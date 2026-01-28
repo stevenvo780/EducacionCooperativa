@@ -55,3 +55,8 @@ serviceAccountKey.json
 node_modules/
 .playwright-mcp
 src/app/debug
+
+# Next.js
+.next/
+out/
+build/
