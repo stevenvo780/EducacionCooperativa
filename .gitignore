@@ -54,3 +54,4 @@ server.pid
 serviceAccountKey.json
 node_modules/
 .playwright-mcp
+src/app/debug
