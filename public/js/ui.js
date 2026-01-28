@@ -101,7 +101,7 @@ function renderPanels() {
                         <button class="panel-btn" onclick="openDownloadModal(${i})" title="Descargar / Exportar"><i class="fas fa-download"></i></button>
                         
                         ${panel.type === 'pdf' ? '' : `
-                        ${!panel.file.endsWith('.md') ? `
+                        ${!panel.file.endsWith('.md') && (panel.file.endsWith('.txt') || panel.file.endsWith('.html') || panel.file.endsWith('.htm')) ? `
                         <button class="panel-btn" onclick="convertFileToMarkdown(${i})" title="Convertir a Markdown"><i class="fas fa-file-import"></i> MD</button>
                         ` : ''}
                         <div class="separator"></div>
