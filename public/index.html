@@ -45,7 +45,11 @@
             <button class="btn-icon" onclick="collapseAllFolders()" title="Contraer todo" style="margin-left: auto; margin-right: 40px; background: none; border: none; color: white; cursor: pointer;">
                 <i class="fas fa-compress-arrows-alt"></i>
             </button>
+            <button class="btn-icon" onclick="createInvite()" title="Invitar a workspace" style="background: none; border: none; color: white; cursor: pointer; margin-right: 8px;">
+                <i class="fas fa-user-plus"></i>
+            </button>
         </div>
+        <div class="sidebar-subtitle">Explorador de archivos — arrastra aquí para subir</div>
         <div class="file-tree" id="file-tree"></div>
     </div>
 
@@ -83,6 +87,7 @@
                 <span>Conectado a Firebase</span>
             </div>
             <div class="status-item" id="active-panel-info">Panel activo: 1</div>
+            <div class="status-item" id="workspace-info"></div>
         </div>
     </div>
 

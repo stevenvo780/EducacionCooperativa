@@ -38,6 +38,7 @@ async function login() {
             localStorage.setItem('workspace', data.workspace || '');
             document.getElementById('login-overlay').style.display = 'none';
             loadFileList();
+            updateWorkspaceInfo();
         } else {
             alert('Contraseña incorrecta');
         }

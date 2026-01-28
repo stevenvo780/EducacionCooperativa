@@ -116,6 +116,13 @@ body {
     min-height: 56px;
 }
 
+.sidebar-subtitle {
+    font-size: 12px;
+    color: #cbd5f5;
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
 .sidebar-toggle {
     position: fixed;
     left: calc(var(--sidebar-width) - 4px);
@@ -870,4 +877,3 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
 }
-
