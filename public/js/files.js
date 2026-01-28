@@ -22,7 +22,7 @@ async function loadFileList() {
 async function loadFileToPanel(path, panelIndex, forceRefresh = false) {
     try {
         const ext = path.split('.').pop().toLowerCase();
-        const isMarkdown = ext === 'md' || ext === 'txt';
+        const isEditable = ['md', 'txt', 'js', 'json', 'html', 'htm', 'css', 'py', 'xml'].includes(ext);
         const isPDF = ext === 'pdf';
         
         // Handle PDF/Binary View
@@ -35,27 +35,18 @@ async function loadFileToPanel(path, panelIndex, forceRefresh = false) {
                 type: 'pdf' // New property
             };
             
-            // Allow manual refresh if needed?
-            // Just update UI
             renderPanels();
             setActivePanel(panelIndex);
-            
-            // Inject PDF viewer directly since renderPanels mostly handles MD
-            // We need to update renderPanels to handle 'pdf' type or handle it here?
-            // renderPanels creates <div>s.
-            // initPanelEditor won't run if we don't set it up differently.
-            // Let's rely on renderPanels checking panel.type
-            
             saveSession();
             return;
         }
 
-        if (!isMarkdown) {
+        if (!isEditable) {
              showToast('Tipo de archivo no soportado para edición');
              return;
         }
 
-        // Standard Markdown/Text Load
+        // Load editable text file
         const url = '/api/file?path=' + encodeURIComponent(path) + (forceRefresh ? '&t=' + Date.now() : '');
         
         const response = await fetch(url, {
@@ -76,7 +67,7 @@ async function loadFileToPanel(path, panelIndex, forceRefresh = false) {
             content: data.content,
             editor: null,
             mode: existingMode,
-            type: 'markdown'
+            type: 'text'
         };
 
         renderPanels();
