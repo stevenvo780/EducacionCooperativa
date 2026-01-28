@@ -6,8 +6,8 @@ import AuthProvider from "@/components/AuthProvider";
 // const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Griego App",
-  description: "Plataforma de Griego UdeA",
+  title: "AgoraSync",
+  description: "Collaborative Learning Platform",
 };
 
 export default function RootLayout({
