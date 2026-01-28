@@ -1,6 +1,7 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   // Allow imports from outside if needed (monorepo), but here we are self-contained
   transpilePackages: ['firebase', 'undici'],
   experimental: {
