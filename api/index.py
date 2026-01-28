@@ -1,12 +1,14 @@
 from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 import firebase_admin
-from firebase_admin import credentials, storage
+from firebase_admin import credentials, storage, auth
 import os
 import json
 import base64
 from functools import wraps
 
 app = Flask(__name__)
+CORS(app) # Enable CORS for all routes
 
 # Configuración desde variables de entorno
 FIREBASE_CREDENTIALS_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT')
@@ -31,14 +33,68 @@ def check_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
+        if not auth_header:
             return jsonify({'error': 'No autorizado'}), 401
         
-        token = auth_header.split(' ')[1]
-        if token != APP_PASSWORD:
-             return jsonify({'error': 'Contraseña incorrecta'}), 401
-        return f(*args, **kwargs)
+        try:
+            token = auth_header.split(' ')[1]
+        except IndexError:
+            return jsonify({'error': 'Formato de token inválido'}), 401
+
+        if token == APP_PASSWORD:
+             return f(*args, **kwargs)
+        
+        try:
+            # Verify Firebase ID Token
+            auth.verify_id_token(token)
+            return f(*args, **kwargs)
+        except:
+             return jsonify({'error': 'Token inválido'}), 401
     return decorated
+
+@app.route('/api/auth/google', methods=['POST'])
+def google_auth():
+    data = request.json
+    id_token = data.get('idToken')
+    if not id_token:
+        return jsonify({'error': 'Falta idToken'}), 400
+    
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return jsonify({
+            'success': True,
+            'token': APP_PASSWORD,
+            'workspace': 'default',
+            'user': {'uid': decoded_token['uid'], 'email': decoded_token.get('email')}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 401
+
+@app.route('/api/register', methods=['POST'])
+def register_user():
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+    name = data.get('name')
+    
+    if not email or not password:
+        return jsonify({'error': 'Faltan datos'}), 400
+        
+    try:
+        user = auth.create_user(
+            email=email,
+            password=password,
+            display_name=name,
+            email_verified=False
+        )
+        return jsonify({
+            'success': True,
+            'token': APP_PASSWORD,
+            'workspace': 'default',
+            'userId': user.uid
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -105,6 +161,17 @@ def save_file():
 @app.errorhandler(500)
 def server_error(e):
     return jsonify(error=str(e)), 500
+
+@app.route('/api/debug-storage', methods=['GET'])
+def debug_storage():
+    try:
+        bucket = storage.bucket()
+        # Intentar listar 1 archivo para verificar permisos
+        blobs = list(bucket.list_blobs(max_results=1))
+        return jsonify({'bucket': bucket.name, 'connection': 'ok'})
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=8888)

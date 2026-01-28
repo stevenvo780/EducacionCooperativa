@@ -398,30 +398,50 @@
             loading.classList.add('show');
 
             try {
-                const response = await fetch('/api/login', {
+                let idToken = null;
+                let loginSuccess = false;
+
+                // 1. Intentar autenticación con Firebase (Usuarios registrados)
+                try {
+                    const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+                    idToken = await userCredential.user.getIdToken();
+                    loginSuccess = true;
+                } catch (e) {
+                    console.log("Firebase auth failed, trying legacy/admin login...", e);
+                }
+
+                // 2. Determinar endpoint (Token Exchange o Legacy Login)
+                const endpoint = idToken ? '/api/auth/google' : '/api/login';
+                const body = idToken ? { idToken } : { email, password, invite };
+
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ email, password, invite })
+                    body: JSON.stringify(body)
                 });
 
                 const data = await response.json();
 
-                if (response.ok && data.success) {
-                    // Store auth token
-                    localStorage.setItem('authToken', data.token);
-                    localStorage.setItem('workspace', data.workspace || '');
+                if (response.ok && (data.success || data.token)) {
+                    // Compatibilidad: data.token puede venir directo de legacy login
+                    const token = data.token || (data.success ? '' : null); // Adjust based on API
                     
-                    showToast('¡Sesión iniciada!', 'success');
-                    
-                    // Redirect to main app
-                    setTimeout(() => {
-                        window.location.href = '/index.html';
-                    }, 500);
-                } else {
-                    showToast(data.error || 'Credenciales incorrectas', 'error');
+                    if (token) {
+                        localStorage.setItem('authToken', token);
+                        localStorage.setItem('workspace', data.workspace || 'default');
+                        
+                        showToast('¡Sesión iniciada!', 'success');
+                        
+                        setTimeout(() => {
+                            window.location.href = '/index.html';
+                        }, 500);
+                        return;
+                    }
                 }
+                
+                showToast(data.error || 'Credenciales incorrectas', 'error');
             } catch (error) {
                 console.error('Error:', error);
                 showToast('Error de conexión. Por favor intenta de nuevo.', 'error');
