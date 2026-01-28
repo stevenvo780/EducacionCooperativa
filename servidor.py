@@ -475,7 +475,10 @@ async def handle_api_invite(request):
     code = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
     invite_data = {'workspace': session['workspace'], 'createdBy': session['email'], 'target': target}
     store_invite(code, invite_data)
-    link = f"{request.url.scheme}://{request.host}/?invite={code}"
+    # Build a simple invitation link - Host header includes port if non-standard
+    base_url = request.headers.get('Host', 'localhost:8888')
+    scheme = request.headers.get('X-Forwarded-Proto', 'http')
+    link = f"{scheme}://{base_url}/?invite={code}"
     return web.json_response({'code': code, 'link': link})
 
 async def handle_api_invite_accept(request):
