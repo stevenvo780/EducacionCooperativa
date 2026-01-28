@@ -10,7 +10,7 @@ import os
 import mimetypes
 import secrets
 import string
-import hashlib
+import bcrypt
 from pathlib import Path
 from aiohttp import web, WSMsgType
 
@@ -111,11 +111,11 @@ async def handle_login(request):
         if user_data:
             # Verify password
             if not verify_password(password, user_data.get('password_hash', '')):
-                return web.json_response({'success': False, 'error': 'Contraseña incorrecta'}, status=401)
+                return web.json_response({'success': False, 'error': 'Credenciales incorrectas'}, status=401)
             workspace = user_data.get('workspace', sanitize_workspace(email))
         elif password != PASSWORD and not workspace:
             # Fallback to old password system if user doesn't exist
-            return web.json_response({'success': False, 'error': 'Password incorrecto'}, status=401)
+            return web.json_response({'success': False, 'error': 'Credenciales incorrectas'}, status=401)
 
         if not workspace:
             workspace = sanitize_workspace(email)
@@ -140,7 +140,10 @@ async def handle_register(request):
         if not name or len(name) < 2:
             return web.json_response({'error': 'Nombre requerido (mínimo 2 caracteres)', 'field': 'name'}, status=400)
 
-        if not email or '@' not in email:
+        # Improved email validation
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not email or not re.match(email_pattern, email):
             return web.json_response({'error': 'Email válido requerido', 'field': 'email'}, status=400)
 
         if not password or len(password) < 8:
@@ -435,12 +438,17 @@ def ensure_user_workspace(workspace: str):
     path.mkdir(parents=True, exist_ok=True)
 
 def hash_password(password: str) -> str:
-    """Hash a password using SHA-256"""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    """Hash a password using bcrypt"""
+    salt = bcrypt.gensalt()
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return password_hash.decode('utf-8')
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a password against a hash"""
-    return hash_password(password) == password_hash
+    """Verify a password against a bcrypt hash"""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    except Exception:
+        return False
 
 def store_user(email: str, user_data: dict):
     """Store user data"""
