@@ -5,8 +5,12 @@ Tests Flask API endpoints for Vercel deployment
 import pytest
 import json
 import sys
+import os
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
+
+# Set environment before importing
+os.environ['APP_PASSWORD'] = 'test_password'
 
 # Add api directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'api'))
@@ -16,7 +20,7 @@ sys.modules['firebase_admin'] = MagicMock()
 sys.modules['firebase_admin.credentials'] = MagicMock()
 sys.modules['firebase_admin.storage'] = MagicMock()
 
-from index import app, check_auth
+from index import app
 
 
 @pytest.fixture
@@ -27,28 +31,24 @@ def client():
         yield client
 
 
-@pytest.fixture
-def mock_password(monkeypatch):
-    """Set test password"""
-    monkeypatch.setenv('APP_PASSWORD', 'test_password')
-    return 'test_password'
+TEST_PASSWORD = 'test_password'
 
 
 class TestFlaskAPI:
     """Test Flask API endpoints"""
     
-    def test_login_success(self, client, mock_password):
+    def test_login_success(self, client):
         """Test successful login"""
         response = client.post('/api/login', 
-            json={'password': 'test_password'},
+            json={'password': TEST_PASSWORD},
             content_type='application/json'
         )
         assert response.status_code == 200
         data = json.loads(response.data)
         assert 'token' in data
-        assert data['token'] == 'test_password'
+        assert data['token'] == TEST_PASSWORD
     
-    def test_login_failure(self, client, mock_password):
+    def test_login_failure(self, client):
         """Test login with wrong password"""
         response = client.post('/api/login',
             json={'password': 'wrong_password'},
@@ -63,7 +63,7 @@ class TestFlaskAPI:
         response = client.get('/api/files')
         assert response.status_code == 401
     
-    def test_list_files_wrong_token(self, client, mock_password):
+    def test_list_files_wrong_token(self, client):
         """Test listing files with wrong token"""
         response = client.get('/api/files',
             headers={'Authorization': 'Bearer wrong_token'}
@@ -71,7 +71,7 @@ class TestFlaskAPI:
         assert response.status_code == 401
     
     @patch('index.storage')
-    def test_list_files_success(self, mock_storage, client, mock_password):
+    def test_list_files_success(self, mock_storage, client):
         """Test successful file listing"""
         # Mock storage bucket and blobs
         mock_blob1 = Mock()
@@ -86,7 +86,7 @@ class TestFlaskAPI:
         mock_storage.bucket.return_value = mock_bucket
         
         response = client.get('/api/files',
-            headers={'Authorization': f'Bearer {mock_password}'}
+            headers={'Authorization': f'Bearer {TEST_PASSWORD}'}
         )
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -100,15 +100,15 @@ class TestFlaskAPI:
         response = client.get('/api/file?path=test.md')
         assert response.status_code == 401
     
-    def test_get_file_missing_path(self, client, mock_password):
+    def test_get_file_missing_path(self, client):
         """Test getting file without path parameter"""
         response = client.get('/api/file',
-            headers={'Authorization': f'Bearer {mock_password}'}
+            headers={'Authorization': f'Bearer {TEST_PASSWORD}'}
         )
         assert response.status_code == 400
     
     @patch('index.storage')
-    def test_get_file_not_found(self, mock_storage, client, mock_password):
+    def test_get_file_not_found(self, mock_storage, client):
         """Test getting non-existent file"""
         mock_blob = Mock()
         mock_blob.exists.return_value = False
@@ -118,12 +118,12 @@ class TestFlaskAPI:
         mock_storage.bucket.return_value = mock_bucket
         
         response = client.get('/api/file?path=nonexistent.md',
-            headers={'Authorization': f'Bearer {mock_password}'}
+            headers={'Authorization': f'Bearer {TEST_PASSWORD}'}
         )
         assert response.status_code == 404
     
     @patch('index.storage')
-    def test_get_file_success(self, mock_storage, client, mock_password):
+    def test_get_file_success(self, mock_storage, client):
         """Test successful file retrieval"""
         mock_blob = Mock()
         mock_blob.exists.return_value = True
@@ -134,7 +134,7 @@ class TestFlaskAPI:
         mock_storage.bucket.return_value = mock_bucket
         
         response = client.get('/api/file?path=test.md',
-            headers={'Authorization': f'Bearer {mock_password}'}
+            headers={'Authorization': f'Bearer {TEST_PASSWORD}'}
         )
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -149,17 +149,17 @@ class TestFlaskAPI:
         )
         assert response.status_code == 401
     
-    def test_save_file_missing_data(self, client, mock_password):
+    def test_save_file_missing_data(self, client):
         """Test saving file with incomplete data"""
         response = client.post('/api/save',
             json={'path': 'test.md'},  # Missing content
             content_type='application/json',
-            headers={'Authorization': f'Bearer {mock_password}'}
+            headers={'Authorization': f'Bearer {TEST_PASSWORD}'}
         )
         assert response.status_code == 400
     
     @patch('index.storage')
-    def test_save_file_success(self, mock_storage, client, mock_password):
+    def test_save_file_success(self, mock_storage, client):
         """Test successful file save"""
         mock_blob = Mock()
         mock_bucket = Mock()
@@ -169,7 +169,7 @@ class TestFlaskAPI:
         response = client.post('/api/save',
             json={'path': 'test.md', 'content': '# New Content'},
             content_type='application/json',
-            headers={'Authorization': f'Bearer {mock_password}'}
+            headers={'Authorization': f'Bearer {TEST_PASSWORD}'}
         )
         assert response.status_code == 200
         data = json.loads(response.data)
