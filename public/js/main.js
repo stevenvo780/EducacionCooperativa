@@ -1,8 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
-    marked.use({
-        breaks: true,
-        gfm: true
-    });
+    try {
+        marked.use({
+            breaks: true,
+            gfm: true
+        });
+    } catch (e) {
+        console.warn('Marked.js not loaded:', e);
+    }
 
     if (authToken) {
         document.getElementById('login-overlay').style.display = 'none';
@@ -11,6 +15,13 @@ document.addEventListener('DOMContentLoaded', () => {
             setupSidebarDragDrop();
         });
         updateWorkspaceInfo();
+    } else {
+        // Redirect to landing page if not authenticated
+        // unless we're on a special page
+        const currentPath = window.location.pathname;
+        if (currentPath === '/index.html' || currentPath === '/') {
+            window.location.href = '/landing.html';
+        }
     }
 
     setupKeyboardShortcuts();
