@@ -3,27 +3,32 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 10, 10, 15;
+  --background-end-rgb: 18, 18, 26;
+  --accent-mandy: 233, 69, 96;
+  --accent-purple: 83, 52, 131;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(
-      to bottom,
-      transparent,
+      180deg,
+      rgb(var(--background-start-rgb)),
       rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+    );
+  min-height: 100vh;
+}
+
+/* Selection styling */
+::selection {
+  background: rgba(233, 69, 96, 0.3);
+  color: #fff;
+}
+
+/* Focus ring accent */
+*:focus-visible {
+  outline-color: rgba(233, 69, 96, 0.6);
 }
 
 @import 'katex/dist/katex.min.css';
@@ -35,5 +40,11 @@ body {
   .scrollbar-hide {
       -ms-overflow-style: none;
       scrollbar-width: none;
+  }
+  .text-gradient-mandy {
+      background: linear-gradient(135deg, #e94560, #533483);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
   }
 }
