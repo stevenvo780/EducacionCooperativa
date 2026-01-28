@@ -1,117 +1,107 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { auth } from '@/lib/firebase'; // Direct access to get token if needed
+import { useRouter } from 'next/navigation';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
+import Link from 'next/link';
 
-interface FileItem {
+interface DocItem {
+  id: string;
   name: string;
-  type: 'file' | 'folder';
-  size: number;
+  updatedAt: any;
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const [currentPath, setCurrentPath] = useState('');
-  const [items, setItems] = useState<FileItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchFiles = async (path: string) => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.items || []);
-      } else {
-        console.error("Failed to fetch files");
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { user, loading } = useAuth();
+  const [docs, setDocs] = useState<DocItem[]>([]);
+  const router = useRouter();
+  const [newDocName, setNewDocName] = useState('');
 
   useEffect(() => {
+    if (!loading && !user) router.push('/login');
     if (user) {
-      fetchFiles(currentPath);
+        fetchDocs();
     }
-  }, [user, currentPath]);
+  }, [user, loading, router]);
 
-  const handleNavigate = (folderName: string) => {
-    const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
-    setCurrentPath(newPath);
+  const fetchDocs = async () => {
+    if (!user) return;
+    const q = query(collection(db, 'documents'), where('ownerId', '==', user.uid));
+    const querySnapshot = await getDocs(q);
+    const fetched: DocItem[] = [];
+    querySnapshot.forEach((doc) => {
+        fetched.push({ id: doc.id, ...doc.data() } as DocItem);
+    });
+    setDocs(fetched);
   };
 
-  const handleGoBack = () => {
-    if (!currentPath) return;
-    const parts = currentPath.split('/');
-    parts.pop();
-    setCurrentPath(parts.join('/'));
+  const createDoc = async () => {
+    if (!newDocName.trim() || !user) return;
+    try {
+        const docRef = await addDoc(collection(db, 'documents'), {
+            name: newDocName,
+            content: '# ' + newDocName,
+            ownerId: user.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        setNewDocName('');
+        fetchDocs(); // refresh
+        // router.push(`/editor/${docRef.id}`); // Optional: auto open
+    } catch (e) {
+        console.error("Error creating doc", e);
+    }
   };
 
-  if (!user) return <div className="p-8">Please log in.</div>;
+  const deleteDocument = async (id: string) => {
+      if (!confirm('Are you sure?')) return;
+      await deleteDoc(doc(db, 'documents', id));
+      fetchDocs();
+  };
+
+  if (loading || !user) return <div className="p-8">Cargando...</div>;
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Dashboard de Archivos</h1>
-      
-      <div className="flex items-center gap-2 mb-4 bg-gray-100 p-2 rounded">
-        <button 
-            onClick={() => setCurrentPath('')}
-            className="text-blue-600 hover:underline"
-        >
-            Inicio
-        </button>
-        {currentPath && (
-            <>
-                <span>/</span>
-                <span className="font-mono text-sm">{currentPath}</span>
-                <button 
-                    onClick={handleGoBack}
-                    className="ml-auto px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
-                >
-                    Atrás
-                </button>
-            </>
-        )}
+    <div className="p-8 max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Mis Documentos</h1>
+        <div className="flex gap-2">
+            <input 
+                type="text" 
+                placeholder="Nombre del documento..." 
+                className="border p-2 rounded"
+                value={newDocName}
+                onChange={e => setNewDocName(e.target.value)}
+            />
+            <button 
+                onClick={createDoc}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            >
+                Crear Nuevo
+            </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow min-h-[400px]">
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">Cargando...</div>
-        ) : items.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">Carpeta vacía</div>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {items.map((item, idx) => (
-              <li 
-                key={idx} 
-                className="p-4 hover:bg-gray-50 flex items-center gap-3 cursor-pointer"
-                onClick={() => item.type === 'folder' ? handleNavigate(item.name) : null}
-              >
-                <span className="text-xl">
-                  {item.type === 'folder' ? '📁' : '📄'}
-                </span>
-                <span className="flex-1 font-medium text-gray-700">
-                  {item.name}
-                </span>
-                {item.type === 'file' && (
-                  <span className="text-xs text-gray-400">
-                    {(item.size / 1024).toFixed(1)} KB
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="grid gap-4">
+        {docs.length === 0 && <p className="text-gray-500">No tienes documentos.</p>}
+        {docs.map(doc => (
+            <div key={doc.id} className="bg-white p-4 rounded shadow flex justify-between items-center">
+                <Link href={`/editor/${doc.id}`} className="font-bold text-lg text-blue-600 hover:underline">
+                    {doc.name || 'Sin título'}
+                </Link>
+                <div className="flex items-center gap-4">
+                   <span className="text-xs text-gray-500">ID: {doc.id}</span>
+                   <button 
+                    onClick={() => deleteDocument(doc.id)}
+                    className="text-red-500 hover:text-red-700"
+                   >
+                    Eliminar
+                   </button>
+                </div>
+            </div>
+        ))}
       </div>
     </div>
   );
