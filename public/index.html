@@ -32,6 +32,7 @@
             <h2><i class="fas fa-lock"></i> Acceso Requerido</h2>
             <input type="email" id="email-input" class="login-input" placeholder="Correo">
             <input type="password" id="password-input" class="login-input" placeholder="Contraseña de acceso">
+            <input type="text" id="invite-input" class="login-input" placeholder="Código de invitación (opcional)">
             <button class="login-btn" onclick="login()">Entrar</button>
         </div>
     </div>
@@ -66,8 +67,14 @@
             <div style="flex: 1"></div>
 
             <div class="toolbar-section">
+                <button class="btn btn-default btn-sm" onclick="acceptInviteFlow()" title="Cambiar con invitación">
+                    <i class="fas fa-user-check"></i> Aceptar invitación
+                </button>
                 <button class="btn btn-default btn-sm" onclick="toggleFullscreen()" title="Pantalla completa (F11)">
                     <i class="fas fa-expand"></i> Fullscreen
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="logout()" title="Cerrar sesión">
+                    <i class="fas fa-sign-out-alt"></i> Salir
                 </button>
             </div>
         </div>
