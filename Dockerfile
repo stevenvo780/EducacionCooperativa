@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install dependencies
-RUN pip install --no-cache-dir aiohttp
+RUN pip install --no-cache-dir aiohttp firebase-admin
 
 # Copy all Griego2 content
 COPY . /app/
