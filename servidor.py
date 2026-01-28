@@ -10,6 +10,7 @@ import os
 import mimetypes
 import secrets
 import string
+import hashlib
 from pathlib import Path
 from aiohttp import web, WSMsgType
 
@@ -58,6 +59,7 @@ db = firestore.client() if FIREBASE_AVAILABLE else None
 # Fallback en memoria cuando no hay Firebase
 MEM_SESSIONS = {}
 MEM_INVITES = {}
+MEM_USERS = {}  # Store users: email -> {name, password_hash, workspace}
 
 # Estado global
 clients = {}
@@ -104,7 +106,15 @@ async def handle_login(request):
                 return web.json_response({'error': 'Invitación no válida'}, status=401)
             workspace = invite_data.get('workspace')
 
-        if password != PASSWORD and not workspace:
+        # Check if user exists in our user database
+        user_data = fetch_user(email)
+        if user_data:
+            # Verify password
+            if not verify_password(password, user_data.get('password_hash', '')):
+                return web.json_response({'success': False, 'error': 'Contraseña incorrecta'}, status=401)
+            workspace = user_data.get('workspace', sanitize_workspace(email))
+        elif password != PASSWORD and not workspace:
+            # Fallback to old password system if user doesn't exist
             return web.json_response({'success': False, 'error': 'Password incorrecto'}, status=401)
 
         if not workspace:
@@ -116,6 +126,53 @@ async def handle_login(request):
         return web.json_response({'success': True, 'token': token, 'workspace': workspace})
     except Exception:
         return web.json_response({'error': 'Error de proceso'}, status=400)
+
+
+async def handle_register(request):
+    """Maneja el registro de nuevos usuarios"""
+    try:
+        data = await request.json()
+        name = (data.get('name') or '').strip()
+        email = (data.get('email') or '').strip().lower()
+        password = data.get('password')
+
+        # Validation
+        if not name or len(name) < 2:
+            return web.json_response({'error': 'Nombre requerido (mínimo 2 caracteres)', 'field': 'name'}, status=400)
+
+        if not email or '@' not in email:
+            return web.json_response({'error': 'Email válido requerido', 'field': 'email'}, status=400)
+
+        if not password or len(password) < 8:
+            return web.json_response({'error': 'Contraseña debe tener al menos 8 caracteres', 'field': 'password'}, status=400)
+
+        # Check if user already exists
+        existing_user = fetch_user(email)
+        if existing_user:
+            return web.json_response({'error': 'Este email ya está registrado', 'field': 'email'}, status=400)
+
+        # Create user
+        workspace = sanitize_workspace(email)
+        password_hash = hash_password(password)
+        
+        user_record = {
+            'name': name,
+            'email': email,
+            'password_hash': password_hash,
+            'workspace': workspace
+        }
+        
+        store_user(email, user_record)
+        
+        # Create session token
+        token = create_session(email, workspace)
+        ensure_user_workspace(workspace)
+
+        return web.json_response({'success': True, 'token': token, 'workspace': workspace})
+
+    except Exception as e:
+        print(f"Registration error: {e}")
+        return web.json_response({'error': 'Error al crear la cuenta'}, status=500)
 
 
 async def handle_api_files(request):
@@ -377,6 +434,30 @@ def ensure_user_workspace(workspace: str):
     path = BASE_DIR / workspace
     path.mkdir(parents=True, exist_ok=True)
 
+def hash_password(password: str) -> str:
+    """Hash a password using SHA-256"""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify a password against a hash"""
+    return hash_password(password) == password_hash
+
+def store_user(email: str, user_data: dict):
+    """Store user data"""
+    if db:
+        db.collection('users').document(email).set(user_data)
+    else:
+        MEM_USERS[email] = user_data
+
+def fetch_user(email: str):
+    """Fetch user data by email"""
+    if not email:
+        return None
+    if db:
+        doc = db.collection('users').document(email).get()
+        return doc.to_dict() if doc.exists else None
+    return MEM_USERS.get(email)
+
 async def handle_api_invite(request):
     session = await require_auth(request)
     if not session:
@@ -410,6 +491,7 @@ def create_app():
     app.router.add_get('/', handle_index)
     app.router.add_get('/ws', handle_websocket)
     app.router.add_post('/api/login', handle_login)
+    app.router.add_post('/api/register', handle_register)
     app.router.add_get('/api/files', handle_api_files)
     app.router.add_get('/api/file', handle_api_file)
     app.router.add_post('/api/save', handle_api_save)

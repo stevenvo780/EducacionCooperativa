@@ -11,6 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
             setupSidebarDragDrop();
         });
         updateWorkspaceInfo();
+    } else {
+        // Redirect to landing page if not authenticated
+        // unless we're on a special page
+        const currentPath = window.location.pathname;
+        if (currentPath === '/index.html' || currentPath === '/') {
+            window.location.href = '/landing.html';
+        }
     }
 
     setupKeyboardShortcuts();
