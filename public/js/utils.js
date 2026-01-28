@@ -21,17 +21,21 @@ function showToast(message, type = 'info') {
 
 async function login() {
     const password = document.getElementById('password-input').value;
+    const email = (document.getElementById('email-input')?.value || '').trim();
+    const invite = new URLSearchParams(window.location.search).get('invite') || '';
+
     try {
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password })
+            body: JSON.stringify({ password, email, invite })
         });
 
         if (response.ok) {
             const data = await response.json();
             authToken = data.token;
             localStorage.setItem('authToken', authToken);
+            localStorage.setItem('workspace', data.workspace || '');
             document.getElementById('login-overlay').style.display = 'none';
             loadFileList();
         } else {

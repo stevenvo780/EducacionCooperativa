@@ -8,8 +8,13 @@ import asyncio
 import json
 import os
 import mimetypes
+import secrets
+import string
 from pathlib import Path
 from aiohttp import web, WSMsgType
+
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 PORT = 8888
 
@@ -31,6 +36,28 @@ if not BASE_DIR.exists():
 
 STATIC_DIR = Path(__file__).parent / 'public'
 PASSWORD = os.getenv('PASSWORD', 'admin')
+FIREBASE_CREDENTIALS_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT')
+FIREBASE_AVAILABLE = False
+
+if not firebase_admin._apps:
+    try:
+        if FIREBASE_CREDENTIALS_JSON:
+            cred = credentials.Certificate(json.loads(FIREBASE_CREDENTIALS_JSON))
+        elif Path("serviceAccountKey.json").exists():
+            cred = credentials.Certificate("serviceAccountKey.json")
+        else:
+            cred = None
+        if cred:
+            firebase_admin.initialize_app(cred)
+            FIREBASE_AVAILABLE = True
+    except Exception as e:
+        print(f"No se pudo inicializar Firebase: {e}")
+
+db = firestore.client() if FIREBASE_AVAILABLE else None
+
+# Fallback en memoria cuando no hay Firebase
+MEM_SESSIONS = {}
+MEM_INVITES = {}
 
 # Estado global
 clients = {}
@@ -61,23 +88,47 @@ async def handle_login(request):
     """Maneja el login devolviendo un token simple"""
     try:
         data = await request.json()
+        email = (data.get('email') or '').strip().lower()
         password = data.get('password')
-        
-        if password == PASSWORD:
-            # En un entorno real, generar un JWT firmado
-            return web.json_response({'success': True, 'token': 'authorized-user'})
-        else:
+        invite = (data.get('invite') or '').strip()
+
+        if not email:
+            return web.json_response({'error': 'Email requerido'}, status=400)
+
+        workspace = None
+
+        # Validar invitación
+        if invite:
+            invite_data = fetch_invite(invite)
+            if not invite_data:
+                return web.json_response({'error': 'Invitación no válida'}, status=401)
+            workspace = invite_data.get('workspace')
+
+        if password != PASSWORD and not workspace:
             return web.json_response({'success': False, 'error': 'Password incorrecto'}, status=401)
+
+        if not workspace:
+            workspace = sanitize_workspace(email)
+
+        token = create_session(email, workspace)
+        ensure_user_workspace(workspace)
+
+        return web.json_response({'success': True, 'token': token, 'workspace': workspace})
     except Exception:
         return web.json_response({'error': 'Error de proceso'}, status=400)
 
 
 async def handle_api_files(request):
     """Lista archivos del usuario"""
+    session = await require_auth(request)
+    if not session:
+        return web.json_response({'error': 'No autorizado'}, status=401)
+
     user_files = []
     allowed_exts = {'.md', '.txt', '.pdf', '.html', '.css', '.js', '.py', '.doc', '.docx', '.odt', '.png', '.jpg', '.jpeg', '.gif', '.svg'}
+    user_root = BASE_DIR / session['workspace']
 
-    for root, dirs, files in os.walk(BASE_DIR):
+    for root, dirs, files in os.walk(user_root):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'visor_markdown']
 
         for file in files:
@@ -93,12 +144,16 @@ async def handle_api_files(request):
 
 async def handle_raw_file(request):
     """Sirve archivos crudos del usuario (PDFs, imágenes, etc)"""
+    session = await require_auth(request, allow_query_token=True)
+    if not session:
+        return web.Response(status=401)
+
     rel_path = request.match_info.get('path', '')
     if not rel_path:
         return web.Response(status=404)
 
-    full_path = (BASE_DIR / rel_path).resolve()
-    if not str(full_path).startswith(str(BASE_DIR.resolve())):
+    full_path = (BASE_DIR / session['workspace'] / rel_path).resolve()
+    if not str(full_path).startswith(str((BASE_DIR / session['workspace']).resolve())):
         return web.Response(status=403)
 
     if not full_path.exists():
@@ -109,14 +164,18 @@ async def handle_raw_file(request):
 
 async def handle_api_file(request):
     """Lee contenido de un archivo"""
+    session = await require_auth(request)
+    if not session:
+        return web.json_response({'error': 'No autorizado'}, status=401)
+
     rel_path = request.query.get('path', '')
 
     if not rel_path:
         return web.json_response({'error': 'Falta path'}, status=400)
 
     try:
-        full_path = (BASE_DIR / rel_path).resolve()
-        if not str(full_path).startswith(str(BASE_DIR.resolve())):
+        full_path = (BASE_DIR / session['workspace'] / rel_path).resolve()
+        if not str(full_path).startswith(str((BASE_DIR / session['workspace']).resolve())):
             return web.json_response({'error': 'Acceso denegado'}, status=403)
 
         if not full_path.exists():
@@ -133,6 +192,9 @@ async def handle_api_file(request):
 
 async def handle_api_save(request):
     """Guarda un archivo"""
+    session = await require_auth(request)
+    if not session:
+        return web.json_response({'error': 'No autorizado'}, status=401)
     try:
         data = await request.json()
         rel_path = data.get('path')
@@ -141,8 +203,8 @@ async def handle_api_save(request):
         if not rel_path or content is None:
             return web.json_response({'error': 'Faltan parámetros'}, status=400)
 
-        full_path = (BASE_DIR / rel_path).resolve()
-        if not str(full_path).startswith(str(BASE_DIR.resolve())):
+        full_path = (BASE_DIR / session['workspace'] / rel_path).resolve()
+        if not str(full_path).startswith(str((BASE_DIR / session['workspace']).resolve())):
             return web.json_response({'error': 'Acceso denegado'}, status=403)
 
         with open(full_path, 'w', encoding='utf-8') as f:
@@ -155,15 +217,17 @@ async def handle_api_save(request):
 
 async def handle_api_upload(request):
     """Sube archivos"""
+    session = await require_auth(request)
+    if not session:
+        return web.json_response({'error': 'No autorizado'}, status=401)
     try:
         reader = await request.multipart()
     except Exception:
         return web.json_response({'error': 'No multipart'}, status=400)
 
     count = 0
-    upload_dir = BASE_DIR / "documentos" # Default upload directory
-    if not upload_dir.exists():
-        upload_dir.mkdir()
+    upload_dir = BASE_DIR / session['workspace']
+    upload_dir.mkdir(parents=True, exist_ok=True)
 
     while True:
         part = await reader.next()
@@ -274,6 +338,8 @@ def create_app():
     app.router.add_get('/api/file', handle_api_file)
     app.router.add_post('/api/save', handle_api_save)
     app.router.add_post('/api/upload', handle_api_upload)
+    app.router.add_post('/api/invitations', handle_api_invite)
+    app.router.add_post('/api/invitations/accept', handle_api_invite_accept)
     app.router.add_get('/raw/{path:.*}', handle_raw_file)
     app.router.add_get('/{filename:.*}', handle_static)
 
@@ -302,3 +368,78 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# Helpers de autenticación e invitaciones
+def sanitize_workspace(email: str) -> str:
+    safe = ''.join(ch if ch.isalnum() else '-' for ch in email.split('@')[0])
+    return safe or 'workspace'
+
+def create_session(email: str, workspace: str) -> str:
+    token = secrets.token_urlsafe(24)
+    record = {'email': email, 'workspace': workspace}
+    if db:
+        db.collection('sessions').document(token).set(record)
+        db.collection('users').document(email).set({'workspace': workspace}, merge=True)
+    else:
+        MEM_SESSIONS[token] = record
+    return token
+
+def fetch_session(token: str):
+    if not token:
+        return None
+    if db:
+        doc = db.collection('sessions').document(token).get()
+        return doc.to_dict() if doc.exists else None
+    return MEM_SESSIONS.get(token)
+
+def fetch_invite(code: str):
+    if not code:
+        return None
+    if db:
+        doc = db.collection('invites').document(code).get()
+        return doc.to_dict() if doc.exists else None
+    return MEM_INVITES.get(code)
+
+def store_invite(code: str, data: dict):
+    if db:
+        db.collection('invites').document(code).set(data)
+    else:
+        MEM_INVITES[code] = data
+
+async def require_auth(request, allow_query_token=False):
+    token = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+    elif allow_query_token:
+        token = request.query.get('token')
+    session = fetch_session(token)
+    return session
+
+def ensure_user_workspace(workspace: str):
+    path = BASE_DIR / workspace
+    path.mkdir(parents=True, exist_ok=True)
+
+async def handle_api_invite(request):
+    session = await require_auth(request)
+    if not session:
+        return web.json_response({'error': 'No autorizado'}, status=401)
+    data = await request.json()
+    target = (data.get('email') or '').lower()
+    code = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+    invite_data = {'workspace': session['workspace'], 'createdBy': session['email'], 'target': target}
+    store_invite(code, invite_data)
+    link = f"{request.url.scheme}://{request.host}/?invite={code}"
+    return web.json_response({'code': code, 'link': link})
+
+async def handle_api_invite_accept(request):
+    data = await request.json()
+    invite_code = data.get('invite')
+    email = (data.get('email') or '').lower()
+    invite_data = fetch_invite(invite_code)
+    if not invite_data:
+        return web.json_response({'error': 'Invitación no válida'}, status=400)
+    workspace = invite_data.get('workspace')
+    token = create_session(email or f'guest-{secrets.token_hex(3)}', workspace)
+    ensure_user_workspace(workspace)
+    return web.json_response({'token': token, 'workspace': workspace})
