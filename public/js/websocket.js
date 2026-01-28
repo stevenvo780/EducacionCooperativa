@@ -86,25 +86,28 @@ function handleRemoteUpdate(data) {
             const currentCursor = editor.getCursor();
             const scrollInfo = editor.getScrollInfo();
             
-            // Update content without triggering change event
-            editor.off('change');
+            // Use a flag to prevent broadcasting during remote update
+            panel._updatingFromRemote = true;
+            
+            // Update content
             editor.setValue(data.content);
             
-            // Restore cursor position
-            editor.setCursor(currentCursor);
+            // Restore cursor position (validate it's within bounds)
+            const lineCount = editor.lineCount();
+            const validLine = Math.min(currentCursor.line, lineCount - 1);
+            const lineLength = editor.getLine(validLine)?.length || 0;
+            const validCh = Math.min(currentCursor.ch, lineLength);
+            editor.setCursor({ line: validLine, ch: validCh });
             editor.scrollTo(scrollInfo.left, scrollInfo.top);
-            
-            // Re-enable change handler
-            editor.on('change', () => {
-                panels[index].content = editor.getValue();
-                updatePanelPreview(index);
-                triggerAutoSave(index);
-                broadcastUpdate(panel.file, editor.getValue());
-            });
             
             // Update panel content and preview
             panels[index].content = data.content;
             updatePanelPreview(index);
+            
+            // Clear the flag after a short delay to avoid race conditions
+            setTimeout(() => {
+                panel._updatingFromRemote = false;
+            }, 100);
         }
     });
 }
@@ -135,24 +138,6 @@ function broadcastUpdate(filePath, content) {
             content: content,
             clientId: currentClientId
         }));
-    }
-}
-
-// Override the existing editor change handler to include WebSocket updates
-function enableCollaborativeEditing(index) {
-    const panel = panels[index];
-    if (panel.editor && panel.file) {
-        // Join the file room
-        joinFileRoom(panel.file);
-        
-        // Add WebSocket broadcast to change handler
-        const originalOnChange = panel.editor.getOption('onChange');
-        panel.editor.on('change', () => {
-            panels[index].content = panel.editor.getValue();
-            updatePanelPreview(index);
-            triggerAutoSave(index);
-            broadcastUpdate(panel.file, panel.editor.getValue());
-        });
     }
 }
 

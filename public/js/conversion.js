@@ -59,7 +59,8 @@ async function convertFileToMarkdown(panelIndex) {
         
     } catch (error) {
         console.error('Error converting file:', error);
-        showToast('Error al convertir el archivo', 'error');
+        const errorMessage = error.message || 'Error al convertir el archivo';
+        showToast(errorMessage, 'error');
     }
 }
 
@@ -76,8 +77,8 @@ function convertTextToMarkdown(text) {
             continue;
         }
         
-        // Detect headings (lines that are all caps or very short)
-        if (line === line.toUpperCase() && line.length < 50 && line.length > 3) {
+        // Detect headings (lines that are all caps and reasonably long)
+        if (line === line.toUpperCase() && line.length >= 5 && line.length < 50 && line.length > 3) {
             markdown += `## ${line}\n\n`;
         }
         // Detect list items
@@ -89,7 +90,11 @@ function convertTextToMarkdown(text) {
         }
         // Regular paragraph
         else {
-            markdown += line + '\n\n';
+            markdown += line + '\n';
+            // Only add an extra newline if the next line is not empty
+            if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+                markdown += '\n';
+            }
         }
     }
     
@@ -97,11 +102,11 @@ function convertTextToMarkdown(text) {
 }
 
 function convertHtmlToMarkdown(html) {
-    // Create a temporary div to parse HTML
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
+    // Use DOMParser for safer HTML parsing
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
     
-    return htmlNodeToMarkdown(temp);
+    return htmlNodeToMarkdown(doc.body);
 }
 
 function htmlNodeToMarkdown(node) {

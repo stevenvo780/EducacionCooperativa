@@ -42,7 +42,8 @@ function initPanelEditor(index) {
         updatePanelPreview(index);
         triggerAutoSave(index);
         // Broadcast changes via WebSocket for real-time collaboration
-        if (typeof broadcastUpdate !== 'undefined') {
+        // Only broadcast if not receiving a remote update
+        if (typeof broadcastUpdate !== 'undefined' && !panel._updatingFromRemote) {
             broadcastUpdate(panel.file, editor.getValue());
         }
     });
