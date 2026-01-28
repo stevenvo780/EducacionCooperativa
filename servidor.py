@@ -15,7 +15,7 @@ from pathlib import Path
 from aiohttp import web, WSMsgType
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth
 
 PORT = 8888
 
@@ -176,6 +176,53 @@ async def handle_register(request):
     except Exception as e:
         print(f"Registration error: {e}")
         return web.json_response({'error': 'Error al crear la cuenta'}, status=500)
+
+
+async def handle_auth_google(request):
+    """Autenticación con Google (Firebase)"""
+    try:
+        data = await request.json()
+        id_token = data.get('idToken')
+        
+        if not id_token:
+            return web.json_response({'error': 'Token requerido'}, status=400)
+            
+        # Verificar token con Firebase
+        decoded_token = auth.verify_id_token(id_token)
+        email = decoded_token.get('email')
+        name = decoded_token.get('name', '')
+        
+        if not email:
+            return web.json_response({'error': 'Email inválido'}, status=400)
+            
+        # Buscar usuario o crear uno nuevo
+        user_data = fetch_user(email)
+        workspace = None
+        
+        if user_data:
+            workspace = user_data.get('workspace')
+        else:
+            # Registro automático
+            workspace = sanitize_workspace(email)
+            user_record = {
+                'name': name,
+                'email': email,
+                'source': 'google',
+                'workspace': workspace
+            }
+            store_user(email, user_record)
+            
+        if not workspace:
+            workspace = sanitize_workspace(email)
+            
+        ensure_user_workspace(workspace)
+        token = create_session(email, workspace)
+        
+        return web.json_response({'success': True, 'token': token, 'workspace': workspace})
+        
+    except Exception as e:
+        print(f"Auth Error: {e}")
+        return web.json_response({'error': 'Error de autenticación'}, status=401)
 
 
 async def handle_api_files(request):
@@ -503,6 +550,7 @@ def create_app():
     app.router.add_get('/ws', handle_websocket)
     app.router.add_post('/api/login', handle_login)
     app.router.add_post('/api/register', handle_register)
+    app.router.add_post('/api/auth/google', handle_auth_google)
     app.router.add_get('/api/files', handle_api_files)
     app.router.add_get('/api/file', handle_api_file)
     app.router.add_post('/api/save', handle_api_save)
