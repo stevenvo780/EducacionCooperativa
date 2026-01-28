@@ -15,7 +15,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2 font-bold text-xl">
                 <BookOpen className="w-6 h-6 text-mandy-500" />
-                <span className="text-gradient-mandy">Griego App</span>
+                <span className="text-gradient-mandy">AgoraSync</span>
             </div>
             <nav className="flex items-center gap-4">
                 {loading ? (
@@ -109,7 +109,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-2 mb-4 md:mb-0">
                 <BookOpen className="w-5 h-5 text-mandy-500" />
-                <span className="font-semibold text-white">Griego App</span>
+                <span className="font-semibold text-white">AgoraSync</span>
             </div>
             <div className="text-sm">
                 &copy; {new Date().getFullYear()} Universidad de Antioquia - Instituto de Filosofía

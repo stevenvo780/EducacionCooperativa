@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { db, storage } from '@/lib/firebase';
@@ -26,12 +26,14 @@ interface DocItem {
   type?: 'text' | 'file';
   url?: string;
   mimeType?: string;
+  folder?: string;
   updatedAt: any;
   ownerId: string;
   workspaceId?: string;
 }
 
 const PERSONAL_WORKSPACE_ID = 'personal';
+const DEFAULT_FOLDER_NAME = 'No estructurado';
 
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
@@ -51,6 +53,7 @@ export default function DashboardPage() {
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
 
   // Actions State
   const [newDocName, setNewDocName] = useState('');
@@ -59,26 +62,9 @@ export default function DashboardPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-    if (user) {
-        initializeDashboard();
-    }
-  }, [user, loading, router]);
-
-  useEffect(() => {
-      if (currentWorkspace && user) {
-          fetchDocs();
-      }
-  }, [currentWorkspace]);
-
-  const initializeDashboard = async () => {
-    if (!user) return;
-    await fetchWorkspaces();
-  };
-
-  const fetchWorkspaces = async () => {
+  const fetchWorkspaces = useCallback(async () => {
     if (!user) return;
     try {
         const qMembers = query(collection(db, 'workspaces'), where('members', 'array-contains', user.uid));
@@ -105,14 +91,11 @@ export default function DashboardPage() {
 
         const allWorkspaces = [personalSpace, ...fetched];
         setWorkspaces(allWorkspaces);
-
-        if (!currentWorkspace) {
-            setCurrentWorkspace(personalSpace);
-        }
+        setCurrentWorkspace(prev => prev ?? personalSpace);
     } catch (e) {
         console.error("Error fetching workspaces", e);
     }
-  };
+  }, [user]);
 
   const acceptInvite = async (ws: Workspace) => {
       if(!user?.email) return;
@@ -129,7 +112,7 @@ export default function DashboardPage() {
       }
   };
 
-  const fetchDocs = async () => {
+  const fetchDocs = useCallback(async () => {
     if (!user || !currentWorkspace) return;
     try {
         let q;
@@ -157,7 +140,20 @@ export default function DashboardPage() {
     } catch (error) {
         console.error("Error fetching docs", error);
     }
-  };
+  }, [user, currentWorkspace]);
+
+  useEffect(() => {
+    if (!loading && !user) router.push('/login');
+    if (user) {
+        fetchWorkspaces();
+    }
+  }, [user, loading, router, fetchWorkspaces]);
+
+  useEffect(() => {
+      if (currentWorkspace && user) {
+          fetchDocs();
+      }
+  }, [currentWorkspace, user, fetchDocs]);
 
   const openDocument = (doc: DocItem) => {
       if (!openTabs.find(t => t.id === doc.id)) {
@@ -205,6 +201,8 @@ export default function DashboardPage() {
     if(e) e.preventDefault();
     const name = newDocName.trim() || 'Sin título';
     if (!user) return;
+    const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+    const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
     setIsCreating(true);
     try {
         const docRef = await addDoc(collection(db, 'documents'), {
@@ -212,7 +210,8 @@ export default function DashboardPage() {
             content: '# ' + name,
             type: 'text',
             ownerId: user.uid,
-            workspaceId: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? null : currentWorkspace?.id,
+            workspaceId: docWorkspaceId,
+            folder: DEFAULT_FOLDER_NAME,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         });
@@ -226,41 +225,119 @@ export default function DashboardPage() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
+  const getUploadContext = () => {
+    if (!user) return null;
+    const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+    const isPersonal = workspaceId === PERSONAL_WORKSPACE_ID;
+    const basePath = isPersonal ? `users/${user.uid}` : `workspaces/${workspaceId}`;
+
+    return {
+        workspaceId: isPersonal ? null : workspaceId,
+        storageFolder: `${basePath}/${DEFAULT_FOLDER_NAME}`
+    };
+  };
+
+  const buildStorageFileName = (fileName: string) => {
+    const safeName = fileName.replace(/[\\/]/g, '_');
+    const uniqueId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    return `${uniqueId}_${safeName}`;
+  };
+
+  const uploadFiles = async (files: File[]) => {
+    if (!user || files.length === 0) return;
+    const context = getUploadContext();
+    if (!context) return;
 
     setIsUploading(true);
     try {
-        const basePath = currentWorkspace?.id === PERSONAL_WORKSPACE_ID
-            ? `users/${user.uid}`
-            : `workspaces/${currentWorkspace?.id}`;
+        const createdDocs: DocItem[] = [];
+        for (const file of files) {
+            const storageRef = ref(storage, `${context.storageFolder}/${buildStorageFileName(file.name)}`);
+            await uploadBytes(storageRef, file);
+            const url = await getDownloadURL(storageRef);
 
-        const storageRef = ref(storage, `${basePath}/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
+            const docRef = await addDoc(collection(db, 'documents'), {
+                name: file.name,
+                type: 'file',
+                url: url,
+                mimeType: file.type,
+                storagePath: storageRef.fullPath,
+                ownerId: user.uid,
+                workspaceId: context.workspaceId,
+                folder: DEFAULT_FOLDER_NAME,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
 
-        const docRef = await addDoc(collection(db, 'documents'), {
-            name: file.name,
-            type: 'file',
-            url: url,
-            mimeType: file.type,
-            storagePath: storageRef.fullPath,
-            ownerId: user.uid,
-            workspaceId: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? null : currentWorkspace?.id,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
+            createdDocs.push({
+                id: docRef.id,
+                name: file.name,
+                type: 'file',
+                url: url,
+                mimeType: file.type,
+                ownerId: user.uid,
+                updatedAt: { seconds: Date.now()/1000 }
+            });
+        }
 
         await fetchDocs();
-        openDocument({ id: docRef.id, name: file.name, type: 'file', url: url, mimeType: file.type, ownerId: user.uid, updatedAt: { seconds: Date.now()/1000 } });
+        if (createdDocs.length === 1) {
+            openDocument(createdDocs[0]);
+        }
     } catch (error) {
         console.error("Upload failed", error);
         alert("Error uploading file");
     } finally {
         setIsUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    await uploadFiles(files);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const isFileDrag = (e: React.DragEvent) => e.dataTransfer?.types?.includes('Files');
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!isDragActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+        dragCounter.current = 0;
+        setIsDragActive(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setIsDragActive(false);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length === 0) return;
+    await uploadFiles(files);
   };
 
   const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
@@ -310,7 +387,26 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="h-screen bg-surface-900 flex flex-col text-white overflow-hidden">
+    <div
+      className="h-screen bg-surface-900 flex flex-col text-white overflow-hidden relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragActive && (
+        <div className="absolute inset-0 z-50 pointer-events-none">
+            <div className="absolute inset-0 bg-surface-900/70 border-2 border-dashed border-mandy-500/70"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-surface-800/80 border border-mandy-500/40 rounded-xl px-6 py-4 text-center shadow-2xl shadow-black/50">
+                    <div className="text-sm font-semibold text-white">Suelta para subir</div>
+                    <div className="text-xs text-surface-300">
+                        Destino: {currentWorkspace?.name || 'Espacio Personal'} / {DEFAULT_FOLDER_NAME}
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
       {/* Top Header */}
       <header className="h-14 bg-surface-800 border-b border-surface-600/50 flex items-center justify-between px-4 shrink-0 z-50 relative">
             <div className="flex items-center gap-4">
@@ -448,7 +544,7 @@ export default function DashboardPage() {
                 <div className="flex gap-0.5">
                     <button onClick={() => createDoc()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nuevo Archivo"><Plus className="w-4 h-4" /></button>
                     <button onClick={() => fileInputRef.current?.click()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Subir Archivo"><Upload className="w-4 h-4" /></button>
-                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
                 </div>
             </div>
 
