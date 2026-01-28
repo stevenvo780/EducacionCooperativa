@@ -37,7 +37,7 @@ export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const [docs, setDocs] = useState<DocItem[]>([]);
   const router = useRouter();
-  
+
   // Workspace State
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [invites, setInvites] = useState<Workspace[]>([]);
@@ -45,9 +45,9 @@ export default function DashboardPage() {
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
   const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
-  
+
   // UI State
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null); // Legacy, effectively activeTabId
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -75,7 +75,6 @@ export default function DashboardPage() {
 
   const initializeDashboard = async () => {
     if (!user) return;
-    // 1. Fetch Workspaces
     await fetchWorkspaces();
   };
 
@@ -83,12 +82,11 @@ export default function DashboardPage() {
     if (!user) return;
     try {
         const qMembers = query(collection(db, 'workspaces'), where('members', 'array-contains', user.uid));
-        
+
         const snapshot = await getDocs(qMembers);
         const fetched: Workspace[] = [];
         snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() } as Workspace));
-        
-        // Fetch Invites
+
         if (user.email) {
             const qInvites = query(collection(db, 'workspaces'), where('pendingInvites', 'array-contains', user.email));
             const snapInvites = await getDocs(qInvites);
@@ -96,7 +94,7 @@ export default function DashboardPage() {
             snapInvites.forEach(doc => fetchedInvites.push({ id: doc.id, ...doc.data() } as Workspace));
             setInvites(fetchedInvites);
         }
-        
+
         const personalSpace: Workspace = {
             id: PERSONAL_WORKSPACE_ID,
             name: 'Espacio Personal',
@@ -104,10 +102,10 @@ export default function DashboardPage() {
             members: [user.uid],
             type: 'personal'
         };
-        
+
         const allWorkspaces = [personalSpace, ...fetched];
         setWorkspaces(allWorkspaces);
-        
+
         if (!currentWorkspace) {
             setCurrentWorkspace(personalSpace);
         }
@@ -136,11 +134,6 @@ export default function DashboardPage() {
     try {
         let q;
         if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
-            // Fetch personal docs (no workspaceId or null)
-            // Note: Compound queries with '==' null are tricky in simple mode, 
-            // so we might need to filter client side if we don't have a reliable index.
-            // For now, let's query by ownerId and filter.
-            // A better V2 approach: add 'workspaceId: "personal"' to all new personal docs.
             q = query(collection(db, 'documents'), where('ownerId', '==', user.uid));
         } else {
             q = query(collection(db, 'documents'), where('workspaceId', '==', currentWorkspace.id));
@@ -150,7 +143,6 @@ export default function DashboardPage() {
         const fetched: DocItem[] = [];
         querySnapshot.forEach((doc) => {
             const data = doc.data() as any;
-            // Client-side filtering for Personal Workspace legacy docs
             if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
                 if (!data.workspaceId || data.workspaceId === PERSONAL_WORKSPACE_ID) {
                     fetched.push({ id: doc.id, ...data } as DocItem);
@@ -159,7 +151,7 @@ export default function DashboardPage() {
                 fetched.push({ id: doc.id, ...data } as DocItem);
             }
         });
-        
+
         fetched.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
         setDocs(fetched);
     } catch (error) {
@@ -172,7 +164,7 @@ export default function DashboardPage() {
           setOpenTabs([...openTabs, doc]);
       }
       setSelectedDocId(doc.id);
-      setShowMobileSidebar(false); // Close mobile drawer if open
+      setShowMobileSidebar(false);
   };
 
   const closeTab = (docId: string, e: React.MouseEvent) => {
@@ -190,14 +182,13 @@ export default function DashboardPage() {
           const wsRef = await addDoc(collection(db, 'workspaces'), {
               name: newWorkspaceName,
               ownerId: user.uid,
-              members: [user.uid], // Owner is a member
+              members: [user.uid],
               createdAt: serverTimestamp(),
               type: 'shared'
           });
           setNewWorkspaceName('');
           setShowNewWorkspaceModal(false);
           await fetchWorkspaces();
-          // Switch to new workspace
           setCurrentWorkspace({
               id: wsRef.id,
               name: newWorkspaceName,
@@ -226,10 +217,8 @@ export default function DashboardPage() {
             updatedAt: serverTimestamp()
         });
         setNewDocName('');
-        await fetchDocs(); 
-        // Find the new doc object to open it properly with all fields (or just construct partial)
-        // ideally we fetch and then find, but for speed:
-        openDocument({ id: docRef.id, name: name, type: 'text', ownerId: user.uid, updatedAt: { seconds: Date.now() / 1000 } }); 
+        await fetchDocs();
+        openDocument({ id: docRef.id, name: name, type: 'text', ownerId: user.uid, updatedAt: { seconds: Date.now() / 1000 } });
     } catch (e) {
         console.error("Error creating doc", e);
     } finally {
@@ -240,18 +229,17 @@ export default function DashboardPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    
+
     setIsUploading(true);
     try {
-        // Path adjusted: workspaces/{wsId}/{file} or users/{uid}/{file}
-        const basePath = currentWorkspace?.id === PERSONAL_WORKSPACE_ID 
-            ? `users/${user.uid}` 
+        const basePath = currentWorkspace?.id === PERSONAL_WORKSPACE_ID
+            ? `users/${user.uid}`
             : `workspaces/${currentWorkspace?.id}`;
-            
+
         const storageRef = ref(storage, `${basePath}/${Date.now()}_${file.name}`);
         await uploadBytes(storageRef, file);
         const url = await getDownloadURL(storageRef);
-        
+
         const docRef = await addDoc(collection(db, 'documents'), {
             name: file.name,
             type: 'file',
@@ -263,7 +251,7 @@ export default function DashboardPage() {
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         });
-        
+
         await fetchDocs();
         openDocument({ id: docRef.id, name: file.name, type: 'file', url: url, mimeType: file.type, ownerId: user.uid, updatedAt: { seconds: Date.now()/1000 } });
     } catch (error) {
@@ -276,7 +264,7 @@ export default function DashboardPage() {
   };
 
   const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
-      e.stopPropagation(); 
+      e.stopPropagation();
       if (!confirm('¿Estás seguro de que quieres eliminar este elemento?')) return;
       try {
         if (docItem.type === 'file' && (docItem as any).storagePath) {
@@ -295,15 +283,10 @@ export default function DashboardPage() {
      if (!inviteEmail || !currentWorkspace || currentWorkspace.type === 'personal') return;
      try {
          const wsRef = doc(db, 'workspaces', currentWorkspace.id);
-         // Find user by email (Need a cloud function or specialized query usually, 
-         // but for now we'll just add to a 'pendingInvites' array and assume they accept later, 
-         // OR if we want to be insecure/fast, we query users collection if readable).
-         
-         // V1 Simplified: Just add to pendingInvites
          await updateDoc(wsRef, {
              pendingInvites: arrayUnion(inviteEmail)
          });
-         
+
          alert(`Invitación enviada a ${inviteEmail}`);
          setInviteEmail('');
      } catch(e) {
@@ -321,54 +304,55 @@ export default function DashboardPage() {
   };
 
   if (loading || !user) return (
-    <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+    <div className="flex h-screen items-center justify-center bg-surface-900">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500"></div>
     </div>
   );
 
   return (
-    <div className="h-screen bg-slate-50 flex flex-col text-slate-900 overflow-hidden">
+    <div className="h-screen bg-surface-900 flex flex-col text-white overflow-hidden">
       {/* Top Header */}
-      <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-20">
+      <header className="h-14 bg-surface-800 border-b border-surface-600/50 flex items-center justify-between px-4 shrink-0 z-50 relative">
             <div className="flex items-center gap-4">
-                <button onClick={() => setShowMobileSidebar(!showMobileSidebar)} className="md:hidden p-1.5 text-slate-500 hover:bg-slate-100 rounded">
+                <button onClick={() => setShowMobileSidebar(!showMobileSidebar)} className="md:hidden p-1.5 text-surface-400 hover:bg-surface-700 rounded">
                     <Menu className="w-5 h-5" />
                 </button>
-                <Link href="/" className="font-bold flex items-center gap-2 text-slate-800">
-                    <span className="bg-blue-600 text-white p-1 rounded-md text-xs">St</span>
+                <div onClick={() => setSelectedDocId(null)} className="font-bold flex items-center gap-2 text-white cursor-pointer">
+                    <span className="bg-gradient-mandy text-white p-1 rounded-md text-xs">St</span>
                     <span className="hidden sm:inline">Studio</span>
-                </Link>
-                
+                </div>
+
                 {/* Workspace Selector */}
                 <div className="relative">
-                    <button 
+                    <button
                         onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
-                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-100 rounded-lg transition border border-transparent hover:border-slate-200"
+                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-surface-700 rounded-lg transition border border-transparent hover:border-surface-600"
                     >
                         {currentWorkspace?.type === 'personal' ? (
-                            <User className="w-4 h-4 text-slate-500" />
+                            <User className="w-4 h-4 text-surface-400" />
                         ) : (
-                            <Briefcase className="w-4 h-4 text-orange-500" />
+                            <Briefcase className="w-4 h-4 text-mandy-400" />
                         )}
-                        <span className="font-medium text-sm max-w-[120px] truncate">{currentWorkspace?.name || 'Seleccionar'}</span>
-                        <ChevronDown className="w-3 h-3 text-slate-400" />
+                        <span className="font-medium text-sm max-w-[120px] truncate text-surface-200">{currentWorkspace?.name || 'Seleccionar'}</span>
+                        <ChevronDown className="w-3 h-3 text-surface-500" />
+                        {invites.length > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mandy-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-mandy-500"></span></span>}
                     </button>
-                    
+
                     {showWorkspaceMenu && (
                         <>
                             <div className="fixed inset-0 z-10" onClick={() => setShowWorkspaceMenu(false)} />
-                            <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-xl z-20 overflow-hidden">
+                            <div className="absolute top-full left-0 mt-2 w-64 bg-surface-800 border border-surface-600/50 shadow-2xl shadow-black/50 rounded-xl z-20 overflow-hidden">
                                 {invites.length > 0 && (
                                     <>
-                                        <div className="p-2 border-b border-slate-100 bg-amber-50">
-                                            <span className="text-xs font-semibold text-amber-600 uppercase tracking-wider px-2">Invitaciones</span>
+                                        <div className="p-2 border-b border-surface-600/50 bg-mandy-500/10">
+                                            <span className="text-xs font-semibold text-mandy-400 uppercase tracking-wider px-2">Invitaciones</span>
                                         </div>
                                         {invites.map(ws => (
-                                            <div key={ws.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 border-b border-slate-100">
-                                                <span className="text-sm font-medium text-slate-700 truncate max-w-[120px]">{ws.name}</span>
-                                                <button 
+                                            <div key={ws.id} className="px-4 py-3 flex items-center justify-between hover:bg-surface-700 border-b border-surface-600/30">
+                                                <span className="text-sm font-medium text-surface-200 truncate max-w-[120px]">{ws.name}</span>
+                                                <button
                                                     onClick={() => acceptInvite(ws)}
-                                                    className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                                                    className="text-xs bg-mandy-500 text-white px-2 py-1 rounded hover:bg-mandy-600"
                                                 >
                                                     Unirse
                                                 </button>
@@ -376,8 +360,8 @@ export default function DashboardPage() {
                                         ))}
                                     </>
                                 )}
-                                <div className="p-2 border-b border-slate-100">
-                                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">Mis Espacios</span>
+                                <div className="p-2 border-b border-surface-600/50">
+                                    <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider px-2">Mis Espacios</span>
                                 </div>
                                 <div className="max-h-60 overflow-y-auto">
                                     {workspaces.map(ws => (
@@ -387,7 +371,7 @@ export default function DashboardPage() {
                                                 setCurrentWorkspace(ws);
                                                 setShowWorkspaceMenu(false);
                                             }}
-                                            className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-slate-50 transition ${currentWorkspace?.id === ws.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700'}`}
+                                            className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-700 transition ${currentWorkspace?.id === ws.id ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
                                         >
                                             {ws.type === 'personal' ? <User className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
                                             {ws.name}
@@ -395,13 +379,13 @@ export default function DashboardPage() {
                                         </button>
                                     ))}
                                 </div>
-                                <div className="p-2 border-t border-slate-100 bg-slate-50">
-                                    <button 
+                                <div className="p-2 border-t border-surface-600/50 bg-surface-700/50">
+                                    <button
                                         onClick={() => {
                                             setShowNewWorkspaceModal(true);
                                             setShowWorkspaceMenu(false);
                                         }}
-                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium hover:border-blue-300 hover:text-blue-600 transition"
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-xs font-medium hover:border-mandy-500/50 hover:text-mandy-400 transition"
                                     >
                                         <Plus className="w-3 h-3" /> Nuevo Espacio
                                     </button>
@@ -412,9 +396,9 @@ export default function DashboardPage() {
                 </div>
 
                 {currentWorkspace?.members && (
-                    <button 
+                    <button
                         onClick={() => setShowMembersModal(true)}
-                        className="items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100 transition hidden sm:flex"
+                        className="items-center gap-1.5 text-xs font-medium text-surface-500 hover:text-surface-200 px-2 py-1 rounded hover:bg-surface-700 transition hidden sm:flex"
                     >
                         <Users className="w-3.5 h-3.5" />
                         {currentWorkspace.members.length}
@@ -423,13 +407,13 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-4">
-                 <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                 <div className="flex items-center gap-2 text-sm text-surface-400 bg-surface-700 px-3 py-1.5 rounded-full">
                     <User className="w-4 h-4" />
                     <span className="truncate max-w-[150px] hidden md:inline">{user.email}</span>
                 </div>
-                <button 
+                <button
                     onClick={() => logout()}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition"
+                    className="p-2 text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
                     title="Cerrar Sesión"
                 >
                     <LogOut className="w-5 h-5" />
@@ -441,52 +425,58 @@ export default function DashboardPage() {
       <div className="flex flex-1 overflow-hidden relative">
         {/* Mobile Sidebar Overlay */}
         {showMobileSidebar && (
-             <div className="absolute inset-0 z-30 bg-black/20 md:hidden" onClick={() => setShowMobileSidebar(false)} />
+             <div className="absolute inset-0 z-30 bg-black/40 md:hidden" onClick={() => setShowMobileSidebar(false)} />
         )}
 
         {/* Sidebar */}
-        <div 
-            style={{ width: sidebarWidth }} 
+        <div
+            style={{ width: sidebarWidth }}
             className={`
-                bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 transition-transform duration-300 absolute md:relative z-40 h-full
+                bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 transition-transform duration-300 absolute md:relative z-40 h-full
                 ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
             `}
         >
-            <div className="p-3 border-b border-slate-200 flex justify-between items-center bg-slate-100/50">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Explorador</span>
-                <div className="flex gap-1">
-                    <button onClick={() => createDoc()} className="p-1 hover:bg-white rounded text-slate-500 hover:text-blue-600 transition" title="Nuevo Archivo"><FileText className="w-4 h-4" /></button>
-                    <button onClick={() => fileInputRef.current?.click()} className="p-1 hover:bg-white rounded text-slate-500 hover:text-blue-600 transition" title="Subir Archivo"><Upload className="w-4 h-4" /></button>
+            <div className="p-3 border-b border-surface-600/50 flex justify-between items-center bg-surface-700/30 gap-2">
+                <div
+                    onClick={() => setSelectedDocId(null)}
+                    className="flex items-center gap-2 cursor-pointer hover:bg-surface-700 px-2 py-1 rounded transition flex-1"
+                    title="Volver a Vista Cuadrícula"
+                >
+                    <Folder className="w-4 h-4 text-surface-500" />
+                    <span className="text-xs font-bold text-surface-500 uppercase tracking-wider">Archivos</span>
+                </div>
+                <div className="flex gap-0.5">
+                    <button onClick={() => createDoc()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nuevo Archivo"><Plus className="w-4 h-4" /></button>
+                    <button onClick={() => fileInputRef.current?.click()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Subir Archivo"><Upload className="w-4 h-4" /></button>
                     <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
                 </div>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-                {/* Simulated Folder Structure - Root */}
-                <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-slate-400 uppercase mt-2">
+                <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-surface-500 uppercase mt-2">
                     <ChevronDown className="w-3 h-3" />
                     {currentWorkspace?.name}
                 </div>
-                
+
                 {docs.length === 0 && (
-                     <div className="px-4 py-8 text-center text-xs text-slate-400">
+                     <div className="px-4 py-8 text-center text-xs text-surface-500">
                         Vacío
                      </div>
                 )}
 
                 {docs.map(doc => (
-                    <div 
+                    <div
                         key={doc.id}
                         onClick={() => openDocument(doc)}
-                        className={`group flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-blue-100 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-200/50'}`}
+                        className={`group flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-mandy-500/15 text-mandy-400 font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
                     >
-                        <div className={`${selectedDocId === doc.id ? 'text-blue-600' : 'text-slate-400'}`}>
+                        <div className={`${selectedDocId === doc.id ? 'text-mandy-500' : 'text-surface-500'}`}>
                             {getIcon(doc)}
                         </div>
                         <span className="truncate flex-1">{doc.name}</span>
-                        <button 
+                        <button
                             onClick={(e) => deleteDocument(doc, e)}
-                            className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 p-0.5"
+                            className="text-surface-500 opacity-0 group-hover:opacity-100 hover:text-mandy-500 p-0.5"
                         >
                             <Trash2 className="w-3 h-3" />
                         </button>
@@ -494,35 +484,35 @@ export default function DashboardPage() {
                 ))}
             </div>
 
-            <div className="p-3 border-t border-slate-200 bg-white text-xs text-slate-400 flex justify-between items-center">
+            <div className="p-3 border-t border-surface-600/50 bg-surface-800 text-xs text-surface-500 flex justify-between items-center">
                 <span>{docs.length} items</span>
                 <div className="flex gap-2">
-                   <Settings className="w-4 h-4 hover:text-slate-600 cursor-pointer" />
-                   <HelpCircle className="w-4 h-4 hover:text-slate-600 cursor-pointer" />
+                   <Settings className="w-4 h-4 hover:text-surface-300 cursor-pointer" />
+                   <HelpCircle className="w-4 h-4 hover:text-surface-300 cursor-pointer" />
                 </div>
             </div>
         </div>
 
         {/* Central Pane */}
-        <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
-            
+        <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
+
             {/* Tabs Bar */}
             {openTabs.length > 0 && (
-                <div className="flex items-center border-b border-slate-200 bg-slate-50 overflow-x-auto scrollbar-hide">
+                <div className="flex items-center border-b border-surface-600/50 bg-surface-800 overflow-x-auto scrollbar-hide">
                     {openTabs.map(tab => (
-                        <div 
+                        <div
                             key={tab.id}
                             onClick={() => setSelectedDocId(tab.id)}
                             className={`
-                                group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-slate-200 select-none
-                                ${selectedDocId === tab.id ? 'bg-white text-blue-600 border-t-2 border-t-blue-500' : 'text-slate-500 hover:bg-slate-100'}
+                                group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-surface-600/30 select-none
+                                ${selectedDocId === tab.id ? 'bg-surface-900 text-mandy-400 border-t-2 border-t-mandy-500' : 'text-surface-500 hover:bg-surface-700/50'}
                             `}
                         >
                             {getIcon(tab)}
                             <span className="truncate flex-1">{tab.name}</span>
-                            <button 
+                            <button
                                 onClick={(e) => closeTab(tab.id, e)}
-                                className={`p-0.5 rounded-full hover:bg-slate-200 ${selectedDocId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                className={`p-0.5 rounded-full hover:bg-surface-700 ${selectedDocId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                             >
                                 <X className="w-3 h-3" />
                             </button>
@@ -532,42 +522,41 @@ export default function DashboardPage() {
             )}
 
             {selectedDocId ? (
-                // Editor View
-                 <Editor 
-                    key={selectedDocId} // Force remount on switch for simplicity
-                    roomId={selectedDocId} 
-                    onClose={() => closeTab(selectedDocId, { stopPropagation: () => {} } as React.MouseEvent)} 
+                 <Editor
+                    key={selectedDocId}
+                    roomId={selectedDocId}
+                    onClose={() => closeTab(selectedDocId, { stopPropagation: () => {} } as React.MouseEvent)}
                  />
             ) : (
                 // Grid View (Empty State / Home)
-                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30">
+                <div className="flex-1 overflow-y-auto p-8 bg-surface-900">
                      <div className="max-w-5xl mx-auto">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-3">
-                            {currentWorkspace?.type === 'personal' ? <User className="w-8 h-8 text-blue-500" /> : <Briefcase className="w-8 h-8 text-orange-500" />}
+                        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                            {currentWorkspace?.type === 'personal' ? <User className="w-8 h-8 text-surface-400" /> : <Briefcase className="w-8 h-8 text-mandy-400" />}
                             {currentWorkspace?.name}
                         </h2>
-                        
+
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                             {docs.map(doc => (
-                                <motion.div 
+                                <motion.div
                                     key={doc.id}
                                     layoutId={doc.id}
                                     onClick={() => openDocument(doc)}
-                                    className="bg-white group p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-lg transition cursor-pointer flex flex-col items-center text-center gap-3 aspect-square justify-center relative"
+                                    className="bg-surface-800 group p-4 rounded-xl border border-surface-600/50 hover:border-mandy-500/30 hover:shadow-lg hover:shadow-mandy-500/5 transition cursor-pointer flex flex-col items-center text-center gap-3 aspect-square justify-center relative"
                                 >
-                                     <div className={`p-4 rounded-full ${doc.type === 'file' ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-500'}`}>
+                                     <div className={`p-4 rounded-full ${doc.type === 'file' ? 'bg-accent-purple/20 text-accent-purple-light' : 'bg-mandy-500/10 text-mandy-400'}`}>
                                          {doc.type === 'file' ? <FileIcon className="w-8 h-8" /> : <FileCode className="w-8 h-8" />}
                                      </div>
-                                     <span className="font-medium text-slate-700 text-sm line-clamp-2 w-full break-words">
+                                     <span className="font-medium text-surface-200 text-sm line-clamp-2 w-full break-words">
                                          {doc.name}
                                      </span>
                                 </motion.div>
                             ))}
 
                             {/* Add Button Card */}
-                            <button 
+                            <button
                                 onClick={() => createDoc()}
-                                className="border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition aspect-square"
+                                className="border-2 border-dashed border-surface-600 rounded-xl flex flex-col items-center justify-center gap-2 text-surface-500 hover:border-mandy-500/50 hover:text-mandy-400 hover:bg-mandy-500/5 transition aspect-square"
                             >
                                 <Plus className="w-8 h-8" />
                                 <span className="text-sm font-medium">Nuevo Doc</span>
@@ -582,69 +571,69 @@ export default function DashboardPage() {
       {/* Modals */}
       <AnimatePresence>
         {showNewWorkspaceModal && (
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4"
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
             >
-                <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
-                    <h2 className="text-lg font-bold mb-4">Nuevo Espacio de Trabajo</h2>
-                    <input 
-                        type="text" 
-                        placeholder="Nombre, ej: Grupo Física" 
+                <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/50 p-6 w-full max-w-sm border border-surface-600/50">
+                    <h2 className="text-lg font-bold mb-4 text-white">Nuevo Espacio de Trabajo</h2>
+                    <input
+                        type="text"
+                        placeholder="Nombre, ej: Grupo Física"
                         value={newWorkspaceName}
                         onChange={(e) => setNewWorkspaceName(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-lg mb-4 text-sm"
+                        className="w-full px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg mb-4 text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
                         autoFocus
                     />
                     <div className="flex gap-2 justify-end">
-                        <button onClick={() => setShowNewWorkspaceModal(false)} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-lg">Cancelar</button>
-                        <button onClick={createWorkspace} disabled={!newWorkspaceName.trim()} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">Crear</button>
+                        <button onClick={() => setShowNewWorkspaceModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:bg-surface-700 rounded-lg">Cancelar</button>
+                        <button onClick={createWorkspace} disabled={!newWorkspaceName.trim()} className="px-4 py-2 text-sm bg-gradient-mandy text-white rounded-lg hover:opacity-90 disabled:opacity-50">Crear</button>
                     </div>
                 </div>
             </motion.div>
         )}
 
         {showMembersModal && currentWorkspace && (
-             <motion.div 
+             <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4"
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
             >
-                <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
+                <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/50 p-6 w-full max-w-md border border-surface-600/50">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-bold flex items-center gap-2">
-                            <Users className="w-5 h-5 text-blue-500" />
+                        <h2 className="text-lg font-bold flex items-center gap-2 text-white">
+                            <Users className="w-5 h-5 text-mandy-400" />
                             Miembros de {currentWorkspace.name}
                         </h2>
-                        <button onClick={() => setShowMembersModal(false)} className="p-1 hover:bg-slate-100 rounded-full"><X className="w-4 h-4" /></button>
+                        <button onClick={() => setShowMembersModal(false)} className="p-1 hover:bg-surface-700 rounded-full text-surface-400"><X className="w-4 h-4" /></button>
                     </div>
 
                     <div className="mb-6">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Invitar por Email</label>
+                        <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Invitar por Email</label>
                         <div className="flex gap-2">
-                             <input 
-                                type="email" 
-                                placeholder="usuario@ejemplo.com" 
+                             <input
+                                type="email"
+                                placeholder="usuario@ejemplo.com"
                                 value={inviteEmail}
                                 onChange={(e) => setInviteEmail(e.target.value)}
-                                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                                className="flex-1 px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
                             />
-                            <button onClick={inviteMember} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Enviar</button>
+                            <button onClick={inviteMember} className="bg-gradient-mandy text-white px-4 py-2 rounded-lg text-sm hover:opacity-90">Enviar</button>
                         </div>
                     </div>
 
                     <div className="space-y-3">
-                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Miembros ({currentWorkspace.members.length})</label>
+                         <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Miembros ({currentWorkspace.members.length})</label>
                          <div className="max-h-48 overflow-y-auto pr-2 space-y-2">
                             {currentWorkspace.members.map((uid) => (
-                                <div key={uid} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                                <div key={uid} className="flex items-center justify-between p-2 bg-surface-700 rounded-lg text-sm">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
+                                        <div className="w-8 h-8 bg-mandy-500/15 text-mandy-400 rounded-full flex items-center justify-center text-xs font-bold">
                                             U
                                         </div>
-                                        <span className="text-slate-600 font-mono text-xs">{uid.substring(0, 8)}...</span>
-                                        {uid === currentWorkspace.ownerId && <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
+                                        <span className="text-surface-300 font-mono text-xs">{uid.substring(0, 8)}...</span>
+                                        {uid === currentWorkspace.ownerId && <span className="bg-accent-purple/20 text-accent-purple-light text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
                                     </div>
-                                    <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-amber-500' : 'text-slate-300'}`} />
+                                    <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
                                 </div>
                             ))}
                          </div>
@@ -656,4 +645,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
