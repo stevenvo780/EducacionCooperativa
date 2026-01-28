@@ -441,6 +441,7 @@
             loading.classList.add('show');
 
             try {
+                // 1. Crear usuario en backend (que crea user en Firebase)
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: {
@@ -452,16 +453,29 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    // Store auth token
-                    localStorage.setItem('authToken', data.token);
-                    localStorage.setItem('workspace', data.workspace || '');
-                    
-                    showToast('¡Cuenta creada exitosamente!', 'success');
-                    
-                    // Redirect to main app
-                    setTimeout(() => {
-                        window.location.href = '/index.html';
-                    }, 1000);
+                    // 2. Hacer login automático con Firebase para obtener el ID Token real
+                    try {
+                        const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+                        const idToken = await userCredential.user.getIdToken();
+                        
+                         // Guardar token real de Firebase
+                        localStorage.setItem('authToken', idToken);
+                        localStorage.setItem('workspace', data.workspace || '');
+                        
+                        showToast('¡Cuenta creada exitosamente!', 'success');
+                        
+                        // Redirect to main app
+                        setTimeout(() => {
+                            window.location.href = '/index.html';
+                        }, 1000);
+
+                    } catch (loginError) {
+                         console.error("Auto-login failed:", loginError);
+                         // Fallback: usar token del backend si no pudimos obtener el de firebase
+                         localStorage.setItem('authToken', data.token);
+                         window.location.href = '/login.html'; // Forzar login manual mejor
+                    }
+
                 } else {
                     showToast(data.error || 'Error al crear la cuenta', 'error');
                     if (data.field) {

@@ -425,11 +425,11 @@
                 const data = await response.json();
 
                 if (response.ok && (data.success || data.token)) {
-                    // Compatibilidad: data.token puede venir directo de legacy login
-                    const token = data.token || (data.success ? '' : null); // Adjust based on API
+                    // PREFERENCIA CRÍTICA: Usar el token de Firebase si existe para identificación correcta
+                    const tokenToStore = idToken || data.token;
                     
-                    if (token) {
-                        localStorage.setItem('authToken', token);
+                    if (tokenToStore) {
+                        localStorage.setItem('authToken', tokenToStore);
                         localStorage.setItem('workspace', data.workspace || 'default');
                         
                         showToast('¡Sesión iniciada!', 'success');
