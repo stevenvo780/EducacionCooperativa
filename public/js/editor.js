@@ -1,11 +1,30 @@
 // Editor & Search Functionality
 
+function getEditorModeForFile(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    const modeMap = {
+        'md': 'markdown',
+        'txt': 'markdown',
+        'js': 'javascript',
+        'json': { name: 'javascript', json: true },
+        'html': 'htmlmixed',
+        'htm': 'htmlmixed',
+        'css': 'css',
+        'py': 'python',
+        'xml': 'xml'
+    };
+    return modeMap[ext] || 'markdown';
+}
+
 function initPanelEditor(index) {
     const textarea = document.getElementById('textarea-' + index);
     if (!textarea) return;
 
+    const panel = panels[index];
+    const mode = panel.file ? getEditorModeForFile(panel.file) : 'markdown';
+
     const editor = CodeMirror.fromTextArea(textarea, {
-        mode: 'markdown',
+        mode: mode,
         theme: 'dracula',
         lineNumbers: true,
         lineWrapping: true,
@@ -31,7 +50,29 @@ function initPanelEditor(index) {
 function updatePanelPreview(index) {
     const content = document.getElementById('content-' + index);
     if (content) {
-        content.innerHTML = marked.parse(panels[index].content);
+        const panel = panels[index];
+        const ext = panel.file ? panel.file.split('.').pop().toLowerCase() : 'md';
+        
+        // Only render markdown for .md and .txt files
+        if (ext === 'md' || ext === 'txt') {
+            content.innerHTML = marked.parse(panels[index].content);
+            
+            // Render LaTeX equations
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(content, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\[', right: '\\]', display: true},
+                        {left: '\\(', right: '\\)', display: false}
+                    ],
+                    throwOnError: false
+                });
+            }
+        } else {
+            // For non-markdown files, show a message in preview mode
+            content.innerHTML = '<div style="padding: 20px; color: #888;">Vista previa no disponible para este tipo de archivo. Use el modo de edición.</div>';
+        }
     }
 }
 
@@ -281,4 +322,115 @@ function exportPDF(index) {
     };
 
     html2pdf().set(opt).from(element).save();
+}
+
+// Markdown Toolbar Functions
+function insertMarkdown(index, before, after = '', placeholder = '') {
+    const editor = panels[index].editor;
+    if (!editor) return;
+    
+    const selection = editor.getSelection();
+    const text = selection || placeholder;
+    const newText = before + text + after;
+    
+    editor.replaceSelection(newText);
+    
+    // If there was no selection, select the placeholder text
+    if (!selection && placeholder) {
+        const cursor = editor.getCursor();
+        editor.setSelection(
+            { line: cursor.line, ch: cursor.ch - after.length - placeholder.length },
+            { line: cursor.line, ch: cursor.ch - after.length }
+        );
+    }
+    
+    editor.focus();
+}
+
+function insertHeading(index, level) {
+    const hashes = '#'.repeat(level);
+    insertMarkdown(index, hashes + ' ', '', 'Título');
+}
+
+function insertBold(index) {
+    insertMarkdown(index, '**', '**', 'texto en negrita');
+}
+
+function insertItalic(index) {
+    insertMarkdown(index, '*', '*', 'texto en cursiva');
+}
+
+function insertLink(index) {
+    insertMarkdown(index, '[', '](url)', 'texto del enlace');
+}
+
+function insertImage(index) {
+    insertMarkdown(index, '![', '](url)', 'descripción de la imagen');
+}
+
+function insertCode(index) {
+    insertMarkdown(index, '`', '`', 'código');
+}
+
+function insertCodeBlock(index) {
+    insertMarkdown(index, '```\n', '\n```', 'código');
+}
+
+function insertList(index) {
+    const editor = panels[index].editor;
+    if (!editor) return;
+    
+    const cursor = editor.getCursor();
+    editor.replaceRange('- ', cursor);
+    editor.focus();
+}
+
+function insertNumberedList(index) {
+    const editor = panels[index].editor;
+    if (!editor) return;
+    
+    const cursor = editor.getCursor();
+    editor.replaceRange('1. ', cursor);
+    editor.focus();
+}
+
+function insertTable(index) {
+    const tableMarkdown = `| Columna 1 | Columna 2 | Columna 3 |
+|-----------|-----------|-----------|
+| Celda 1   | Celda 2   | Celda 3   |
+| Celda 4   | Celda 5   | Celda 6   |
+`;
+    
+    const editor = panels[index].editor;
+    if (!editor) return;
+    
+    const cursor = editor.getCursor();
+    editor.replaceRange(tableMarkdown, cursor);
+    editor.focus();
+}
+
+function insertLatex(index, inline = true) {
+    if (inline) {
+        insertMarkdown(index, '$', '$', 'fórmula LaTeX');
+    } else {
+        insertMarkdown(index, '$$\n', '\n$$', 'fórmula LaTeX en bloque');
+    }
+}
+
+function insertQuote(index) {
+    const editor = panels[index].editor;
+    if (!editor) return;
+    
+    const cursor = editor.getCursor();
+    editor.replaceRange('> ', cursor);
+    editor.focus();
+}
+
+function insertHorizontalRule(index) {
+    const editor = panels[index].editor;
+    if (!editor) return;
+    
+    const cursor = editor.getCursor();
+    editor.replaceRange('\n---\n', cursor);
+    editor.focus();
 }

@@ -34,6 +34,7 @@ function renderPanels() {
 
         if (panel.file) {
             let contentHtml = '';
+            const isMarkdown = panel.file && (panel.file.endsWith('.md') || panel.file.endsWith('.txt'));
             
             if (panel.type === 'pdf') {
                 contentHtml = `
@@ -43,6 +44,39 @@ function renderPanels() {
                 `;
             } else {
                 contentHtml = `
+                ${isMarkdown && panel.mode !== 'preview' ? `
+                <div class="markdown-toolbar" id="md-toolbar-${i}">
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" onclick="insertHeading(${i}, 1)" title="Título 1"><i class="fas fa-heading"></i>1</button>
+                        <button class="toolbar-btn" onclick="insertHeading(${i}, 2)" title="Título 2"><i class="fas fa-heading"></i>2</button>
+                        <button class="toolbar-btn" onclick="insertHeading(${i}, 3)" title="Título 3"><i class="fas fa-heading"></i>3</button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" onclick="insertBold(${i})" title="Negrita"><i class="fas fa-bold"></i></button>
+                        <button class="toolbar-btn" onclick="insertItalic(${i})" title="Cursiva"><i class="fas fa-italic"></i></button>
+                        <button class="toolbar-btn" onclick="insertCode(${i})" title="Código inline"><i class="fas fa-code"></i></button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" onclick="insertLink(${i})" title="Enlace"><i class="fas fa-link"></i></button>
+                        <button class="toolbar-btn" onclick="insertImage(${i})" title="Imagen"><i class="fas fa-image"></i></button>
+                        <button class="toolbar-btn" onclick="insertQuote(${i})" title="Cita"><i class="fas fa-quote-right"></i></button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" onclick="insertList(${i})" title="Lista"><i class="fas fa-list-ul"></i></button>
+                        <button class="toolbar-btn" onclick="insertNumberedList(${i})" title="Lista numerada"><i class="fas fa-list-ol"></i></button>
+                        <button class="toolbar-btn" onclick="insertTable(${i})" title="Tabla"><i class="fas fa-table"></i></button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" onclick="insertLatex(${i}, true)" title="Fórmula LaTeX inline">$x$</button>
+                        <button class="toolbar-btn" onclick="insertLatex(${i}, false)" title="Fórmula LaTeX en bloque">$$</button>
+                        <button class="toolbar-btn" onclick="insertCodeBlock(${i})" title="Bloque de código"><i class="fas fa-file-code"></i></button>
+                    </div>
+                </div>
+                ` : ''}
                 <div class="panel-content">
                     <div class="editor-pane ${panel.mode === 'preview' ? 'hidden' : ''}" id="editor-${i}">
                         <textarea id="textarea-${i}"></textarea>
@@ -74,7 +108,7 @@ function renderPanels() {
                         `}
                     </div>
                     
-                    ${panel.type === 'markdown' ? `<!-- Search Bar -->
+                    ${panel.type !== 'pdf' ? `<!-- Search Bar -->
                     <div class="panel-search-bar" id="search-bar-${i}">
                         <input type="text" 
                             class="search-input" 
@@ -119,7 +153,13 @@ function getFileIcon(path) {
         case 'pdf': return 'fa-file-pdf';
         case 'txt': return 'fa-file-lines';
         case 'doc': case 'docx': return 'fa-file-word';
-        case 'png': case 'jpg': case 'jpeg': return 'fa-file-image';
+        case 'png': case 'jpg': case 'jpeg': case 'gif': case 'svg': return 'fa-file-image';
+        case 'js': return 'fa-file-code';
+        case 'json': return 'fa-file-code';
+        case 'html': case 'htm': return 'fa-file-code';
+        case 'css': return 'fa-file-code';
+        case 'py': return 'fa-file-code';
+        case 'xml': return 'fa-file-code';
         default: return 'fa-file';
     }
 }
