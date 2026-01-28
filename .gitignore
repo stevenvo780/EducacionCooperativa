@@ -52,3 +52,4 @@ playwright-report/
 *.log
 server.pid
 serviceAccountKey.json
+node_modules/

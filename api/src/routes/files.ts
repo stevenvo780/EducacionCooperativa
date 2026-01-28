@@ -1,23 +1,22 @@
-import { Router, Response } from 'express';
-import { AuthRequest, authMiddleware } from '../middleware/auth.js';
-import { bucket, db } from '../firebase.js';
-import { getUserGroups, resolveStoragePath } from '../services/groups.js';
+import { Router } from 'express';
+import { authMiddleware } from '../middleware/auth.js';
+import * as FilesController from '../controllers/files.controller.js';
+import multer from 'multer';
 
 const router = Router();
 
-// List files
-router.get('/files', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const uid = req.user?.uid;
-    const email = req.user?.email;
+// Configurar storage temporal o directo.
+const upload = multer({ dest: 'uploads/temp/' });
 
-    if (!uid) {
-      return res.status(401).json({ error: 'Sesión inválida' });
-    }
+router.use(authMiddleware);
 
-    const groups = await getUserGroups(uid, email);
-    const files: string[] = [];
+// GET /api/files?path=...
+router.get('/files', FilesController.listFiles);
 
+// POST /api/folder
+router.post('/folder', FilesController.createFolder);
+
+export default router;
     // Personal files
     const personalPrefix = `users/${uid}/`;
     const [personalBlobs] = await bucket.getFiles({ prefix: personalPrefix });
