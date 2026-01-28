@@ -22,7 +22,9 @@ function showToast(message, type = 'info') {
 async function login() {
     const password = document.getElementById('password-input').value;
     const email = (document.getElementById('email-input')?.value || '').trim();
-    const invite = new URLSearchParams(window.location.search).get('invite') || '';
+    const inviteParam = new URLSearchParams(window.location.search).get('invite') || '';
+    const inviteInput = (document.getElementById('invite-input')?.value || '').trim();
+    const invite = inviteInput || inviteParam;
 
     try {
         const response = await fetch('/api/login', {
@@ -44,6 +46,36 @@ async function login() {
         }
     } catch (e) {
         alert('Error de conexión');
+    }
+}
+
+function logout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('workspace');
+    location.reload();
+}
+
+async function acceptInviteFlow() {
+    const invite = prompt('Ingresa el código de invitación');
+    const email = (document.getElementById('email-input')?.value || '').trim();
+    if (!invite) return;
+    try {
+        const response = await fetch('/api/invitations/accept', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ invite, email })
+        });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        authToken = data.token;
+        localStorage.setItem('authToken', authToken);
+        localStorage.setItem('workspace', data.workspace || '');
+        document.getElementById('login-overlay').style.display = 'none';
+        loadFileList();
+        updateWorkspaceInfo();
+        showToast('Invitación aceptada, espacio ' + (data.workspace || ''));
+    } catch (e) {
+        showToast('Invitación no válida', 'error');
     }
 }
 

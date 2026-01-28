@@ -229,6 +229,9 @@ body {
     border-bottom: 1px solid rgba(255,255,255,0.1);
     flex-wrap: wrap;
     transition: all 0.3s ease;
+    position: sticky;
+    top: 0;
+    z-index: 150;
 }
 
 .top-toolbar.collapsed {
@@ -255,6 +258,32 @@ body {
     font-size: 1.2em;
     transition: all 0.3s ease;
     z-index: 200;
+}
+
+@media (max-width: 768px) {
+    .top-toolbar {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .toolbar-section {
+        width: 100%;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .top-toolbar .btn {
+        flex: 1 1 45%;
+        min-width: 140px;
+        justify-content: center;
+    }
+    .grid-selector {
+        width: 100%;
+        justify-content: center;
+    }
+    .toolbar-toggle {
+        top: 64px;
+    }
 }
 
 .toolbar-toggle:hover {
