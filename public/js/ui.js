@@ -44,7 +44,7 @@ function renderPanels() {
                 `;
             } else {
                 contentHtml = `
-                ${isMarkdown && panel.mode !== 'preview' ? `
+                ${isMarkdown && panel.mode === 'edit' ? `
                 <div class="markdown-toolbar" id="md-toolbar-${i}">
                     <div class="toolbar-group">
                         <button class="toolbar-btn" onclick="insertHeading(${i}, 1)" title="Título 1"><i class="fas fa-heading"></i>1</button>
@@ -101,6 +101,9 @@ function renderPanels() {
                         <button class="panel-btn" onclick="openDownloadModal(${i})" title="Descargar / Exportar"><i class="fas fa-download"></i></button>
                         
                         ${panel.type === 'pdf' ? '' : `
+                        ${!panel.file.endsWith('.md') ? `
+                        <button class="panel-btn" onclick="convertFileToMarkdown(${i})" title="Convertir a Markdown"><i class="fas fa-file-import"></i> MD</button>
+                        ` : ''}
                         <div class="separator"></div>
                         <button class="panel-btn ${panel.mode === 'edit' ? 'active' : ''}" onclick="setPanelMode(${i}, 'edit')" title="Editar"><i class="fas fa-pen"></i></button>
                         <button class="panel-btn ${panel.mode === 'split' ? 'active' : ''}" onclick="setPanelMode(${i}, 'split')" title="Dividir"><i class="fas fa-columns"></i></button>

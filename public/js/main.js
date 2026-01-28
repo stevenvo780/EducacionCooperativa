@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
         loadFileList().then(() => {
             restoreSession();
             setupSidebarDragDrop();
+            // Initialize WebSocket for real-time collaboration
+            initWebSocket();
         });
         updateWorkspaceInfo();
     } else {
