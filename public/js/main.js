@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
             restoreSession();
             setupSidebarDragDrop();
         });
+        updateWorkspaceInfo();
     }
 
     setupKeyboardShortcuts();
@@ -83,3 +84,34 @@ window.addEventListener('beforeinstallprompt', (e) => {
         toolbar.appendChild(installBtn);
     }
 });
+
+async function createInvite() {
+    if (!authToken) {
+        showToast('Inicia sesión primero', 'error');
+        return;
+    }
+    try {
+        const email = prompt('Correo del invitado (opcional):') || '';
+        const response = await fetch('/api/invitations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + authToken
+            },
+            body: JSON.stringify({ email })
+        });
+        if (!response.ok) throw new Error('No se pudo crear invitación');
+        const data = await response.json();
+        await navigator.clipboard.writeText(data.link);
+        showToast('Enlace copiado al portapapeles');
+    } catch (err) {
+        console.error(err);
+        showToast('Error al crear invitación', 'error');
+    }
+}
+
+function updateWorkspaceInfo() {
+    const ws = localStorage.getItem('workspace') || '';
+    const el = document.getElementById('workspace-info');
+    if (el) el.textContent = ws ? `Espacio: ${ws}` : '';
+}
