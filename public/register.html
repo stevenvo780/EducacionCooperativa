@@ -336,6 +336,15 @@
                 </div>
             </form>
 
+            <div style="margin: 1.5rem 0 1rem 0; height: 1px; background: rgba(255,255,255,0.1); position: relative; text-align: center;">
+                <span style="background: var(--dark); padding: 0 10px; position: relative; top: -10px; color: rgba(255,255,255,0.5); font-size: 0.9rem;">o</span>
+            </div>
+            
+            <button type="button" class="btn" onclick="signInWithGoogle()" style="width: 100%; background: #ffffff; color: #333; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 500;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="18">
+                Registrarse con Google
+            </button>
+
             <div class="login-link">
                 ¿Ya tienes cuenta? <a href="/login.html">Inicia sesión aquí</a>
             </div>
@@ -468,5 +477,10 @@
             }
         }
     </script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="/js/firebase-config.js"></script>
+    <script src="/js/firebase-auth.js"></script>
 </body>
 </html>
