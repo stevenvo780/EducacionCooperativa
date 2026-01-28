@@ -49,15 +49,15 @@ export default function LandingPage() {
                     className="max-w-3xl mx-auto space-y-8"
                 >
                     <h1 className="text-4xl lg:text-6xl font-extrabold tracking-tight text-slate-900">
-                        La plataforma definitiva para estudiar <span className="text-blue-600">Griego Clásico</span>
+                        La plataforma definitiva para estudiar <span className="text-blue-600">Colaborativamente</span>
                     </h1>
                     <p className="text-lg lg:text-xl text-slate-600 leading-relaxed">
-                        Edita, traduce y gestiona tus textos en griego y markdown en un entorno colaborativo y moderno.
+                        Crea espacios de trabajo, gestiona documentos y estudia en equipo. Edita textos y comparte conocimiento en tiempo real.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                         <Link href={user ? "/dashboard" : "/login"}>
                             <button className="flex items-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition shadow-lg hover:shadow-xl transform hover:-translate-y-1">
-                                {user ? "Ir a mis textos" : "Comenzar gratis"}
+                                {user ? "Ir a mis espacios" : "Comenzar gratis"}
                                 <ArrowRight className="w-5 h-5" />
                             </button>
                         </Link>

@@ -53,3 +53,4 @@ playwright-report/
 server.pid
 serviceAccountKey.json
 node_modules/
+.playwright-mcp
