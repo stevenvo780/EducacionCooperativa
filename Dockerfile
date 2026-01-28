@@ -2,10 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
-RUN pip install --no-cache-dir aiohttp==3.13.3 firebase-admin
+# Install dependencies from requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all Griego2 content
+# Copy all content (respecting .dockerignore)
 COPY . /app/
 
 # Expose single port (HTTP + WebSocket unified)
