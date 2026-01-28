@@ -1,18 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import Link from 'next/link';
-import { FileText, Plus, Trash2, Search, LogOut, User } from 'lucide-react';
+import { FileText, Plus, Trash2, Search, LogOut, User, Upload, Image as ImageIcon, File as FileIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface DocItem {
   id: string;
   name: string;
+  type?: 'text' | 'file';
+  url?: string;
+  mimeType?: string;
   updatedAt: any;
+  ownerId: string;
 }
 
 export default function DashboardPage() {
@@ -21,6 +26,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [newDocName, setNewDocName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!loading && !user) router.push('/login');
@@ -35,13 +42,14 @@ export default function DashboardPage() {
         const q = query(
             collection(db, 'documents'), 
             where('ownerId', '==', user.uid)
-            // Note: Compound queries/ordering require index in Firestore. Keeping it simple for now.
         );
         const querySnapshot = await getDocs(q);
         const fetched: DocItem[] = [];
         querySnapshot.forEach((doc) => {
             fetched.push({ id: doc.id, ...doc.data() } as DocItem);
         });
+        // Client side sort since index might be missing
+        fetched.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
         setDocs(fetched);
     } catch (error) {
         console.error("Error fetching docs", error);
@@ -56,6 +64,7 @@ export default function DashboardPage() {
         const docRef = await addDoc(collection(db, 'documents'), {
             name: newDocName,
             content: '# ' + newDocName,
+            type: 'text',
             ownerId: user.uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -69,15 +78,58 @@ export default function DashboardPage() {
     }
   };
 
-  const deleteDocument = async (id: string, e: React.MouseEvent) => {
-      e.preventDefault(); // Stop Link propagation if nested
-      if (!confirm('¿Estás seguro de que quieres eliminar este documento?')) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    
+    setIsUploading(true);
+    try {
+        const storageRef = ref(storage, `users/${user.uid}/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        
+        await addDoc(collection(db, 'documents'), {
+            name: file.name,
+            type: 'file',
+            url: url,
+            mimeType: file.type,
+            storagePath: storageRef.fullPath,
+            ownerId: user.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        
+        fetchDocs();
+    } catch (error) {
+        console.error("Upload failed", error);
+        alert("Error uploading file");
+    } finally {
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
+      e.preventDefault(); 
+      if (!confirm('¿Estás seguro de que quieres eliminar este elemento?')) return;
       try {
-        await deleteDoc(doc(db, 'documents', id));
+        if (docItem.type === 'file' && (docItem as any).storagePath) {
+            const storageRef = ref(storage, (docItem as any).storagePath);
+            await deleteObject(storageRef).catch(e => console.warn("Storage delete failed", e));
+        }
+        await deleteDoc(doc(db, 'documents', docItem.id));
         fetchDocs();
       } catch (e) {
         console.error("Error deleting", e);
       }
+  };
+
+  const getIcon = (doc: DocItem) => {
+      if (doc.type === 'file') {
+          if (doc.mimeType?.startsWith('image/')) return <ImageIcon className="w-5 h-5" />;
+          return <FileIcon className="w-5 h-5" />;
+      }
+      return <FileText className="w-5 h-5" />;
   };
 
   if (loading || !user) return (
@@ -117,30 +169,57 @@ export default function DashboardPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input 
                     type="text" 
-                    placeholder="Buscar documentos (Pronto)..." 
-                    disabled
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-500 cursor-not-allowed"
+                    placeholder="Buscar documentos..." 
+                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                    onChange={(e) => {
+                        // Basic client search
+                        const val = e.target.value.toLowerCase();
+                        if (!val) {
+                            fetchDocs(); 
+                            return;
+                        }
+                        const filtered = docs.filter(d => d.name.toLowerCase().includes(val));
+                        setDocs(filtered);
+                    }}
                 />
             </div>
 
-            <form onSubmit={createDoc} className="flex w-full md:w-auto gap-2">
+            <div className="flex w-full md:w-auto gap-3 items-center">
                 <input 
-                    type="text" 
-                    placeholder="Nuevo documento..." 
-                    className="flex-1 md:w-64 border border-slate-200 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={newDocName}
-                    onChange={e => setNewDocName(e.target.value)}
-                    required
+                    type="file" 
+                    ref={fileInputRef}
+                    className="hidden" 
+                    onChange={handleFileUpload}
                 />
-                <button 
-                    type="submit"
-                    disabled={isCreating}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-medium text-sm shadow-sm hover:shadow active:scale-95 transform"
+                
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2 font-medium text-sm"
                 >
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Crear</span>
+                    <Upload className="w-4 h-4" />
+                    {isUploading ? 'Subiendo...' : 'Subir'}
                 </button>
-            </form>
+
+                <form onSubmit={createDoc} className="flex gap-2">
+                    <input 
+                        type="text" 
+                        placeholder="Nuevo documento..." 
+                        className="w-40 xl:w-64 border border-slate-200 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={newDocName}
+                        onChange={e => setNewDocName(e.target.value)}
+                        required={!newDocName} /* Only required if submitting form */
+                    />
+                    <button 
+                        type="submit"
+                        disabled={isCreating}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-medium text-sm shadow-sm hover:shadow active:scale-95 transform"
+                    >
+                        <Plus className="w-4 h-4" />
+                        <span className="hidden sm:inline">Crear</span>
+                    </button>
+                </form>
+            </div>
         </div>
 
         {/* Documents Grid */}
@@ -166,10 +245,10 @@ export default function DashboardPage() {
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition h-full flex flex-col justify-between">
                             <div className="flex items-start justify-between mb-4">
                                 <div className="bg-blue-50 text-blue-600 p-2 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition">
-                                    <FileText className="w-5 h-5" />
+                                    {getIcon(doc)}
                                 </div>
                                 <button 
-                                    onClick={(e) => deleteDocument(doc.id, e)}
+                                    onClick={(e) => deleteDocument(doc, e)}
                                     className="text-slate-300 hover:text-red-500 p-1 rounded-md hover:bg-red-50 transition opacity-0 group-hover:opacity-100"
                                     title="Eliminar"
                                 >
@@ -182,7 +261,7 @@ export default function DashboardPage() {
                                     {doc.name || 'Sin título'}
                                 </h3>
                                 <p className="text-xs text-slate-400">
-                                    ID: {doc.id.substring(0, 8)}...
+                                    {doc.type === 'file' ? 'Archivo' : 'Documento'} • ID: {doc.id.substring(0, 8)}
                                 </p>
                             </div>
                         </div>
