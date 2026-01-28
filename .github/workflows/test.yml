@@ -34,7 +34,7 @@ jobs:
         PYTHONPATH: .
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
@@ -102,12 +102,13 @@ jobs:
     
     - name: Upload test artifacts
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-artifacts
         path: |
           test-results/
           playwright-report/
+          server.log
 
   lint:
     name: Code Quality

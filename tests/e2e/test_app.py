@@ -161,17 +161,14 @@ class TestCollaborativeEditing:
     
     async def test_websocket_connection(self, page):
         """Test that WebSocket connection is established"""
+        # Set up console error listener before any page operations
+        console_errors = []
+        page.on('console', lambda msg: console_errors.append(msg) if msg.type == 'error' else None)
+        
         await self.login(page)
         
         # Wait a moment for WebSocket to connect
         await asyncio.sleep(2)
-        
-        # Check for any WebSocket errors in console
-        # This is a basic check - in a real scenario we'd monitor network
-        console_errors = []
-        page.on('console', lambda msg: console_errors.append(msg) if msg.type == 'error' else None)
-        
-        await asyncio.sleep(1)
         
         # No WebSocket connection errors should be present
         ws_errors = [err for err in console_errors if 'websocket' in str(err).lower()]
