@@ -7,7 +7,7 @@ import { db, storage } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import Link from 'next/link';
-import { FileText, Plus, Trash2, Search, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, MoreVertical, FileCode, Settings, HelpCircle, ArrowLeft } from 'lucide-react';
+import { FileText, Plus, Trash2, Search, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, MoreVertical, FileCode, Settings, HelpCircle, ArrowLeft, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@/components/Editor';
 
@@ -47,8 +47,10 @@ export default function DashboardPage() {
   const [showMembersModal, setShowMembersModal] = useState(false);
   
   // UI State
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null); // Legacy, effectively activeTabId
+  const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   // Actions State
   const [newDocName, setNewDocName] = useState('');
@@ -165,6 +167,23 @@ export default function DashboardPage() {
     }
   };
 
+  const openDocument = (doc: DocItem) => {
+      if (!openTabs.find(t => t.id === doc.id)) {
+          setOpenTabs([...openTabs, doc]);
+      }
+      setSelectedDocId(doc.id);
+      setShowMobileSidebar(false); // Close mobile drawer if open
+  };
+
+  const closeTab = (docId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      const newTabs = openTabs.filter(t => t.id !== docId);
+      setOpenTabs(newTabs);
+      if (selectedDocId === docId) {
+          setSelectedDocId(newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null);
+      }
+  };
+
   const createWorkspace = async () => {
       if (!newWorkspaceName.trim() || !user) return;
       try {
@@ -208,7 +227,9 @@ export default function DashboardPage() {
         });
         setNewDocName('');
         await fetchDocs(); 
-        setSelectedDocId(docRef.id);
+        // Find the new doc object to open it properly with all fields (or just construct partial)
+        // ideally we fetch and then find, but for speed:
+        openDocument({ id: docRef.id, name: name, type: 'text', ownerId: user.uid, updatedAt: { seconds: Date.now() / 1000 } }); 
     } catch (e) {
         console.error("Error creating doc", e);
     } finally {
@@ -244,7 +265,7 @@ export default function DashboardPage() {
         });
         
         await fetchDocs();
-        setSelectedDocId(docRef.id);
+        openDocument({ id: docRef.id, name: file.name, type: 'file', url: url, mimeType: file.type, ownerId: user.uid, updatedAt: { seconds: Date.now()/1000 } });
     } catch (error) {
         console.error("Upload failed", error);
         alert("Error uploading file");
@@ -310,6 +331,9 @@ export default function DashboardPage() {
       {/* Top Header */}
       <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-20">
             <div className="flex items-center gap-4">
+                <button onClick={() => setShowMobileSidebar(!showMobileSidebar)} className="md:hidden p-1.5 text-slate-500 hover:bg-slate-100 rounded">
+                    <Menu className="w-5 h-5" />
+                </button>
                 <Link href="/" className="font-bold flex items-center gap-2 text-slate-800">
                     <span className="bg-blue-600 text-white p-1 rounded-md text-xs">St</span>
                     <span className="hidden sm:inline">Studio</span>
@@ -390,7 +414,7 @@ export default function DashboardPage() {
                 {currentWorkspace?.members && (
                     <button 
                         onClick={() => setShowMembersModal(true)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100 transition hidden sm:flex"
+                        className="items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100 transition hidden sm:flex"
                     >
                         <Users className="w-3.5 h-3.5" />
                         {currentWorkspace.members.length}
@@ -414,9 +438,20 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Layout (Sidebar + Content) */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Mobile Sidebar Overlay */}
+        {showMobileSidebar && (
+             <div className="absolute inset-0 z-30 bg-black/20 md:hidden" onClick={() => setShowMobileSidebar(false)} />
+        )}
+
         {/* Sidebar */}
-        <div style={{ width: sidebarWidth }} className="bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 transition-all hidden md:flex">
+        <div 
+            style={{ width: sidebarWidth }} 
+            className={`
+                bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 transition-transform duration-300 absolute md:relative z-40 h-full
+                ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}
+        >
             <div className="p-3 border-b border-slate-200 flex justify-between items-center bg-slate-100/50">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Explorador</span>
                 <div className="flex gap-1">
@@ -442,7 +477,7 @@ export default function DashboardPage() {
                 {docs.map(doc => (
                     <div 
                         key={doc.id}
-                        onClick={() => setSelectedDocId(doc.id)}
+                        onClick={() => openDocument(doc)}
                         className={`group flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-blue-100 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-200/50'}`}
                     >
                         <div className={`${selectedDocId === doc.id ? 'text-blue-600' : 'text-slate-400'}`}>
@@ -470,11 +505,38 @@ export default function DashboardPage() {
 
         {/* Central Pane */}
         <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
+            
+            {/* Tabs Bar */}
+            {openTabs.length > 0 && (
+                <div className="flex items-center border-b border-slate-200 bg-slate-50 overflow-x-auto scrollbar-hide">
+                    {openTabs.map(tab => (
+                        <div 
+                            key={tab.id}
+                            onClick={() => setSelectedDocId(tab.id)}
+                            className={`
+                                group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-slate-200 select-none
+                                ${selectedDocId === tab.id ? 'bg-white text-blue-600 border-t-2 border-t-blue-500' : 'text-slate-500 hover:bg-slate-100'}
+                            `}
+                        >
+                            {getIcon(tab)}
+                            <span className="truncate flex-1">{tab.name}</span>
+                            <button 
+                                onClick={(e) => closeTab(tab.id, e)}
+                                className={`p-0.5 rounded-full hover:bg-slate-200 ${selectedDocId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                            >
+                                <X className="w-3 h-3" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {selectedDocId ? (
                 // Editor View
                  <Editor 
+                    key={selectedDocId} // Force remount on switch for simplicity
                     roomId={selectedDocId} 
-                    onClose={() => setSelectedDocId(null)} 
+                    onClose={() => closeTab(selectedDocId, { stopPropagation: () => {} } as React.MouseEvent)} 
                  />
             ) : (
                 // Grid View (Empty State / Home)
@@ -490,7 +552,7 @@ export default function DashboardPage() {
                                 <motion.div 
                                     key={doc.id}
                                     layoutId={doc.id}
-                                    onClick={() => setSelectedDocId(doc.id)}
+                                    onClick={() => openDocument(doc)}
                                     className="bg-white group p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-lg transition cursor-pointer flex flex-col items-center text-center gap-3 aspect-square justify-center relative"
                                 >
                                      <div className={`p-4 rounded-full ${doc.type === 'file' ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-500'}`}>
