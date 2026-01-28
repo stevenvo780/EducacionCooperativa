@@ -25,3 +25,5 @@ body {
     )
     rgb(var(--background-start-rgb));
 }
+
+@import 'katex/dist/katex.min.css';
