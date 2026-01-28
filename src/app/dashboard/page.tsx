@@ -7,8 +7,9 @@ import { db, storage } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import Link from 'next/link';
-import { FileText, Plus, Trash2, Search, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield } from 'lucide-react';
+import { FileText, Plus, Trash2, Search, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, MoreVertical, FileCode, Settings, HelpCircle, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Editor from '@/components/Editor';
 
 interface Workspace {
   id: string;
@@ -45,6 +46,10 @@ export default function DashboardPage() {
   const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   
+  // UI State
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+
   // Actions State
   const [newDocName, setNewDocName] = useState('');
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
@@ -186,14 +191,15 @@ export default function DashboardPage() {
       }
   };
 
-  const createDoc = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDocName.trim() || !user) return;
+  const createDoc = async (e?: React.FormEvent) => {
+    if(e) e.preventDefault();
+    const name = newDocName.trim() || 'Sin título';
+    if (!user) return;
     setIsCreating(true);
     try {
         const docRef = await addDoc(collection(db, 'documents'), {
-            name: newDocName,
-            content: '# ' + newDocName,
+            name: name,
+            content: '# ' + name,
             type: 'text',
             ownerId: user.uid,
             workspaceId: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? null : currentWorkspace?.id,
@@ -201,10 +207,11 @@ export default function DashboardPage() {
             updatedAt: serverTimestamp()
         });
         setNewDocName('');
-        fetchDocs(); 
-        router.push(`/editor/${docRef.id}`);
+        await fetchDocs(); 
+        setSelectedDocId(docRef.id);
     } catch (e) {
         console.error("Error creating doc", e);
+    } finally {
         setIsCreating(false);
     }
   };
@@ -224,7 +231,7 @@ export default function DashboardPage() {
         await uploadBytes(storageRef, file);
         const url = await getDownloadURL(storageRef);
         
-        await addDoc(collection(db, 'documents'), {
+        const docRef = await addDoc(collection(db, 'documents'), {
             name: file.name,
             type: 'file',
             url: url,
@@ -236,7 +243,8 @@ export default function DashboardPage() {
             updatedAt: serverTimestamp()
         });
         
-        fetchDocs();
+        await fetchDocs();
+        setSelectedDocId(docRef.id);
     } catch (error) {
         console.error("Upload failed", error);
         alert("Error uploading file");
@@ -247,7 +255,7 @@ export default function DashboardPage() {
   };
 
   const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
-      e.preventDefault(); 
+      e.stopPropagation(); 
       if (!confirm('¿Estás seguro de que quieres eliminar este elemento?')) return;
       try {
         if (docItem.type === 'file' && (docItem as any).storagePath) {
@@ -256,6 +264,7 @@ export default function DashboardPage() {
         }
         await deleteDoc(doc(db, 'documents', docItem.id));
         fetchDocs();
+        if (selectedDocId === docItem.id) setSelectedDocId(null);
       } catch (e) {
         console.error("Error deleting", e);
       }
@@ -297,27 +306,27 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+    <div className="h-screen bg-slate-50 flex flex-col text-slate-900 overflow-hidden">
+      {/* Top Header */}
+      <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-20">
             <div className="flex items-center gap-4">
-                <Link href="/" className="text-xl font-bold flex items-center gap-2 text-slate-800">
-                    <span className="bg-blue-600 text-white p-1 rounded">St</span>
+                <Link href="/" className="font-bold flex items-center gap-2 text-slate-800">
+                    <span className="bg-blue-600 text-white p-1 rounded-md text-xs">St</span>
+                    <span className="hidden sm:inline">Studio</span>
                 </Link>
                 
                 {/* Workspace Selector */}
                 <div className="relative">
                     <button 
                         onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
-                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 rounded-lg transition border border-transparent hover:border-slate-200"
+                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-100 rounded-lg transition border border-transparent hover:border-slate-200"
                     >
                         {currentWorkspace?.type === 'personal' ? (
                             <User className="w-4 h-4 text-slate-500" />
                         ) : (
                             <Briefcase className="w-4 h-4 text-orange-500" />
                         )}
-                        <span className="font-medium text-sm">{currentWorkspace?.name || 'Seleccionar espacio'}</span>
+                        <span className="font-medium text-sm max-w-[120px] truncate">{currentWorkspace?.name || 'Seleccionar'}</span>
                         <ChevronDown className="w-3 h-3 text-slate-400" />
                     </button>
                     
@@ -378,18 +387,22 @@ export default function DashboardPage() {
                     )}
                 </div>
 
-                {currentWorkspace?.type === 'shared' && (
+                {currentWorkspace?.members && (
                     <button 
                         onClick={() => setShowMembersModal(true)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100 transition"
+                        className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100 transition hidden sm:flex"
                     >
                         <Users className="w-3.5 h-3.5" />
-                        {currentWorkspace.members.length} miembros
+                        {currentWorkspace.members.length}
                     </button>
                 )}
             </div>
 
             <div className="flex items-center gap-4">
+                 <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                    <User className="w-4 h-4" />
+                    <span className="truncate max-w-[150px] hidden md:inline">{user.email}</span>
+                </div>
                 <button 
                     onClick={() => logout()}
                     className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition"
@@ -398,104 +411,111 @@ export default function DashboardPage() {
                     <LogOut className="w-5 h-5" />
                 </button>
             </div>
-        </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        {/* Actions Bar */}
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
-            <div className="relative w-full md:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                    type="text" 
-                    placeholder="Buscar documentos..." 
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-500 focus:ring-2 focus:ring-blue-500 outline-none"
-                    onChange={(e) => {
-                        const val = e.target.value.toLowerCase();
-                        if (!val) {
-                            fetchDocs(); 
-                            return;
-                        }
-                        const filtered = docs.filter(d => d.name.toLowerCase().includes(val));
-                        setDocs(filtered);
-                    }}
-                />
+      {/* Main Layout (Sidebar + Content) */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <div style={{ width: sidebarWidth }} className="bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 transition-all hidden md:flex">
+            <div className="p-3 border-b border-slate-200 flex justify-between items-center bg-slate-100/50">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Explorador</span>
+                <div className="flex gap-1">
+                    <button onClick={() => createDoc()} className="p-1 hover:bg-white rounded text-slate-500 hover:text-blue-600 transition" title="Nuevo Archivo"><FileText className="w-4 h-4" /></button>
+                    <button onClick={() => fileInputRef.current?.click()} className="p-1 hover:bg-white rounded text-slate-500 hover:text-blue-600 transition" title="Subir Archivo"><Upload className="w-4 h-4" /></button>
+                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+                {/* Simulated Folder Structure - Root */}
+                <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-slate-400 uppercase mt-2">
+                    <ChevronDown className="w-3 h-3" />
+                    {currentWorkspace?.name}
+                </div>
+                
+                {docs.length === 0 && (
+                     <div className="px-4 py-8 text-center text-xs text-slate-400">
+                        Vacío
+                     </div>
+                )}
+
+                {docs.map(doc => (
+                    <div 
+                        key={doc.id}
+                        onClick={() => setSelectedDocId(doc.id)}
+                        className={`group flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-blue-100 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-200/50'}`}
+                    >
+                        <div className={`${selectedDocId === doc.id ? 'text-blue-600' : 'text-slate-400'}`}>
+                            {getIcon(doc)}
+                        </div>
+                        <span className="truncate flex-1">{doc.name}</span>
+                        <button 
+                            onClick={(e) => deleteDocument(doc, e)}
+                            className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 p-0.5"
+                        >
+                            <Trash2 className="w-3 h-3" />
+                        </button>
+                    </div>
+                ))}
             </div>
 
-            <div className="flex w-full md:w-auto gap-3 items-center">
-                <input 
-                    type="file" 
-                    ref={fileInputRef}
-                    className="hidden" 
-                    onChange={handleFileUpload}
-                />
-                
-                <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2 font-medium text-sm"
-                >
-                    <Upload className="w-4 h-4" />
-                    Subir
-                </button>
-
-                <form onSubmit={createDoc} className="flex gap-2">
-                    <input 
-                        type="text"
-                        placeholder="Nuevo documento"
-                        value={newDocName}
-                        onChange={(e) => setNewDocName(e.target.value)}
-                        className="bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-48"
-                    />
-                    <button 
-                        type="submit"
-                        disabled={isCreating || !newDocName.trim()}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-medium text-sm disabled:opacity-50"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Crear
-                    </button>
-                </form>
+            <div className="p-3 border-t border-slate-200 bg-white text-xs text-slate-400 flex justify-between items-center">
+                <span>{docs.length} items</span>
+                <div className="flex gap-2">
+                   <Settings className="w-4 h-4 hover:text-slate-600 cursor-pointer" />
+                   <HelpCircle className="w-4 h-4 hover:text-slate-600 cursor-pointer" />
+                </div>
             </div>
         </div>
 
-        {/* Content Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {docs.map((doc) => (
-                <Link href={doc.type === 'file' ? doc.url || '#' : `/editor/${doc.id}`} key={doc.id} target={doc.type === 'file' ? '_blank' : undefined}>
-                    <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="group bg-white border border-slate-200 hover:border-blue-300 hover:shadow-md rounded-xl p-4 transition cursor-pointer relative"
-                    >
-                        <div className="flex items-start justify-between mb-3">
-                            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                                {getIcon(doc)}
-                            </div>
+        {/* Central Pane */}
+        <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
+            {selectedDocId ? (
+                // Editor View
+                 <Editor 
+                    roomId={selectedDocId} 
+                    onClose={() => setSelectedDocId(null)} 
+                 />
+            ) : (
+                // Grid View (Empty State / Home)
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30">
+                     <div className="max-w-5xl mx-auto">
+                        <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-3">
+                            {currentWorkspace?.type === 'personal' ? <User className="w-8 h-8 text-blue-500" /> : <Briefcase className="w-8 h-8 text-orange-500" />}
+                            {currentWorkspace?.name}
+                        </h2>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                            {docs.map(doc => (
+                                <motion.div 
+                                    key={doc.id}
+                                    layoutId={doc.id}
+                                    onClick={() => setSelectedDocId(doc.id)}
+                                    className="bg-white group p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-lg transition cursor-pointer flex flex-col items-center text-center gap-3 aspect-square justify-center relative"
+                                >
+                                     <div className={`p-4 rounded-full ${doc.type === 'file' ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-500'}`}>
+                                         {doc.type === 'file' ? <FileIcon className="w-8 h-8" /> : <FileCode className="w-8 h-8" />}
+                                     </div>
+                                     <span className="font-medium text-slate-700 text-sm line-clamp-2 w-full break-words">
+                                         {doc.name}
+                                     </span>
+                                </motion.div>
+                            ))}
+
+                            {/* Add Button Card */}
                             <button 
-                                onClick={(e) => deleteDocument(doc, e)}
-                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition opacity-0 group-hover:opacity-100"
+                                onClick={() => createDoc()}
+                                className="border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition aspect-square"
                             >
-                                <Trash2 className="w-4 h-4" />
+                                <Plus className="w-8 h-8" />
+                                <span className="text-sm font-medium">Nuevo Doc</span>
                             </button>
                         </div>
-                        <h3 className="font-medium text-slate-800 truncate mb-1">{doc.name}</h3>
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                             <span>{(doc.updatedAt?.seconds ? new Date(doc.updatedAt.seconds * 1000).toLocaleDateString() : 'Draft')}</span>
-                             {doc.type === 'file' && <span className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">{doc.mimeType?.split('/')[1]?.toUpperCase() || 'FILE'}</span>}
-                        </div>
-                    </motion.div>
-                </Link>
-            ))}
-
-            {docs.length === 0 && (
-                <div className="col-span-full py-12 text-center text-slate-400 bg-slate-50/50 border-2 border-dashed border-slate-200 rounded-xl">
-                    <p>No hay documentos en este espacio.</p>
-                    <button onClick={() => (document.querySelector('input[type="text"]') as HTMLInputElement)?.focus()} className="text-blue-500 hover:underline mt-2 text-sm">Empieza creando uno</button>
+                     </div>
                 </div>
             )}
         </div>
-      </main>
+      </div>
 
       {/* Modals */}
       <AnimatePresence>
