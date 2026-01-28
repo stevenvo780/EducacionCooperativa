@@ -37,9 +37,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const router = useRouter();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
-            setLoading(false);
+        // Check localStorage for persisted "Custom Auth" session
+        const storedUser = localStorage.getItem('agora_user');
+        if (storedUser) {
+            try {
+                setUser(JSON.parse(storedUser));
+            } catch (e) {
+                console.error("Failed to parse stored user", e);
+            }
+        }
+
+        // Keep Firebase listener if needed for Google Auth (optional)
+        const unsubscribe = onAuthStateChanged(auth, (authUser: User | null) => {
+             // If firebase auth works (e.g. Google), it overrides our custom auth
+             if (authUser) {
+                setUser(authUser);
+             } 
+             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -50,13 +64,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             router.push('/dashboard');
         } catch (error) {
             console.error("Login failed", error);
-            throw error;
+            // Mock fallback if needed, but we try to avoid it.
         }
     };
 
     const loginWithEmail = async (email: string, pass: string) => {
         try {
-            await signInWithEmailAndPassword(auth, email, pass);
+            // Use Custom API Login
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: pass }),
+            });
+
+            if (!res.ok) {
+                 const errorData = await res.json();
+                 throw new Error(errorData.error || 'Login failed');
+            }
+
+            const userData = await res.json();
+            // Transform to Firebase User shape if needed or use as is (cast to User for TS)
+            const userObj = {
+                uid: userData.uid,
+                email: userData.email,
+                displayName: userData.displayName,
+                photoURL: userData.photoURL,
+                // Add dummy methods to satisfy User interface if strictly used
+                getIdToken: async () => 'mock-token',
+            } as unknown as User;
+
+            setUser(userObj);
+            localStorage.setItem('agora_user', JSON.stringify(userObj));
+            
             router.push('/dashboard');
         } catch (error) {
             console.error("Email login failed", error);
@@ -66,8 +105,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const registerWithEmail = async (email: string, pass: string) => {
         try {
-            await createUserWithEmailAndPassword(auth, email, pass);
-            router.push('/dashboard');
+            // Use Server-Side Registration via API Route (Custom Firestore Auth)
+            const res = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: pass }),
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || 'Registration failed');
+            }
+            
+            // Redirect to login after successful registration
+            router.push('/login'); 
         } catch (error) {
             console.error("Registration failed", error);
             throw error;
@@ -77,9 +128,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = async () => {
         try {
             await signOut(auth);
+            setUser(null);
+            localStorage.removeItem('agora_user');
             router.push('/');
         } catch (error) {
             console.error("Logout failed", error);
+            setUser(null);
+            localStorage.removeItem('agora_user');
+            router.push('/');
         }
     };
 
