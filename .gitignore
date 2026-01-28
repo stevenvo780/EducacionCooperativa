@@ -60,3 +60,8 @@ src/app/debug
 .next/
 out/
 build/
+
+# Next.js
+.next/
+out/
+build/
