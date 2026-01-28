@@ -1,9 +1,0 @@
-{
-  "/_not-found": "app/_not-found.js",
-  "/api/auth/route": "app/api/auth/route.js",
-  "/api/files/route": "app/api/files/route.js",
-  "/api/invitations/route": "app/api/invitations/route.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js"
-}
