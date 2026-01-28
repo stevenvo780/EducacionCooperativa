@@ -7,7 +7,7 @@ import filesRoutes from './routes/files.js';
 import invitationsRoutes from './routes/invitations.js';
 
 const app = express();
-const PORT = process.env.PORT || 8888;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -22,8 +22,11 @@ app.get('/api/health', (_, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-  console.log(`API server running on port ${PORT}`);
-});
+// Only listen if NOT running on Vercel
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`API server running on port ${PORT}`);
+  });
+}
 
 export default app;
