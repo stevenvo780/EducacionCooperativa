@@ -108,7 +108,7 @@ class TestServerEndpoints(AioHTTPTestCase):
             "/api/login",
             json={
                 "email": "test@example.com",
-                "password": "admin"  # Default password
+                "password": "admin"  # Matches default PASSWORD env var
             }
         )
         assert resp.status == 200
