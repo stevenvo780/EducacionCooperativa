@@ -326,49 +326,6 @@ async def broadcast_users(file_path):
                 pass
 
 
-def create_app():
-    """Crea la aplicación"""
-    app = web.Application()
-
-    # Rutas
-    app.router.add_get('/', handle_index)
-    app.router.add_get('/ws', handle_websocket)
-    app.router.add_post('/api/login', handle_login)
-    app.router.add_get('/api/files', handle_api_files)
-    app.router.add_get('/api/file', handle_api_file)
-    app.router.add_post('/api/save', handle_api_save)
-    app.router.add_post('/api/upload', handle_api_upload)
-    app.router.add_post('/api/invitations', handle_api_invite)
-    app.router.add_post('/api/invitations/accept', handle_api_invite_accept)
-    app.router.add_get('/raw/{path:.*}', handle_raw_file)
-    app.router.add_get('/{filename:.*}', handle_static)
-
-    return app
-
-
-def main():
-    print(f"""
-╔════════════════════════════════════════════════════════════════╗
-║      Visor & Editor Colaborativo de Markdown                   ║
-╠════════════════════════════════════════════════════════════════╣
-║                                                                ║
-║   🌐 HTTP + WebSocket:  http://localhost:{PORT}                  ║
-║                                                                ║
-║   ✅ Compatible con ngrok (mismo puerto)                       ║
-║   ✏️  Edita archivos en tiempo real                            ║
-║   👥 Colabora con otros usuarios                               ║
-║                                                                ║
-║   Presiona Ctrl+C para detener                                 ║
-╚════════════════════════════════════════════════════════════════╝
-    """)
-
-    app = create_app()
-    web.run_app(app, host='0.0.0.0', port=PORT, print=None)
-
-
-if __name__ == '__main__':
-    main()
-
 # Helpers de autenticación e invitaciones
 def sanitize_workspace(email: str) -> str:
     safe = ''.join(ch if ch.isalnum() else '-' for ch in email.split('@')[0])
@@ -443,3 +400,47 @@ async def handle_api_invite_accept(request):
     token = create_session(email or f'guest-{secrets.token_hex(3)}', workspace)
     ensure_user_workspace(workspace)
     return web.json_response({'token': token, 'workspace': workspace})
+
+
+def create_app():
+    """Crea la aplicación"""
+    app = web.Application()
+
+    # Rutas
+    app.router.add_get('/', handle_index)
+    app.router.add_get('/ws', handle_websocket)
+    app.router.add_post('/api/login', handle_login)
+    app.router.add_get('/api/files', handle_api_files)
+    app.router.add_get('/api/file', handle_api_file)
+    app.router.add_post('/api/save', handle_api_save)
+    app.router.add_post('/api/upload', handle_api_upload)
+    app.router.add_post('/api/invitations', handle_api_invite)
+    app.router.add_post('/api/invitations/accept', handle_api_invite_accept)
+    app.router.add_get('/raw/{path:.*}', handle_raw_file)
+    app.router.add_get('/{filename:.*}', handle_static)
+
+    return app
+
+
+def main():
+    print(f"""
+╔════════════════════════════════════════════════════════════════╗
+║      Visor & Editor Colaborativo de Markdown                   ║
+╠════════════════════════════════════════════════════════════════╣
+║                                                                ║
+║   🌐 HTTP + WebSocket:  http://localhost:{PORT}                  ║
+║                                                                ║
+║   ✅ Compatible con ngrok (mismo puerto)                       ║
+║   ✏️  Edita archivos en tiempo real                            ║
+║   👥 Colabora con otros usuarios                               ║
+║                                                                ║
+║   Presiona Ctrl+C para detener                                 ║
+╚════════════════════════════════════════════════════════════════╝
+    """)
+
+    app = create_app()
+    web.run_app(app, host='0.0.0.0', port=PORT, print=None)
+
+
+if __name__ == '__main__':
+    main()

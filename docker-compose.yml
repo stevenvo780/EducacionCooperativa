@@ -1,16 +1,14 @@
 services:
-  griego-md:
+  educacion-cooperativa:
     build:
-      context: ..
-      dockerfile: visor_markdown/Dockerfile
-    container_name: griego-markdown
-    user: "${UID:-1000}:${GID:-1000}"
+      context: .
+      dockerfile: Dockerfile
+    container_name: educacion-cooperativa
     ports:
       - "8888:8888"
     volumes:
-      - ./:/app/:z
-      - ../Griego2Docs/documentos:/app/documentos:z
+      - ./documentos:/app/documentos:z
     environment:
       - PYTHONUNBUFFERED=1
+      - PASSWORD=admin
     restart: unless-stopped
-    working_dir: /app/visor_markdown
