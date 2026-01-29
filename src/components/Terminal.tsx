@@ -18,12 +18,17 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const activeSessionRef = useRef<string | null>(null);
   
   const { user } = useAuth();
   const [hubConnected, setHubConnected] = useState(false);
   const [workerStatus, setWorkerStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
 
   // --- 1. Socket Connection ---
   useEffect(() => {
@@ -69,13 +74,16 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
 
         socket.on('session-created', (data) => {
             console.log('🚀 Session Created:', data.id);
+            activeSessionRef.current = data.id;
             setActiveSession(data.id);
         });
 
         socket.on('output', (data) => {
             // Write to terminal directly here to avoid React render cycle latency
-            if (activeSession && data.sessionId === activeSession && xtermRef.current) {
-                xtermRef.current.write(data.data);
+            const sessionId = activeSessionRef.current;
+            if (!sessionId || !xtermRef.current) return;
+            if (data.sessionId === sessionId) {
+                xtermRef.current.write(data.data ?? '');
             }
         });
     });
@@ -125,9 +133,10 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
 
     // Input Handler
     term.onData(data => {
-        if (socketRef.current?.connected) {
+        const sessionId = activeSessionRef.current;
+        if (socketRef.current?.connected && sessionId) {
             socketRef.current.emit('execute', {
-                sessionId: activeSession,
+                sessionId,
                 command: data
             });
         }
@@ -137,9 +146,10 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
     const resizeObserver = new ResizeObserver(() => {
         try {
             fitAddon.fit();
-            if (socketRef.current?.connected) {
+            const sessionId = activeSessionRef.current;
+            if (socketRef.current?.connected && sessionId) {
                 socketRef.current.emit('resize', {
-                    sessionId: activeSession,
+                    sessionId,
                     cols: term.cols,
                     rows: term.rows
                 });
