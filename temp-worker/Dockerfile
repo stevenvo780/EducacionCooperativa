@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # - curl, git, wget, nano, vim: Standard tools for a "workspace"
 # - python3, python3-pip: For the sync agent
 # - nodejs: For the worker connectivity
+# - build-essential, make: Required for compiling node-pty
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -17,6 +18,8 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     ca-certificates \
     gnupg \
+    build-essential \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 18.x
