@@ -404,8 +404,22 @@ export default function DashboardPage() {
       });
   }, []);
 
+  const renderCloseControl = useCallback((docId: string) => (
+      <button
+          onClick={(e) => {
+              e.stopPropagation();
+              closeTabById(docId);
+          }}
+          className="p-1 rounded transition text-slate-400 hover:bg-red-600/20 hover:text-red-300"
+          title="Cerrar"
+      >
+          <X className="w-4 h-4" />
+      </button>
+  ), [closeTabById]);
+
   const renderDocModeControls = useCallback((docId: string, mode: ViewMode) => (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
           <button
               onClick={() => setDocMode(docId, 'edit')}
               className={`p-1 rounded transition ${mode === 'edit' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
@@ -430,8 +444,11 @@ export default function DashboardPage() {
           >
               <Columns className="w-4 h-4" />
           </button>
+          </div>
+          <span className="h-4 w-px bg-slate-700" />
+          {renderCloseControl(docId)}
       </div>
-  ), [setDocMode]);
+  ), [renderCloseControl, setDocMode]);
 
   const renderTile = (id: string, path: MosaicPath) => {
     const doc = openTabs.find(t => t.id === id) || docs.find(d => d.id === id); // Fallback to docs if not in tabs, though openTabs should be sync
@@ -445,7 +462,7 @@ export default function DashboardPage() {
             path={path}
             title={doc.name}
             className="bg-surface-900 border border-surface-700"
-            toolbarControls={isTerminal ? [] : renderDocModeControls(doc.id, mode)}
+            toolbarControls={isTerminal ? renderCloseControl(doc.id) : renderDocModeControls(doc.id, mode)}
             renderPreview={() => (
                 <div className="flex items-center gap-2 p-1">
                    {isTerminal ? <TerminalIcon className="w-4 h-4 text-mandy-400" /> : <FileText className="w-4 h-4 text-sky-400" />}

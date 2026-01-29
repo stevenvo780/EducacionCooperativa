@@ -7,9 +7,11 @@ with open('.env.local', 'r') as f:
         if 'FIREBASE_SERVICE_ACCOUNT="' in line:
             start = line.find('="') + 2
             val = line[start:].strip()
-            # Handle potential ending quote
+            # Handle potential ending quote and newline literal
             if val.endswith('"') and not val.endswith('\\"'): 
                 val = val[:-1]
+            if val.endswith(r'\n'):
+                val = val[:-2]
             
             # Heuristic fix for .env JSON format
             # Convert structural \n (followed by space or }) to real breaks
