@@ -34,7 +34,7 @@ services:
     network_mode: host
     environment:
       - NEXUS_URL=http://localhost:3010
-      - WORKER_TOKEN=dev-user-123
+      - WORKER_TOKEN=21VuZW4cdXd9jGKOgPa5YQegICw1
       - FIREBASE_BUCKET=udea-filosofia.firebasestorage.app
     volumes:
       - ./temp-worker/worker:/workspace # Mount a folder as the user's workspace

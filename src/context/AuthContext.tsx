@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const useMock = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true';
         if (useMock && !localStorage.getItem('agora_user')) {
              const mockUser = {
-                 uid: 'dev-user-123',
+                 uid: '21VuZW4cdXd9jGKOgPa5YQegICw1',
                  email: 'dev@test.com',
                  displayName: 'Dev Tester',
                  getIdToken: async () => 'mock-token'
