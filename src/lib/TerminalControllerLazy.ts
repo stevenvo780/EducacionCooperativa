@@ -1,13 +1,18 @@
 import { io, Socket } from 'socket.io-client';
 
-// Lazy-loaded xterm types
-type Terminal = any;
-type FitAddon = any;
+// Global types for CDN-loaded xterm
+declare global {
+  interface Window {
+    Terminal: any;
+    FitAddon: any;
+    WebLinksAddon: any;
+  }
+}
 
 export class TerminalController {
-  public term: Terminal | null = null;
+  public term: any = null;
   public socket: Socket | null = null;
-  private fitAddon: FitAddon | null = null;
+  private fitAddon: any = null;
   private container: HTMLElement | null = null;
   private activeSessionId: string | null = null;
   private nexusUrl: string;
@@ -18,21 +23,50 @@ export class TerminalController {
     this.nexusUrl = nexusUrl;
   }
 
+  private loadScript(src: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) {
+        resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
+  }
+
+  private loadCSS(href: string): void {
+    if (document.querySelector(`link[href="${href}"]`)) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
   public async initialize(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
     if (this.initialized) return true;
 
     try {
-      // Dynamic import to avoid bundler issues
-      const [xtermModule, fitModule, weblinksModule] = await Promise.all([
-        import('@xterm/xterm'),
-        import('@xterm/addon-fit'),
-        import('@xterm/addon-web-links'),
-      ]);
+      // Load xterm from CDN (avoids bundler issues)
+      this.loadCSS('https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css');
+      
+      await this.loadScript('https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js');
+      await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js');
+      await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js');
 
-      const Terminal = xtermModule.Terminal;
-      const FitAddon = fitModule.FitAddon;
-      const WebLinksAddon = weblinksModule.WebLinksAddon;
+      // Wait a tick for globals to be available
+      await new Promise(r => setTimeout(r, 50));
+
+      const Terminal = window.Terminal;
+      const FitAddon = window.FitAddon?.FitAddon;
+      const WebLinksAddon = window.WebLinksAddon?.WebLinksAddon;
+
+      if (!Terminal || !FitAddon) {
+        throw new Error('xterm globals not found');
+      }
 
       this.term = new Terminal({
         cursorBlink: true,
@@ -44,12 +78,14 @@ export class TerminalController {
         },
         fontFamily: 'monospace',
         fontSize: 14,
-        allowProposedApi: true,
       });
 
       this.fitAddon = new FitAddon();
       this.term.loadAddon(this.fitAddon);
-      this.term.loadAddon(new WebLinksAddon());
+      
+      if (WebLinksAddon) {
+        this.term.loadAddon(new WebLinksAddon());
+      }
 
       // Input handler
       this.term.onData((data: string) => {
