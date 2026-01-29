@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput } from 'lucide-react';
+import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { Mosaic, MosaicWindow, MosaicNode, getLeaves, MosaicZeroState, createBalancedTreeFromLeaves, MosaicPath } from 'react-mosaic-component';
@@ -128,6 +128,7 @@ export default function DashboardPage() {
   const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
   const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -322,6 +323,13 @@ export default function DashboardPage() {
       setActiveFolder(ROOT_FOLDER_PATH);
     }
   }, [currentWorkspaceId]);
+
+  useEffect(() => {
+      const folderInput = folderInputRef.current;
+      if (!folderInput) return;
+      folderInput.setAttribute('webkitdirectory', 'true');
+      folderInput.setAttribute('directory', 'true');
+  }, []);
 
   useEffect(() => {
       return () => {
@@ -831,9 +839,23 @@ export default function DashboardPage() {
     deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
   };
 
-  const uploadFiles = async (files: File[], targetFolder?: string) => {
+  const getRelativeDir = (file: File) => {
+    const raw = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? '';
+    if (!raw) return '';
+    return normalizePath(raw.split('/').slice(0, -1).join('/'));
+  };
+
+  const joinPaths = (...parts: string[]) => normalizePath(parts.filter(Boolean).join('/'));
+
+  const uploadFiles = async (
+    files: File[],
+    targetFolder?: string,
+    options?: { preservePaths?: boolean }
+  ) => {
     if (!user || files.length === 0) return;
-    const folderName = normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
+    const baseFolder = options?.preservePaths
+        ? normalizePath(targetFolder ?? '')
+        : normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
     const context = getUploadContext();
     if (!context) return;
 
@@ -861,6 +883,9 @@ export default function DashboardPage() {
                 error: undefined
             } : prev);
 
+            const relativeDir = options?.preservePaths ? getRelativeDir(file) : '';
+            const resolvedFolder = joinPaths(baseFolder, relativeDir) || DEFAULT_FOLDER_NAME;
+
             if (isMarkdownFile(file)) {
                 const content = await file.text();
                 
@@ -874,7 +899,7 @@ export default function DashboardPage() {
                         mimeType: file.type || 'text/markdown',
                         ownerId: user.uid,
                         workspaceId: context.workspaceId,
-                        folder: folderName
+                        folder: resolvedFolder
                     })
                 });
                 
@@ -889,7 +914,7 @@ export default function DashboardPage() {
                     mimeType: file.type || 'text/markdown',
                     ownerId: user.uid,
                     updatedAt: { seconds: Date.now()/1000 },
-                    folder: folderName
+                    folder: resolvedFolder
                 });
                 continue;
             }
@@ -898,7 +923,7 @@ export default function DashboardPage() {
             formData.append('file', file);
             formData.append('ownerId', user.uid);
             formData.append('workspaceId', context.workspaceId || 'personal');
-            formData.append('folder', folderName);
+            formData.append('folder', resolvedFolder);
 
             const res = await fetch('/api/upload', {
                 method: 'POST',
@@ -942,6 +967,15 @@ export default function DashboardPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    const targetFolder = uploadTargetFolder ?? activeFolder ?? ROOT_FOLDER_PATH;
+    setUploadTargetFolder(null);
+    await uploadFiles(files, targetFolder, { preservePaths: true });
+    if (folderInputRef.current) folderInputRef.current.value = '';
+  };
+
   const isFileDrag = (e: React.DragEvent) => {
     const types = Array.from(e.dataTransfer?.types ?? []);
     if (types.includes('Files')) return true;
@@ -982,7 +1016,8 @@ export default function DashboardPage() {
     setIsDragActive(false);
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length === 0) return;
-    await uploadFiles(files, DEFAULT_FOLDER_NAME);
+    const preservePaths = files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
+    await uploadFiles(files, DEFAULT_FOLDER_NAME, { preservePaths });
   };
 
   const handleDocDragStart = (e: React.DragEvent, docItem: DocItem) => {
@@ -1060,7 +1095,8 @@ export default function DashboardPage() {
           e.preventDefault();
           e.stopPropagation();
           setFolderDragOver(null);
-          await uploadFiles(files, folderName);
+          const preservePaths = files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
+          await uploadFiles(files, folderName, { preservePaths });
           return;
       }
       const types = Array.from(e.dataTransfer.types ?? []);
@@ -1383,7 +1419,18 @@ export default function DashboardPage() {
                     >
                         <Upload className="w-4 h-4" />
                     </button>
+                    <button
+                        onClick={() => {
+                            setUploadTargetFolder(DEFAULT_FOLDER_NAME);
+                            folderInputRef.current?.click();
+                        }}
+                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
+                        title="Subir Carpeta"
+                    >
+                        <FolderUp className="w-4 h-4" />
+                    </button>
                     <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
+                    <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple />
                 </div>
             </div>
 
@@ -1541,6 +1588,15 @@ export default function DashboardPage() {
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
                             >
                                 <Upload className="w-3.5 h-3.5" /> Subir
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setUploadTargetFolder(activeFolder);
+                                    folderInputRef.current?.click();
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
+                            >
+                                <FolderUp className="w-3.5 h-3.5" /> Subir Carpeta
                             </button>
                         </div>
                     </div>
