@@ -32,17 +32,36 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
 
     const connect = async () => {
         try {
-            // Get fresh Firebase Token
+            let token = '';
             // @ts-ignore
-            const token = await user.getIdToken();
+            if (typeof user.getIdToken === 'function') {
+                // @ts-ignore
+                token = await user.getIdToken();
+            } else {
+                console.warn("User object has no getIdToken method (Custom/Mock User). Using fallback.");
+                // Fallback for custom auth users (won't work with strict Firebase Verify, but stops crash)
+                token = 'mock-token'; 
+            }
+            
             console.log('🔌 Connecting to Hub at:', nexusUrl);
 
-            socket = io(nexusUrl, {
-                auth: {
-                    type: 'client',
-                    token: token
-                },
-                transports: ['websocket'], // Force WebSocket to avoid CORS/Proxy polling issues
+                        socket = io(nexusUrl, {
+
+                            auth: {
+
+                                type: 'client',
+
+                                token: token,
+
+                                // @ts-ignore
+
+                                uid: user.uid // Send UID explicitly for permissive auth fallback
+
+                            },
+
+                            transports: ['websocket'],
+
+             // Force WebSocket to avoid CORS/Proxy polling issues
                 reconnectionDelay: 1000,
                 timeout: 10000,
             });

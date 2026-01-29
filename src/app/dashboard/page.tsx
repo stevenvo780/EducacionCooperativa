@@ -621,6 +621,34 @@ export default function DashboardPage() {
       return folderChildrenMap[activeFolder] ?? [];
   }, [folderChildrenMap, activeFolder]);
 
+  const renderFolderTree = (parentPath: string, depth = 0): React.ReactNode[] => {
+      const children = folderChildrenMap[parentPath] ?? [];
+      return children.map(folder => {
+          const count = docsByFolder[folder.path]?.length ?? 0;
+          const isActive = activeFolder === folder.path;
+          const isDropActive = folderDragOver === folder.path;
+          const paddingLeft = 12 + depth * 12;
+
+          return (
+              <div key={folder.path}>
+                  <button
+                      onClick={() => setActiveFolder(folder.path)}
+                      onDragOver={(e) => handleFolderDragOver(e, folder.path)}
+                      onDrop={(e) => handleFolderDrop(e, folder.path)}
+                      onDragLeave={() => handleFolderDragLeave(folder.path)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10 text-mandy-300' : isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
+                      style={{ paddingLeft }}
+                  >
+                      <Folder className={`w-4 h-4 ${isActive ? 'text-mandy-400' : 'text-surface-500'}`} />
+                      <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
+                      <span className="text-[10px] text-surface-500">{count}</span>
+                  </button>
+                  {renderFolderTree(folder.path, depth + 1)}
+              </div>
+          );
+      });
+  };
+
   useEffect(() => {
       if (folders.length === 0) {
           if (activeFolder !== DEFAULT_FOLDER_NAME) {
@@ -1364,25 +1392,7 @@ export default function DashboardPage() {
                                 Carpetas
                             </div>
                             <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
-                                {folders.map(folder => {
-                                    const count = docsByFolder[folder.name]?.length ?? 0;
-                                    const isActive = activeFolder === folder.name;
-                                    const isDropActive = folderDragOver === folder.name;
-                                    return (
-                                        <button
-                                            key={folder.id}
-                                            onClick={() => setActiveFolder(folder.name)}
-                                            onDragOver={(e) => handleFolderDragOver(e, folder.name)}
-                                            onDrop={(e) => handleFolderDrop(e, folder.name)}
-                                            onDragLeave={() => handleFolderDragLeave(folder.name)}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10 text-mandy-300' : isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
-                                        >
-                                            <Folder className={`w-4 h-4 ${isActive ? 'text-mandy-400' : 'text-surface-500'}`} />
-                                            <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
-                                            <span className="text-[10px] text-surface-500">{count}</span>
-                                        </button>
-                                    );
-                                })}
+                                {renderFolderTree('')}
                             </div>
                         </aside>
                         <section className="flex-1 min-h-0 overflow-y-auto">
@@ -1390,7 +1400,28 @@ export default function DashboardPage() {
                                 Documentos
                             </div>
                             <div className="px-4 pb-6 space-y-1">
-                                {activeFolderDocs.length === 0 ? (
+                                {activeChildFolders.map(folder => {
+                                    const count = docsByFolder[folder.path]?.length ?? 0;
+                                    const isDropActive = folderDragOver === folder.path;
+                                    return (
+                                        <div
+                                            key={folder.path}
+                                            onClick={() => setActiveFolder(folder.path)}
+                                            onDragOver={(e) => handleFolderDragOver(e, folder.path)}
+                                            onDrop={(e) => handleFolderDrop(e, folder.path)}
+                                            onDragLeave={() => handleFolderDragLeave(folder.path)}
+                                            className={`group flex items-center gap-3 px-4 py-3 rounded-lg border transition cursor-pointer ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'}`}
+                                        >
+                                            <Folder className="w-4 h-4 text-surface-500" />
+                                            <div className="flex flex-col min-w-0 flex-1">
+                                                <span className="text-sm font-semibold text-surface-200 truncate">{folder.name}</span>
+                                                <span className="text-[11px] text-surface-500 truncate">{folder.path}</span>
+                                            </div>
+                                            <span className="text-[10px] text-surface-500">{count}</span>
+                                        </div>
+                                    );
+                                })}
+                                {activeChildFolders.length === 0 && activeFolderDocs.length === 0 ? (
                                     <div className="px-4 py-6 text-sm text-surface-500">Esta carpeta está vacía.</div>
                                 ) : activeFolderDocs.map(doc => (
                                     <div
