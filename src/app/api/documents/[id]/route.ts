@@ -1,4 +1,5 @@
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, adminStorage } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -6,16 +7,19 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         const { id } = params;
         const body = await req.json();
         
+        const docRef = adminDb.collection('documents').doc(id);
+        const snap = await docRef.get();
+        if (!snap.exists) {
+            return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+        }
+
         // Remove undefined fields if necessary, but JSON updates usually are explicit
         const updateData = {
             ...body,
-            updatedAt: new Date(),
+            updatedAt: FieldValue.serverTimestamp(),
         };
 
-        // If serverTimestamp was anticipated, use new Date() as firebase-admin deals well with Dates or field values
-        // For simplicity, new Date() is fine.
-
-        await adminDb.collection('documents').doc(id).update(updateData);
+        await docRef.update(updateData);
 
         return NextResponse.json({ status: 'success' });
     } catch (error: any) {
@@ -34,6 +38,33 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         return NextResponse.json({ id: docSnap.id, ...docSnap.data() });
     } catch (error: any) {
         console.error('Error fetching document:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+    try {
+        const { id } = params;
+        const docRef = adminDb.collection('documents').doc(id);
+        const snap = await docRef.get();
+        if (!snap.exists) {
+            return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+        }
+
+        const data = snap.data() as any;
+        const storagePath = data?.storagePath as string | undefined;
+        if (data?.type === 'file' && storagePath) {
+            const bucket = adminStorage.bucket();
+            if (!bucket?.name) {
+                throw new Error('Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID');
+            }
+            await bucket.file(storagePath).delete().catch((e) => console.warn('Storage delete failed', e));
+        }
+
+        await docRef.delete();
+        return NextResponse.json({ status: 'deleted' });
+    } catch (error: any) {
+        console.error('Error deleting document:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
