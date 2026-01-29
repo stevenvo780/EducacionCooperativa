@@ -59,8 +59,13 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
         document.head.appendChild(link);
 
         try {
-            const actualToken =
-                typeof user.getIdToken === 'function' ? await user.getIdToken() : 'mock-token';
+            // Get token - use mock-token for custom auth (non-Firebase users)
+            let actualToken = 'mock-token';
+            if (typeof user.getIdToken === 'function') {
+                const token = await user.getIdToken();
+                // If token looks like a JWT (has dots), use it. Otherwise use mock-token.
+                actualToken = token.includes('.') ? token : 'mock-token';
+            }
             if (cancelled) return;
             controller.connect(
                 actualToken,
