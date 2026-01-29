@@ -95,7 +95,7 @@ program
 pip3 install watchdog firebase-admin > /dev/null 2>&1 &
 
 # Start the Node Worker (Main Process) in background
-node /app/dist/index.js &
+node /app/worker/dist/index.js &
 
 # Wait a bit for pip
 sleep 5
