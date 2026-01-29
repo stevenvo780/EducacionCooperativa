@@ -33,7 +33,11 @@ export async function POST(req: NextRequest) {
                  if (bucket.name) {
                      const safeName = (name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
                      const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
-                     const path = `users/${ownerId || 'unknown'}/${fname}`;
+                     
+                     let path = `users/${ownerId || 'unknown'}/${fname}`;
+                     if (workspaceId && workspaceId !== 'personal') {
+                         path = `workspaces/${workspaceId}/${fname}`;
+                     }
                      
                      await bucket.file(path).save(content ?? '', { 
                         contentType: 'text/markdown',

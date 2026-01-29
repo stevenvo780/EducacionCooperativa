@@ -19,7 +19,12 @@ export async function POST(req: NextRequest) {
         
         // Use user-specific path for sync compatibility
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filename = `users/${ownerId}/${safeName}`;
+        let filename = `users/${ownerId}/${safeName}`;
+        
+        // If specific workspace provided (and not personal), use workspace path
+        if (workspaceId && workspaceId !== 'personal') {
+             filename = `workspaces/${workspaceId}/${safeName}`;
+        }
         
         const bucket = adminStorage.bucket();
         if (!bucket?.name) {
