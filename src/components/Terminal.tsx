@@ -2,9 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { TerminalController } from '@/lib/TerminalController';
+import { TerminalController } from '@/lib/TerminalControllerLazy';
 import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download } from 'lucide-react';
-import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
   nexusUrl: string;
@@ -36,21 +35,29 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
         return;
     }
 
-    let controller: TerminalController;
-    try {
-        controller = new TerminalController(nexusUrl);
-    } catch (err) {
-        console.error('[Terminal] Init error', err);
-        setStatus('error');
-        setErrorMessage('No se pudo inicializar el terminal.');
-        return;
-    }
-    controllerRef.current = controller;
-
     let cancelled = false;
     const uid = user.uid;
 
-    const connect = async () => {
+    const initAndConnect = async () => {
+        const controller = new TerminalController(nexusUrl);
+        
+        // Initialize (lazy load xterm)
+        const ok = await controller.initialize();
+        if (!ok || cancelled) {
+            console.error('[Terminal] Init failed');
+            setStatus('error');
+            setErrorMessage('No se pudo inicializar el terminal.');
+            return;
+        }
+        
+        controllerRef.current = controller;
+        
+        // Load CSS dynamically
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css';
+        document.head.appendChild(link);
+
         try {
             const actualToken =
                 typeof user.getIdToken === 'function' ? await user.getIdToken() : 'mock-token';
@@ -120,11 +127,11 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
         }
     };
 
-    connect();
+    initAndConnect();
 
     return () => {
         cancelled = true;
-        controller.destroy();
+        controllerRef.current?.destroy();
         controllerRef.current = null;
     };
   }, [nexusUrl, user]);
