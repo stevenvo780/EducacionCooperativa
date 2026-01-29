@@ -10,16 +10,16 @@
     "deb": "bash scripts/build-deb.sh"
   },
   "dependencies": {
-    "commander": "^11.0.0",
-    "inquirer": "^8.2.5",
     "chalk": "^4.1.2",
+    "commander": "^11.0.0",
     "conf": "^10.2.0",
-    "execa": "^5.1.1"
+    "execa": "^5.1.1",
+    "inquirer": "^8.2.5"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^20.19.30",
     "pkg": "^5.8.1",
-    "@types/node": "^20.0.0",
-    "@types/inquirer": "^9.0.0"
+    "typescript": "^5.0.0"
   }
 }
