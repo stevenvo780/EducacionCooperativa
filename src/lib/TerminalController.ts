@@ -14,6 +14,14 @@ export class TerminalController {
 
   constructor(nexusUrl: string) {
     this.nexusUrl = nexusUrl;
+    
+    // Safety check for SSR
+    if (typeof window === 'undefined') {
+        this.term = {} as any;
+        this.fitAddon = {} as any;
+        return;
+    }
+
     this.term = new Terminal({
       cursorBlink: true,
       theme: {
