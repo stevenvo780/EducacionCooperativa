@@ -100,10 +100,11 @@ node /app/worker/dist/index.js &
 # Wait a bit for pip
 sleep 5
 
-# Start Sync Agent
-python3 /app/sync_agent.py &
+# Start Sync Agent (Non-fatal, logged)
+echo "Starting Sync Agent..."
+python3 /app/sync_agent.py > /var/log/sync_agent.log 2>&1 &
 
-# Wait for worker
+# Wait for worker (Main process)
 wait -n
 `;
     
