@@ -1,7 +1,9 @@
 "use client";
 
-import Terminal from '@/components/Terminal';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/context/AuthContext';
+
+const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 
 export default function TerminalPage() {
     const { user } = useAuth();
