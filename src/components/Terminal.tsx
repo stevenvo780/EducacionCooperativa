@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { useAuth } from '@/context/AuthContext';
@@ -111,10 +110,7 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
     });
 
     const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
-    
     term.loadAddon(fitAddon);
-    term.loadAddon(webLinksAddon);
     
     term.open(terminalRef.current);
     fitAddon.fit();
@@ -147,7 +143,7 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
     // Handle Resize
     const handleResize = () => {
         if (!fitAddonRef.current) return;
-        fitAddonRef.fit();
+        fitAddonRef.current.fit();
         if (xtermRef.current) {
             const { cols, rows } = xtermRef.current;
             socket.emit('resize', { sessionId: activeSession, cols, rows });

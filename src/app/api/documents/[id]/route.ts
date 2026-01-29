@@ -54,11 +54,15 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
         const data = snap.data() as any;
         const storagePath = data?.storagePath as string | undefined;
         if (data?.type === 'file' && storagePath) {
-            const bucket = adminStorage.bucket();
-            if (!bucket?.name) {
-                throw new Error('Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID');
+            const existing = await adminDb.collection('documents').where('storagePath', '==', storagePath).get();
+            const hasOtherReferences = existing.docs.some(docItem => docItem.id !== id);
+            if (!hasOtherReferences) {
+                const bucket = adminStorage.bucket();
+                if (!bucket?.name) {
+                    throw new Error('Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID');
+                }
+                await bucket.file(storagePath).delete().catch((e) => console.warn('Storage delete failed', e));
             }
-            await bucket.file(storagePath).delete().catch((e) => console.warn('Storage delete failed', e));
         }
 
         await docRef.delete();

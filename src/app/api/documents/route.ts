@@ -5,9 +5,9 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { name, content, type, ownerId, workspaceId, folder, mimeType } = body;
+        const { name, content, type, ownerId, workspaceId, folder, mimeType, url, storagePath } = body;
 
-        const docRef = await adminDb.collection('documents').add({
+        const docData: Record<string, unknown> = {
             name: name || 'Sin título',
             content: content ?? '',
             type: type || 'text',
@@ -17,7 +17,16 @@ export async function POST(req: NextRequest) {
             folder: folder || 'No estructurado',
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
-        });
+        };
+
+        if (typeof url === 'string') {
+            docData.url = url;
+        }
+        if (typeof storagePath === 'string') {
+            docData.storagePath = storagePath;
+        }
+
+        const docRef = await adminDb.collection('documents').add(docData);
 
         return NextResponse.json({ id: docRef.id, status: 'success' });
     } catch (error: any) {

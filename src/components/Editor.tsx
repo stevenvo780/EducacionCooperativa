@@ -28,7 +28,6 @@ import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 
-// --- Types ---
 
 type ViewId = 'editor' | 'preview' | string;
 type ViewMode = 'edit' | 'split' | 'preview';
@@ -41,7 +40,6 @@ interface EditorProps {
   viewMode?: ViewMode;
 }
 
-// --- Icons & Tools ---
 
 const ToolbarButton = ({ onClick, icon: Icon, title, active = false }: any) => (
   <button
@@ -80,7 +78,6 @@ const getLayoutForMode = (mode: ViewMode): MosaicNode<ViewId> => {
   };
 };
 
-// --- Main Component ---
 
 export default function MosaicEditor({
   initialContent = '',
@@ -287,7 +284,6 @@ export default function MosaicEditor({
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
-  // --- Insertion Helpers ---
   const insert = (template: string, offset = 0) => {
       // Simple append for now. In a real app, we'd use a Ref to the CodeMirror instance
       // to insert at cursor position.
@@ -304,7 +300,6 @@ export default function MosaicEditor({
     };
   }, [content]);
 
-  // --- Toolbar Component ---
   const Toolbar = () => (
     <div className="flex items-center gap-1 p-2 bg-slate-800 border-b border-slate-700 select-none overflow-x-auto custom-scrollbar">
        <div className="flex items-center gap-1 shrink-0">
@@ -346,9 +341,7 @@ export default function MosaicEditor({
     </div>
   );
 
-    // --- Render Tile ---
     const renderTile = (id: ViewId, path: MosaicPath) => {
-      // EDITOR TILE
       if (id === 'editor' || id.startsWith('editor')) {
           return (
             <MosaicWindow
@@ -423,7 +416,6 @@ export default function MosaicEditor({
         );
       } 
       
-      // PREVIEW TILE
       if (id === 'preview' || id.startsWith('preview')) {
           return (
               <MosaicWindow
