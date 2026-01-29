@@ -4,8 +4,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { db, storage } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import Link from 'next/link';
 import { FileText, Plus, Trash2, Search, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, MoreVertical, FileCode, Settings, HelpCircle, ArrowLeft, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -41,6 +41,12 @@ interface UploadStatus {
   error?: string;
 }
 
+interface DeleteStatus {
+  phase: 'deleting' | 'done' | 'error';
+  name?: string;
+  error?: string;
+}
+
 const PERSONAL_WORKSPACE_ID = 'personal';
 const DEFAULT_FOLDER_NAME = 'No estructurado';
 
@@ -71,9 +77,12 @@ export default function DashboardPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
+  const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
   const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchWorkspaces = useCallback(async () => {
     if (!user) return;
@@ -180,6 +189,9 @@ export default function DashboardPage() {
       return () => {
           if (uploadStatusTimer.current) {
               clearTimeout(uploadStatusTimer.current);
+          }
+          if (deleteStatusTimer.current) {
+              clearTimeout(deleteStatusTimer.current);
           }
       };
   }, []);
@@ -319,6 +331,13 @@ export default function DashboardPage() {
         clearTimeout(uploadStatusTimer.current);
     }
     uploadStatusTimer.current = setTimeout(() => setUploadStatus(null), 2000);
+  };
+
+  const scheduleDeleteStatusClear = () => {
+    if (deleteStatusTimer.current) {
+        clearTimeout(deleteStatusTimer.current);
+    }
+    deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
   };
 
   const uploadFiles = async (files: File[]) => {
@@ -474,17 +493,40 @@ export default function DashboardPage() {
 
   const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
       e.stopPropagation();
+      if (deletingIds[docItem.id]) return;
       if (!confirm('¿Estás seguro de que quieres eliminar este elemento?')) return;
       try {
-        if (docItem.type === 'file' && (docItem as any).storagePath) {
-            const storageRef = ref(storage, (docItem as any).storagePath);
-            await deleteObject(storageRef).catch(e => console.warn("Storage delete failed", e));
+        setDeletingIds(prev => ({ ...prev, [docItem.id]: true }));
+        if (deleteStatusTimer.current) {
+            clearTimeout(deleteStatusTimer.current);
         }
-        await deleteDoc(doc(db, 'documents', docItem.id));
-        fetchDocs();
-        if (selectedDocId === docItem.id) setSelectedDocId(null);
+        setDeleteStatus({ phase: 'deleting', name: docItem.name });
+        const res = await fetch(`/api/documents/${docItem.id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            throw new Error('API delete failed');
+        }
+        setDocs(prev => prev.filter(item => item.id !== docItem.id));
+        setOpenTabs(prev => {
+            const next = prev.filter(tab => tab.id !== docItem.id);
+            if (selectedDocId === docItem.id) {
+                setSelectedDocId(next.length > 0 ? next[next.length - 1].id : null);
+            }
+            return next;
+        });
+        await fetchDocs();
+        setDeleteStatus({ phase: 'done', name: docItem.name });
+        scheduleDeleteStatusClear();
       } catch (e) {
         console.error("Error deleting", e);
+        setDeleteStatus({ phase: 'error', name: docItem.name, error: 'Error al eliminar' });
+        scheduleDeleteStatusClear();
+        alert("Error al eliminar");
+      } finally {
+        setDeletingIds(prev => {
+            const next = { ...prev };
+            delete next[docItem.id];
+            return next;
+        });
       }
   };
 

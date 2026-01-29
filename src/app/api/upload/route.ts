@@ -6,9 +6,9 @@ export async function POST(req: NextRequest) {
     try {
         const formData = await req.formData();
         const file = formData.get('file') as File;
-        const ownerId = formData.get('ownerId') as string;
-        const workspaceId = formData.get('workspaceId') as string;
-        const folder = formData.get('folder') as string;
+        const ownerId = (formData.get('ownerId') as string) || 'unknown';
+        const workspaceId = (formData.get('workspaceId') as string) || 'personal';
+        const folder = (formData.get('folder') as string) || 'No estructurado';
         
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
         const filename = `uploads/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
         
         const bucket = adminStorage.bucket();
+        if (!bucket?.name) {
+            throw new Error('Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID');
+        }
         const fileRef = bucket.file(filename);
 
         await fileRef.save(buffer, {
@@ -42,9 +45,9 @@ export async function POST(req: NextRequest) {
             url: url,
             mimeType: file.type,
             storagePath: filename,
-            ownerId: ownerId || 'unknown',
-            workspaceId: workspaceId || 'personal',
-            folder: folder || 'No estructurado',
+            ownerId,
+            workspaceId,
+            folder,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
         });
