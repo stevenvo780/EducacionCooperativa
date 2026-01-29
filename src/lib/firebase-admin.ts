@@ -3,7 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 
-const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT;
+const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT ? process.env.FIREBASE_SERVICE_ACCOUNT.trim() : undefined;
 let serviceAccount;
 
 try {
@@ -15,8 +15,8 @@ try {
 }
 
 // Ensure bucket name is always usable; fall back to the default GCS naming.
-const projectId = process.env.FIREBASE_PROJECT_ID;
-const configuredBucket = process.env.FIREBASE_STORAGE_BUCKET;
+const projectId = process.env.FIREBASE_PROJECT_ID ? process.env.FIREBASE_PROJECT_ID.trim() : undefined;
+const configuredBucket = process.env.FIREBASE_STORAGE_BUCKET ? process.env.FIREBASE_STORAGE_BUCKET.trim() : undefined;
 const fallbackBucket = projectId ? `${projectId}.appspot.com` : undefined;
 const storageBucket = configuredBucket || fallbackBucket;
 
