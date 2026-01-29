@@ -93,8 +93,14 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
           // Check if already mounted (xterm element exists)
           if (!containerRef.current.hasChildNodes()) {
               controllerRef.current.mount(containerRef.current);
-              controllerRef.current.fit();
           }
+          controllerRef.current.fit();
+          
+          const resizeObserver = new ResizeObserver(() => {
+              controllerRef.current?.fit();
+          });
+          resizeObserver.observe(containerRef.current);
+          return () => resizeObserver.disconnect();
       }
   }, [sessionActive]);
 

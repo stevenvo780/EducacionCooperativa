@@ -5,8 +5,13 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Editor from '@/components/Editor';
-import Terminal from '@/components/Terminal';
+import dynamic from 'next/dynamic';
+import { Mosaic, MosaicWindow, MosaicNode, getLeaves, MosaicZeroState, createBalancedTreeFromLeaves, MosaicPath } from 'react-mosaic-component';
+import 'react-mosaic-component/react-mosaic-component.css';
+
+// Fix imports for server-side
+const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
+const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 
 interface Workspace {
   id: string;
@@ -20,7 +25,7 @@ interface Workspace {
 interface DocItem {
   id: string;
   name: string;
-  type?: 'text' | 'file' | 'folder';
+  type?: 'text' | 'file' | 'folder' | 'terminal';
   content?: string;
   url?: string;
   storagePath?: string;
@@ -110,8 +115,7 @@ export default function DashboardPage() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
   const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(null);
-  const [gridMode, setGridMode] = useState<GridMode>(4);
-  const [dropPosition, setDropPosition] = useState<number | null>(null);
+  const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
 
   // Actions State
   const [newDocName, setNewDocName] = useState('');
@@ -329,14 +333,33 @@ export default function DashboardPage() {
       };
   }, []);
 
+  const openTerminal = () => {
+      // Create a unique ID for the terminal
+      const newTerminalId = `terminal-${Date.now()}`;
+      const newTerminalItem: DocItem = {
+          id: newTerminalId,
+          name: 'Terminal',
+          type: 'terminal',
+          updatedAt: new Date(),
+          ownerId: user?.uid || 'system'
+      };
+      
+      setOpenTabs(prev => [...prev, newTerminalItem]);
+      setMosaicNode(current => {
+          const leaves = getLeaves(current);
+          if (leaves.includes(newTerminalId)) return current;
+          return createBalancedTreeFromLeaves([...leaves, newTerminalId]);
+      });
+      setShowMobileSidebar(false);
+      setShowTerminal(false);
+  };
+
   const closeTabById = useCallback((docId: string) => {
-      setOpenTabs(prev => {
-          const next = prev.filter(t => t.id !== docId);
-          setSelectedDocId(prevSelected => {
-              if (prevSelected !== docId) return prevSelected;
-              return next.length > 0 ? next[next.length - 1].id : null;
-          });
-          return next;
+      setOpenTabs(prev => prev.filter(t => t.id !== docId));
+      setMosaicNode(current => {
+          const leaves = getLeaves(current);
+          const newLeaves = leaves.filter(leaf => leaf !== docId);
+          return createBalancedTreeFromLeaves(newLeaves);
       });
   }, []);
 
@@ -350,7 +373,12 @@ export default function DashboardPage() {
           }
           return [...prev, doc];
       });
-      setSelectedDocId(doc.id);
+      
+      setMosaicNode(current => {
+          const leaves = getLeaves(current);
+          if (leaves.includes(doc.id)) return current;
+          return createBalancedTreeFromLeaves([...leaves, doc.id]);
+      });
       setShowMobileSidebar(false);
   };
 
@@ -376,20 +404,36 @@ export default function DashboardPage() {
       });
   }, []);
 
-  const gridDocs = useMemo(() => {
-      if (gridMode === 1) {
-          const selected = selectedDocId ? openTabs.find(tab => tab.id === selectedDocId) : null;
-          return selected ? [selected] : openTabs.slice(0, 1);
-      }
-      if (openTabs.length <= gridMode) return openTabs;
-      const selected = selectedDocId ? openTabs.find(tab => tab.id === selectedDocId) : null;
-      if (!selected) return openTabs.slice(-gridMode);
-      const others = openTabs.filter(tab => tab.id !== selected.id);
-      return [selected, ...others].slice(0, gridMode);
-  }, [openTabs, selectedDocId, gridMode]);
+  const renderTile = (id: string, path: MosaicPath) => {
+    const doc = openTabs.find(t => t.id === id) || docs.find(d => d.id === id); // Fallback to docs if not in tabs, though openTabs should be sync
+    if (!doc) return <div className="p-4 text-surface-400">Documento no encontrado: {id}</div>;
 
-  const gridColsClass = gridMode === 1 || gridDocs.length <= 1 ? 'grid-cols-1' : 'grid-cols-2';
-  const gridRowsClass = gridMode <= 2 || gridDocs.length <= 2 ? 'grid-rows-1' : 'grid-rows-2';
+    const isTerminal = doc.type === 'terminal';
+    
+    return (
+        <MosaicWindow<string>
+            path={path}
+            title={doc.name}
+            className="bg-surface-900 border border-surface-700"
+            toolbarControls={[]}
+            renderPreview={() => (
+                <div className="flex items-center gap-2 p-1">
+                   {isTerminal ? <TerminalIcon className="w-4 h-4 text-mandy-400" /> : <FileText className="w-4 h-4 text-sky-400" />}
+                   <span className="text-sm font-medium text-surface-200">{doc.name}</span>
+                </div>
+            )}
+        >
+            <div className="h-full w-full bg-black relative">
+                 {isTerminal ? (
+                      <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"} />
+                  ) : (
+                      <Editor roomId={doc.id} embedded />
+                  )}
+            </div>
+        </MosaicWindow>
+    );
+  };
+
   const activeFolderLabel = activeFolder || 'Raiz';
 
   const createFolderRecord = async (folderName: string, parentOverride?: string) => {
@@ -638,6 +682,7 @@ export default function DashboardPage() {
   };
 
   const getDocBadge = (doc: DocItem) => {
+    if (doc.type === 'terminal') return 'TERM';
     if (doc.type === 'file') {
         if (isMarkdownDocItem(doc)) return 'MD';
         const ext = getFileExtension(doc.name);
@@ -927,7 +972,7 @@ export default function DashboardPage() {
       e.preventDefault();
       e.stopPropagation();
       setDropPosition(null);
-      const docToOpen = docs.find(d => d.id === docId);
+      const docToOpen = docs.find(d => d.id === docId) || openTabs.find(d => d.id === docId);
       if (docToOpen) {
           // Insert at specific position in openTabs
           setOpenTabs(prev => {
@@ -1037,6 +1082,7 @@ export default function DashboardPage() {
   };
 
   const getIcon = (doc: DocItem) => {
+      if (doc.type === 'terminal') return <TerminalIcon className="w-5 h-5" />;
       if (doc.type === 'file') {
           if (doc.mimeType?.startsWith('image/')) return <ImageIcon className="w-5 h-5" />;
           if (isMarkdownDocItem(doc)) return <FileText className="w-5 h-5" />;
@@ -1296,16 +1342,12 @@ export default function DashboardPage() {
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                 {/* Mi Asistente (Terminal) Button */}
                 <div 
-                    onClick={() => {
-                        setShowTerminal(true);
-                        setSelectedDocId(null);
-                        setShowMobileSidebar(false);
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition ${showTerminal ? 'bg-mandy-500 text-white shadow-lg shadow-mandy-500/20' : 'text-surface-300 hover:bg-surface-700/50'}`}
+                    onClick={openTerminal}
+                    className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition text-surface-300 hover:bg-surface-700/50 group`}
+                    title="Añadir Terminal al Grid"
                 >
-                    <TerminalIcon className={`w-5 h-5 ${showTerminal ? 'text-white' : 'text-mandy-400'}`} />
-                    <span className="font-bold flex-1">Mi Asistente</span>
-                    {showTerminal && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
+                    <TerminalIcon className={`w-5 h-5 text-mandy-400 group-hover:text-white transition-colors`} />
+                    <span className="font-bold flex-1">Mi Asistente +</span>
                 </div>
 
                 <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-surface-500 uppercase mt-4">
@@ -1405,146 +1447,20 @@ export default function DashboardPage() {
                             </div>
                         ))}
                     </div>
-                    {/* Grid Mode Selector */}
-                    <div className="flex items-center gap-1 px-2 border-l border-surface-600/30">
-                        <span className="text-[10px] text-surface-500 mr-1">{openTabs.length} tabs</span>
-                        <button
-                            onClick={() => setGridMode(1)}
-                            className={`px-2 py-1 rounded transition flex items-center gap-1 ${gridMode === 1 ? 'bg-mandy-500/20 text-mandy-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
-                            title="1 panel"
-                        >
-                            <div className="w-4 h-3 border border-current rounded-sm" />
-                        </button>
-                        <button
-                            onClick={() => setGridMode(2)}
-                            className={`px-2 py-1 rounded transition flex items-center gap-1 ${gridMode === 2 ? 'bg-mandy-500/20 text-mandy-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
-                            title="2 paneles"
-                        >
-                            <div className="flex gap-px">
-                                <div className="w-2 h-3 border border-current rounded-sm" />
-                                <div className="w-2 h-3 border border-current rounded-sm" />
-                            </div>
-                        </button>
-                        <button
-                            onClick={() => setGridMode(4)}
-                            className={`px-2 py-1 rounded transition flex items-center gap-1 ${gridMode === 4 ? 'bg-mandy-500/20 text-mandy-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
-                            title="4 paneles"
-                        >
-                            <div className="grid grid-cols-2 gap-px">
-                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
-                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
-                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
-                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
-                            </div>
-                        </button>
-                    </div>
                 </div>
             )}
 
             {/* Content Area */}
-            {showTerminal ? (
-                <div className="flex-1 min-h-0 bg-black overflow-hidden flex flex-col">
-                    <div className="flex-1">
-                        <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"} />
-                    </div>
-                </div>
-            ) : openTabs.length > 0 ? (
-                <div className="flex-1 min-h-0 flex flex-col relative">
-                    <div className={`grid ${gridColsClass} ${gridRowsClass} gap-3 p-3 flex-1 min-h-0`}>
-                        {Array.from({ length: gridMode }).map((_, index) => {
-                            const doc = gridDocs[index];
-                            const isDropTarget = dropPosition === index;
-
-                            if (!doc) {
-                                // Empty slot - drop zone
-                                return (
-                                    <div
-                                        key={`empty-${index}`}
-                                        className={`flex flex-col items-center justify-center min-h-0 rounded-lg border-2 border-dashed transition-all ${isDropTarget ? 'border-mandy-500 bg-mandy-500/10' : 'border-surface-700/60 bg-surface-800/30'}`}
-                                        onDragOver={(e) => handleDropZoneDragOver(e, index)}
-                                        onDragLeave={handleDropZoneDragLeave}
-                                        onDrop={(e) => handleDropZoneDrop(e, index)}
-                                    >
-                                        <div className={`text-center p-4 ${isDropTarget ? 'text-mandy-400' : 'text-surface-500'}`}>
-                                            <Plus className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                                            <div className="text-xs font-medium">
-                                                {isDropTarget ? 'Suelta aqui' : `Panel ${index + 1}`}
-                                            </div>
-                                            <div className="text-[10px] mt-1 opacity-70">Arrastra un documento</div>
-                                        </div>
-                                    </div>
-                                );
-                            }
-
-                            const currentMode = docModes[doc.id] ?? 'split';
-                            const isActive = doc.id === selectedDocId;
-                            const modeButtonBase = 'p-1 rounded-md border border-transparent transition';
-                            const modeActive = 'bg-mandy-500/20 text-mandy-300 border-mandy-500/40';
-                            const modeIdle = 'text-surface-400 hover:text-surface-100 hover:bg-surface-700/60';
-
-                            return (
-                                <div
-                                    key={doc.id}
-                                    className={`flex flex-col min-h-0 rounded-lg border relative ${isDropTarget ? 'border-mandy-500 ring-2 ring-mandy-500/30' : isActive ? 'border-mandy-500/60 shadow-lg shadow-mandy-500/10' : 'border-surface-700/60'} bg-surface-900 overflow-hidden`}
-                                    onDragOver={(e) => handleDropZoneDragOver(e, index)}
-                                    onDragLeave={handleDropZoneDragLeave}
-                                    onDrop={(e) => handleDropZoneDrop(e, index)}
-                                >
-                                    {isDropTarget && (
-                                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-mandy-500/20 pointer-events-none">
-                                            <div className="bg-surface-800/90 border border-mandy-500/60 rounded-lg px-4 py-2 text-center">
-                                                <div className="text-sm font-semibold text-mandy-400">Reemplazar Panel {index + 1}</div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="flex items-center gap-2 px-3 py-2 bg-surface-800/70 border-b border-surface-700/60">
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-600/60 text-surface-400 font-mono">{index + 1}</span>
-                                        <button onClick={() => setSelectedDocId(doc.id)} className="flex items-center gap-2 min-w-0 text-left">
-                                            <span className="text-surface-400">{getIcon(doc)}</span>
-                                            <span className="text-xs font-semibold text-surface-200 truncate">{doc.name}</span>
-                                        </button>
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
-                                            {getDocBadge(doc)}
-                                        </span>
-                                        <div className="ml-auto flex items-center gap-1">
-                                            <button
-                                                onClick={() => setDocMode(doc.id, 'edit')}
-                                                className={`${modeButtonBase} ${currentMode === 'edit' ? modeActive : modeIdle}`}
-                                                title="Solo edicion"
-                                            >
-                                                <Pencil className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => setDocMode(doc.id, 'split')}
-                                                className={`${modeButtonBase} ${currentMode === 'split' ? modeActive : modeIdle}`}
-                                                title="Edicion y vista"
-                                            >
-                                                <Columns className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => setDocMode(doc.id, 'preview')}
-                                                className={`${modeButtonBase} ${currentMode === 'preview' ? modeActive : modeIdle}`}
-                                                title="Solo vista"
-                                            >
-                                                <Eye className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => closeTabById(doc.id)}
-                                                className="p-1 rounded-md text-surface-400 hover:text-mandy-300 hover:bg-surface-700/60 transition"
-                                                title="Cerrar"
-                                            >
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="flex-1 min-h-0">
-                                        <Editor roomId={doc.id} embedded viewMode={currentMode} />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+            {mosaicNode ? (
+               <div className="flex-1 min-h-0 relative">
+                   <Mosaic<string>
+                        renderTile={renderTile}
+                        value={mosaicNode}
+                        onChange={setMosaicNode}
+                        className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
+                        zeroStateView={<MosaicZeroState createNode={() => Promise.resolve('new')} title="No hay paneles" />}
+                   />
+               </div>
             ) : (
                 // Archivos Explorer
                 <div className="flex-1 min-h-0 flex flex-col bg-surface-900">
