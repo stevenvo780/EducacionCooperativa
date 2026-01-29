@@ -12,7 +12,7 @@ interface TerminalProps {
 
 type TerminalStatus = 'checking' | 'online' | 'offline' | 'error';
 
-const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
+const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<TerminalController | null>(null);
   const { user } = useAuth();
@@ -20,6 +20,7 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
   const [status, setStatus] = useState<TerminalStatus>('checking');
   const [sessionActive, setSessionActive] = useState(false);
   const [hubConnected, setHubConnected] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || controllerRef.current) return;
@@ -27,61 +28,102 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
     setStatus('checking');
     setHubConnected(false);
     setSessionActive(false);
+    setErrorMessage(null);
 
-    const controller = new TerminalController(nexusUrl);
+    if (!nexusUrl) {
+        setStatus('error');
+        setErrorMessage('URL de Nexus no configurada.');
+        return;
+    }
+
+    let controller: TerminalController;
+    try {
+        controller = new TerminalController(nexusUrl);
+    } catch (err) {
+        console.error('[Terminal] Init error', err);
+        setStatus('error');
+        setErrorMessage('No se pudo inicializar el terminal.');
+        return;
+    }
     controllerRef.current = controller;
 
-    // Connect
-    const token = typeof user.getIdToken === 'function' ? user.getIdToken() : 'mock-token';
+    let cancelled = false;
     const uid = user.uid;
 
-    Promise.resolve(token).then(actualToken => {
-        controller.connect(
-            actualToken,
-            uid,
-            (newStatus) => {
-                if (newStatus === 'hub-online') {
-                    setHubConnected(true);
-                    setStatus(prev => (prev === 'online' ? prev : 'checking'));
-                    return;
-                }
-                if (newStatus === 'hub-offline') {
-                    setHubConnected(false);
-                    setStatus('offline');
+    const connect = async () => {
+        try {
+            const actualToken =
+                typeof user.getIdToken === 'function' ? await user.getIdToken() : 'mock-token';
+            if (cancelled) return;
+            controller.connect(
+                actualToken,
+                uid,
+                (newStatus) => {
+                    if (newStatus === 'hub-online') {
+                        setHubConnected(true);
+                        setStatus(prev => (prev === 'online' ? prev : 'checking'));
+                        return;
+                    }
+                    if (newStatus === 'hub-offline') {
+                        setHubConnected(false);
+                        setStatus('offline');
+                        setSessionActive(false);
+                        return;
+                    }
+                    if (newStatus === 'online') {
+                        setHubConnected(true);
+                        setStatus('online');
+                        return;
+                    }
+                    if (newStatus === 'offline') {
+                        setStatus('offline');
+                        setSessionActive(false);
+                        controllerRef.current?.clearSession('Worker offline');
+                        return;
+                    }
+                    if (newStatus === 'error') {
+                        setHubConnected(false);
+                        setStatus('error');
+                        setSessionActive(false);
+                        controllerRef.current?.clearSession('Connection error');
+                        return;
+                    }
+                },
+                () => {
                     setSessionActive(false);
-                    return;
                 }
-                if (newStatus === 'online') {
-                    setHubConnected(true);
-                    setStatus('online');
-                    return;
-                }
-                if (newStatus === 'offline') {
-                    setStatus('offline');
-                    setSessionActive(false);
-                    controllerRef.current?.clearSession('Worker offline');
-                    return;
-                }
-                if (newStatus === 'error') {
-                    setHubConnected(false);
-                    setStatus('error');
-                    setSessionActive(false);
-                    controllerRef.current?.clearSession('Connection error');
-                    return;
-                }
-            },
-            () => {
+            );
+
+            controller.socket?.on('session-created', () => {
+                setSessionActive(true);
+            });
+            controller.socket?.on('connect_error', (err: Error) => {
+                setStatus('error');
+                setHubConnected(false);
                 setSessionActive(false);
-            }
-        );
-        
-        // Listen for session start to switch UI
-        controller.socket?.on('session-created', () => {
-            setSessionActive(true);
-        });
-    });
+                setErrorMessage(err?.message || 'No se pudo conectar al hub.');
+            });
+            controller.socket?.on('error', (err: unknown) => {
+                const message = typeof err === 'string' ? err : 'Error en el socket.';
+                setStatus('error');
+                setHubConnected(false);
+                setSessionActive(false);
+                setErrorMessage(message);
+            });
+        } catch (err) {
+            if (cancelled) return;
+            console.error('[Terminal] Auth error', err);
+            setStatus('error');
+            setHubConnected(false);
+            setSessionActive(false);
+            setErrorMessage('Error de autenticacion. Revisa tu sesion.');
+        }
+    };
+
+    connect();
 
     return () => {
+        cancelled = true;
         controller.destroy();
         controllerRef.current = null;
     };
@@ -90,17 +132,28 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
   // Mount Xterm to DOM when session becomes active and div is rendered
   useEffect(() => {
       if (sessionActive && containerRef.current && controllerRef.current) {
-          // Check if already mounted (xterm element exists)
-          if (!containerRef.current.hasChildNodes()) {
-              controllerRef.current.mount(containerRef.current);
+          try {
+              // Check if already mounted (xterm element exists)
+              if (!containerRef.current.hasChildNodes()) {
+                  controllerRef.current.mount(containerRef.current);
+              }
+              controllerRef.current.fit();
+          } catch (err) {
+              console.error('[Terminal] Mount error', err);
+              setStatus('error');
+              setHubConnected(false);
+              setSessionActive(false);
+              setErrorMessage('No se pudo montar el terminal.');
+              return;
           }
-          controllerRef.current.fit();
-          
-          const resizeObserver = new ResizeObserver(() => {
-              controllerRef.current?.fit();
-          });
-          resizeObserver.observe(containerRef.current);
-          return () => resizeObserver.disconnect();
+
+          if (typeof ResizeObserver === 'function') {
+              const resizeObserver = new ResizeObserver(() => {
+                  controllerRef.current?.fit();
+              });
+              resizeObserver.observe(containerRef.current);
+              return () => resizeObserver.disconnect();
+          }
       }
   }, [sessionActive]);
 
@@ -166,7 +219,12 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                     ) : (
                         <div className="space-y-4 text-slate-400">
                             {showHubError ? (
-                                <p>Revisa la URL de Nexus y la conectividad de red.</p>
+                                <div className="space-y-2">
+                                    <p>Revisa la URL de Nexus y la conectividad de red.</p>
+                                    {errorMessage && (
+                                        <p className="text-red-300 text-sm">{errorMessage}</p>
+                                    )}
+                                </div>
                             ) : (
                                 <>
                                     <p>No se detecta el agente en tu máquina.</p>
@@ -187,4 +245,4 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
   );
 };
 
-export default Terminal;
+export default TerminalInner;
