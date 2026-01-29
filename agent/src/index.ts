@@ -70,6 +70,9 @@ program
     const mountPath = config.get('mountPath');
     const serviceAccountPath = config.get('serviceAccountPath');
 
+    console.log('DEBUG: Config loaded from:', config.path);
+    console.log('DEBUG: Config content:', config.store);
+
     if (!token || !nexusUrl || !serviceAccountPath) {
       console.log(chalk.red('❌ Agent not configured. Please run "edu-agent setup" first.'));
       return;
@@ -113,6 +116,9 @@ wait -n
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
     
     fs.writeFileSync(path.join(tmpDir, 'entrypoint.sh'), entrypointScript, { mode: 0o755 });
+    try {
+        fs.chmodSync(path.join(tmpDir, 'entrypoint.sh'), '755');
+    } catch(e) {}
     
     // Locate the sync agent script
     // Priority 1: Dev environment (relative)

@@ -21,23 +21,59 @@ socket.on("connect_error", (err) => {
   console.error("❌ Connection Error:", err.message);
 });
 
+const sessions = new Map();
+
 socket.on("execute", (data) => {
   // data: { sessionId, command }
-  console.log("📝 Received command:", data);
   const { sessionId, command } = data;
 
-  if (!command || !command.trim()) return;
+  // Initialize session buffer if needed
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, { buffer: "" });
+  }
+  const session = sessions.get(sessionId);
 
-  // Simple echo/exec
-  // Dangerous in prod, but fine for test
-  exec(command, (error, stdout, stderr) => {
-    let output = stdout || "";
-    if (stderr) output += `\n[stderr] ${stderr}`;
-    if (error) output += `\n[error] ${error.message}`;
+  // command here is actually the raw input chunk (usually a single char)
+  const input = command; 
+  
+  // Echo back to user immediately so they see what they type
+  socket.emit("output", { sessionId, data: input });
 
-    socket.emit("output", {
-      sessionId,
-      data: output
-    });
-  });
+  for (const char of input) {
+    if (char === '\r') {
+      // Enter pressed: Execute command
+      socket.emit("output", { sessionId, data: '\r\n' }); // New line
+      
+      const cmdToRun = session.buffer.trim();
+      session.buffer = ""; // Clear buffer
+      
+      if (!cmdToRun) {
+         socket.emit("output", { sessionId, data: '$ ' });
+         continue;
+      }
+
+      console.log(`🚀 Executing: ${cmdToRun}`);
+      exec(cmdToRun, { cwd: process.cwd() }, (error, stdout, stderr) => {
+        let output = stdout || "";
+        if (stderr) output += stderr; // stderr is often just text in terminals
+        if (error && !stderr) output += `Error: ${error.message}\n`;
+        
+        // Normalize line endings for xterm
+        output = output.replace(/\n/g, '\r\n');
+        
+        socket.emit("output", { sessionId, data: output + '$ ' });
+      });
+      
+    } else if (char === '\u007F') {
+      // Backspace
+      if (session.buffer.length > 0) {
+        session.buffer = session.buffer.slice(0, -1);
+        // Destructive backspace sequence
+        socket.emit("output", { sessionId, data: '\b \b' });
+      }
+    } else {
+      // Regular character
+      session.buffer += char;
+    }
+  }
 });

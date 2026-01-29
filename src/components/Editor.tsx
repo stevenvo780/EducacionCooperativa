@@ -8,8 +8,6 @@ import {
   MosaicPath
 } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
 
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
@@ -544,38 +542,72 @@ export default function MosaicEditor({
 
         {/* Mosaic Grid Area */}
         <div className="flex-1 relative overflow-hidden">
-            <DndProvider backend={HTML5Backend}>
                 <Mosaic
                     renderTile={renderTile}
                     value={layout}
                     onChange={setLayout}
                     className="mosaic-blueprint-theme mosaic-custom-dark"
                 />
-            </DndProvider>
         </div>
 
         <style jsx global>{`
             .mosaic-custom-dark {
                 background: #0f172a; 
             }
+            .mosaic-root {
+                top: 0 !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+            }
             .mosaic-tile {
-                margin: 2px; /* Gaps between tiles */
-                box-shadow: 0 0 0 1px #334155;
+                margin: 0 !important; /* Remove gaps */
+                box-shadow: none !important;
+                border-left: 1px solid #334155; 
+                border-bottom: 1px solid #334155;
+            }
+            .mosaic-tile:first-child {
+                border-left: none;
+            }
+            .mosaic-window {
+                box-shadow: none !important;
+                background: #0f172a !important;
             }
             .mosaic-window-toolbar {
-                height: 32px !important;
+                height: 36px !important;
                 background: #1e293b !important;
-                box-shadow: inset 0 -1px 0 #334155 !important;
+                box-shadow: none !important;
+                border-bottom: 1px solid #334155 !important;
+                display: flex !important;
+                align-items: center !important;
+                padding: 0 8px !important;
             }
             .mosaic-window-title {
-                font-size: 12px !important;
-                font-weight: 600 !important;
+                font-size: 13px !important;
+                font-weight: 500 !important;
+                color: #e2e8f0 !important;
+                text-transform: none !important;
+                letter-spacing: normal !important;
+            }
+            .mosaic-window-controls .mosaic-default-control {
                 color: #94a3b8 !important;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
+                padding: 4px !important;
+                margin-left: 4px !important;
+                border-radius: 4px !important;
+            }
+            .mosaic-window-controls .mosaic-default-control:hover {
+                background: #334155 !important;
+                color: #f8fafc !important;
+            }
+            .mosaic-split {
+                background: #1e293b !important;
+                width: 1px !important; 
+                height: 1px !important;
+                z-index: 10 !important;
             }
             .mosaic-split:hover {
-                background: #3b82f6 !important; /* Blue highlight on hover */
+                background: #3b82f6 !important;
+                box-shadow: 0 0 0 1px #3b82f6 !important;
             }
             .cm-editor { height: 100%; font-family: 'Fira Code', monospace; }
             .editor-embedded .mosaic-window-toolbar {

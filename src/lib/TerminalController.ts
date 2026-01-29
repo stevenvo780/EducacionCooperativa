@@ -104,7 +104,7 @@ export class TerminalController {
     });
 
     this.socket.on('output', (data: { sessionId: string; data: string }) => {
-        if (data.sessionId === this.activeSessionId) {
+        if (data.sessionId === this.activeSessionId && data.data) {
             this.term.write(data.data);
         }
     });
