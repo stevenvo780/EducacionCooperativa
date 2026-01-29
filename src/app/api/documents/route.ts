@@ -6,6 +6,7 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const { name, content, type, ownerId, workspaceId, folder, mimeType, url, storagePath } = body;
+        const normalizedFolder = typeof folder === 'string' ? folder : 'No estructurado';
 
         const docData: Record<string, unknown> = {
             name: name || 'Sin título',
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
             mimeType: mimeType || null,
             ownerId: ownerId || 'unknown',
             workspaceId: workspaceId ?? 'personal',
-            folder: folder || 'No estructurado',
+            folder: normalizedFolder,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
         };

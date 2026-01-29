@@ -8,7 +8,8 @@ export async function POST(req: NextRequest) {
         const file = formData.get('file') as File;
         const ownerId = (formData.get('ownerId') as string) || 'unknown';
         const workspaceId = (formData.get('workspaceId') as string) || 'personal';
-        const folder = (formData.get('folder') as string) || 'No estructurado';
+        const folderField = formData.get('folder');
+        const folder = typeof folderField === 'string' ? folderField : 'No estructurado';
         
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -58,8 +59,10 @@ export async function POST(req: NextRequest) {
             name: file.name, 
             type: 'file', 
             path: filename,
+            storagePath: filename,
             mimeType: file.type,
             ownerId: ownerId,
+            folder,
             updatedAt: { seconds: Date.now() / 1000 } // Approximation
         });
 

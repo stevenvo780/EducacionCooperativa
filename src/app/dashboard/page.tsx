@@ -89,6 +89,7 @@ export default function DashboardPage() {
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
   const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const currentWorkspaceId = currentWorkspace?.id;
 
   // UI State
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
@@ -289,10 +290,10 @@ export default function DashboardPage() {
   }, [user, currentWorkspace, applyDocsSnapshot]);
 
   useEffect(() => {
-    if (currentWorkspace) {
+    if (currentWorkspaceId) {
       setActiveFolder(ROOT_FOLDER_PATH);
     }
-  }, [currentWorkspace?.id]);
+  }, [currentWorkspaceId]);
 
   useEffect(() => {
       return () => {
@@ -319,9 +320,7 @@ export default function DashboardPage() {
   const openDocument = (doc: DocItem) => {
       setShowTerminal(false);
       if (doc.type === 'folder') return;
-      if (doc.folder) {
-          setActiveFolder(doc.folder);
-      }
+      setActiveFolder(normalizeFolderPath(doc.folder));
       setOpenTabs(prev => {
           if (prev.find(t => t.id === doc.id)) {
               return prev;
@@ -364,12 +363,13 @@ export default function DashboardPage() {
 
   const gridColsClass = gridDocs.length <= 1 ? 'grid-cols-1' : 'grid-cols-2';
   const gridRowsClass = gridDocs.length <= 2 ? 'grid-rows-1' : 'grid-rows-2';
+  const activeFolderLabel = activeFolder || 'Raiz';
 
-  const createFolderRecord = async (folderName: string) => {
+  const createFolderRecord = async (folderName: string, parentOverride?: string) => {
       if (!user) return false;
       const trimmed = folderName.trim();
       if (!trimmed) return false;
-      const parentPath = normalizePath(activeFolder);
+      const parentPath = normalizePath(parentOverride ?? activeFolder);
       const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
       const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
       if (exists) return false;
@@ -407,7 +407,7 @@ export default function DashboardPage() {
           alert('La carpeta ya existe');
           return;
       }
-      const created = await createFolderRecord(trimmed);
+      const created = await createFolderRecord(trimmed, parentPath);
       if (!created) {
           alert('No se pudo crear la carpeta');
       }
@@ -422,10 +422,7 @@ export default function DashboardPage() {
           const parentPath = segments.slice(0, -1).join('/');
           const exists = folders.some(folder => folder.path.toLowerCase() === targetPath.toLowerCase());
           if (!exists) {
-              const savedActive = activeFolder;
-              setActiveFolder(parentPath || DEFAULT_FOLDER_NAME);
-              await createFolderRecord(leafName);
-              setActiveFolder(savedActive);
+              await createFolderRecord(leafName, parentPath);
           }
       }
 
@@ -459,7 +456,7 @@ export default function DashboardPage() {
           type: docItem.type || 'text',
           ownerId: user.uid,
           workspaceId: docWorkspaceId,
-          folder: docItem.folder || DEFAULT_FOLDER_NAME,
+          folder: normalizeFolderPath(docItem.folder),
           mimeType: docItem.mimeType || null
       };
 
@@ -485,7 +482,7 @@ export default function DashboardPage() {
               type: docItem.type || 'text',
               ownerId: user.uid,
               updatedAt: { seconds: Date.now() / 1000 },
-              folder: docItem.folder || DEFAULT_FOLDER_NAME,
+              folder: normalizeFolderPath(docItem.folder),
               mimeType: docItem.mimeType,
               url: docItem.url,
               storagePath: docItem.storagePath,
@@ -498,7 +495,7 @@ export default function DashboardPage() {
   };
 
   const promptMoveDocument = async (docItem: DocItem) => {
-      const current = docItem.folder || DEFAULT_FOLDER_NAME;
+      const current = normalizeFolderPath(docItem.folder);
       const target = prompt('Mover a carpeta', current);
       if (!target) return;
       await moveDocumentToFolder(docItem.id, target);
@@ -533,7 +530,7 @@ export default function DashboardPage() {
     if(e) e.preventDefault();
     const name = newDocName.trim() || 'Sin título';
     if (!user) return;
-    const targetFolder = (folderName ?? activeFolder ?? DEFAULT_FOLDER_NAME).trim() || DEFAULT_FOLDER_NAME;
+    const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
     const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
     const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
     setIsCreating(true);
@@ -620,7 +617,7 @@ export default function DashboardPage() {
   const docsByFolder = useMemo(() => {
       const grouped: Record<string, DocItem[]> = {};
       docs.forEach(docItem => {
-          const folderName = docItem.folder || DEFAULT_FOLDER_NAME;
+          const folderName = normalizeFolderPath(docItem.folder);
           if (!grouped[folderName]) grouped[folderName] = [];
           grouped[folderName].push(docItem);
       });
@@ -682,16 +679,15 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+      if (activeFolder === ROOT_FOLDER_PATH) return;
       if (folders.length === 0) {
-          if (activeFolder !== DEFAULT_FOLDER_NAME) {
-              setActiveFolder(DEFAULT_FOLDER_NAME);
-          }
+          setActiveFolder(ROOT_FOLDER_PATH);
           return;
       }
       const exists = folders.some(folder => folder.path === activeFolder);
       if (!exists) {
-          const rootFolders = folderChildrenMap[''] ?? [];
-          const fallback = rootFolders[0]?.path || DEFAULT_FOLDER_NAME;
+          const rootFolders = folderChildrenMap[ROOT_FOLDER_PATH] ?? [];
+          const fallback = rootFolders[0]?.path || ROOT_FOLDER_PATH;
           setActiveFolder(fallback);
       }
   }, [folders, activeFolder, folderChildrenMap]);
@@ -712,7 +708,7 @@ export default function DashboardPage() {
 
   const uploadFiles = async (files: File[], targetFolder?: string) => {
     if (!user || files.length === 0) return;
-    const folderName = (targetFolder ?? DEFAULT_FOLDER_NAME).trim() || DEFAULT_FOLDER_NAME;
+    const folderName = normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
     const context = getUploadContext();
     if (!context) return;
 
@@ -767,7 +763,8 @@ export default function DashboardPage() {
                     type: 'text',
                     mimeType: file.type || 'text/markdown',
                     ownerId: user.uid,
-                    updatedAt: { seconds: Date.now()/1000 }
+                    updatedAt: { seconds: Date.now()/1000 },
+                    folder: folderName
                 });
                 continue;
             }
@@ -786,7 +783,7 @@ export default function DashboardPage() {
             if(!res.ok) throw new Error("API Upload failed");
             
             const newDoc = await res.json();
-            createdDocs.push(newDoc);
+            createdDocs.push({ ...newDoc, folder: newDoc.folder ?? folderName });
             
             setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
         }
@@ -875,8 +872,14 @@ export default function DashboardPage() {
 
   const handleFolderDragOver = (e: React.DragEvent, folderName: string) => {
       const types = Array.from(e.dataTransfer.types ?? []);
+      const hasFiles = types.includes('Files');
       const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
-      if (!hasDocId || types.includes('Files')) return;
+      if (hasFiles) {
+          e.preventDefault();
+          setFolderDragOver(folderName);
+          return;
+      }
+      if (!hasDocId) return;
       e.preventDefault();
       setFolderDragOver(folderName);
   };
@@ -888,9 +891,17 @@ export default function DashboardPage() {
   };
 
   const handleFolderDrop = async (e: React.DragEvent, folderName: string) => {
+      const files = Array.from(e.dataTransfer.files ?? []);
+      if (files.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          setFolderDragOver(null);
+          await uploadFiles(files, folderName);
+          return;
+      }
       const types = Array.from(e.dataTransfer.types ?? []);
       const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
-      if (!hasDocId || types.includes('Files')) return;
+      if (!hasDocId) return;
       const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
       if (!docId) return;
       e.preventDefault();
@@ -1391,7 +1402,7 @@ export default function DashboardPage() {
                             {currentWorkspace?.type === 'personal' ? <User className="w-6 h-6 text-surface-400" /> : <Briefcase className="w-6 h-6 text-mandy-400" />}
                             <div className="flex flex-col">
                                 <span className="text-lg font-bold text-white">{currentWorkspace?.name}</span>
-                                <span className="text-xs text-surface-400">Carpeta: {activeFolder}</span>
+                                <span className="text-xs text-surface-400">Carpeta: {activeFolderLabel}</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1424,7 +1435,18 @@ export default function DashboardPage() {
                                 Carpetas
                             </div>
                             <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
-                                {renderFolderTree('')}
+                                <button
+                                    onClick={() => setActiveFolder(ROOT_FOLDER_PATH)}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${activeFolder === ROOT_FOLDER_PATH ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
+                                >
+                                    {currentWorkspace?.type === 'personal'
+                                        ? <User className={`w-4 h-4 ${activeFolder === ROOT_FOLDER_PATH ? 'text-mandy-400' : 'text-surface-500'}`} />
+                                        : <Briefcase className={`w-4 h-4 ${activeFolder === ROOT_FOLDER_PATH ? 'text-mandy-400' : 'text-surface-500'}`} />
+                                    }
+                                    <span className="text-sm font-semibold truncate flex-1">{currentWorkspace?.name || 'Espacio Personal'}</span>
+                                    <span className="text-[10px] text-surface-500">Raiz</span>
+                                </button>
+                                {renderFolderTree(ROOT_FOLDER_PATH)}
                             </div>
                         </aside>
                         <section className="flex-1 min-h-0 overflow-y-auto">
@@ -1454,7 +1476,9 @@ export default function DashboardPage() {
                                     );
                                 })}
                                 {activeChildFolders.length === 0 && activeFolderDocs.length === 0 ? (
-                                    <div className="px-4 py-6 text-sm text-surface-500">Esta carpeta está vacía.</div>
+                                    <div className="px-4 py-6 text-sm text-surface-500">
+                                        {activeFolder === ROOT_FOLDER_PATH ? 'Este espacio está vacío.' : 'Esta carpeta está vacía.'}
+                                    </div>
                                 ) : activeFolderDocs.map(doc => (
                                     <div
                                         key={doc.id}
