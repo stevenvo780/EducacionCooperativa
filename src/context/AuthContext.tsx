@@ -42,6 +42,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (storedUser) {
             try {
                 setUser(JSON.parse(storedUser));
+                setLoading(false); // Force loading false if we have a stored user
             } catch (e) {
                 console.error("Failed to parse stored user", e);
             }
