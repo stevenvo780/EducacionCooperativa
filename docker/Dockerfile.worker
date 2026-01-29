@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 
 # 2. Prepare Python Environment for Sync Agent
 WORKDIR /app
-COPY agent/sync-service/requirements.txt /app/requirements.txt
+COPY EducacionCooperativa/agent/sync-service/requirements.txt /app/requirements.txt
 # Create venv to avoid root conflicts, though in container root is fine usually.
 # We'll install globally for simplicity in this container
 RUN pip3 install --no-cache-dir -r requirements.txt
