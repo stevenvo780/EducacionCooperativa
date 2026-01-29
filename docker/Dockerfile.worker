@@ -1,0 +1,33 @@
+# Base: Node + Python
+FROM node:18-bullseye-slim
+
+# 1. Install System Deps & Python
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Prepare Python Environment for Sync Agent
+WORKDIR /app
+COPY agent/sync-service/requirements.txt /app/requirements.txt
+# Create venv to avoid root conflicts, though in container root is fine usually.
+# We'll install globally for simplicity in this container
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# 3. Install Worker (From Ultimate Terminal Source)
+# We assume this Dockerfile is run from the Monorepo Root context
+# Copying the worker source code from the other folder
+WORKDIR /app/worker
+COPY ultimate-terminal/worker/package.json ./
+COPY ultimate-terminal/worker/tsconfig.json ./
+RUN npm install
+
+COPY ultimate-terminal/worker/src ./src
+RUN npm run build
+
+# 4. Setup Entrypoint
+WORKDIR /app
+CMD ["node", "worker/dist/index.js"]
