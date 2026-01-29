@@ -5,51 +5,13 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, FileCode, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil } from 'lucide-react';
+import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, FileCode, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@/components/Editor';
+import Terminal from '@/components/Terminal';
 
 interface Workspace {
-  id: string;
-  name: string;
-  ownerId: string;
-  members: string[];
-  pendingInvites?: string[];
-  type: 'personal' | 'shared';
-}
-
-interface DocItem {
-  id: string;
-  name: string;
-  type?: 'text' | 'file';
-  url?: string;
-  mimeType?: string;
-  folder?: string;
-  updatedAt: any;
-  ownerId: string;
-  workspaceId?: string;
-}
-
-type ViewMode = 'edit' | 'split' | 'preview';
-
-interface UploadStatus {
-  total: number;
-  currentIndex: number;
-  currentName: string;
-  progress: number;
-  phase: 'uploading' | 'done' | 'error';
-  error?: string;
-}
-
-interface DeleteStatus {
-  phase: 'deleting' | 'done' | 'error';
-  name?: string;
-  error?: string;
-}
-
-const PERSONAL_WORKSPACE_ID = 'personal';
-const DEFAULT_FOLDER_NAME = 'No estructurado';
-
+// ...
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const [docs, setDocs] = useState<DocItem[]>([]);
@@ -65,6 +27,7 @@ export default function DashboardPage() {
 
   // UI State
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [showTerminal, setShowTerminal] = useState(false);
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -209,6 +172,7 @@ export default function DashboardPage() {
   }, []);
 
   const openDocument = (doc: DocItem) => {
+      setShowTerminal(false);
       setOpenTabs(prev => {
           if (prev.find(t => t.id === doc.id)) {
               return prev;
@@ -679,7 +643,7 @@ export default function DashboardPage() {
                 <button onClick={() => setShowMobileSidebar(!showMobileSidebar)} className="md:hidden p-1.5 text-surface-400 hover:bg-surface-700 rounded">
                     <Menu className="w-5 h-5" />
                 </button>
-                <div onClick={() => setSelectedDocId(null)} className="font-bold flex items-center gap-2 text-white cursor-pointer">
+                <div onClick={() => { setSelectedDocId(null); setShowTerminal(false); }} className="font-bold flex items-center gap-2 text-white cursor-pointer">
                     <span className="bg-gradient-mandy text-white p-1 rounded-md text-xs">St</span>
                     <span className="hidden sm:inline">Studio</span>
                 </div>
@@ -800,7 +764,7 @@ export default function DashboardPage() {
         >
             <div className="p-3 border-b border-surface-600/50 flex justify-between items-center bg-surface-700/30 gap-2">
                 <div
-                    onClick={() => setSelectedDocId(null)}
+                    onClick={() => { setSelectedDocId(null); setShowTerminal(false); }}
                     className="flex items-center gap-2 cursor-pointer hover:bg-surface-700 px-2 py-1 rounded transition flex-1"
                     title="Volver a Vista Cuadrícula"
                 >
@@ -815,7 +779,21 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-                <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-surface-500 uppercase mt-2">
+                {/* Mi Asistente (Terminal) Button */}
+                <div 
+                    onClick={() => {
+                        setShowTerminal(true);
+                        setSelectedDocId(null);
+                        setShowMobileSidebar(false);
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition ${showTerminal ? 'bg-mandy-500 text-white shadow-lg shadow-mandy-500/20' : 'text-surface-300 hover:bg-surface-700/50'}`}
+                >
+                    <TerminalIcon className={`w-5 h-5 ${showTerminal ? 'text-white' : 'text-mandy-400'}`} />
+                    <span className="font-bold flex-1">Mi Asistente</span>
+                    {showTerminal && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
+                </div>
+
+                <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-surface-500 uppercase mt-4">
                     <ChevronDown className="w-3 h-3" />
                     {currentWorkspace?.name}
                 </div>
@@ -890,7 +868,14 @@ export default function DashboardPage() {
                 </div>
             )}
 
-            {selectedDocId && openTabs.length > 0 ? (
+            {/* Content Area */}
+            {showTerminal ? (
+                <div className="flex-1 min-h-0 bg-black overflow-hidden flex flex-col">
+                    <div className="flex-1">
+                        <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"} />
+                    </div>
+                </div>
+            ) : selectedDocId && openTabs.length > 0 ? (
                 <div className="flex-1 min-h-0 flex flex-col">
                     <div className={`grid ${gridColsClass} ${gridRowsClass} gap-3 p-3 flex-1 min-h-0`}>
                         {gridDocs.map(doc => {

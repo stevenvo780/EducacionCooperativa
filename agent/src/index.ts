@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import inquirer from 'inquirer';
 import Conf from 'conf';
-import { execa } from 'execa';
+import execa from 'execa';
 import chalk from 'chalk';
 import fs from 'fs';
 import os from 'os';
