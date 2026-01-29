@@ -35,6 +35,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const router = useRouter();
 
     useEffect(() => {
+        // DEV ONLY: Auto-login mock
+        const useMock = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true';
+        if (useMock && !localStorage.getItem('agora_user')) {
+             const mockUser = {
+                 uid: 'dev-user-123',
+                 email: 'dev@test.com',
+                 displayName: 'Dev Tester',
+                 getIdToken: async () => 'mock-token'
+             } as any;
+             setUser(mockUser);
+             setLoading(false);
+             return; 
+        }
+
         // Check localStorage for persisted custom auth session
         const storedUser = localStorage.getItem('agora_user');
         if (storedUser) {
