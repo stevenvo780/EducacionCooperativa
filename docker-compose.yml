@@ -40,3 +40,7 @@ services:
       - ./temp-worker/worker:/workspace # Mount a folder as the user's workspace
     depends_on:
       - hub
+
+networks:
+  app-network:
+    driver: bridge
