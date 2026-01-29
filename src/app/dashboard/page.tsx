@@ -6,12 +6,12 @@ import { useRouter } from 'next/navigation';
 import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
-import { Mosaic, MosaicWindow, MosaicNode, getLeaves, MosaicZeroState, createBalancedTreeFromLeaves, MosaicPath } from 'react-mosaic-component';
-import 'react-mosaic-component/react-mosaic-component.css';
+import type { MosaicNode } from 'react-mosaic-component';
 
 // Fix imports for server-side
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
+const MosaicLayout = dynamic(() => import('@/components/MosaicLayout'), { ssr: false });
 
 interface Workspace {
   id: string;
@@ -343,7 +343,7 @@ export default function DashboardPage() {
       };
   }, []);
 
-  const openTerminal = () => {
+  const openTerminal = async () => {
       // Create a unique ID for the terminal
       const newTerminalId = `terminal-${Date.now()}`;
       const newTerminalItem: DocItem = {
@@ -355,6 +355,7 @@ export default function DashboardPage() {
       };
       
       setOpenTabs(prev => [...prev, newTerminalItem]);
+      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
           const leaves = getLeaves(current);
           if (leaves.includes(newTerminalId)) return current;
@@ -364,8 +365,9 @@ export default function DashboardPage() {
       setShowTerminal(false);
   };
 
-  const closeTabById = useCallback((docId: string) => {
+  const closeTabById = useCallback(async (docId: string) => {
       setOpenTabs(prev => prev.filter(t => t.id !== docId));
+      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
           const leaves = getLeaves(current);
           const newLeaves = leaves.filter(leaf => leaf !== docId);
@@ -373,7 +375,7 @@ export default function DashboardPage() {
       });
   }, []);
 
-  const openDocument = (doc: DocItem) => {
+  const openDocument = async (doc: DocItem) => {
       setShowTerminal(false);
       if (doc.type === 'folder') return;
       setActiveFolder(normalizeFolderPath(doc.folder));
@@ -384,6 +386,7 @@ export default function DashboardPage() {
           return [...prev, doc];
       });
       
+      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
           const leaves = getLeaves(current);
           if (leaves.includes(doc.id)) return current;
@@ -414,82 +417,7 @@ export default function DashboardPage() {
       });
   }, []);
 
-  const renderCloseControl = useCallback((docId: string) => (
-      <button
-          onClick={(e) => {
-              e.stopPropagation();
-              closeTabById(docId);
-          }}
-          className="p-1 rounded transition text-slate-400 hover:bg-red-600/20 hover:text-red-300"
-          title="Cerrar"
-      >
-          <X className="w-4 h-4" />
-      </button>
-  ), [closeTabById]);
 
-  const renderDocModeControls = useCallback((docId: string, mode: ViewMode) => (
-      <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-          <button
-              onClick={() => setDocMode(docId, 'edit')}
-              className={`p-1 rounded transition ${mode === 'edit' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
-              title="Edicion"
-              aria-pressed={mode === 'edit'}
-          >
-              <Pencil className="w-4 h-4" />
-          </button>
-          <button
-              onClick={() => setDocMode(docId, 'preview')}
-              className={`p-1 rounded transition ${mode === 'preview' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
-              title="Vista"
-              aria-pressed={mode === 'preview'}
-          >
-              <Eye className="w-4 h-4" />
-          </button>
-          <button
-              onClick={() => setDocMode(docId, 'split')}
-              className={`p-1 rounded transition ${mode === 'split' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
-              title="Dividir"
-              aria-pressed={mode === 'split'}
-          >
-              <Columns className="w-4 h-4" />
-          </button>
-          </div>
-          <span className="h-4 w-px bg-slate-700" />
-          {renderCloseControl(docId)}
-      </div>
-  ), [renderCloseControl, setDocMode]);
-
-  const renderTile = (id: string, path: MosaicPath) => {
-    const doc = openTabs.find(t => t.id === id) || docs.find(d => d.id === id); // Fallback to docs if not in tabs, though openTabs should be sync
-    if (!doc) return <div className="p-4 text-surface-400">Documento no encontrado: {id}</div>;
-
-    const isTerminal = doc.type === 'terminal';
-    const mode = docModes[doc.id] ?? 'preview';
-    
-    return (
-        <MosaicWindow<string>
-            path={path}
-            title={doc.name}
-            className="bg-surface-900 border border-surface-700"
-            toolbarControls={isTerminal ? renderCloseControl(doc.id) : renderDocModeControls(doc.id, mode)}
-            renderPreview={() => (
-                <div className="flex items-center gap-2 p-1">
-                   {isTerminal ? <TerminalIcon className="w-4 h-4 text-mandy-400" /> : <FileText className="w-4 h-4 text-sky-400" />}
-                   <span className="text-sm font-medium text-surface-200">{doc.name}</span>
-                </div>
-            )}
-        >
-            <div className="h-full w-full bg-black relative">
-                 {isTerminal ? (
-                      <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"} />
-                  ) : (
-                      <Editor roomId={doc.id} embedded viewMode={mode} />
-                  )}
-            </div>
-        </MosaicWindow>
-    );
-  };
 
   const activeFolderLabel = activeFolder || 'Raiz';
 
@@ -1644,12 +1572,15 @@ export default function DashboardPage() {
             {/* Content Area */}
             {mosaicNode ? (
                <div className="flex-1 min-h-0 relative">
-                   <Mosaic<string>
-                        renderTile={renderTile}
+                   <MosaicLayout
                         value={mosaicNode}
                         onChange={setMosaicNode}
-                        className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
-                        zeroStateView={<MosaicZeroState createNode={() => Promise.resolve('new')} />}
+                        openTabs={openTabs}
+                        docs={docs}
+                        docModes={docModes}
+                        onSetDocMode={setDocMode}
+                        onCloseTab={closeTabById}
+                        nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"}
                    />
                </div>
             ) : (
