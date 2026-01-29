@@ -1,0 +1,81 @@
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider, Auth } from "firebase/auth";
+import { getFirestore, Firestore } from "firebase/firestore";
+import { getStorage, FirebaseStorage } from "firebase/storage";
+
+// Firebase client configuration
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+};
+
+// Lazy initialization to avoid SSR issues
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
+let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
+let googleProvider: GoogleAuthProvider | null = null;
+
+function getFirebaseApp(): FirebaseApp {
+  if (typeof window === 'undefined') {
+    // Return a dummy app during SSR - actual Firebase won't be used server-side
+    return {} as FirebaseApp;
+  }
+
+  if (!app) {
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  }
+  return app;
+}
+
+function getFirebaseAuth(): Auth {
+  if (typeof window === 'undefined') {
+    return {} as Auth;
+  }
+  if (!auth) {
+    auth = getAuth(getFirebaseApp());
+  }
+  return auth;
+}
+
+function getFirebaseDb(): Firestore {
+  if (typeof window === 'undefined') {
+    return {} as Firestore;
+  }
+  if (!db) {
+    db = getFirestore(getFirebaseApp());
+  }
+  return db;
+}
+
+function getFirebaseStorage(): FirebaseStorage {
+  if (typeof window === 'undefined') {
+    return {} as FirebaseStorage;
+  }
+  if (!storage) {
+    storage = getStorage(getFirebaseApp());
+  }
+  return storage;
+}
+
+function getGoogleProvider(): GoogleAuthProvider {
+  if (typeof window === 'undefined') {
+    return {} as GoogleAuthProvider;
+  }
+  if (!googleProvider) {
+    googleProvider = new GoogleAuthProvider();
+  }
+  return googleProvider;
+}
+
+// Export getters that lazily initialize
+export {
+  getFirebaseAuth as auth,
+  getFirebaseDb as db,
+  getFirebaseStorage as storage,
+  getGoogleProvider as googleProvider
+};

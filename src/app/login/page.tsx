@@ -32,10 +32,14 @@ export default function LoginPage() {
   };
 
   const handleGoogle = async () => {
+    setError(null);
+    setLoading(true);
     try {
         await signInWithGoogle();
-    } catch (error) {
-        // Error handled in context
+    } catch (err: any) {
+        setError(err.message || 'Error al iniciar sesión con Google');
+    } finally {
+        setLoading(false);
     }
   }
 
