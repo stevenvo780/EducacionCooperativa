@@ -3,8 +3,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, query, where } from 'firebase/firestore';
 import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@/components/Editor';
@@ -42,6 +40,7 @@ interface FolderItem {
 }
 
 type ViewMode = 'edit' | 'split' | 'preview';
+type GridMode = 1 | 2 | 4;
 
 interface UploadStatus {
   total: number;
@@ -76,6 +75,15 @@ const normalizeFolderPath = (value?: string) => {
   return normalized || DEFAULT_FOLDER_NAME;
 };
 
+const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspace => ({
+  id: data.id,
+  name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Sin nombre',
+  ownerId: data.ownerId ?? '',
+  members: Array.isArray(data.members) ? data.members : [],
+  pendingInvites: Array.isArray(data.pendingInvites) ? data.pendingInvites : [],
+  type: data.type === 'personal' ? 'personal' : 'shared',
+});
+
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const [docs, setDocs] = useState<DocItem[]>([]);
@@ -102,6 +110,8 @@ export default function DashboardPage() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
   const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(null);
+  const [gridMode, setGridMode] = useState<GridMode>(4);
+  const [dropPosition, setDropPosition] = useState<number | null>(null);
 
   // Actions State
   const [newDocName, setNewDocName] = useState('');
@@ -129,25 +139,49 @@ export default function DashboardPage() {
     };
 
     let fetched: Workspace[] = [];
+    let fetchedInvites: Workspace[] = [];
     try {
-        console.log("Skipped Firestore Client Calls");
+        const params = new URLSearchParams();
+        params.set('ownerId', user.uid);
+        if (user.email) {
+          params.set('email', user.email);
+        }
+        const res = await fetch(`/api/workspaces?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error('Failed to fetch workspaces');
+        }
+        const data = await res.json();
+        fetched = Array.isArray(data.workspaces) ? data.workspaces.map(normalizeWorkspace) : [];
+        fetchedInvites = Array.isArray(data.invites) ? data.invites.map(normalizeWorkspace) : [];
     } catch (e) {
         console.error("Error fetching workspaces", e);
     }
 
-    const allWorkspaces = [personalSpace, ...fetched];
+    const allWorkspaces = [personalSpace, ...fetched.filter(ws => ws.id !== PERSONAL_WORKSPACE_ID)];
     setWorkspaces(allWorkspaces);
-    setCurrentWorkspace(prev => prev ?? personalSpace);
+    setInvites(fetchedInvites);
+    setCurrentWorkspace(prev => {
+      if (!prev) return personalSpace;
+      const match = allWorkspaces.find(ws => ws.id === prev.id);
+      return match ?? personalSpace;
+    });
   }, [user]);
 
   const acceptInvite = async (ws: Workspace) => {
       if(!user?.email) return;
       try {
-          const wsRef = doc(db, 'workspaces', ws.id);
-          await updateDoc(wsRef, {
-              members: arrayUnion(user.uid),
-              pendingInvites: arrayRemove(user.email)
+          const res = await fetch(`/api/workspaces/${ws.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  action: 'accept',
+                  userId: user.uid,
+                  email: user.email
+              })
           });
+          if (!res.ok) {
+              throw new Error('Failed to accept invite');
+          }
           await fetchWorkspaces();
           alert('¡Te has unido al espacio!');
       } catch (e) {
@@ -271,23 +305,12 @@ export default function DashboardPage() {
   }, [currentWorkspace, user, fetchDocs]);
 
   useEffect(() => {
-    if (!user || !currentWorkspace) return;
-    const constraints = currentWorkspace.id === PERSONAL_WORKSPACE_ID
-      ? [where('ownerId', '==', user.uid)]
-      : [where('workspaceId', '==', currentWorkspace.id)];
-    const docsQuery = query(collection(db, 'documents'), ...constraints);
-    const unsubscribe = onSnapshot(
-      docsQuery,
-      snapshot => {
-        const liveDocs = snapshot.docs.map(docItem => ({ id: docItem.id, ...docItem.data() })) as DocItem[];
-        applyDocsSnapshot(liveDocs);
-      },
-      error => {
-        console.error('Error listening documents', error);
-      }
-    );
-    return () => unsubscribe();
-  }, [user, currentWorkspace, applyDocsSnapshot]);
+    if (!currentWorkspace || !user) return;
+    const interval = setInterval(() => {
+      fetchDocs();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [currentWorkspace, user, fetchDocs]);
 
   useEffect(() => {
     if (currentWorkspaceId) {
@@ -354,15 +377,19 @@ export default function DashboardPage() {
   }, []);
 
   const gridDocs = useMemo(() => {
-      if (openTabs.length <= 4) return openTabs;
+      if (gridMode === 1) {
+          const selected = selectedDocId ? openTabs.find(tab => tab.id === selectedDocId) : null;
+          return selected ? [selected] : openTabs.slice(0, 1);
+      }
+      if (openTabs.length <= gridMode) return openTabs;
       const selected = selectedDocId ? openTabs.find(tab => tab.id === selectedDocId) : null;
-      if (!selected) return openTabs.slice(-4);
+      if (!selected) return openTabs.slice(-gridMode);
       const others = openTabs.filter(tab => tab.id !== selected.id);
-      return [selected, ...others].slice(0, 4);
-  }, [openTabs, selectedDocId]);
+      return [selected, ...others].slice(0, gridMode);
+  }, [openTabs, selectedDocId, gridMode]);
 
-  const gridColsClass = gridDocs.length <= 1 ? 'grid-cols-1' : 'grid-cols-2';
-  const gridRowsClass = gridDocs.length <= 2 ? 'grid-rows-1' : 'grid-rows-2';
+  const gridColsClass = gridMode === 1 || gridDocs.length <= 1 ? 'grid-cols-1' : 'grid-cols-2';
+  const gridRowsClass = gridMode <= 2 || gridDocs.length <= 2 ? 'grid-rows-1' : 'grid-rows-2';
   const activeFolderLabel = activeFolder || 'Raiz';
 
   const createFolderRecord = async (folderName: string, parentOverride?: string) => {
@@ -504,21 +531,26 @@ export default function DashboardPage() {
   const createWorkspace = async () => {
       if (!newWorkspaceName.trim() || !user) return;
       try {
-          const wsRef = await addDoc(collection(db, 'workspaces'), {
-              name: newWorkspaceName,
-              ownerId: user.uid,
-              members: [user.uid],
-              createdAt: serverTimestamp(),
-              type: 'shared'
+          const res = await fetch('/api/workspaces', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  name: newWorkspaceName,
+                  ownerId: user.uid
+              })
           });
+          if (!res.ok) {
+              throw new Error('Failed to create workspace');
+          }
+          const data = await res.json();
           setNewWorkspaceName('');
           setShowNewWorkspaceModal(false);
           await fetchWorkspaces();
           setCurrentWorkspace({
-              id: wsRef.id,
-              name: newWorkspaceName,
-              ownerId: user.uid,
-              members: [user.uid],
+              id: data.id,
+              name: data.name ?? newWorkspaceName,
+              ownerId: data.ownerId ?? user.uid,
+              members: Array.isArray(data.members) ? data.members : [user.uid],
               type: 'shared'
           });
       } catch (e) {
@@ -868,6 +900,45 @@ export default function DashboardPage() {
 
   const handleDocDragEnd = () => {
       setFolderDragOver(null);
+      setDropPosition(null);
+  };
+
+  const handleDropZoneDragOver = (e: React.DragEvent, position: number) => {
+      const types = Array.from(e.dataTransfer.types ?? []);
+      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+      if (!hasDocId || types.includes('Files')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropPosition(position);
+  };
+
+  const handleDropZoneDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDropPosition(null);
+  };
+
+  const handleDropZoneDrop = (e: React.DragEvent, position: number) => {
+      const types = Array.from(e.dataTransfer.types ?? []);
+      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+      if (!hasDocId || types.includes('Files')) return;
+      const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
+      if (!docId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropPosition(null);
+      const docToOpen = docs.find(d => d.id === docId);
+      if (docToOpen) {
+          // Insert at specific position in openTabs
+          setOpenTabs(prev => {
+              const filtered = prev.filter(t => t.id !== docToOpen.id);
+              const newTabs = [...filtered];
+              newTabs.splice(position, 0, docToOpen);
+              return newTabs;
+          });
+          setSelectedDocId(docToOpen.id);
+          setShowTerminal(false);
+      }
   };
 
   const handleFolderDragOver = (e: React.DragEvent, folderName: string) => {
@@ -945,10 +1016,17 @@ export default function DashboardPage() {
   const inviteMember = async () => {
      if (!inviteEmail || !currentWorkspace || currentWorkspace.type === 'personal') return;
      try {
-         const wsRef = doc(db, 'workspaces', currentWorkspace.id);
-         await updateDoc(wsRef, {
-             pendingInvites: arrayUnion(inviteEmail)
+         const res = await fetch(`/api/workspaces/${currentWorkspace.id}`, {
+             method: 'PATCH',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+                 action: 'invite',
+                 email: inviteEmail
+             })
          });
+         if (!res.ok) {
+             throw new Error('Failed to invite member');
+         }
 
          alert(`Invitación enviada a ${inviteEmail}`);
          setInviteEmail('');
@@ -1245,6 +1323,9 @@ export default function DashboardPage() {
                     <div
                         key={doc.id}
                         onClick={() => openDocument(doc)}
+                        draggable
+                        onDragStart={(e) => handleDocDragStart(e, doc)}
+                        onDragEnd={handleDocDragEnd}
                         className={`group flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-mandy-500/15 text-mandy-400 font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
                     >
                         <div className={`${selectedDocId === doc.id ? 'text-mandy-500' : 'text-surface-500'}`}>
@@ -1301,27 +1382,62 @@ export default function DashboardPage() {
         <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
 
             {/* Tabs Bar */}
-            {selectedDocId && openTabs.length > 0 && (
-                <div className="flex items-center border-b border-surface-600/50 bg-surface-800 overflow-x-auto scrollbar-hide">
-                    {openTabs.map(tab => (
-                        <div
-                            key={tab.id}
-                            onClick={() => setSelectedDocId(tab.id)}
-                            className={`
-                                group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-surface-600/30 select-none
-                                ${selectedDocId === tab.id ? 'bg-surface-900 text-mandy-400 border-t-2 border-t-mandy-500' : 'text-surface-500 hover:bg-surface-700/50'}
-                            `}
-                        >
-                            {getIcon(tab)}
-                            <span className="truncate flex-1">{tab.name}</span>
-                            <button
-                                onClick={(e) => closeTab(tab.id, e)}
-                                className={`p-0.5 rounded-full hover:bg-surface-700 ${selectedDocId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            {openTabs.length > 0 && (
+                <div className="flex items-center border-b border-surface-600/50 bg-surface-800">
+                    <div className="flex-1 flex items-center overflow-x-auto scrollbar-hide">
+                        {openTabs.map(tab => (
+                            <div
+                                key={tab.id}
+                                onClick={() => setSelectedDocId(tab.id)}
+                                className={`
+                                    group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-surface-600/30 select-none
+                                    ${selectedDocId === tab.id ? 'bg-surface-900 text-mandy-400 border-t-2 border-t-mandy-500' : 'text-surface-500 hover:bg-surface-700/50'}
+                                `}
                             >
-                                <X className="w-3 h-3" />
-                            </button>
-                        </div>
-                    ))}
+                                {getIcon(tab)}
+                                <span className="truncate flex-1">{tab.name}</span>
+                                <button
+                                    onClick={(e) => closeTab(tab.id, e)}
+                                    className={`p-0.5 rounded-full hover:bg-surface-700 ${selectedDocId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    {/* Grid Mode Selector */}
+                    <div className="flex items-center gap-1 px-2 border-l border-surface-600/30">
+                        <span className="text-[10px] text-surface-500 mr-1">{openTabs.length} tabs</span>
+                        <button
+                            onClick={() => setGridMode(1)}
+                            className={`px-2 py-1 rounded transition flex items-center gap-1 ${gridMode === 1 ? 'bg-mandy-500/20 text-mandy-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
+                            title="1 panel"
+                        >
+                            <div className="w-4 h-3 border border-current rounded-sm" />
+                        </button>
+                        <button
+                            onClick={() => setGridMode(2)}
+                            className={`px-2 py-1 rounded transition flex items-center gap-1 ${gridMode === 2 ? 'bg-mandy-500/20 text-mandy-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
+                            title="2 paneles"
+                        >
+                            <div className="flex gap-px">
+                                <div className="w-2 h-3 border border-current rounded-sm" />
+                                <div className="w-2 h-3 border border-current rounded-sm" />
+                            </div>
+                        </button>
+                        <button
+                            onClick={() => setGridMode(4)}
+                            className={`px-2 py-1 rounded transition flex items-center gap-1 ${gridMode === 4 ? 'bg-mandy-500/20 text-mandy-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
+                            title="4 paneles"
+                        >
+                            <div className="grid grid-cols-2 gap-px">
+                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
+                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
+                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
+                                <div className="w-2 h-1.5 border border-current rounded-[2px]" />
+                            </div>
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -1332,10 +1448,34 @@ export default function DashboardPage() {
                         <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"} />
                     </div>
                 </div>
-            ) : selectedDocId && openTabs.length > 0 ? (
-                <div className="flex-1 min-h-0 flex flex-col">
+            ) : openTabs.length > 0 ? (
+                <div className="flex-1 min-h-0 flex flex-col relative">
                     <div className={`grid ${gridColsClass} ${gridRowsClass} gap-3 p-3 flex-1 min-h-0`}>
-                        {gridDocs.map(doc => {
+                        {Array.from({ length: gridMode }).map((_, index) => {
+                            const doc = gridDocs[index];
+                            const isDropTarget = dropPosition === index;
+
+                            if (!doc) {
+                                // Empty slot - drop zone
+                                return (
+                                    <div
+                                        key={`empty-${index}`}
+                                        className={`flex flex-col items-center justify-center min-h-0 rounded-lg border-2 border-dashed transition-all ${isDropTarget ? 'border-mandy-500 bg-mandy-500/10' : 'border-surface-700/60 bg-surface-800/30'}`}
+                                        onDragOver={(e) => handleDropZoneDragOver(e, index)}
+                                        onDragLeave={handleDropZoneDragLeave}
+                                        onDrop={(e) => handleDropZoneDrop(e, index)}
+                                    >
+                                        <div className={`text-center p-4 ${isDropTarget ? 'text-mandy-400' : 'text-surface-500'}`}>
+                                            <Plus className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                            <div className="text-xs font-medium">
+                                                {isDropTarget ? 'Suelta aqui' : `Panel ${index + 1}`}
+                                            </div>
+                                            <div className="text-[10px] mt-1 opacity-70">Arrastra un documento</div>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
                             const currentMode = docModes[doc.id] ?? 'split';
                             const isActive = doc.id === selectedDocId;
                             const modeButtonBase = 'p-1 rounded-md border border-transparent transition';
@@ -1345,9 +1485,20 @@ export default function DashboardPage() {
                             return (
                                 <div
                                     key={doc.id}
-                                    className={`flex flex-col min-h-0 rounded-lg border ${isActive ? 'border-mandy-500/60 shadow-lg shadow-mandy-500/10' : 'border-surface-700/60'} bg-surface-900 overflow-hidden`}
+                                    className={`flex flex-col min-h-0 rounded-lg border relative ${isDropTarget ? 'border-mandy-500 ring-2 ring-mandy-500/30' : isActive ? 'border-mandy-500/60 shadow-lg shadow-mandy-500/10' : 'border-surface-700/60'} bg-surface-900 overflow-hidden`}
+                                    onDragOver={(e) => handleDropZoneDragOver(e, index)}
+                                    onDragLeave={handleDropZoneDragLeave}
+                                    onDrop={(e) => handleDropZoneDrop(e, index)}
                                 >
+                                    {isDropTarget && (
+                                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-mandy-500/20 pointer-events-none">
+                                            <div className="bg-surface-800/90 border border-mandy-500/60 rounded-lg px-4 py-2 text-center">
+                                                <div className="text-sm font-semibold text-mandy-400">Reemplazar Panel {index + 1}</div>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="flex items-center gap-2 px-3 py-2 bg-surface-800/70 border-b border-surface-700/60">
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-600/60 text-surface-400 font-mono">{index + 1}</span>
                                         <button onClick={() => setSelectedDocId(doc.id)} className="flex items-center gap-2 min-w-0 text-left">
                                             <span className="text-surface-400">{getIcon(doc)}</span>
                                             <span className="text-xs font-semibold text-surface-200 truncate">{doc.name}</span>
