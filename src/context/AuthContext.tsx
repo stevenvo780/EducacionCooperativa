@@ -1,14 +1,12 @@
 'use client';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { 
-    onAuthStateChanged, 
-    User, 
-    signInWithPopup, 
-    signOut,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword
+import {
+    onAuthStateChanged,
+    User,
+    signInWithPopup,
+    signOut
 } from 'firebase/auth';
-import { auth, googleProvider } from '@/lib/firebase';
+import { auth as getAuth, googleProvider as getGoogleProvider } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -37,107 +35,133 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const router = useRouter();
 
     useEffect(() => {
-        // Check localStorage for persisted "Custom Auth" session
+        // Check localStorage for persisted custom auth session
         const storedUser = localStorage.getItem('agora_user');
         if (storedUser) {
             try {
                 setUser(JSON.parse(storedUser));
-                setLoading(false); // Force loading false if we have a stored user
             } catch (e) {
                 console.error("Failed to parse stored user", e);
+                localStorage.removeItem('agora_user');
             }
         }
 
-        // Keep Firebase listener if needed for Google Auth (optional)
-        const unsubscribe = onAuthStateChanged(auth, (authUser: User | null) => {
-             // If firebase auth works (e.g. Google), it overrides our custom auth
-             if (authUser) {
+        // Firebase auth listener for Google Sign-In
+        const firebaseAuth = getAuth();
+        const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
+            if (authUser) {
+                // Firebase auth succeeded (Google Sign-In)
                 setUser(authUser);
-             } 
-             setLoading(false);
+                localStorage.removeItem('agora_user'); // Clear custom auth if using Firebase
+            }
+            setLoading(false);
         });
+
         return () => unsubscribe();
     }, []);
 
     const signInWithGoogle = async () => {
+        // Check if Firebase is properly configured
+        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+        if (!apiKey) {
+            throw new Error('Google Sign-In no está configurado. Por favor usa email/contraseña.');
+        }
+
         try {
-            await signInWithPopup(auth, googleProvider);
-            router.push('/dashboard');
-        } catch (error) {
-            console.error("Login failed", error);
-            // Mock fallback if needed, but we try to avoid it.
+            const firebaseAuth = getAuth();
+            const provider = getGoogleProvider();
+            const result = await signInWithPopup(firebaseAuth, provider);
+            if (result.user) {
+                router.push('/dashboard');
+            }
+        } catch (error: any) {
+            console.error("Google login failed:", error);
+            if (error.code === 'auth/configuration-not-found' ||
+                error.code === 'auth/invalid-api-key' ||
+                error.code === 'auth/api-key-not-valid') {
+                throw new Error('Google Sign-In no está configurado correctamente.');
+            }
+            throw new Error(error.message || 'Error al iniciar sesión con Google');
         }
     };
 
     const loginWithEmail = async (email: string, pass: string) => {
-        try {
-            // Use Custom API Login
-            const res = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password: pass }),
-            });
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass }),
+        });
 
-            if (!res.ok) {
-                 const errorData = await res.json();
-                 throw new Error(errorData.error || 'Login failed');
-            }
-
-            const userData = await res.json();
-            // Transform to Firebase User shape if needed or use as is (cast to User for TS)
-            const userObj = {
-                uid: userData.uid,
-                email: userData.email,
-                displayName: userData.displayName,
-                photoURL: userData.photoURL,
-                // Add dummy methods to satisfy User interface if strictly used
-                getIdToken: async () => 'mock-token',
-            } as unknown as User;
-
-            setUser(userObj);
-            localStorage.setItem('agora_user', JSON.stringify(userObj));
-            
-            router.push('/dashboard');
-        } catch (error) {
-            console.error("Email login failed", error);
-            throw error;
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'Credenciales inválidas');
         }
-    }
+
+        const userData = await res.json();
+
+        const userObj = {
+            uid: userData.uid,
+            email: userData.email,
+            displayName: userData.displayName || email.split('@')[0],
+            photoURL: userData.photoURL || null,
+            getIdToken: async () => userData.uid, // Use uid as token for API calls
+        } as unknown as User;
+
+        setUser(userObj);
+        localStorage.setItem('agora_user', JSON.stringify({
+            uid: userData.uid,
+            email: userData.email,
+            displayName: userObj.displayName,
+            photoURL: userObj.photoURL,
+        }));
+
+        router.push('/dashboard');
+    };
 
     const registerWithEmail = async (email: string, pass: string) => {
-        try {
-            // Use Server-Side Registration via API Route (Custom Firestore Auth)
-            const res = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password: pass }),
-            });
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass }),
+        });
 
-            if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.error || 'Registration failed');
-            }
-            
-            // Redirect to login after successful registration
-            router.push('/login'); 
-        } catch (error) {
-            console.error("Registration failed", error);
-            throw error;
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'Error al registrar usuario');
         }
-    }
+
+        const userData = await res.json();
+
+        // Auto login after registration
+        const userObj = {
+            uid: userData.uid,
+            email: userData.email,
+            displayName: email.split('@')[0],
+            photoURL: null,
+            getIdToken: async () => userData.uid,
+        } as unknown as User;
+
+        setUser(userObj);
+        localStorage.setItem('agora_user', JSON.stringify({
+            uid: userData.uid,
+            email: userData.email,
+            displayName: userObj.displayName,
+            photoURL: null,
+        }));
+
+        router.push('/dashboard');
+    };
 
     const logout = async () => {
         try {
-            await signOut(auth);
-            setUser(null);
-            localStorage.removeItem('agora_user');
-            router.push('/');
+            const firebaseAuth = getAuth();
+            await signOut(firebaseAuth);
         } catch (error) {
-            console.error("Logout failed", error);
-            setUser(null);
-            localStorage.removeItem('agora_user');
-            router.push('/');
+            // Ignore Firebase signout errors if using custom auth
         }
+        setUser(null);
+        localStorage.removeItem('agora_user');
+        router.push('/');
     };
 
     return (
