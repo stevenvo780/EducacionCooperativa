@@ -33,6 +33,114 @@ body {
 
 @import 'katex/dist/katex.min.css';
 
+.markdown-preview {
+  color: #e2e8f0;
+  max-width: none;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  color: #f8fafc;
+  font-weight: 700;
+  margin: 1.4rem 0 0.6rem;
+}
+
+.markdown-preview h1 { font-size: 1.6rem; }
+.markdown-preview h2 { font-size: 1.35rem; }
+.markdown-preview h3 { font-size: 1.2rem; }
+.markdown-preview h4 { font-size: 1.05rem; }
+.markdown-preview h5 { font-size: 0.95rem; }
+.markdown-preview h6 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.markdown-preview p,
+.markdown-preview li,
+.markdown-preview td,
+.markdown-preview th {
+  white-space: pre-wrap;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 1.4rem;
+  margin: 0.6rem 0 1rem;
+}
+
+.markdown-preview li {
+  margin: 0.3rem 0;
+}
+
+.markdown-preview a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid #334155;
+  margin: 1.5rem 0;
+}
+
+.markdown-preview blockquote {
+  border-left: 3px solid #334155;
+  padding-left: 0.9rem;
+  color: #94a3b8;
+  margin: 1rem 0;
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid #334155;
+  padding: 0.5rem 0.6rem;
+  vertical-align: top;
+}
+
+.markdown-preview tr:nth-child(even) {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.markdown-preview code {
+  background: #0b1220;
+  border: 1px solid #1e293b;
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85em;
+}
+
+.markdown-preview pre {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.6rem;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.markdown-preview pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 0.9em;
+  color: inherit;
+}
+
+.markdown-preview img {
+  max-width: 100%;
+  border-radius: 0.6rem;
+}
+
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar {
       display: none;

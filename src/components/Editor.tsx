@@ -31,11 +31,14 @@ import 'katex/dist/katex.min.css';
 // --- Types ---
 
 type ViewId = 'editor' | 'preview' | string;
+type ViewMode = 'edit' | 'split' | 'preview';
 
 interface EditorProps {
   initialContent?: string;
   roomId: string;
   onClose?: () => void;
+  embedded?: boolean;
+  viewMode?: ViewMode;
 }
 
 // --- Icons & Tools ---
@@ -66,9 +69,27 @@ const isVideoMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('vi
 const isAudioMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('audio/');
 const isPdfMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/pdf';
 
+const getLayoutForMode = (mode: ViewMode): MosaicNode<ViewId> => {
+  if (mode === 'edit') return 'editor';
+  if (mode === 'preview') return 'preview';
+  return {
+    direction: 'row',
+    first: 'editor',
+    second: 'preview',
+    splitPercentage: 50,
+  };
+};
+
 // --- Main Component ---
 
-export default function MosaicEditor({ initialContent = '', roomId, onClose }: EditorProps) {
+export default function MosaicEditor({
+  initialContent = '',
+  roomId,
+  onClose,
+  embedded = false,
+  viewMode,
+}: EditorProps) {
+  const resolvedViewMode = viewMode ?? 'split';
   const [content, setContent] = useState(initialContent);
   const [saving, setSaving] = useState(false);
   const [showEditorToolbar, setShowEditorToolbar] = useState(true);
@@ -79,87 +100,163 @@ export default function MosaicEditor({ initialContent = '', roomId, onClose }: E
   const [fileMime, setFileMime] = useState('');
 
   // Initial Layout: Editor (Left) | Preview (Right)
-  const [layout, setLayout] = useState<MosaicNode<ViewId> | null>({
-    direction: 'row',
-    first: 'editor',
-    second: 'preview',
-    splitPercentage: 50,
-  });
+  const [layout, setLayout] = useState<MosaicNode<ViewId> | null>(() => getLayoutForMode(resolvedViewMode));
 
   const { user } = useAuth();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
-  const lastFileUrlRef = useRef<string | null>(null);
+  const [usePolling, setUsePolling] = useState(false);
+  const contentRef = useRef(content);
+  const pendingLocalChangeRef = useRef(false);
+  const lastRawKeyRef = useRef<string | null>(null);
+  const rawLoadInFlightRef = useRef(false);
 
-  // --- API Sync ---
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+
+  useEffect(() => {
+    setLayout(getLayoutForMode(resolvedViewMode));
+  }, [resolvedViewMode]);
+
+  const resetDocState = useCallback(() => {
+    setDocType('text');
+    setFileUrl(null);
+    setFileName('');
+    setFileMime('');
+    setContent('');
+    hasLoadedRef.current = true;
+  }, []);
+
+  const maybeLoadRawContent = useCallback(async (key: string | null) => {
+    if (!roomId || !key) return;
+    if (rawLoadInFlightRef.current || key === lastRawKeyRef.current) return;
+    rawLoadInFlightRef.current = true;
+    lastRawKeyRef.current = key;
+    try {
+        const res = await fetch(`/api/documents/${roomId}/raw`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const text = await res.text();
+        if (text && text !== contentRef.current) {
+            setContent(text);
+        }
+    } catch (e) {
+        console.error('Error loading raw content:', e);
+    } finally {
+        rawLoadInFlightRef.current = false;
+    }
+  }, [roomId]);
+
+  const applyDocData = useCallback((data: any) => {
+    if (!data) {
+        resetDocState();
+        return;
+    }
+
+    const type = data.type ?? 'text';
+    const name = data.name ?? '';
+    const mimeType = data.mimeType ?? '';
+    const url = data.url ?? null;
+    const storagePath = data.storagePath ?? null;
+    const isMarkdown = isMarkdownMime(mimeType) || isMarkdownName(name);
+
+    if (type === 'file' && !isMarkdown) {
+        setDocType('file');
+        setFileUrl(url);
+        setFileName(name || 'Archivo');
+        setFileMime(mimeType);
+        setContent('');
+        hasLoadedRef.current = true;
+        return;
+    }
+
+    setDocType('text');
+    setFileUrl(null);
+    setFileName('');
+    setFileMime(mimeType);
+
+    const incoming = typeof data.content === 'string' ? data.content : null;
+    if (incoming !== null) {
+        const same = incoming === contentRef.current;
+        const skipOwn = pendingLocalChangeRef.current && data.lastUpdatedBy === user?.uid && !same;
+        if (!same && !skipOwn) {
+            setContent(incoming);
+        }
+    } else if (type === 'file' && (url || storagePath)) {
+        const rawKey = storagePath || url;
+        maybeLoadRawContent(rawKey);
+    } else if (!pendingLocalChangeRef.current) {
+        setContent('');
+    }
+
+    hasLoadedRef.current = true;
+  }, [maybeLoadRawContent, resetDocState, user?.uid]);
+
+  const loadDoc = useCallback(async () => {
+    if (!roomId) return;
+    try {
+        const res = await fetch(`/api/documents/${roomId}`, { cache: 'no-store' });
+        if (!res.ok) {
+            resetDocState();
+            return;
+        }
+        const data = await res.json();
+        applyDocData(data);
+    } catch (e) {
+        console.error('Error loading document:', e);
+    }
+  }, [roomId, applyDocData, resetDocState]);
+
   useEffect(() => {
     if (!roomId) return;
     hasLoadedRef.current = false;
-    lastFileUrlRef.current = null;
-    const controller = new AbortController();
+    pendingLocalChangeRef.current = false;
+    lastRawKeyRef.current = null;
+    setUsePolling(false);
+    loadDoc();
+  }, [roomId, loadDoc]);
 
-    const loadDoc = async () => {
+  useEffect(() => {
+    if (!roomId) return;
+    const source = new EventSource(`/api/documents/${roomId}/stream`);
+
+    source.onmessage = (event) => {
         try {
-            const res = await fetch(`/api/documents/${roomId}`, { cache: 'no-store', signal: controller.signal });
-            if (!res.ok) {
-                setDocType('text');
-                setFileUrl(null);
-                setFileName('');
-                setFileMime('');
-                setContent('');
-                hasLoadedRef.current = true;
-                return;
+            const payload = JSON.parse(event.data);
+            if (payload?.type === 'snapshot') {
+                applyDocData(payload.data);
+            } else if (payload?.type === 'deleted') {
+                resetDocState();
             }
-            const data = await res.json();
-            const type = data.type ?? 'text';
-            const name = data.name ?? '';
-            const mimeType = data.mimeType ?? '';
-            const url = data.url ?? null;
-            const isMarkdown = isMarkdownMime(mimeType) || isMarkdownName(name);
-
-            if (type === 'file' && !isMarkdown) {
-                setDocType('file');
-                setFileUrl(url);
-                setFileName(name || 'Archivo');
-                setFileMime(mimeType);
-                setContent('');
-            } else {
-                setDocType('text');
-                setFileUrl(null);
-                setFileName('');
-                setFileMime(mimeType);
-                if (typeof data.content === 'string') {
-                    setContent(data.content);
-                } else if (type === 'file' && url) {
-                    if (url !== lastFileUrlRef.current) {
-                        lastFileUrlRef.current = url;
-                        fetch(url)
-                            .then((textRes) => textRes.text())
-                            .then((text) => setContent(text))
-                            .catch((err) => console.error('Error loading markdown file:', err));
-                    }
-                } else {
-                    setContent('');
-                }
-            }
-        } catch (e: any) {
-            if (e?.name !== 'AbortError') {
-                console.error('Error loading document:', e);
-            }
-        } finally {
-            hasLoadedRef.current = true;
+        } catch (e) {
+            console.error('Error parsing live update:', e);
         }
     };
 
-    loadDoc();
-    return () => controller.abort();
-  }, [roomId]);
+    source.onerror = () => {
+        source.close();
+        setUsePolling(true);
+    };
+
+    return () => {
+        source.close();
+    };
+  }, [roomId, applyDocData, resetDocState]);
+
+  useEffect(() => {
+    if (!usePolling) return;
+    const interval = setInterval(() => {
+        loadDoc();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [usePolling, loadDoc]);
 
   const handleContentChange = useCallback((val: string) => {
     setContent(val);
     if (!roomId || docType === 'file') return;
     if (!hasLoadedRef.current) return;
 
+    pendingLocalChangeRef.current = true;
     setSaving(true);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
@@ -180,6 +277,7 @@ export default function MosaicEditor({ initialContent = '', roomId, onClose }: E
         } catch (e) {
             console.error('Error saving:', e);
         } finally {
+            pendingLocalChangeRef.current = false;
             setSaving(false);
         }
     }, 700);
@@ -336,7 +434,7 @@ export default function MosaicEditor({ initialContent = '', roomId, onClose }: E
                 toolbarControls={[]}
               >
                 <div className="h-full overflow-auto p-8 bg-slate-900 custom-scrollbar">
-                    <article className="prose prose-invert prose-slate max-w-none prose-headings:font-bold prose-a:text-blue-400 hover:prose-a:text-blue-300 prose-pre:bg-slate-800 prose-pre:border prose-pre:border-slate-700">
+                    <article className="markdown-preview">
                         <ReactMarkdown 
                             remarkPlugins={[remarkMath, remarkGfm]} 
                             rehypePlugins={[rehypeKatex]}
@@ -421,34 +519,36 @@ export default function MosaicEditor({ initialContent = '', roomId, onClose }: E
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-300 relative">
+    <div className={clsx("flex flex-col h-full bg-slate-950 text-slate-300 relative", embedded && "editor-embedded")}>
         {/* Global App Bar */}
-        <div className="h-10 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-3">
-             <div className="flex items-center gap-3">
-                 {onClose && (
-                    <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider">
-                        <ChevronLeft className="w-4 h-4" /> Exit
-                    </button>
-                 )}
-                 <div className="h-4 w-px bg-slate-700" />
-                 <span className="text-xs font-medium text-slate-500">Workspace</span>
-             </div>
-             
-             <div className="flex items-center gap-2">
-                 <button 
-                   onClick={() => setLayout({ direction: 'row', first: 'editor', second: 'preview', splitPercentage: 50 })}
-                   className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
-                 >
-                    <Columns className="w-3 h-3" /> Reset Layout
-                 </button>
-                 <button 
-                   onClick={() => setLayout({ direction: 'column', first: 'editor', second: 'preview', splitPercentage: 50 })}
-                   className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
-                 >
-                    <LayoutGrid className="w-3 h-3" /> Split V
-                 </button>
-             </div>
-        </div>
+        {!embedded && (
+          <div className="h-10 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-3">
+               <div className="flex items-center gap-3">
+                   {onClose && (
+                      <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider">
+                          <ChevronLeft className="w-4 h-4" /> Exit
+                      </button>
+                   )}
+                   <div className="h-4 w-px bg-slate-700" />
+                   <span className="text-xs font-medium text-slate-500">Workspace</span>
+               </div>
+               
+               <div className="flex items-center gap-2">
+                   <button 
+                     onClick={() => setLayout({ direction: 'row', first: 'editor', second: 'preview', splitPercentage: 50 })}
+                     className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
+                   >
+                      <Columns className="w-3 h-3" /> Reset Layout
+                   </button>
+                   <button 
+                     onClick={() => setLayout({ direction: 'column', first: 'editor', second: 'preview', splitPercentage: 50 })}
+                     className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
+                   >
+                      <LayoutGrid className="w-3 h-3" /> Split V
+                   </button>
+               </div>
+          </div>
+        )}
 
         {/* Mosaic Grid Area */}
         <div className="flex-1 relative overflow-hidden">
@@ -486,6 +586,9 @@ export default function MosaicEditor({ initialContent = '', roomId, onClose }: E
                 background: #3b82f6 !important; /* Blue highlight on hover */
             }
             .cm-editor { height: 100%; font-family: 'Fira Code', monospace; }
+            .editor-embedded .mosaic-window-toolbar {
+                display: none !important;
+            }
         `}</style>
     </div>
   );
