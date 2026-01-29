@@ -1,22 +1,24 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { useAuth } from '@/context/AuthContext';
-import { Download, Copy, CheckCircle, Terminal as TerminalIcon, Cpu, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, Copy, CheckCircle, Terminal as TerminalIcon, Cpu, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
 interface TerminalProps {
   nexusUrl: string;
 }
 
 const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
-  const terminalRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Refs for persistent instances across renders
   const xtermRef = useRef<XTerm | null>(null);
-  const socketRef = useRef<Socket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   
   const { user } = useAuth();
   const [hubConnected, setHubConnected] = useState(false);
@@ -24,13 +26,16 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // --- Socket Connection & Event Handling ---
+  // --- 1. Socket Connection Management ---
   useEffect(() => {
     if (!user) return;
 
-    let socket: Socket | null = null;
+    // Clean up existing socket if any
+    if (socketRef.current) {
+        socketRef.current.disconnect();
+    }
 
-    const connect = async () => {
+    const initSocket = async () => {
         try {
             let token = '';
             // @ts-ignore
@@ -38,30 +43,20 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                 // @ts-ignore
                 token = await user.getIdToken();
             } else {
-                console.warn("User object has no getIdToken method (Custom/Mock User). Using fallback.");
-                // Fallback for custom auth users (won't work with strict Firebase Verify, but stops crash)
+                console.warn("Using fallback auth token");
                 token = 'mock-token'; 
             }
-            
-            console.log('🔌 Connecting to Hub at:', nexusUrl);
 
-                        socket = io(nexusUrl, {
+            console.log('🔌 Connecting to Hub:', nexusUrl);
 
-                            auth: {
-
-                                type: 'client',
-
-                                token: token,
-
-                                // @ts-ignore
-
-                                uid: user.uid // Send UID explicitly for permissive auth fallback
-
-                            },
-
-                            transports: ['websocket'],
-
-             // Force WebSocket to avoid CORS/Proxy polling issues
+            const socket = io(nexusUrl, {
+                auth: {
+                    type: 'client',
+                    token: token,
+                    // @ts-ignore
+                    uid: user.uid 
+                },
+                transports: ['websocket'], // Force WebSocket
                 reconnectionDelay: 1000,
                 timeout: 10000,
             });
@@ -69,13 +64,10 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
             socketRef.current = socket;
 
             socket.on('connect', () => {
-                console.log('✅ Connected to Hub (Socket ID:', socket?.id, ')');
+                console.log('✅ Connected to Hub');
                 setHubConnected(true);
-            });
-
-            socket.on('connect_error', (err) => {
-                console.error('❌ Connection Error:', err.message);
-                setHubConnected(false);
+                // Request updated worker status on connect
+                // Note: The Hub should send it automatically on join, but we can't manually request it easily without an event
             });
 
             socket.on('disconnect', () => {
@@ -84,7 +76,6 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                 setWorkerStatus('checking');
             });
 
-            // Hub Protocol: Receives worker status for THIS user
             socket.on('worker-status', (data: { status: 'online' | 'offline' }) => {
                 console.log('🤖 Worker Status:', data.status);
                 setWorkerStatus(data.status);
@@ -93,53 +84,56 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
             socket.on('session-created', (data: { id: string }) => {
                 console.log('🚀 Session Created:', data.id);
                 setActiveSession(data.id);
-                // The terminal component will handle the attach now
             });
-            
+
             socket.on('error', (err) => {
                 console.error('Hub Error:', err);
             });
-
         } catch (e) {
-            console.error("Auth Token Error:", e);
+            console.error("Socket Init Error:", e);
         }
     };
 
-    connect();
+    initSocket();
 
     return () => {
-        if (socket) socket.disconnect();
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
     };
-  }, [nexusUrl, user]);
+  }, [nexusUrl, user]); // Only re-run if URL or User changes
 
-
-  // --- Terminal Initialization & Input Handling ---
+  // --- 2. Terminal Instance Management ---
   useEffect(() => {
-    if (!activeSession || !terminalRef.current || !socketRef.current) return;
-    
-    // Only init if not already done
+    if (!activeSession || !containerRef.current) return;
+
+    // If terminal already exists, just clear it and resize
     if (xtermRef.current) {
         xtermRef.current.clear();
-        return; 
+        fitAddonRef.current?.fit();
+        return;
     }
 
+    console.log("🖥️ Initializing Xterm.js...");
     const term = new XTerm({
       cursorBlink: true,
       theme: {
-        background: '#09090b', // Zinc-950
-        foreground: '#f4f4f5', // Zinc-100
-        cursor: '#22c55e',     // Green-500
+        background: '#09090b',
+        foreground: '#f4f4f5',
+        cursor: '#22c55e',
         selectionBackground: '#3f3f46',
       },
       fontFamily: '"Fira Code", monospace',
       fontSize: 14,
-      allowProposedApi: true
+      allowProposedApi: true,
+      scrollback: 10000, // Increase scrollback
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     
-    term.open(terminalRef.current);
+    term.open(containerRef.current);
     fitAddon.fit();
 
     xtermRef.current = term;
@@ -148,45 +142,60 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
     term.writeln('\x1b[32m✔ Connected to your Personal Assistant.\x1b[0m');
     term.writeln('Type commands to execute on your local machine.\r\n');
 
-    const socket = socketRef.current;
-
-    // Handle incoming data
-    const handleOutput = (data: { sessionId: string; data: string }) => {
-        if (data.sessionId === activeSession) {
-             term.write(data.data);
-        }
-    };
-    
-    socket.on('output', handleOutput);
-
-    // Handle outgoing data
+    // Handle Input (Keyboard -> Socket)
     term.onData((data) => {
-      socket.emit('execute', {
-        sessionId: activeSession,
-        command: data
-      });
+      if (socketRef.current && socketRef.current.connected) {
+          socketRef.current.emit('execute', {
+            sessionId: activeSession,
+            command: data
+          });
+      }
     });
 
     // Handle Resize
     const handleResize = () => {
-        if (!fitAddonRef.current) return;
+        if (!fitAddonRef.current || !socketRef.current || !activeSession) return;
+        
         fitAddonRef.current.fit();
-        if (xtermRef.current) {
-            const { cols, rows } = xtermRef.current;
-            socket.emit('resize', { sessionId: activeSession, cols, rows });
-        }
+        const { cols, rows } = term;
+        
+        // Debounce resize events slightly if needed, but direct emit is usually fine for UI events
+        socketRef.current.emit('resize', { sessionId: activeSession, cols, rows });
     };
+
     window.addEventListener('resize', handleResize);
-    // Initial resize
-    setTimeout(handleResize, 100);
+    // Initial resize sync
+    setTimeout(handleResize, 200);
 
     return () => {
-        socket.off('output', handleOutput);
+        console.log("🧹 Cleaning up Terminal Instance");
         window.removeEventListener('resize', handleResize);
         term.dispose();
         xtermRef.current = null;
+        fitAddonRef.current = null;
     };
-  }, [activeSession]);
+  }, [activeSession]); // Re-init ONLY if activeSession changes (which usually implies a session restart)
+
+  // --- 3. Output Handling (Socket -> Terminal) ---
+  // This is separated to avoid re-initializing the terminal when just the listener logic needs to bind
+  useEffect(() => {
+      if (!socketRef.current || !activeSession) return;
+
+      const socket = socketRef.current;
+      const term = xtermRef.current;
+
+      const handleOutput = (data: { sessionId: string; data: string }) => {
+          if (data.sessionId === activeSession && xtermRef.current) {
+               xtermRef.current.write(data.data);
+          }
+      };
+
+      socket.on('output', handleOutput);
+
+      return () => {
+          socket.off('output', handleOutput);
+      };
+  }, [activeSession, hubConnected]); // Re-bind if session or connection state cycles
 
 
   // --- Actions ---
@@ -197,21 +206,22 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
   };
 
   const copyToken = () => {
+    // @ts-ignore
     if (user?.uid) {
+        // @ts-ignore
         navigator.clipboard.writeText(user.uid);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     }
   };
 
-
-  // --- Render: Onboarding View ---
+  // --- Render ---
   if (!user) return <div className="p-8 text-center text-gray-400">Please log in.</div>;
 
   if (workerStatus === 'offline' || workerStatus === 'checking') {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-8 bg-black text-slate-200">
-            <div className="max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex flex-col items-center justify-center h-full p-8 bg-black text-slate-200 overflow-y-auto">
+            <div className="max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl shrink-0">
                 
                 {/* Header */}
                 <div className="p-6 border-b border-slate-800 flex items-center gap-4 bg-slate-950">
@@ -220,7 +230,7 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold text-white">Connect your Local Agent</h2>
-                        <p className="text-sm text-slate-400">To use the terminal and file sync, you need to run the agent on your Linux machine.</p>
+                        <p className="text-sm text-slate-400">Run the agent on your Linux machine to enable the terminal.</p>
                     </div>
                 </div>
 
@@ -252,13 +262,14 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                         <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-400 shrink-0 border border-slate-700">1</div>
                         <div className="space-y-3 flex-1">
                             <h3 className="font-semibold text-white">Download & Install Agent</h3>
-                            <p className="text-sm text-slate-400">Download the <code>.deb</code> package for Ubuntu/Debian.</p>
-                            <a 
-                                href="/downloads/edu-agent_1.0.0_amd64.deb" 
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors"
-                            >
-                                <Download className="w-4 h-4" /> Download .deb
-                            </a>
+                            <div className="flex gap-2">
+                                <a 
+                                    href="/downloads/edu-agent_1.0.0_amd64.deb" 
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium transition-colors"
+                                >
+                                    <Download className="w-4 h-4" /> Download .deb
+                                </a>
+                            </div>
                         </div>
                     </div>
 
@@ -267,10 +278,10 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                         <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-400 shrink-0 border border-slate-700">2</div>
                         <div className="space-y-3 flex-1">
                             <h3 className="font-semibold text-white">Setup & Run</h3>
-                            <div className="bg-black rounded-lg border border-slate-800 p-4 font-mono text-sm text-slate-300">
+                            <div className="bg-black rounded-lg border border-slate-800 p-4 font-mono text-sm text-slate-300 space-y-2">
                                 <p><span className="text-blue-400">$</span> sudo dpkg -i edu-agent_1.0.0_amd64.deb</p>
                                 <p><span className="text-blue-400">$</span> edu-agent setup</p>
-                                <p><span className="text-blue-400">$</span> edu-agent start</p>
+                                <p><span className="text-blue-400">$</span> edu-agent start -d</p>
                             </div>
                         </div>
                     </div>
@@ -280,9 +291,9 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                         <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-400 shrink-0 border border-slate-700">3</div>
                         <div className="space-y-3 flex-1">
                             <h3 className="font-semibold text-white">Your Worker Token</h3>
-                            <p className="text-sm text-slate-400">When prompted during setup, paste this token:</p>
                             <div className="flex items-center gap-2">
                                 <code className="flex-1 bg-black border border-slate-800 rounded px-3 py-2 font-mono text-green-400 text-sm truncate">
+                                    {/* @ts-ignore */}
                                     {user.uid}
                                 </code>
                                 <button 
@@ -297,7 +308,7 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                     </div>
                 </div>
                 
-                {workerStatus === 'offline' && (
+                {workerStatus === 'offline' && hubConnected && (
                     <div className="bg-yellow-500/10 border-t border-yellow-500/20 p-4 text-center">
                         <p className="text-yellow-200 text-sm flex items-center justify-center gap-2">
                             <Loader2 className="w-4 h-4 animate-spin" /> Waiting for agent to connect...
@@ -309,7 +320,6 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
       );
   }
 
-  // --- Render: Terminal View (Online) ---
   return (
       <div className="flex flex-col h-full bg-black">
           {!activeSession ? (
@@ -327,8 +337,8 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
                   </button>
               </div>
           ) : (
-            <div className="flex-1 relative p-1">
-                <div ref={terminalRef} className="w-full h-full" />
+            <div className="flex-1 relative p-1 h-full w-full bg-black overflow-hidden">
+                <div ref={containerRef} className="w-full h-full" />
             </div>
           )}
       </div>
