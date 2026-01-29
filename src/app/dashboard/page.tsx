@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove, onSnapshot, query, where } from 'firebase/firestore';
 import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@/components/Editor';
@@ -60,19 +60,20 @@ interface DeleteStatus {
 
 const PERSONAL_WORKSPACE_ID = 'personal';
 const DEFAULT_FOLDER_NAME = 'No estructurado';
+const ROOT_FOLDER_PATH = '';
 
 const normalizePath = (value?: string) => {
-    if (!value) return '';
-    return value
-        .split('/')
-        .map(part => part.trim())
-        .filter(Boolean)
-        .join('/');
+  if (!value) return '';
+  return value
+    .split('/')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join('/');
 };
 
 const normalizeFolderPath = (value?: string) => {
-    const normalized = normalizePath(value);
-    return normalized || DEFAULT_FOLDER_NAME;
+  const normalized = normalizePath(value);
+  return normalized || DEFAULT_FOLDER_NAME;
 };
 
 export default function DashboardPage() {
@@ -94,7 +95,7 @@ export default function DashboardPage() {
   const [showTerminal, setShowTerminal] = useState(false);
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
-  const [activeFolder, setActiveFolder] = useState<string>(DEFAULT_FOLDER_NAME);
+  const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -153,6 +154,88 @@ export default function DashboardPage() {
       }
   };
 
+  const applyDocsSnapshot = useCallback((fetched: DocItem[]) => {
+    if (!currentWorkspace) return;
+
+    const filtered = fetched.filter(d => {
+      if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
+        return !d.workspaceId || d.workspaceId === PERSONAL_WORKSPACE_ID;
+      }
+      return d.workspaceId === currentWorkspace.id;
+    });
+
+    const folderDocs = filtered.filter(item => item.type === 'folder');
+    const fileDocs = filtered.filter(item => item.type !== 'folder');
+
+    const normalizedFileDocs = fileDocs.map(docItem => {
+      const folderPath = normalizeFolderPath(docItem.folder);
+      return { ...docItem, folder: folderPath };
+    });
+
+    const folderMap = new Map<string, FolderItem>();
+    const ensureNode = (path: string, kind: FolderItem['kind']) => {
+      const normalized = normalizePath(path);
+      if (!normalized) return;
+      const existing = folderMap.get(normalized);
+      const name = normalized.split('/').slice(-1)[0] || normalized;
+      const parentPath = normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '';
+
+      if (!existing) {
+        folderMap.set(normalized, {
+          id: `path:${normalized}`,
+          name,
+          path: normalized,
+          parentPath,
+          kind,
+        });
+        return;
+      }
+
+      const priority: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+      if (priority[kind] < priority[existing.kind]) {
+        folderMap.set(normalized, { ...existing, kind });
+      }
+    };
+
+    const ensureAncestors = (path: string) => {
+      const normalized = normalizePath(path);
+      if (!normalized) return;
+      const parts = normalized.split('/');
+      let current = '';
+      parts.forEach(part => {
+        current = current ? `${current}/${part}` : part;
+        ensureNode(current, current === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
+      });
+    };
+
+    ensureNode(DEFAULT_FOLDER_NAME, 'system');
+
+    folderDocs.forEach(folderDoc => {
+      const parentPath = normalizePath(folderDoc.folder);
+      const name = (folderDoc.name || 'Carpeta').trim() || 'Carpeta';
+      const fullPath = parentPath ? `${parentPath}/${name}` : name;
+      ensureAncestors(parentPath);
+      ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record');
+    });
+
+    normalizedFileDocs.forEach(docItem => {
+      const folderPath = normalizeFolderPath(docItem.folder);
+      ensureAncestors(folderPath);
+      ensureNode(folderPath, folderPath === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
+    });
+
+    const folderList = Array.from(folderMap.values());
+
+    normalizedFileDocs.sort((a, b) => {
+      const dateA = a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : new Date(a.updatedAt).getTime();
+      const dateB = b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : new Date(b.updatedAt).getTime();
+      return (dateB || 0) - (dateA || 0);
+    });
+
+    setDocs(normalizedFileDocs);
+    setFolders(folderList);
+  }, [currentWorkspace]);
+
   const fetchDocs = useCallback(async () => {
     if (!user || !currentWorkspace) return;
     try {
@@ -167,87 +250,11 @@ export default function DashboardPage() {
         if (!res.ok) throw new Error('Failed to fetch docs via API');
         const fetched: DocItem[] = await res.json();
 
-        const filtered = fetched.filter(d => {
-             if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
-                 return !d.workspaceId || d.workspaceId === PERSONAL_WORKSPACE_ID;
-             }
-             return true;
-        });
-
-        const folderDocs = filtered.filter(item => item.type === 'folder');
-        const fileDocs = filtered.filter(item => item.type !== 'folder');
-
-        const normalizedFileDocs = fileDocs.map(docItem => {
-            const folderPath = normalizeFolderPath(docItem.folder);
-            return { ...docItem, folder: folderPath };
-        });
-
-        const folderMap = new Map<string, FolderItem>();
-        const ensureNode = (path: string, kind: FolderItem['kind']) => {
-            const normalized = normalizePath(path);
-            if (!normalized) return;
-            const existing = folderMap.get(normalized);
-            const name = normalized.split('/').slice(-1)[0] || normalized;
-            const parentPath = normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '';
-
-            if (!existing) {
-                folderMap.set(normalized, {
-                    id: `path:${normalized}`,
-                    name,
-                    path: normalized,
-                    parentPath,
-                    kind
-                });
-                return;
-            }
-
-            const priority: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
-            if (priority[kind] < priority[existing.kind]) {
-                folderMap.set(normalized, { ...existing, kind });
-            }
-        };
-
-        const ensureAncestors = (path: string) => {
-            const normalized = normalizePath(path);
-            if (!normalized) return;
-            const parts = normalized.split('/');
-            let current = '';
-            parts.forEach(part => {
-                current = current ? `${current}/${part}` : part;
-                ensureNode(current, current === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
-            });
-        };
-
-        ensureNode(DEFAULT_FOLDER_NAME, 'system');
-
-        folderDocs.forEach(folderDoc => {
-            const parentPath = normalizePath(folderDoc.folder);
-            const name = (folderDoc.name || 'Carpeta').trim() || 'Carpeta';
-            const fullPath = parentPath ? `${parentPath}/${name}` : name;
-            ensureAncestors(parentPath);
-            ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record');
-        });
-
-        normalizedFileDocs.forEach(docItem => {
-            const folderPath = normalizeFolderPath(docItem.folder);
-            ensureAncestors(folderPath);
-            ensureNode(folderPath, folderPath === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
-        });
-
-        const folderList = Array.from(folderMap.values());
-
-        normalizedFileDocs.sort((a, b) => {
-            const dateA = a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : new Date(a.updatedAt).getTime();
-            const dateB = b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : new Date(b.updatedAt).getTime();
-            return (dateB || 0) - (dateA || 0);
-        });
-
-        setDocs(normalizedFileDocs);
-        setFolders(folderList);
+        applyDocsSnapshot(fetched);
     } catch (error) {
         console.error("Error fetching docs", error);
     }
-  }, [user, currentWorkspace]);
+  }, [user, currentWorkspace, applyDocsSnapshot]);
 
   useEffect(() => {
     if (!loading && !user) router.push('/login');
@@ -261,6 +268,31 @@ export default function DashboardPage() {
           fetchDocs();
       }
   }, [currentWorkspace, user, fetchDocs]);
+
+  useEffect(() => {
+    if (!user || !currentWorkspace) return;
+    const constraints = currentWorkspace.id === PERSONAL_WORKSPACE_ID
+      ? [where('ownerId', '==', user.uid)]
+      : [where('workspaceId', '==', currentWorkspace.id)];
+    const docsQuery = query(collection(db, 'documents'), ...constraints);
+    const unsubscribe = onSnapshot(
+      docsQuery,
+      snapshot => {
+        const liveDocs = snapshot.docs.map(docItem => ({ id: docItem.id, ...docItem.data() })) as DocItem[];
+        applyDocsSnapshot(liveDocs);
+      },
+      error => {
+        console.error('Error listening documents', error);
+      }
+    );
+    return () => unsubscribe();
+  }, [user, currentWorkspace, applyDocsSnapshot]);
+
+  useEffect(() => {
+    if (currentWorkspace) {
+      setActiveFolder(ROOT_FOLDER_PATH);
+    }
+  }, [currentWorkspace?.id]);
 
   useEffect(() => {
       return () => {
