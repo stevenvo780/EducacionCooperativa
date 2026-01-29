@@ -16,7 +16,10 @@ export async function POST(req: NextRequest) {
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const filename = `uploads/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        
+        // Use user-specific path for sync compatibility
+        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const filename = `${ownerId}/${safeName}`;
         
         const bucket = adminStorage.bucket();
         if (!bucket?.name) {

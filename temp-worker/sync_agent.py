@@ -7,7 +7,7 @@ from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import firebase_admin
-from firebase_admin import credentials, storage
+from firebase_admin import credentials, storage, firestore
 
 # Configuration
 # Env vars provided by the Docker container
@@ -19,19 +19,20 @@ POLL_INTERVAL = 10
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger("SyncAgent")
 
-# Initialize Firebase (Implicit credentials from Google Cloud environment or mounted JSON)
-# For the Docker container, we'll likely pass a service account via ENV or file mount
+# Initialize Firebase
+app_firebase = None
 try:
     # Check for mounted credentials
     cred_path = "/app/serviceAccountKey.json"
     if os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred, {'storageBucket': BUCKET_NAME})
+        app_firebase = firebase_admin.initialize_app(cred, {'storageBucket': BUCKET_NAME})
     else:
         # Fallback to default (ADC)
-        firebase_admin.initialize_app(None, {'storageBucket': BUCKET_NAME})
+        app_firebase = firebase_admin.initialize_app(None, {'storageBucket': BUCKET_NAME})
     
     bucket = storage.bucket()
+    db = firestore.client()
     logger.info(f"✅ Connected to Firebase Storage: {BUCKET_NAME}")
 except Exception as e:
     logger.error(f"❌ Failed to initialize Firebase: {e}")
@@ -44,8 +45,11 @@ class SyncManager:
 
     def get_remote_path(self, local_path):
         """Maps local /workspace/foo.txt -> user_uid/foo.txt"""
-        rel = local_path.relative_to(SYNC_DIR)
-        return f"{WORKER_TOKEN}/{rel}" # Using Worker Token as the User Root Folder
+        try:
+            rel = local_path.relative_to(SYNC_DIR)
+            return f"{WORKER_TOKEN}/{rel}" 
+        except:
+            return None
 
     def get_local_path(self, remote_blob_name):
         """Maps user_uid/foo.txt -> /workspace/foo.txt"""
@@ -55,13 +59,43 @@ class SyncManager:
         rel = remote_blob_name[len(WORKER_TOKEN)+1:]
         return SYNC_DIR / rel
 
+    def update_firestore(self, blob_path, local_path):
+        """Syncs content back to Firestore for UI visibility"""
+        try: 
+            # Check if text file
+            if local_path.suffix.lower() not in ['.md', '.txt', '.js', '.ts', '.tsx', '.json', '.css', '.html']:
+                return
+
+            content = local_path.read_text(encoding='utf-8', errors='ignore')
+            
+            # Find document with this storagePath
+            docs = db.collection('documents').where('storagePath', '==', blob_path).limit(1).stream()
+            doc_found = False
+            for doc in docs:
+                doc.reference.update({
+                    'content': content,
+                    'updatedAt': firestore.firestore.SERVER_TIMESTAMP
+                })
+                logger.info(f"🔄 Updated Firestore Doc: {doc.id}")
+                doc_found = True
+            
+            # Optional: Create if not exists? (Maybe too aggressive for now, UI should create)
+        except Exception as e:
+            logger.error(f"Firestore Sync Error: {e}")
+
     def upload_file(self, local_path):
         if self._is_updating: return
         try:
             blob_path = self.get_remote_path(local_path)
+            if not blob_path: return
+            
             blob = bucket.blob(blob_path)
             blob.upload_from_filename(str(local_path))
             logger.info(f"⬆️  Uploaded: {local_path.name}")
+            
+            # Trigger Firestore update
+            self.update_firestore(blob_path, local_path)
+            
         except Exception as e:
             logger.error(f"Error uploading {local_path}: {e}")
 

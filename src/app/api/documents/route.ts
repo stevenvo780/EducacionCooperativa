@@ -1,4 +1,4 @@
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -23,8 +23,28 @@ export async function POST(req: NextRequest) {
         if (typeof url === 'string') {
             docData.url = url;
         }
+        
+        // Sync text documents to Storage for Worker compatibility
         if (typeof storagePath === 'string') {
             docData.storagePath = storagePath;
+        } else if (!storagePath && (!type || type === 'text' || type === 'markdown')) {
+             try {
+                 const bucket = adminStorage.bucket();
+                 if (bucket.name) {
+                     const safeName = (name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
+                     const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
+                     const path = `${ownerId || 'unknown'}/${fname}`;
+                     
+                     await bucket.file(path).save(content ?? '', { 
+                        contentType: 'text/markdown',
+                        metadata: { ownerId: ownerId || 'unknown' }
+                     });
+                     
+                     docData.storagePath = path;
+                 }
+             } catch (err) {
+                 console.warn('Failed to sync document to storage:', err);
+             }
         }
 
         const docRef = await adminDb.collection('documents').add(docData);
