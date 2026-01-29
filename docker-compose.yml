@@ -28,9 +28,15 @@ services:
     command: sh -c "npm install && npm run dev"
     networks:
       - app-network
+  edu-worker-test:
+    build: 
+      context: ./temp-worker
+    network_mode: host
+    environment:
+      - NEXUS_URL=http://localhost:3010
+      - WORKER_TOKEN=dev-user-123
+      - FIREBASE_BUCKET=udea-filosofia.firebasestorage.app
+    volumes:
+      - ./temp-worker/worker:/workspace # Mount a folder as the user's workspace
     depends_on:
       - hub
-
-networks:
-  app-network:
-    driver: bridge
