@@ -42,23 +42,74 @@ class SyncManager:
     def __init__(self):
         self.ignore_list = ['.git', '.DS_Store', 'node_modules', '.next']
         self._is_updating = False
+        # Map: local_path_prefix -> remote_storage_prefix
+        # Default: personal workspace
+        self.mounts = {
+            SYNC_DIR: f"users/{WORKER_TOKEN}"
+        }
+        self.load_workspace_mounts()
+
+    def load_workspace_mounts(self):
+        """Discovers shared workspaces and adds them as subfolders in /workspace"""
+        try:
+            # 1. Find workspaces where I am a member
+            # Note: Firestore 'in' query limited to 10, 'array-contains' is safe for 1 item
+            docs = db.collection('workspaces').where('members', 'array_contains', WORKER_TOKEN).stream()
+            
+            for doc in docs:
+                data = doc.to_dict()
+                ws_name = data.get('name', doc.id).strip().replace('/', '_') # Sanitize
+                ws_id = doc.id
+                
+                # Check for collision with normal files, maybe use a "Shared" folder?
+                # For now, mount at /workspace/{WorkspaceName}
+                mount_point = SYNC_DIR / ws_name
+                remote_prefix = f"workspaces/{ws_id}"
+                
+                self.mounts[mount_point] = remote_prefix
+                
+                if not mount_point.exists():
+                    try:
+                        mount_point.mkdir(exist_ok=True)
+                        logger.info(f"📂 Mounted Shared Workspace: {ws_name} -> {remote_prefix}")
+                    except Exception as e:
+                        logger.error(f"Failed to mount {ws_name}: {e}")
+                else:
+                    logger.info(f"📂 Detected Shared Workspace: {ws_name}")
+
+        except Exception as e:
+            logger.error(f"Error loading workspaces: {e}")
 
     def get_remote_path(self, local_path):
-        """Maps local /workspace/foo.txt -> users/user_uid/foo.txt"""
-        try:
-            rel = local_path.relative_to(SYNC_DIR)
-            return f"users/{WORKER_TOKEN}/{rel}" 
-        except:
-            return None
+        """Maps local path to remote based on mounts"""
+        # Find the most specific mount point
+        best_mount = None
+        best_len = 0
+        
+        for mount_point, remote_prefix in self.mounts.items():
+            try:
+                # Check if local_path is inside mount_point
+                if local_path == mount_point or mount_point in local_path.parents:
+                    if len(str(mount_point)) > best_len:
+                        best_mount = mount_point
+                        best_len = len(str(mount_point))
+            except:
+                pass
+        
+        if not best_mount: return None
+
+        rel = local_path.relative_to(best_mount)
+        remote = self.mounts[best_mount]
+        return f"{remote}/{rel}"
 
     def get_local_path(self, remote_blob_name):
-        """Maps users/user_uid/foo.txt -> /workspace/foo.txt"""
-        prefix = f"users/{WORKER_TOKEN}/"
-        # Strip the user prefix
-        if not remote_blob_name.startswith(prefix):
-            return None
-        rel = remote_blob_name[len(prefix):]
-        return SYNC_DIR / rel
+        """Maps remote path to local based on mounts"""
+        # Iterate mounts to find which one matches this blob prefix
+        for mount_point, remote_prefix in self.mounts.items():
+            if remote_blob_name.startswith(f"{remote_prefix}/"):
+                rel = remote_blob_name[len(remote_prefix)+1:]
+                return mount_point / rel
+        return None
 
     def update_firestore(self, blob_path, local_path):
         """Syncs content back to Firestore for UI visibility"""
@@ -116,20 +167,19 @@ class SyncManager:
             self._is_updating = False
 
     def sync_cycle(self):
-        """Polls for remote changes"""
+        """Polls for remote changes across all mounts"""
         try:
-            blobs = bucket.list_blobs(prefix=f"{WORKER_TOKEN}/")
-            for blob in blobs:
-                if blob.name.endswith('/'): continue
-                
-                local_path = self.get_local_path(blob.name)
-                if not local_path: continue
+            for mount_point, prefix in self.mounts.items():
+                blobs = bucket.list_blobs(prefix=f"{prefix}/")
+                for blob in blobs:
+                    if blob.name.endswith('/'): continue
+                    
+                    local_path = self.get_local_path(blob.name)
+                    if not local_path: continue
 
-                # Simple check: if local doesn't exist or remote md5 differs
-                # Note: Firebase MD5 is base64, need to handle comparison carefully or just rely on existence/size for now
-                if not local_path.exists():
-                    self.download_file(blob)
-                # TODO: Implement robust hash comparison
+                    if not local_path.exists():
+                        self.download_file(blob)
+                    # TODO: Checksum update
         except Exception as e:
             logger.error(f"Sync cycle error: {e}")
 

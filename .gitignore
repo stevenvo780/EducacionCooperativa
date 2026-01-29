@@ -65,3 +65,5 @@ build/
 .next/
 out/
 build/
+
+temp-worker
