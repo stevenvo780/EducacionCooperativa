@@ -13,11 +13,40 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
 
+        const existingData = snap.data();
+        let storagePath = existingData?.storagePath;
+
+        // Sync content updates to Storage
+        if (body.content !== undefined && existingData?.type !== 'file') {
+             const bucket = adminStorage.bucket();
+             if (bucket.name) {
+                 if (!storagePath) {
+                     const ownerId = existingData?.ownerId || 'unknown';
+                     const safeName = (existingData?.name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
+                     const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
+                     storagePath = `${ownerId}/${fname}`;
+                 }
+                 
+                 try {
+                     await bucket.file(storagePath).save(body.content, { 
+                        contentType: 'text/markdown',
+                        metadata: { ownerId: existingData?.ownerId }
+                     });
+                 } catch (e) {
+                     console.warn('Failed to update storage backing:', e);
+                 }
+             }
+        }
+
         // Remove undefined fields if necessary, but JSON updates usually are explicit
-        const updateData = {
+        const updateData: any = {
             ...body,
             updatedAt: FieldValue.serverTimestamp(),
         };
+        
+        if (storagePath && !existingData?.storagePath) {
+            updateData.storagePath = storagePath;
+        }
 
         await docRef.update(updateData);
 

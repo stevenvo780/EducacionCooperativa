@@ -114,6 +114,7 @@ export default function DashboardPage() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<number | null>(null);
   const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(null);
   const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
 
