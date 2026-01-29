@@ -132,6 +132,7 @@ export default function DashboardPage() {
   const dragCounter = useRef(0);
   const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
 
   const fetchWorkspaces = useCallback(async () => {
     if (!user) return;
@@ -847,12 +848,109 @@ export default function DashboardPage() {
 
   const joinPaths = (...parts: string[]) => normalizePath(parts.filter(Boolean).join('/'));
 
+  const isSupportedFile = (file: File) => {
+    const mime = (file.type || '').toLowerCase();
+    if (mime) {
+        return (
+            mime.startsWith('text/') ||
+            mime.startsWith('image/') ||
+            mime.startsWith('video/') ||
+            mime.startsWith('audio/') ||
+            mime === 'application/pdf' ||
+            mime === 'application/json' ||
+            mime === 'application/xml'
+        );
+    }
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    return [
+        'md', 'markdown', 'mdown', 'mkd', 'txt', 'json', 'csv', 'tsv',
+        'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'yml', 'yaml',
+        'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+        'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'm4a'
+    ].includes(ext);
+  };
+
+  type FileSystemEntry = {
+    isFile: boolean;
+    isDirectory: boolean;
+    name: string;
+    fullPath?: string;
+    file?: (success: (file: File) => void, error?: (err: unknown) => void) => void;
+    createReader?: () => FileSystemDirectoryReader;
+  };
+
+  type FileSystemDirectoryReader = {
+    readEntries: (success: (entries: FileSystemEntry[]) => void, error?: (err: unknown) => void) => void;
+  };
+
+  const readAllEntries = async (dirEntry: FileSystemEntry) => {
+    const reader = dirEntry.createReader?.();
+    if (!reader) return [];
+    const all: FileSystemEntry[] = [];
+    while (true) {
+        const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+            reader.readEntries(resolve, reject);
+        });
+        if (batch.length === 0) break;
+        all.push(...batch);
+    }
+    return all;
+  };
+
+  const collectFilesFromEntry = async (entry: FileSystemEntry): Promise<File[]> => {
+    if (entry.isFile && entry.file) {
+        const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
+        const rawPath = entry.fullPath ?? file.name;
+        const relativePath = rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
+        if (relativePath) {
+            Object.defineProperty(file, 'webkitRelativePath', { value: relativePath });
+        }
+        return [file];
+    }
+    if (entry.isDirectory) {
+        const entries = await readAllEntries(entry);
+        const nested = await Promise.all(entries.map(collectFilesFromEntry));
+        return nested.flat();
+    }
+    return [];
+  };
+
+  const collectDroppedFiles = async (e: React.DragEvent) => {
+    const items = Array.from(e.dataTransfer.items ?? []);
+    if (items.length === 0) {
+        return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
+    }
+    const entries = items
+        .map(item => (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry?.())
+        .filter((entry) => Boolean(entry)) as FileSystemEntry[];
+    if (entries.length === 0) {
+        return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
+    }
+    const fileGroups = await Promise.all(entries.map(collectFilesFromEntry));
+    const files = fileGroups.flat();
+    const preservePaths = entries.some(entry => entry.isDirectory) || files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
+    return { files, preservePaths };
+  };
+
   const uploadFiles = async (
     files: File[],
     targetFolder?: string,
     options?: { preservePaths?: boolean }
   ) => {
     if (!user || files.length === 0) return;
+    const supportedFiles = files.filter(isSupportedFile);
+    if (supportedFiles.length === 0) {
+        setUploadStatus({
+            total: 0,
+            currentIndex: 0,
+            currentName: '',
+            progress: 0,
+            phase: 'error',
+            error: 'No hay archivos compatibles'
+        });
+        scheduleUploadStatusClear();
+        return;
+    }
     const baseFolder = options?.preservePaths
         ? normalizePath(targetFolder ?? '')
         : normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
@@ -863,7 +961,7 @@ export default function DashboardPage() {
         clearTimeout(uploadStatusTimer.current);
     }
     setUploadStatus({
-        total: files.length,
+        total: supportedFiles.length,
         currentIndex: 0,
         currentName: '',
         progress: 0,
@@ -872,8 +970,8 @@ export default function DashboardPage() {
     setIsUploading(true);
     try {
         const createdDocs: DocItem[] = [];
-        for (let i = 0; i < files.length; i += 1) {
-            const file = files[i];
+        for (let i = 0; i < supportedFiles.length; i += 1) {
+            const file = supportedFiles[i];
             setUploadStatus(prev => prev ? {
                 ...prev,
                 currentIndex: i + 1,
@@ -933,7 +1031,7 @@ export default function DashboardPage() {
             if(!res.ok) throw new Error("API Upload failed");
             
             const newDoc = await res.json();
-            createdDocs.push({ ...newDoc, folder: newDoc.folder ?? folderName });
+            createdDocs.push({ ...newDoc, folder: newDoc.folder ?? resolvedFolder });
             
             setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
         }
@@ -1014,9 +1112,8 @@ export default function DashboardPage() {
     e.stopPropagation();
     dragCounter.current = 0;
     setIsDragActive(false);
-    const files = Array.from(e.dataTransfer.files ?? []);
+    const { files, preservePaths } = await collectDroppedFiles(e);
     if (files.length === 0) return;
-    const preservePaths = files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
     await uploadFiles(files, DEFAULT_FOLDER_NAME, { preservePaths });
   };
 
@@ -1090,12 +1187,11 @@ export default function DashboardPage() {
   };
 
   const handleFolderDrop = async (e: React.DragEvent, folderName: string) => {
-      const files = Array.from(e.dataTransfer.files ?? []);
+      const { files, preservePaths } = await collectDroppedFiles(e);
       if (files.length > 0) {
           e.preventDefault();
           e.stopPropagation();
           setFolderDragOver(null);
-          const preservePaths = files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
           await uploadFiles(files, folderName, { preservePaths });
           return;
       }
@@ -1430,7 +1526,7 @@ export default function DashboardPage() {
                         <FolderUp className="w-4 h-4" />
                     </button>
                     <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
-                    <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple />
+                    <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
                 </div>
             </div>
 
@@ -1553,7 +1649,7 @@ export default function DashboardPage() {
                         value={mosaicNode}
                         onChange={setMosaicNode}
                         className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
-                        zeroStateView={<MosaicZeroState createNode={() => Promise.resolve('new')} title="No hay paneles" />}
+                        zeroStateView={<MosaicZeroState createNode={() => Promise.resolve('new')} />}
                    />
                </div>
             ) : (
