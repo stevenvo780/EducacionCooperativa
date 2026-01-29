@@ -5,16 +5,64 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, FileCode, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon } from 'lucide-react';
+import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, FileCode, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@/components/Editor';
 import Terminal from '@/components/Terminal';
 
 interface Workspace {
-// ...
+  id: string;
+  name: string;
+  ownerId: string;
+  members: string[];
+  pendingInvites?: string[];
+  type: 'personal' | 'shared';
+}
+
+interface DocItem {
+  id: string;
+  name: string;
+  type?: 'text' | 'file' | 'folder';
+  content?: string;
+  url?: string;
+  storagePath?: string;
+  mimeType?: string;
+  folder?: string;
+  updatedAt: any;
+  ownerId: string;
+  workspaceId?: string;
+}
+
+interface FolderItem {
+  id: string;
+  name: string;
+  kind: 'system' | 'record' | 'virtual';
+}
+
+type ViewMode = 'edit' | 'split' | 'preview';
+
+interface UploadStatus {
+  total: number;
+  currentIndex: number;
+  currentName: string;
+  progress: number;
+  phase: 'uploading' | 'done' | 'error';
+  error?: string;
+}
+
+interface DeleteStatus {
+  phase: 'deleting' | 'done' | 'error';
+  name?: string;
+  error?: string;
+}
+
+const PERSONAL_WORKSPACE_ID = 'personal';
+const DEFAULT_FOLDER_NAME = 'No estructurado';
+
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const [docs, setDocs] = useState<DocItem[]>([]);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
   const router = useRouter();
 
   // Workspace State
@@ -33,6 +81,7 @@ export default function DashboardPage() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
 
   // Actions State
   const [newDocName, setNewDocName] = useState('');
@@ -61,21 +110,6 @@ export default function DashboardPage() {
 
     let fetched: Workspace[] = [];
     try {
-        // Mock bypassing getDocs for test environment without keys
-        /*
-        const qMembers = query(collection(db, 'workspaces'), where('members', 'array-contains', user.uid));
-
-        const snapshot = await getDocs(qMembers);
-        snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() } as Workspace));
-
-        if (user.email) {
-            const qInvites = query(collection(db, 'workspaces'), where('pendingInvites', 'array-contains', user.email));
-            const snapInvites = await getDocs(qInvites);
-            const fetchedInvites: Workspace[] = [];
-            snapInvites.forEach(doc => fetchedInvites.push({ id: doc.id, ...doc.data() } as Workspace));
-            setInvites(fetchedInvites);
-        }
-        */
         console.log("Skipped Firestore Client Calls");
     } catch (e) {
         console.error("Error fetching workspaces", e);
@@ -115,8 +149,6 @@ export default function DashboardPage() {
         if (!res.ok) throw new Error('Failed to fetch docs via API');
         const fetched: DocItem[] = await res.json();
 
-        // Client side filtering for Personal Workspace (mirroring old logic roughly)
-        // logic: if Personal, show docs where workspaceId is null or 'personal'
         const filtered = fetched.filter(d => {
              if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
                  return !d.workspaceId || d.workspaceId === PERSONAL_WORKSPACE_ID;
@@ -124,17 +156,60 @@ export default function DashboardPage() {
              return true;
         });
 
-        filtered.sort((a, b) => {
+        const folderDocs = filtered.filter(item => item.type === 'folder');
+        const fileDocs = filtered.filter(item => item.type !== 'folder');
+        const folderNames = new Set<string>();
+        fileDocs.forEach(docItem => {
+            folderNames.add(docItem.folder || DEFAULT_FOLDER_NAME);
+        });
+        folderNames.add(DEFAULT_FOLDER_NAME);
+
+        const folderMap = new Map<string, FolderItem>();
+        folderMap.set(DEFAULT_FOLDER_NAME, {
+            id: 'default',
+            name: DEFAULT_FOLDER_NAME,
+            kind: 'system'
+        });
+        folderDocs.forEach(folderDoc => {
+            const name = folderDoc.name || 'Carpeta';
+            if (!folderMap.has(name)) {
+                folderMap.set(name, {
+                    id: folderDoc.id,
+                    name,
+                    kind: 'record'
+                });
+            }
+        });
+        folderNames.forEach(name => {
+            if (!folderMap.has(name)) {
+                folderMap.set(name, {
+                    id: `virtual:${name}`,
+                    name,
+                    kind: 'virtual'
+                });
+            }
+        });
+
+        const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+        const folderList = Array.from(folderMap.values()).sort((a, b) => {
+            const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
+            if (weightDiff !== 0) return weightDiff;
+            return a.name.localeCompare(b.name);
+        });
+
+        fileDocs.sort((a, b) => {
             const dateA = a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : new Date(a.updatedAt).getTime();
             const dateB = b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : new Date(b.updatedAt).getTime();
             return (dateB || 0) - (dateA || 0);
         });
 
-        setDocs(filtered);
+        setDocs(fileDocs);
+        setFolders(folderList);
     } catch (error) {
         console.error("Error fetching docs", error);
     }
   }, [user, currentWorkspace]);
+
   useEffect(() => {
     if (!loading && !user) router.push('/login');
     if (user) {
@@ -147,7 +222,6 @@ export default function DashboardPage() {
           fetchDocs();
       }
   }, [currentWorkspace, user, fetchDocs]);
-// ...existing code...
 
   useEffect(() => {
       return () => {
@@ -215,6 +289,132 @@ export default function DashboardPage() {
 
   const gridColsClass = gridDocs.length <= 1 ? 'grid-cols-1' : 'grid-cols-2';
   const gridRowsClass = gridDocs.length <= 2 ? 'grid-rows-1' : 'grid-rows-2';
+
+  const createFolderRecord = async (folderName: string) => {
+      if (!user) return false;
+      const trimmed = folderName.trim();
+      if (!trimmed) return false;
+      const exists = folders.some(folder => folder.name.toLowerCase() === trimmed.toLowerCase());
+      if (exists) return false;
+
+      const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+      const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
+      const response = await fetch('/api/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              name: trimmed,
+              type: 'folder',
+              ownerId: user.uid,
+              workspaceId: docWorkspaceId
+          })
+      });
+      if (!response.ok) {
+          console.error('Failed to create folder');
+          return false;
+      }
+      await fetchDocs();
+      return true;
+  };
+
+  const createFolder = async () => {
+      const name = prompt('Nombre de carpeta');
+      if (!name) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const exists = folders.some(folder => folder.name.toLowerCase() === trimmed.toLowerCase());
+      if (exists) {
+          alert('La carpeta ya existe');
+          return;
+      }
+      const created = await createFolderRecord(trimmed);
+      if (!created) {
+          alert('No se pudo crear la carpeta');
+      }
+  };
+
+  const moveDocumentToFolder = async (docId: string, folderName: string) => {
+      const trimmed = folderName.trim();
+      if (!trimmed) return;
+
+      if (trimmed !== DEFAULT_FOLDER_NAME) {
+          await createFolderRecord(trimmed);
+      }
+
+      setDocs(prev => prev.map(item => item.id === docId ? { ...item, folder: trimmed } : item));
+      setOpenTabs(prev => prev.map(item => item.id === docId ? { ...item, folder: trimmed } : item));
+
+      try {
+          const res = await fetch(`/api/documents/${docId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ folder: trimmed })
+          });
+          if (!res.ok) {
+              throw new Error('Failed to move document');
+          }
+          await fetchDocs();
+      } catch (error) {
+          console.error('Error moving document', error);
+          await fetchDocs();
+      }
+  };
+
+  const copyDocument = async (docItem: DocItem) => {
+      if (!user) return;
+      if (docItem.type === 'folder') return;
+      const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+      const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
+      const newName = `${docItem.name} (copia)`;
+      const payload: Record<string, unknown> = {
+          name: newName,
+          type: docItem.type || 'text',
+          ownerId: user.uid,
+          workspaceId: docWorkspaceId,
+          folder: docItem.folder || DEFAULT_FOLDER_NAME,
+          mimeType: docItem.mimeType || null
+      };
+
+      if (docItem.type === 'file') {
+          payload.url = docItem.url || null;
+          payload.storagePath = docItem.storagePath || null;
+      } else {
+          payload.content = docItem.content ?? '';
+      }
+
+      try {
+          const res = await fetch('/api/documents', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error('Failed to copy document');
+          const data = await res.json();
+          await fetchDocs();
+          openDocument({
+              id: data.id,
+              name: newName,
+              type: docItem.type || 'text',
+              ownerId: user.uid,
+              updatedAt: { seconds: Date.now() / 1000 },
+              folder: docItem.folder || DEFAULT_FOLDER_NAME,
+              mimeType: docItem.mimeType,
+              url: docItem.url,
+              storagePath: docItem.storagePath,
+              content: docItem.content
+          });
+      } catch (error) {
+          console.error('Error copying document', error);
+          alert('Error al copiar');
+      }
+  };
+
+  const promptMoveDocument = async (docItem: DocItem) => {
+      const current = docItem.folder || DEFAULT_FOLDER_NAME;
+      const target = prompt('Mover a carpeta', current);
+      if (!target) return;
+      await moveDocumentToFolder(docItem.id, target);
+  };
 
   const createWorkspace = async () => {
       if (!newWorkspaceName.trim() || !user) return;
@@ -291,20 +491,6 @@ export default function DashboardPage() {
     };
   };
 
-  const buildStorageFileName = (fileName: string) => {
-    const safeName = fileName.replace(/[\\/]/g, '_');
-    const uniqueId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    return `${uniqueId}_${safeName}`;
-  };
-
-  const getFileExtension = (name: string) => {
-    const parts = name.split('.');
-    if (parts.length < 2) return '';
-    return parts[parts.length - 1].toUpperCase();
-  };
-
   const isMarkdownName = (name?: string) => {
     const lower = (name ?? '').toLowerCase();
     return lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.mdown') || lower.endsWith('.mkd');
@@ -320,6 +506,12 @@ export default function DashboardPage() {
     return isMarkdownName(doc.name);
   };
 
+  const getFileExtension = (name: string) => {
+    const parts = name.split('.');
+    if (parts.length < 2) return '';
+    return parts[parts.length - 1].toUpperCase();
+  };
+
   const getDocBadge = (doc: DocItem) => {
     if (doc.type === 'file') {
         if (isMarkdownDocItem(doc)) return 'MD';
@@ -328,6 +520,16 @@ export default function DashboardPage() {
     }
     return isMarkdownName(doc.name) ? 'MD' : 'DOC';
   };
+
+  const docsByFolder = useMemo(() => {
+      const grouped: Record<string, DocItem[]> = {};
+      docs.forEach(docItem => {
+          const folderName = docItem.folder || DEFAULT_FOLDER_NAME;
+          if (!grouped[folderName]) grouped[folderName] = [];
+          grouped[folderName].push(docItem);
+      });
+      return grouped;
+  }, [docs]);
 
   const scheduleUploadStatusClear = () => {
     if (uploadStatusTimer.current) {
@@ -375,7 +577,6 @@ export default function DashboardPage() {
             if (isMarkdownFile(file)) {
                 const content = await file.text();
                 
-                // Use API to create document
                 const res = await fetch('/api/documents', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -492,6 +693,41 @@ export default function DashboardPage() {
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length === 0) return;
     await uploadFiles(files);
+  };
+
+  const handleDocDragStart = (e: React.DragEvent, docItem: DocItem) => {
+      e.dataTransfer.setData('application/x-doc-id', docItem.id);
+      e.dataTransfer.setData('text/plain', docItem.id);
+      e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDocDragEnd = () => {
+      setFolderDragOver(null);
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folderName: string) => {
+      const types = Array.from(e.dataTransfer.types ?? []);
+      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+      if (!hasDocId || types.includes('Files')) return;
+      e.preventDefault();
+      setFolderDragOver(folderName);
+  };
+
+  const handleFolderDragLeave = (folderName: string) => {
+      if (folderDragOver === folderName) {
+          setFolderDragOver(null);
+      }
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, folderName: string) => {
+      const types = Array.from(e.dataTransfer.types ?? []);
+      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+      if (!hasDocId || types.includes('Files')) return;
+      const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
+      if (!docId) return;
+      e.preventDefault();
+      setFolderDragOver(null);
+      await moveDocumentToFolder(docId, folderName);
   };
 
   const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
