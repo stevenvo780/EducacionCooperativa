@@ -67,3 +67,5 @@ out/
 build/
 
 temp-worker
+
+.env.local
