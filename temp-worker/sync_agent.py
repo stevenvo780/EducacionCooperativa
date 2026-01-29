@@ -44,19 +44,20 @@ class SyncManager:
         self._is_updating = False
 
     def get_remote_path(self, local_path):
-        """Maps local /workspace/foo.txt -> user_uid/foo.txt"""
+        """Maps local /workspace/foo.txt -> users/user_uid/foo.txt"""
         try:
             rel = local_path.relative_to(SYNC_DIR)
-            return f"{WORKER_TOKEN}/{rel}" 
+            return f"users/{WORKER_TOKEN}/{rel}" 
         except:
             return None
 
     def get_local_path(self, remote_blob_name):
-        """Maps user_uid/foo.txt -> /workspace/foo.txt"""
+        """Maps users/user_uid/foo.txt -> /workspace/foo.txt"""
+        prefix = f"users/{WORKER_TOKEN}/"
         # Strip the user prefix
-        if not remote_blob_name.startswith(f"{WORKER_TOKEN}/"):
+        if not remote_blob_name.startswith(prefix):
             return None
-        rel = remote_blob_name[len(WORKER_TOKEN)+1:]
+        rel = remote_blob_name[len(prefix):]
         return SYNC_DIR / rel
 
     def update_firestore(self, blob_path, local_path):

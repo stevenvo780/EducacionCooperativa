@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
         
         // Use user-specific path for sync compatibility
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filename = `${ownerId}/${safeName}`;
+        const filename = `users/${ownerId}/${safeName}`;
         
         const bucket = adminStorage.bucket();
         if (!bucket?.name) {

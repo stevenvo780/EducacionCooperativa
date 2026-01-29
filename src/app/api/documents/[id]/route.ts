@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                      const ownerId = existingData?.ownerId || 'unknown';
                      const safeName = (existingData?.name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
                      const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
-                     storagePath = `${ownerId}/${fname}`;
+                     storagePath = `users/${ownerId}/${fname}`;
                  }
                  
                  try {
