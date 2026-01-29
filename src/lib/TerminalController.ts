@@ -88,8 +88,20 @@ export class TerminalController {
         onStatusChange?.('hub-offline');
     });
 
-    this.socket.on('connect_error', (err) => {
-        console.error('[Terminal] Socket connect error', err);
+    this.socket.on('connect_error', (err: any) => {
+        console.error('[Terminal] Socket connect error detailed:', {
+            message: err.message,
+            stack: err.stack,
+            url: this.nexusUrl,
+            type: err.type,
+            name: err.name
+        });
+        
+        // Specific check for Mixed Content (HTTPS -> HTTP)
+        if (typeof window !== 'undefined' && window.location.protocol === 'https:' && this.nexusUrl.startsWith('http:')) {
+             console.error('[Terminal] SECURITY BLOCK: Attempting to connect to insecure HTTP Hub from HTTPS origin. Browsers block this.');
+        }
+
         onStatusChange?.('error');
     });
 
