@@ -19,8 +19,9 @@ chmod +x deb/usr/bin/edu-agent
 
 # 5. Copy Sync Service Files (The Python Agent)
 # We copy them to /usr/lib/edu-agent so the CLI can find them
-cp ../sync-service/sync_agent.py deb/usr/lib/edu-agent/
-cp ../sync-service/requirements.txt deb/usr/lib/edu-agent/
+# Assumes running from project root (agent/)
+cp sync-service/sync_agent.py deb/usr/lib/edu-agent/
+cp sync-service/requirements.txt deb/usr/lib/edu-agent/
 
 # 6. Create Control File
 mkdir -p deb/DEBIAN
