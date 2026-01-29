@@ -38,6 +38,7 @@ services:
       - FIREBASE_BUCKET=udea-filosofia.firebasestorage.app
     volumes:
       - ./temp-worker/worker:/workspace # Mount a folder as the user's workspace
+      - ./temp-worker/serviceAccountKey.json:/app/serviceAccountKey.json
     depends_on:
       - hub
 
