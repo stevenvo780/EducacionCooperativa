@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, FileCode, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput } from 'lucide-react';
+import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@/components/Editor';
 import Terminal from '@/components/Terminal';
@@ -36,6 +36,8 @@ interface DocItem {
 interface FolderItem {
   id: string;
   name: string;
+  path: string;
+  parentPath: string;
   kind: 'system' | 'record' | 'virtual';
 }
 
@@ -59,6 +61,20 @@ interface DeleteStatus {
 const PERSONAL_WORKSPACE_ID = 'personal';
 const DEFAULT_FOLDER_NAME = 'No estructurado';
 
+const normalizePath = (value?: string) => {
+    if (!value) return '';
+    return value
+        .split('/')
+        .map(part => part.trim())
+        .filter(Boolean)
+        .join('/');
+};
+
+const normalizeFolderPath = (value?: string) => {
+    const normalized = normalizePath(value);
+    return normalized || DEFAULT_FOLDER_NAME;
+};
+
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const [docs, setDocs] = useState<DocItem[]>([]);
@@ -78,10 +94,12 @@ export default function DashboardPage() {
   const [showTerminal, setShowTerminal] = useState(false);
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
+  const [activeFolder, setActiveFolder] = useState<string>(DEFAULT_FOLDER_NAME);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
+  const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(null);
 
   // Actions State
   const [newDocName, setNewDocName] = useState('');
@@ -158,52 +176,73 @@ export default function DashboardPage() {
 
         const folderDocs = filtered.filter(item => item.type === 'folder');
         const fileDocs = filtered.filter(item => item.type !== 'folder');
-        const folderNames = new Set<string>();
-        fileDocs.forEach(docItem => {
-            folderNames.add(docItem.folder || DEFAULT_FOLDER_NAME);
+
+        const normalizedFileDocs = fileDocs.map(docItem => {
+            const folderPath = normalizeFolderPath(docItem.folder);
+            return { ...docItem, folder: folderPath };
         });
-        folderNames.add(DEFAULT_FOLDER_NAME);
 
         const folderMap = new Map<string, FolderItem>();
-        folderMap.set(DEFAULT_FOLDER_NAME, {
-            id: 'default',
-            name: DEFAULT_FOLDER_NAME,
-            kind: 'system'
-        });
+        const ensureNode = (path: string, kind: FolderItem['kind']) => {
+            const normalized = normalizePath(path);
+            if (!normalized) return;
+            const existing = folderMap.get(normalized);
+            const name = normalized.split('/').slice(-1)[0] || normalized;
+            const parentPath = normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '';
+
+            if (!existing) {
+                folderMap.set(normalized, {
+                    id: `path:${normalized}`,
+                    name,
+                    path: normalized,
+                    parentPath,
+                    kind
+                });
+                return;
+            }
+
+            const priority: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+            if (priority[kind] < priority[existing.kind]) {
+                folderMap.set(normalized, { ...existing, kind });
+            }
+        };
+
+        const ensureAncestors = (path: string) => {
+            const normalized = normalizePath(path);
+            if (!normalized) return;
+            const parts = normalized.split('/');
+            let current = '';
+            parts.forEach(part => {
+                current = current ? `${current}/${part}` : part;
+                ensureNode(current, current === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
+            });
+        };
+
+        ensureNode(DEFAULT_FOLDER_NAME, 'system');
+
         folderDocs.forEach(folderDoc => {
-            const name = folderDoc.name || 'Carpeta';
-            if (!folderMap.has(name)) {
-                folderMap.set(name, {
-                    id: folderDoc.id,
-                    name,
-                    kind: 'record'
-                });
-            }
-        });
-        folderNames.forEach(name => {
-            if (!folderMap.has(name)) {
-                folderMap.set(name, {
-                    id: `virtual:${name}`,
-                    name,
-                    kind: 'virtual'
-                });
-            }
+            const parentPath = normalizePath(folderDoc.folder);
+            const name = (folderDoc.name || 'Carpeta').trim() || 'Carpeta';
+            const fullPath = parentPath ? `${parentPath}/${name}` : name;
+            ensureAncestors(parentPath);
+            ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record');
         });
 
-        const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
-        const folderList = Array.from(folderMap.values()).sort((a, b) => {
-            const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
-            if (weightDiff !== 0) return weightDiff;
-            return a.name.localeCompare(b.name);
+        normalizedFileDocs.forEach(docItem => {
+            const folderPath = normalizeFolderPath(docItem.folder);
+            ensureAncestors(folderPath);
+            ensureNode(folderPath, folderPath === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
         });
 
-        fileDocs.sort((a, b) => {
+        const folderList = Array.from(folderMap.values());
+
+        normalizedFileDocs.sort((a, b) => {
             const dateA = a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : new Date(a.updatedAt).getTime();
             const dateB = b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : new Date(b.updatedAt).getTime();
             return (dateB || 0) - (dateA || 0);
         });
 
-        setDocs(fileDocs);
+        setDocs(normalizedFileDocs);
         setFolders(folderList);
     } catch (error) {
         console.error("Error fetching docs", error);
@@ -247,6 +286,10 @@ export default function DashboardPage() {
 
   const openDocument = (doc: DocItem) => {
       setShowTerminal(false);
+      if (doc.type === 'folder') return;
+      if (doc.folder) {
+          setActiveFolder(doc.folder);
+      }
       setOpenTabs(prev => {
           if (prev.find(t => t.id === doc.id)) {
               return prev;
@@ -266,7 +309,7 @@ export default function DashboardPage() {
       setDocModes(prev => {
           const next: Record<string, ViewMode> = {};
           openTabs.forEach(tab => {
-              next[tab.id] = prev[tab.id] ?? 'split';
+              next[tab.id] = prev[tab.id] ?? 'preview';
           });
           return next;
       });
@@ -294,7 +337,9 @@ export default function DashboardPage() {
       if (!user) return false;
       const trimmed = folderName.trim();
       if (!trimmed) return false;
-      const exists = folders.some(folder => folder.name.toLowerCase() === trimmed.toLowerCase());
+      const parentPath = normalizePath(activeFolder);
+      const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+      const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
       if (exists) return false;
 
       const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
@@ -306,7 +351,8 @@ export default function DashboardPage() {
               name: trimmed,
               type: 'folder',
               ownerId: user.uid,
-              workspaceId: docWorkspaceId
+              workspaceId: docWorkspaceId,
+              folder: parentPath
           })
       });
       if (!response.ok) {
@@ -322,7 +368,9 @@ export default function DashboardPage() {
       if (!name) return;
       const trimmed = name.trim();
       if (!trimmed) return;
-      const exists = folders.some(folder => folder.name.toLowerCase() === trimmed.toLowerCase());
+      const parentPath = normalizePath(activeFolder);
+      const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+      const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
       if (exists) {
           alert('La carpeta ya existe');
           return;
@@ -333,22 +381,30 @@ export default function DashboardPage() {
       }
   };
 
-  const moveDocumentToFolder = async (docId: string, folderName: string) => {
-      const trimmed = folderName.trim();
-      if (!trimmed) return;
+  const moveDocumentToFolder = async (docId: string, folderPath: string) => {
+      const targetPath = normalizeFolderPath(folderPath);
 
-      if (trimmed !== DEFAULT_FOLDER_NAME) {
-          await createFolderRecord(trimmed);
+      if (targetPath !== DEFAULT_FOLDER_NAME) {
+          const segments = targetPath.split('/');
+          const leafName = segments[segments.length - 1];
+          const parentPath = segments.slice(0, -1).join('/');
+          const exists = folders.some(folder => folder.path.toLowerCase() === targetPath.toLowerCase());
+          if (!exists) {
+              const savedActive = activeFolder;
+              setActiveFolder(parentPath || DEFAULT_FOLDER_NAME);
+              await createFolderRecord(leafName);
+              setActiveFolder(savedActive);
+          }
       }
 
-      setDocs(prev => prev.map(item => item.id === docId ? { ...item, folder: trimmed } : item));
-      setOpenTabs(prev => prev.map(item => item.id === docId ? { ...item, folder: trimmed } : item));
+      setDocs(prev => prev.map(item => item.id === docId ? { ...item, folder: targetPath } : item));
+      setOpenTabs(prev => prev.map(item => item.id === docId ? { ...item, folder: targetPath } : item));
 
       try {
           const res = await fetch(`/api/documents/${docId}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ folder: trimmed })
+              body: JSON.stringify({ folder: targetPath })
           });
           if (!res.ok) {
               throw new Error('Failed to move document');
@@ -441,10 +497,11 @@ export default function DashboardPage() {
       }
   };
 
-  const createDoc = async (e?: React.FormEvent) => {
+  const createDoc = async (e?: React.FormEvent, folderName?: string) => {
     if(e) e.preventDefault();
     const name = newDocName.trim() || 'Sin título';
     if (!user) return;
+    const targetFolder = (folderName ?? activeFolder ?? DEFAULT_FOLDER_NAME).trim() || DEFAULT_FOLDER_NAME;
     const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
     const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
     setIsCreating(true);
@@ -458,7 +515,7 @@ export default function DashboardPage() {
                 type: 'text',
                 ownerId: user.uid,
                 workspaceId: docWorkspaceId,
-                folder: DEFAULT_FOLDER_NAME,
+                folder: targetFolder,
             })
         });
         
@@ -471,7 +528,14 @@ export default function DashboardPage() {
 
         setNewDocName('');
         await fetchDocs();
-        openDocument({ id: docRef.id, name: name, type: 'text', ownerId: user.uid, updatedAt: { seconds: Date.now() / 1000 } });
+        openDocument({
+            id: docRef.id,
+            name: name,
+            type: 'text',
+            ownerId: user.uid,
+            updatedAt: { seconds: Date.now() / 1000 },
+            folder: targetFolder
+        });
     } catch (e) {
         console.error("Error creating doc", e);
     } finally {
@@ -531,6 +595,47 @@ export default function DashboardPage() {
       return grouped;
   }, [docs]);
 
+  const activeFolderDocs = useMemo(() => {
+      return docsByFolder[activeFolder] ?? [];
+  }, [docsByFolder, activeFolder]);
+
+  const folderChildrenMap = useMemo(() => {
+      const map: Record<string, FolderItem[]> = {};
+      folders.forEach(folder => {
+          const parent = folder.parentPath || '';
+          if (!map[parent]) map[parent] = [];
+          map[parent].push(folder);
+      });
+      Object.values(map).forEach(list => {
+          list.sort((a, b) => {
+              const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+              const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
+              if (weightDiff !== 0) return weightDiff;
+              return a.name.localeCompare(b.name);
+          });
+      });
+      return map;
+  }, [folders]);
+
+  const activeChildFolders = useMemo(() => {
+      return folderChildrenMap[activeFolder] ?? [];
+  }, [folderChildrenMap, activeFolder]);
+
+  useEffect(() => {
+      if (folders.length === 0) {
+          if (activeFolder !== DEFAULT_FOLDER_NAME) {
+              setActiveFolder(DEFAULT_FOLDER_NAME);
+          }
+          return;
+      }
+      const exists = folders.some(folder => folder.path === activeFolder);
+      if (!exists) {
+          const rootFolders = folderChildrenMap[''] ?? [];
+          const fallback = rootFolders[0]?.path || DEFAULT_FOLDER_NAME;
+          setActiveFolder(fallback);
+      }
+  }, [folders, activeFolder, folderChildrenMap]);
+
   const scheduleUploadStatusClear = () => {
     if (uploadStatusTimer.current) {
         clearTimeout(uploadStatusTimer.current);
@@ -545,8 +650,9 @@ export default function DashboardPage() {
     deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
   };
 
-  const uploadFiles = async (files: File[]) => {
+  const uploadFiles = async (files: File[], targetFolder?: string) => {
     if (!user || files.length === 0) return;
+    const folderName = (targetFolder ?? DEFAULT_FOLDER_NAME).trim() || DEFAULT_FOLDER_NAME;
     const context = getUploadContext();
     if (!context) return;
 
@@ -587,7 +693,7 @@ export default function DashboardPage() {
                         mimeType: file.type || 'text/markdown',
                         ownerId: user.uid,
                         workspaceId: context.workspaceId,
-                        folder: DEFAULT_FOLDER_NAME
+                        folder: folderName
                     })
                 });
                 
@@ -610,7 +716,7 @@ export default function DashboardPage() {
             formData.append('file', file);
             formData.append('ownerId', user.uid);
             formData.append('workspaceId', context.workspaceId || 'personal');
-            formData.append('folder', DEFAULT_FOLDER_NAME);
+            formData.append('folder', folderName);
 
             const res = await fetch('/api/upload', {
                 method: 'POST',
@@ -648,7 +754,9 @@ export default function DashboardPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
-    await uploadFiles(files);
+    const targetFolder = uploadTargetFolder ?? DEFAULT_FOLDER_NAME;
+    setUploadTargetFolder(null);
+    await uploadFiles(files, targetFolder);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -692,7 +800,7 @@ export default function DashboardPage() {
     setIsDragActive(false);
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length === 0) return;
-    await uploadFiles(files);
+    await uploadFiles(files, DEFAULT_FOLDER_NAME);
   };
 
   const handleDocDragStart = (e: React.DragEvent, docItem: DocItem) => {
@@ -1008,8 +1116,30 @@ export default function DashboardPage() {
                     <span className="text-xs font-bold text-surface-500 uppercase tracking-wider">Archivos</span>
                 </div>
                 <div className="flex gap-0.5">
-                    <button onClick={() => createDoc()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nuevo Archivo"><Plus className="w-4 h-4" /></button>
-                    <button onClick={() => fileInputRef.current?.click()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Subir Archivo"><Upload className="w-4 h-4" /></button>
+                    <button
+                        onClick={() => createDoc(undefined, activeFolder)}
+                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
+                        title="Nuevo Archivo"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => createFolder()}
+                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
+                        title="Nueva Carpeta"
+                    >
+                        <FolderPlus className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => {
+                            setUploadTargetFolder(DEFAULT_FOLDER_NAME);
+                            fileInputRef.current?.click();
+                        }}
+                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
+                        title="Subir Archivo"
+                    >
+                        <Upload className="w-4 h-4" />
+                    </button>
                     <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
                 </div>
             </div>
@@ -1050,16 +1180,36 @@ export default function DashboardPage() {
                             {getIcon(doc)}
                         </div>
                         <span className="truncate flex-1">{doc.name}</span>
-                        <div className="ml-auto flex items-center gap-2">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
-                                {getDocBadge(doc)}
-                            </span>
-                            <button
-                                onClick={(e) => deleteDocument(doc, e)}
-                                className={`text-surface-500 hover:text-mandy-500 p-0.5 transition-opacity ${deletingIds[doc.id] ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                                disabled={!!deletingIds[doc.id]}
-                                title="Eliminar"
-                            >
+                                        <div className="ml-auto flex items-center gap-1.5">
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
+                                                {getDocBadge(doc)}
+                                            </span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    copyDocument(doc);
+                                                }}
+                                                className="text-surface-500 hover:text-surface-200 p-0.5 transition-opacity opacity-0 group-hover:opacity-100"
+                                                title="Duplicar"
+                                            >
+                                                <Copy className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    promptMoveDocument(doc);
+                                                }}
+                                                className="text-surface-500 hover:text-surface-200 p-0.5 transition-opacity opacity-0 group-hover:opacity-100"
+                                                title="Mover"
+                                            >
+                                                <FolderInput className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => deleteDocument(doc, e)}
+                                                className={`text-surface-500 hover:text-mandy-500 p-0.5 transition-opacity ${deletingIds[doc.id] ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                                disabled={!!deletingIds[doc.id]}
+                                                title="Eliminar"
+                                            >
                                 {deletingIds[doc.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                             </button>
                         </div>
@@ -1174,44 +1324,125 @@ export default function DashboardPage() {
                     </div>
                 </div>
             ) : (
-                // Grid View (Empty State / Home)
-                <div className="flex-1 overflow-y-auto p-8 bg-surface-900">
-                     <div className="max-w-5xl mx-auto">
-                        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                            {currentWorkspace?.type === 'personal' ? <User className="w-8 h-8 text-surface-400" /> : <Briefcase className="w-8 h-8 text-mandy-400" />}
-                            {currentWorkspace?.name}
-                        </h2>
-
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                            {docs.map(doc => (
-                                <motion.div
-                                    key={doc.id}
-                                    layoutId={doc.id}
-                                    onClick={() => openDocument(doc)}
-                                    className="bg-surface-800 group p-4 rounded-xl border border-surface-600/50 hover:border-mandy-500/30 hover:shadow-lg hover:shadow-mandy-500/5 transition cursor-pointer flex flex-col items-center text-center gap-3 aspect-square justify-center relative"
-                                >
-                                     <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded bg-surface-700/70 text-surface-300 uppercase">
-                                         {getDocBadge(doc)}
-                                     </span>
-                                     <div className={`p-4 rounded-full ${doc.type === 'file' && !isMarkdownDocItem(doc) ? 'bg-accent-purple/20 text-accent-purple-light' : 'bg-mandy-500/10 text-mandy-400'}`}>
-                                         {doc.type === 'file' && !isMarkdownDocItem(doc) ? <FileIcon className="w-8 h-8" /> : <FileCode className="w-8 h-8" />}
-                                     </div>
-                                     <span className="font-medium text-surface-200 text-sm line-clamp-2 w-full break-words">
-                                         {doc.name}
-                                     </span>
-                                </motion.div>
-                            ))}
-
-                            {/* Add Button Card */}
+                // Archivos Explorer
+                <div className="flex-1 min-h-0 flex flex-col bg-surface-900">
+                    <div className="px-6 py-4 border-b border-surface-700/60 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            {currentWorkspace?.type === 'personal' ? <User className="w-6 h-6 text-surface-400" /> : <Briefcase className="w-6 h-6 text-mandy-400" />}
+                            <div className="flex flex-col">
+                                <span className="text-lg font-bold text-white">{currentWorkspace?.name}</span>
+                                <span className="text-xs text-surface-400">Carpeta: {activeFolder}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
                             <button
-                                onClick={() => createDoc()}
-                                className="border-2 border-dashed border-surface-600 rounded-xl flex flex-col items-center justify-center gap-2 text-surface-500 hover:border-mandy-500/50 hover:text-mandy-400 hover:bg-mandy-500/5 transition aspect-square"
+                                onClick={() => createDoc(undefined, activeFolder)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
                             >
-                                <Plus className="w-8 h-8" />
-                                <span className="text-sm font-medium">Nuevo Doc</span>
+                                <Plus className="w-3.5 h-3.5" /> Nuevo Doc
+                            </button>
+                            <button
+                                onClick={() => createFolder()}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
+                            >
+                                <FolderPlus className="w-3.5 h-3.5" /> Nueva Carpeta
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setUploadTargetFolder(activeFolder);
+                                    fileInputRef.current?.click();
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
+                            >
+                                <Upload className="w-3.5 h-3.5" /> Subir
                             </button>
                         </div>
-                     </div>
+                    </div>
+                    <div className="flex-1 min-h-0 flex">
+                        <aside className="w-64 border-r border-surface-700/60 bg-surface-800/40 flex flex-col">
+                            <div className="px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                Carpetas
+                            </div>
+                            <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
+                                {folders.map(folder => {
+                                    const count = docsByFolder[folder.name]?.length ?? 0;
+                                    const isActive = activeFolder === folder.name;
+                                    const isDropActive = folderDragOver === folder.name;
+                                    return (
+                                        <button
+                                            key={folder.id}
+                                            onClick={() => setActiveFolder(folder.name)}
+                                            onDragOver={(e) => handleFolderDragOver(e, folder.name)}
+                                            onDrop={(e) => handleFolderDrop(e, folder.name)}
+                                            onDragLeave={() => handleFolderDragLeave(folder.name)}
+                                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10 text-mandy-300' : isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
+                                        >
+                                            <Folder className={`w-4 h-4 ${isActive ? 'text-mandy-400' : 'text-surface-500'}`} />
+                                            <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
+                                            <span className="text-[10px] text-surface-500">{count}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </aside>
+                        <section className="flex-1 min-h-0 overflow-y-auto">
+                            <div className="px-6 py-4 text-xs text-surface-400 uppercase tracking-wider">
+                                Documentos
+                            </div>
+                            <div className="px-4 pb-6 space-y-1">
+                                {activeFolderDocs.length === 0 ? (
+                                    <div className="px-4 py-6 text-sm text-surface-500">Esta carpeta está vacía.</div>
+                                ) : activeFolderDocs.map(doc => (
+                                    <div
+                                        key={doc.id}
+                                        onClick={() => openDocument(doc)}
+                                        draggable
+                                        onDragStart={(e) => handleDocDragStart(e, doc)}
+                                        onDragEnd={handleDocDragEnd}
+                                        className="group flex items-center gap-3 px-4 py-3 rounded-lg border border-surface-800/80 bg-surface-800/40 hover:bg-surface-800/70 hover:border-surface-600/80 transition cursor-pointer"
+                                    >
+                                        <div className="text-surface-500">{getIcon(doc)}</div>
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                            <span className="text-sm font-semibold text-surface-200 truncate">{doc.name}</span>
+                                            <span className="text-[11px] text-surface-500 truncate">{doc.folder || DEFAULT_FOLDER_NAME}</span>
+                                        </div>
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
+                                            {getDocBadge(doc)}
+                                        </span>
+                                        <div className="ml-auto flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    copyDocument(doc);
+                                                }}
+                                                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                                                title="Duplicar"
+                                            >
+                                                <Copy className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    promptMoveDocument(doc);
+                                                }}
+                                                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                                                title="Mover"
+                                            >
+                                                <FolderInput className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => deleteDocument(doc, e)}
+                                                className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
+                                                title="Eliminar"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    </div>
                 </div>
             )}
         </div>
