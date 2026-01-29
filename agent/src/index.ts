@@ -36,13 +36,13 @@ program
         type: 'password',
         name: 'token',
         message: 'Paste your Worker Token (User UID):',
-        validate: (input) => input.length > 0 ? true : 'Token is required',
+        validate: (input: string) => input.length > 0 ? true : 'Token is required',
       },
       {
         type: 'input',
         name: 'serviceAccountPath',
         message: 'Path to serviceAccountKey.json (for File Sync):',
-        validate: (input) => fs.existsSync(input) ? true : 'File not found',
+        validate: (input: string) => fs.existsSync(input) ? true : 'File not found',
       },
       {
         type: 'input',
@@ -182,4 +182,4 @@ program
     }
   });
 
-program.parse();
+program.parse(process.argv);
