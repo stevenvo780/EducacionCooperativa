@@ -404,18 +404,48 @@ export default function DashboardPage() {
       });
   }, []);
 
+  const renderDocModeControls = useCallback((docId: string, mode: ViewMode) => (
+      <div className="flex items-center gap-1">
+          <button
+              onClick={() => setDocMode(docId, 'edit')}
+              className={`p-1 rounded transition ${mode === 'edit' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
+              title="Edicion"
+              aria-pressed={mode === 'edit'}
+          >
+              <Pencil className="w-4 h-4" />
+          </button>
+          <button
+              onClick={() => setDocMode(docId, 'preview')}
+              className={`p-1 rounded transition ${mode === 'preview' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
+              title="Vista"
+              aria-pressed={mode === 'preview'}
+          >
+              <Eye className="w-4 h-4" />
+          </button>
+          <button
+              onClick={() => setDocMode(docId, 'split')}
+              className={`p-1 rounded transition ${mode === 'split' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
+              title="Dividir"
+              aria-pressed={mode === 'split'}
+          >
+              <Columns className="w-4 h-4" />
+          </button>
+      </div>
+  ), [setDocMode]);
+
   const renderTile = (id: string, path: MosaicPath) => {
     const doc = openTabs.find(t => t.id === id) || docs.find(d => d.id === id); // Fallback to docs if not in tabs, though openTabs should be sync
     if (!doc) return <div className="p-4 text-surface-400">Documento no encontrado: {id}</div>;
 
     const isTerminal = doc.type === 'terminal';
+    const mode = docModes[doc.id] ?? 'preview';
     
     return (
         <MosaicWindow<string>
             path={path}
             title={doc.name}
             className="bg-surface-900 border border-surface-700"
-            toolbarControls={[]}
+            toolbarControls={isTerminal ? [] : renderDocModeControls(doc.id, mode)}
             renderPreview={() => (
                 <div className="flex items-center gap-2 p-1">
                    {isTerminal ? <TerminalIcon className="w-4 h-4 text-mandy-400" /> : <FileText className="w-4 h-4 text-sky-400" />}
@@ -427,7 +457,7 @@ export default function DashboardPage() {
                  {isTerminal ? (
                       <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"} />
                   ) : (
-                      <Editor roomId={doc.id} embedded />
+                      <Editor roomId={doc.id} embedded viewMode={mode} />
                   )}
             </div>
         </MosaicWindow>
