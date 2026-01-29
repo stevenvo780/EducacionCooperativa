@@ -1,20 +1,22 @@
 import { adminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { name, content, type, ownerId, workspaceId, folder } = body;
+        const { name, content, type, ownerId, workspaceId, folder, mimeType } = body;
 
         const docRef = await adminDb.collection('documents').add({
-            name,
-            content,
-            type,
-            ownerId,
-            workspaceId,
-            folder,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            name: name || 'Sin título',
+            content: content ?? '',
+            type: type || 'text',
+            mimeType: mimeType || null,
+            ownerId: ownerId || 'unknown',
+            workspaceId: workspaceId ?? 'personal',
+            folder: folder || 'No estructurado',
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
         });
 
         return NextResponse.json({ id: docRef.id, status: 'success' });

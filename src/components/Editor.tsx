@@ -1,307 +1,512 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import {
+  Mosaic,
+  MosaicWindow,
+  MosaicNode,
+  MosaicPath
+} from 'react-mosaic-component';
+import 'react-mosaic-component/react-mosaic-component.css';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
-import { 
-  ChevronLeft, Cloud, Check, Download, 
-  Maximize2, Minimize2, PanelLeftClose, PanelRightClose,
-  Bold, Italic, Heading, Link as LinkIcon, Code, Columns,
+import {
+  Bold, Italic, Heading as HeadingIcon, Link as LinkIcon, Code,
+  Quote, List, ListOrdered, Table, Image as ImageIcon,
+  Sigma, Columns, Maximize2, Minimize2, Check, Cloud,
+  Type, LayoutGrid
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { Group, Panel, Separator } from "react-resizable-panels";
+import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 
+// --- Types ---
+
+type ViewId = 'editor' | 'preview' | string;
+
 interface EditorProps {
   initialContent?: string;
-  roomId: string; 
+  roomId: string;
   onClose?: () => void;
 }
 
-export default function Editor({ initialContent = '', roomId, onClose }: EditorProps) {
-  const { user } = useAuth();
+// --- Icons & Tools ---
+
+const ToolbarButton = ({ onClick, icon: Icon, title, active = false }: any) => (
+  <button
+    onClick={onClick}
+    className={clsx(
+      "p-1.5 rounded-md transition-all duration-200",
+      active ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:bg-slate-700 hover:text-slate-100"
+    )}
+    title={title}
+  >
+    <Icon className="w-4 h-4" />
+  </button>
+);
+
+const Divider = () => <div className="w-px h-5 bg-slate-700 mx-1 self-center" />;
+
+const isMarkdownName = (name?: string) => {
+  const lower = (name ?? '').toLowerCase();
+  return lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.mdown') || lower.endsWith('.mkd');
+};
+
+const isMarkdownMime = (mime?: string) => (mime ?? '').toLowerCase().includes('markdown');
+const isImageMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('image/');
+const isVideoMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('video/');
+const isAudioMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('audio/');
+const isPdfMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/pdf';
+
+// --- Main Component ---
+
+export default function MosaicEditor({ initialContent = '', roomId, onClose }: EditorProps) {
   const [content, setContent] = useState(initialContent);
+  const [saving, setSaving] = useState(false);
+  const [showEditorToolbar, setShowEditorToolbar] = useState(true);
+  const [showEditorStatus, setShowEditorStatus] = useState(true);
   const [docType, setDocType] = useState<'text' | 'file'>('text');
   const [fileUrl, setFileUrl] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  
-  // Layout States
-  const [showPreview, setShowPreview] = useState(true);
-  const [showToolbar, setShowToolbar] = useState(true);
-  const [showFooter, setShowFooter] = useState(true);
-  
+  const [fileName, setFileName] = useState('');
+  const [fileMime, setFileMime] = useState('');
+
+  // Initial Layout: Editor (Left) | Preview (Right)
+  const [layout, setLayout] = useState<MosaicNode<ViewId> | null>({
+    direction: 'row',
+    first: 'editor',
+    second: 'preview',
+    splitPercentage: 50,
+  });
+
+  const { user } = useAuth();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasLoadedRef = useRef(false);
+  const lastFileUrlRef = useRef<string | null>(null);
+
+  // --- API Sync ---
   useEffect(() => {
     if (!roomId) return;
-    
-    // Server-side fetch fallback
-    const fetchDoc = async () => {
+    hasLoadedRef.current = false;
+    lastFileUrlRef.current = null;
+    const controller = new AbortController();
+
+    const loadDoc = async () => {
         try {
-            const res = await fetch(`/api/documents/${roomId}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.type === 'file') {
-                    setDocType('file');
-                    setFileUrl(data.url);
-                    setContent(data.name || 'File');
-                } else {
-                    if (data.content !== undefined) {
-                        setContent(data.content);
-                    }
-                }
-            } else if (res.status === 404) {
-                 // Initialize with default
-                 setContent(initialContent);
+            const res = await fetch(`/api/documents/${roomId}`, { cache: 'no-store', signal: controller.signal });
+            if (!res.ok) {
+                setDocType('text');
+                setFileUrl(null);
+                setFileName('');
+                setFileMime('');
+                setContent('');
+                hasLoadedRef.current = true;
+                return;
             }
-        } catch (e) {
-            console.error("Error fetching document:", e);
+            const data = await res.json();
+            const type = data.type ?? 'text';
+            const name = data.name ?? '';
+            const mimeType = data.mimeType ?? '';
+            const url = data.url ?? null;
+            const isMarkdown = isMarkdownMime(mimeType) || isMarkdownName(name);
+
+            if (type === 'file' && !isMarkdown) {
+                setDocType('file');
+                setFileUrl(url);
+                setFileName(name || 'Archivo');
+                setFileMime(mimeType);
+                setContent('');
+            } else {
+                setDocType('text');
+                setFileUrl(null);
+                setFileName('');
+                setFileMime(mimeType);
+                if (typeof data.content === 'string') {
+                    setContent(data.content);
+                } else if (type === 'file' && url) {
+                    if (url !== lastFileUrlRef.current) {
+                        lastFileUrlRef.current = url;
+                        fetch(url)
+                            .then((textRes) => textRes.text())
+                            .then((text) => setContent(text))
+                            .catch((err) => console.error('Error loading markdown file:', err));
+                    }
+                } else {
+                    setContent('');
+                }
+            }
+        } catch (e: any) {
+            if (e?.name !== 'AbortError') {
+                console.error('Error loading document:', e);
+            }
+        } finally {
+            hasLoadedRef.current = true;
         }
     };
-    
-    fetchDoc();
-    // Disable onSnapshot for now as it causes permission errors
-    /*
-    const docRef = doc(db, 'documents', roomId);
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.type === 'file') {
-            setDocType('file');
-            setFileUrl(data.url);
-            setContent(data.name || 'File');
-        } else {
-            if (data.content !== undefined && data.lastUpdatedBy !== user?.uid) {
-               setContent(data.content);
-            }
-        }
-      } else {
-        setDoc(docRef, { 
-            content: initialContent, 
-            type: 'text',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp() 
-        });
-      }
-    });
-    return () => unsubscribe();
-    */
-  }, [roomId, initialContent]);
 
-  // Debouncing logic
-  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    loadDoc();
+    return () => controller.abort();
+  }, [roomId]);
 
-  const onChange = useCallback((val: string) => {
+  const handleContentChange = useCallback((val: string) => {
     setContent(val);
+    if (!roomId || docType === 'file') return;
+    if (!hasLoadedRef.current) return;
+
     setSaving(true);
-    
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    
+
     saveTimeoutRef.current = setTimeout(async () => {
-        if (!roomId) return;
         try {
             const res = await fetch(`/api/documents/${roomId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                   content: val,
-                   lastUpdatedBy: user?.uid 
-                })
+                    content: val,
+                    type: 'text',
+                    lastUpdatedBy: user?.uid,
+                }),
             });
-            if (!res.ok) throw new Error("Failed to save");
+            if (!res.ok) {
+                throw new Error('Failed to save');
+            }
         } catch (e) {
-            console.error("Error updating document:", e);
+            console.error('Error saving:', e);
         } finally {
-            setSaving(false); 
+            setSaving(false);
         }
-    }, 1000);
-  }, [roomId, user]);
+    }, 700);
+  }, [roomId, user?.uid, docType]);
 
-  const insertText = (template: string, cursorOffset = 0) => {
-      const newVal = content + template;
-      onChange(newVal);
+  useEffect(() => () => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+  }, []);
+
+  // --- Insertion Helpers ---
+  const insert = (template: string, offset = 0) => {
+      // Simple append for now. In a real app, we'd use a Ref to the CodeMirror instance
+      // to insert at cursor position.
+      const next = content + template;
+      handleContentChange(next);
   };
 
-  const handleExport = () => {
-      const blob = new Blob([content], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `document_${roomId}.md`;
-      a.click();
-  };
+  const stats = useMemo(() => {
+    const trimmed = content.trim();
+    const words = trimmed ? trimmed.split(/\s+/).length : 0;
+    return {
+      words,
+      chars: content.length,
+    };
+  }, [content]);
 
-  // --- File Viewer Mode ---
-  if (docType === 'file' && fileUrl) {
-      return (
-        <div className="flex flex-col h-full bg-slate-900 text-white">
-             <div className="h-14 border-b border-slate-700 bg-slate-800 flex items-center justify-between px-4">
-                <button onClick={onClose} className="flex items-center text-slate-400 hover:text-white gap-2 font-medium">
-                    <ChevronLeft className="w-5 h-5" /> Back
-                </button>
-                <div className="font-bold truncate px-4">{content}</div>
-                <a href={fileUrl} target="_blank" rel="noreferrer" className="bg-blue-600 px-4 py-2 rounded hover:bg-blue-500 flex items-center gap-2">
-                    <Download className="w-4 h-4" /> Download
-                </a>
-             </div>
-             <div className="flex-1 p-4 bg-slate-950 flex items-center justify-center">
-                <iframe src={fileUrl} className="w-full h-full border-none bg-white rounded" />
-             </div>
-        </div>
-      );
-  }
+  // --- Toolbar Component ---
+  const Toolbar = () => (
+    <div className="flex items-center gap-1 p-2 bg-slate-800 border-b border-slate-700 select-none overflow-x-auto custom-scrollbar">
+       <div className="flex items-center gap-1 shrink-0">
+          <ToolbarButton icon={Bold} title="Bold (**b**)" onClick={() => insert('**Bold**')} />
+          <ToolbarButton icon={Italic} title="Italic (*i*)" onClick={() => insert('*Italic*')} />
+          <ToolbarButton icon={Code} title="Inline Code (`c`)" onClick={() => insert('`code`')} />
+       </div>
+       <Divider />
+       <div className="flex items-center gap-1 shrink-0">
+          <ToolbarButton icon={HeadingIcon} title="Heading 1" onClick={() => insert('# ')} />
+          <ToolbarButton icon={Quote} title="Blockquote" onClick={() => insert('> ')} />
+       </div>
+       <Divider />
+       <div className="flex items-center gap-1 shrink-0">
+          <ToolbarButton icon={List} title="Bullet List" onClick={() => insert('- ')} />
+          <ToolbarButton icon={ListOrdered} title="Numbered List" onClick={() => insert('1. ')} />
+          <ToolbarButton icon={Table} title="Table" onClick={() => insert('\n| Col 1 | Col 2 |\n|---|---|\n| Val 1 | Val 2 |\n')} />
+       </div>
+       <Divider />
+       <div className="flex items-center gap-1 shrink-0">
+          <ToolbarButton icon={Sigma} title="Math Block ($$)" onClick={() => insert('\n$$ \n x = \\frac{-b \\pm \sqrt{b^2 - 4ac}}{2a} \n$$ \n')} />
+          <ToolbarButton icon={Type} title="Inline Math ($)" onClick={() => insert('$x^2$')} />
+       </div>
+       <Divider />
+       <div className="flex items-center gap-1 shrink-0">
+          <ToolbarButton icon={LinkIcon} title="Link" onClick={() => insert('[Link Title](url)')} />
+          <ToolbarButton icon={ImageIcon} title="Image" onClick={() => insert('![Alt](url)')} />
+       </div>
+       <div className="ml-auto flex items-center gap-2 text-xs text-slate-500 font-mono">
+          {saving ? <span className="text-blue-400 animate-pulse flex items-center gap-1"><Cloud className="w-3 h-3"/> Saving</span> : <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3"/> Saved</span>}
+       </div>
+       <button
+         onClick={() => setShowEditorToolbar(false)}
+         className="ml-1 p-1.5 rounded-md text-slate-400 hover:bg-slate-700 hover:text-slate-100"
+         title="Hide toolbar"
+       >
+         <Minimize2 className="w-4 h-4" />
+       </button>
+    </div>
+  );
 
-  // --- Markdown Editor Mode ---
-  return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-300 relative overflow-hidden group">
-      
-      {/* Floating Toggles (Visible on hover/interaction) */}
-      <div className={clsx(
-          "absolute top-2 right-4 z-50 flex gap-2 transition-opacity duration-300",
-          showToolbar ? "opacity-0 pointer-events-none" : "opacity-100"
-      )}>
-        <button onClick={() => setShowToolbar(true)} className="p-2 bg-slate-800/80 backdrop-blur rounded-full hover:bg-slate-700 text-slate-400 hover:text-white shadow-lg border border-slate-700">
-            <Maximize2 className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* --- Top Toolbar --- */}
-      {showToolbar && (
-        <div className="shrink-0 h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 transition-all duration-300">
-            <div className="flex items-center gap-3">
-                {onClose && (
-                    <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white">
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
+    // --- Render Tile ---
+    const renderTile = (id: ViewId, path: MosaicPath) => {
+      // EDITOR TILE
+      if (id === 'editor' || id.startsWith('editor')) {
+          return (
+            <MosaicWindow
+              path={path}
+              createNode={() => 'new'}
+              title={`Editor`}
+              className="bg-slate-900"
+              toolbarControls={[]} 
+              renderPreview={() => <div className="p-2 text-white">Editor Preview</div>}
+            >
+            <div className="flex flex-col h-full bg-slate-950 relative">
+                {showEditorToolbar && <Toolbar />}
+                {!showEditorToolbar && (
+                  <button
+                    onClick={() => setShowEditorToolbar(true)}
+                    className="absolute top-2 left-2 z-10 p-1.5 rounded-md bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700"
+                    title="Show toolbar"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
                 )}
-                <div className="h-6 w-px bg-slate-800 mx-1" />
-                
-                {/* Formatting Tools */}
-                <div className="flex items-center gap-1">
-                    <button onClick={() => insertText('**bold**')} className="p-2 hover:bg-slate-800 rounded text-slate-400 hover:text-white" title="Bold"><Bold className="w-4 h-4" /></button>
-                    <button onClick={() => insertText('*italic*')} className="p-2 hover:bg-slate-800 rounded text-slate-400 hover:text-white" title="Italic"><Italic className="w-4 h-4" /></button>
-                    <button onClick={() => insertText('# ')} className="p-2 hover:bg-slate-800 rounded text-slate-400 hover:text-white" title="Heading"><Heading className="w-4 h-4" /></button>
-                    <button onClick={() => insertText('`code`')} className="p-2 hover:bg-slate-800 rounded text-slate-400 hover:text-white" title="Code"><Code className="w-4 h-4" /></button>
-                    <button onClick={() => insertText('[title](url)')} className="p-2 hover:bg-slate-800 rounded text-slate-400 hover:text-white" title="Link"><LinkIcon className="w-4 h-4" /></button>
-                </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-                <button 
-                    onClick={() => setShowPreview(!showPreview)} 
-                    className={clsx("p-2 rounded-lg flex items-center gap-2 text-sm", showPreview ? "bg-blue-500/10 text-blue-400" : "hover:bg-slate-800 text-slate-400")}
-                    title={showPreview ? "Hide Preview" : "Show Preview"}
-                >
-                    <Columns className="w-4 h-4" />
-                    <span className="hidden sm:inline">Preview</span>
-                </button>
-                
-                <button 
-                    onClick={handleExport}
-                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"
-                    title="Export Markdown"
-                >
-                    <Download className="w-4 h-4" />
-                </button>
-
-                <div className="h-6 w-px bg-slate-800 mx-1" />
-                
-                <button onClick={() => setShowToolbar(false)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white" title="Compact Mode">
-                    <Minimize2 className="w-4 h-4" />
-                </button>
-            </div>
-        </div>
-      )}
-
-      {/* --- Main Workspace (Resizable) --- */}
-      <div className="flex-1 overflow-hidden relative">
-          <Group orientation="horizontal">
-            
-            {/* Editor Panel */}
-            <Panel defaultSize={50} minSize={20} className="h-full bg-slate-950">
-                <div className="h-full overflow-auto custom-scrollbar">
+                <div className="flex-1 overflow-hidden relative">
                     <CodeMirror
                         value={content}
                         height="100%"
                         extensions={[markdown({ base: markdownLanguage, codeLanguages: languages })]}
-                        onChange={onChange}
+                        onChange={handleContentChange}
                         theme="dark"
                         className="text-base h-full"
                         basicSetup={{
-                            lineNumbers: true,
-                            foldGutter: true,
+                            lineNumbers: true, 
+                            foldGutter: true, 
                             highlightActiveLine: true,
-                            autocompletion: true,
+                            autocompletion: true
                         }}
                     />
                 </div>
-            </Panel>
-
-            {/* Separator / Handle */}
-            {showPreview && (
-                <Separator className="w-2 bg-slate-800 hover:bg-blue-600 transition-colors flex items-center justify-center z-10 cursor-col-resize" />
-            )}
-
-            {/* Preview Panel */}
-            {showPreview && (
-                <Panel defaultSize={50} minSize={20} className="h-full bg-slate-900">
-                    <div className="h-full overflow-auto p-8 custom-scrollbar">
-                        <article className="prose prose-invert prose-slate max-w-none prose-headings:font-bold prose-a:text-blue-400 hover:prose-a:text-blue-300">
-                            <ReactMarkdown 
-                                remarkPlugins={[remarkMath]} 
-                                rehypePlugins={[rehypeKatex]}
-                            >
-                                {content}
-                            </ReactMarkdown>
-                        </article>
+                {showEditorStatus && (
+                  <div className="shrink-0 h-8 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-3 text-[11px] text-slate-400">
+                    <div className="flex items-center gap-3">
+                      <span>Markdown</span>
+                      <span>{stats.words} words</span>
+                      <span>{stats.chars} chars</span>
                     </div>
-                </Panel>
-            )}
-
-          </Group>
-      </div>
-
-      {/* --- Bottom Status Bar --- */}
-      {showFooter && (
-        <div className="shrink-0 h-8 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-4 text-xs select-none">
-            <div className="flex items-center gap-4 text-slate-500">
-                <span>Markdown</span>
-                <span>{content.length} chars</span>
-            </div>
-            <div className="flex items-center gap-3">
-                {saving ? (
-                    <span className="flex items-center gap-1 text-blue-400"><Cloud className="w-3 h-3 animate-pulse" /> Saving...</span>
-                ) : (
-                    <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3 h-3" /> Saved</span>
+                    <div className="flex items-center gap-2">
+                      {saving ? (
+                        <span className="text-blue-400 flex items-center gap-1"><Cloud className="w-3 h-3" /> Saving</span>
+                      ) : (
+                        <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3" /> Saved</span>
+                      )}
+                      <button
+                        onClick={() => setShowEditorStatus(false)}
+                        className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
+                        title="Hide status bar"
+                      >
+                        <Minimize2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
                 )}
-                <button onClick={() => setShowFooter(false)} className="hover:text-white"><PanelRightClose className="w-3 h-3" /></button>
+                {!showEditorStatus && (
+                  <button
+                    onClick={() => setShowEditorStatus(true)}
+                    className="absolute bottom-2 right-2 z-10 p-1.5 rounded-md bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700"
+                    title="Show status bar"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+                )}
             </div>
-        </div>
-      )}
+          </MosaicWindow>
+        );
+      } 
       
-      {/* Footer Toggle (if hidden) */}
-      {!showFooter && (
-          <button 
-            onClick={() => setShowFooter(true)} 
-            className="absolute bottom-2 right-4 p-1.5 bg-slate-800/80 backdrop-blur rounded-full text-slate-400 hover:text-white border border-slate-700 z-50"
-          >
-              <PanelLeftClose className="w-3 h-3 rotate-180" />
-          </button>
-      )}
+      // PREVIEW TILE
+      if (id === 'preview' || id.startsWith('preview')) {
+          return (
+              <MosaicWindow
+                path={path}
+                createNode={() => 'new'}
+                title="Markdown Preview"
+                className="bg-slate-900"
+                toolbarControls={[]}
+              >
+                <div className="h-full overflow-auto p-8 bg-slate-900 custom-scrollbar">
+                    <article className="prose prose-invert prose-slate max-w-none prose-headings:font-bold prose-a:text-blue-400 hover:prose-a:text-blue-300 prose-pre:bg-slate-800 prose-pre:border prose-pre:border-slate-700">
+                        <ReactMarkdown 
+                            remarkPlugins={[remarkMath, remarkGfm]} 
+                            rehypePlugins={[rehypeKatex]}
+                        >
+                            {content}
+                        </ReactMarkdown>
+                    </article>
+                </div>
+              </MosaicWindow>
+          );
+      }
+  
+      return <div className="text-white p-4">Unknown Window: {id}</div>;
+    };
 
-      <style jsx global>{`
-        .cm-editor { height: 100%; font-family: 'Fira Code', monospace; }
-        .cm-scroller { overflow: auto !important; }
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { bg: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #334155; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #475569; }
-      `}</style>
+  if (docType === 'file') {
+    const safeName = fileName || 'Archivo';
+    const lowerName = safeName.toLowerCase();
+    const isImage = isImageMime(fileMime) || /\.(png|jpe?g|gif|webp|svg)$/.test(lowerName);
+    const isPdf = isPdfMime(fileMime) || lowerName.endsWith('.pdf');
+    const isVideo = isVideoMime(fileMime);
+    const isAudio = isAudioMime(fileMime);
+
+    return (
+      <div className="flex flex-col h-full bg-slate-950 text-white">
+        <div className="h-12 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-4">
+          <div className="flex items-center gap-3 min-w-0">
+            {onClose && (
+              <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider">
+                <ChevronLeft className="w-4 h-4" /> Volver
+              </button>
+            )}
+            <div className="h-4 w-px bg-slate-700" />
+            <span className="text-xs font-medium text-slate-400 truncate">{safeName}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {fileUrl && (
+              <>
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs bg-slate-800 border border-slate-700 px-2 py-1 rounded hover:bg-slate-700"
+                >
+                  Abrir
+                </a>
+                <a
+                  href={fileUrl}
+                  download
+                  className="text-xs bg-blue-600 px-2 py-1 rounded hover:bg-blue-500"
+                >
+                  Descargar
+                </a>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex-1 p-4 bg-slate-900 flex items-center justify-center">
+          {!fileUrl && (
+            <div className="text-sm text-slate-400">No se pudo cargar el archivo.</div>
+          )}
+          {fileUrl && isImage && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={fileUrl} alt={safeName} className="max-h-full max-w-full rounded shadow" />
+          )}
+          {fileUrl && isVideo && (
+            <video src={fileUrl} controls className="max-h-full max-w-full rounded shadow" />
+          )}
+          {fileUrl && isAudio && (
+            <audio src={fileUrl} controls className="w-full max-w-xl" />
+          )}
+          {fileUrl && !isImage && !isVideo && !isAudio && (
+            <iframe
+              src={fileUrl}
+              className={`w-full h-full border border-slate-700 rounded bg-white ${isPdf ? '' : 'min-h-[70vh]'}`}
+              title={safeName}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-slate-950 text-slate-300 relative">
+        {/* Global App Bar */}
+        <div className="h-10 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-3">
+             <div className="flex items-center gap-3">
+                 {onClose && (
+                    <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider">
+                        <ChevronLeft className="w-4 h-4" /> Exit
+                    </button>
+                 )}
+                 <div className="h-4 w-px bg-slate-700" />
+                 <span className="text-xs font-medium text-slate-500">Workspace</span>
+             </div>
+             
+             <div className="flex items-center gap-2">
+                 <button 
+                   onClick={() => setLayout({ direction: 'row', first: 'editor', second: 'preview', splitPercentage: 50 })}
+                   className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
+                 >
+                    <Columns className="w-3 h-3" /> Reset Layout
+                 </button>
+                 <button 
+                   onClick={() => setLayout({ direction: 'column', first: 'editor', second: 'preview', splitPercentage: 50 })}
+                   className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
+                 >
+                    <LayoutGrid className="w-3 h-3" /> Split V
+                 </button>
+             </div>
+        </div>
+
+        {/* Mosaic Grid Area */}
+        <div className="flex-1 relative overflow-hidden">
+            <DndProvider backend={HTML5Backend}>
+                <Mosaic
+                    renderTile={renderTile}
+                    value={layout}
+                    onChange={setLayout}
+                    className="mosaic-blueprint-theme mosaic-custom-dark"
+                />
+            </DndProvider>
+        </div>
+
+        <style jsx global>{`
+            .mosaic-custom-dark {
+                background: #0f172a; 
+            }
+            .mosaic-tile {
+                margin: 2px; /* Gaps between tiles */
+                box-shadow: 0 0 0 1px #334155;
+            }
+            .mosaic-window-toolbar {
+                height: 32px !important;
+                background: #1e293b !important;
+                box-shadow: inset 0 -1px 0 #334155 !important;
+            }
+            .mosaic-window-title {
+                font-size: 12px !important;
+                font-weight: 600 !important;
+                color: #94a3b8 !important;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            .mosaic-split:hover {
+                background: #3b82f6 !important; /* Blue highlight on hover */
+            }
+            .cm-editor { height: 100%; font-family: 'Fira Code', monospace; }
+        `}</style>
     </div>
   );
+}
+
+// Helper icons
+function ChevronLeft(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  )
 }
