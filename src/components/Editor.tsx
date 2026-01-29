@@ -86,7 +86,7 @@ export default function MosaicEditor({
   embedded = false,
   viewMode,
 }: EditorProps) {
-  const resolvedViewMode = viewMode ?? 'split';
+  const resolvedViewMode = viewMode ?? 'preview';
   const [content, setContent] = useState(initialContent);
   const [saving, setSaving] = useState(false);
   const [showEditorToolbar, setShowEditorToolbar] = useState(true);

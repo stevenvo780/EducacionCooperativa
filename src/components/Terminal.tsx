@@ -33,22 +33,30 @@ const Terminal: React.FC<TerminalProps> = ({ nexusUrl }) => {
     const connect = async () => {
         try {
             // Get fresh Firebase Token
-            // @ts-ignore - Assuming Firebase User object has getIdToken
+            // @ts-ignore
             const token = await user.getIdToken();
+            console.log('🔌 Connecting to Hub at:', nexusUrl);
 
             socket = io(nexusUrl, {
                 auth: {
                     type: 'client',
                     token: token
                 },
+                transports: ['websocket'], // Force WebSocket to avoid CORS/Proxy polling issues
                 reconnectionDelay: 1000,
+                timeout: 10000,
             });
 
             socketRef.current = socket;
 
             socket.on('connect', () => {
-                console.log('✅ Connected to Hub');
+                console.log('✅ Connected to Hub (Socket ID:', socket?.id, ')');
                 setHubConnected(true);
+            });
+
+            socket.on('connect_error', (err) => {
+                console.error('❌ Connection Error:', err.message);
+                setHubConnected(false);
             });
 
             socket.on('disconnect', () => {
