@@ -20,7 +20,7 @@ const Terminal: React.FC<TerminalProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
-  
+
   const {
     controller,
     status,
@@ -74,7 +74,7 @@ const Terminal: React.FC<TerminalProps> = ({
   const isPersonalWorkspace = workspaceType === 'personal' || workspaceId === 'personal' || !workspaceId;
   const workspaceCode = isPersonalWorkspace ? 'personal' : workspaceId;
   const workspacePath = isPersonalWorkspace ? '/workspace' : `/workspace/_ws/${workspaceId}`;
-  
+
   const downloadPath = '/downloads/edu-worker_1.0.0_amd64.deb';
   const downloadUrl = typeof window !== 'undefined' ? `${window.location.origin}${downloadPath}` : downloadPath;
 
