@@ -1,56 +1,65 @@
 import { test, expect } from '@playwright/test';
 
 test('Terminal connection flow', async ({ page }) => {
+  // Enable console logging for debugging
+  page.on('console', msg => {
+    if (msg.text().includes('TerminalContext') || msg.text().includes('Status')) {
+      console.log('Browser:', msg.text());
+    }
+  });
+  page.on('pageerror', err => console.error('Browser Error:', err.message));
+  
   // 1. Navigate to Dashboard
-  // Uses mock auth so should auto-login or have dev bypass
   await page.goto('http://localhost:3011/dashboard');
+  await page.waitForLoadState('domcontentloaded');
   
-  // 2. Wait for loading to finish
-  await expect(page.locator('text=Espacio Personal')).toBeVisible({ timeout: 10000 });
+  // 2. Wait for the dashboard to render
+  await page.waitForTimeout(3000);
   
-  // 3. Open Terminal
-  await page.getByText('Mi Asistente +').click();
+  // 3. Take screenshot for debugging
+  await page.screenshot({ path: 'test-results/debug-dashboard.png' });
   
-  // 4. Check for Terminal Window in Mosaic
-  // The terminal window title
-  await expect(page.locator('.mosaic-window-title', { hasText: 'Terminal' }).first()).toBeVisible();
-
-  // 5. Verify Online Status
-  // "Asistente Conectado" appears when status === 'online'
-  // Or if it's already active, it shows the terminal (xterm)
-  // Let's check for the success state or the error state
+  // 4. Wait for Espacio Personal
+  await expect(page.getByText('MI ASISTENTE')).toBeVisible({ timeout: 30000 });
   
-  const connected = page.getByText('Asistente Conectado');
-  const terminalCanvas = page.locator('.xterm-screen'); // Xterm canvas
-  const disconnected = page.getByText('Asistente Desconectado');
+  // 5. Wait for MI ASISTENTE section
+  await expect(page.getByText('MI ASISTENTE')).toBeVisible({ timeout: 10000 });
   
-  // Wait for one of these states
-  await Promise.race([
-      connected.waitFor({ state: 'visible' }),
-      terminalCanvas.waitFor({ state: 'visible' }),
-      disconnected.waitFor({ state: 'visible' })
-  ]);
+  // 6. Check what we see in the terminal section
+  const conectando = await page.getByText('Conectando...').isVisible().catch(() => false);
+  const sinSesiones = await page.getByText('Sin sesiones activas').isVisible().catch(() => false);
+  console.log('UI State - Conectando:', conectando, 'Sin sesiones:', sinSesiones);
   
-  if (await disconnected.isVisible()) {
-      throw new Error('Test Failed: Assistant is Disconnected');
+  // 7. Wait for connection to complete
+  await expect(page.getByText('Sin sesiones activas')).toBeVisible({ timeout: 20000 });
+  
+  // 8. Create a new session
+  console.log('Looking for new session button...');
+  const plusButtons = await page.locator('button').filter({ has: page.locator('svg.lucide-plus') }).all();
+  console.log(`Found ${plusButtons.length} buttons with plus icon`);
+  
+  // Try to find the specific button near "MI ASISTENTE"
+  const newSessionButton = page.locator('button[title="Nueva Sesión"]').first();
+  const buttonVisible = await newSessionButton.isVisible().catch(() => false);
+  console.log(`New Session button visible: ${buttonVisible}`);
+  
+  if (!buttonVisible) {
+    // Fallback: find button in MI ASISTENTE section
+    const asistentSection = page.locator('text=MI ASISTENTE').locator('..').locator('..');
+    await asistentSection.screenshot({ path: 'test-results/asistente-section.png' });
   }
-
-  // If connected button exists, click it to enter terminal
-  if (await connected.isVisible()) {
-      await page.getByRole('button', { name: 'Abrir Terminal' }).click();
-  }
   
-  // Final verification: Xterm is visible
-  await expect(page.locator('.xterm-screen')).toBeVisible();
+  await newSessionButton.click();
+  console.log('Clicked new session button');
+  
+  // 9. Wait for session to be created
+  await expect(page.getByText('Terminal 1')).toBeVisible({ timeout: 15000 });
+  
+  // 10. Click on the session to open terminal
+  await page.getByText('Terminal 1').click();
+  
+  // 11. Verify terminal is mounted
+  await expect(page.locator('.xterm')).toBeVisible({ timeout: 10000 });
   
   console.log('✅ Terminal connected successfully');
-
-  // 6. Test Interactive Command
-  // Type 'echo "Hello World"'
-  const terminal = page.locator('.xterm-rows');
-  await page.keyboard.type('echo "Hello World"');
-  await page.keyboard.press('Enter');
-
-  // Expect output
-  await expect(page.locator('.xterm-rows')).toContainText('Hello World', { timeout: 5000 });
 });

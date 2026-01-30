@@ -17,6 +17,7 @@ interface TerminalContextType {
     activeSessionId: string | null;
     status: 'checking' | 'online' | 'offline' | 'error';
     hubConnected: boolean;
+    isCreatingSession: boolean;
     initialize: (nexusUrl: string) => Promise<void>;
     createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
     selectSession: (sessionId: string) => void;
@@ -37,15 +38,23 @@ export const useTerminal = () => {
 export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const { user } = useAuth();
     const controllerRef = useRef<TerminalController | null>(null);
+    // Use a getter function instead of ref to always get current user
+    const getUserRef = useRef(() => user);
+    getUserRef.current = () => user;
+    
     const [sessions, setSessions] = useState<TerminalSession[]>([]);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
     const [status, setStatus] = useState<'checking' | 'online' | 'offline' | 'error'>('checking');
     const [hubConnected, setHubConnected] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [isCreatingSession, setIsCreatingSession] = useState(false);
 
     // Initialize ONLY when explicitly called (usually by Dashboard) to allow dynamic Nexus URL
     const initialize = useCallback(async (nexusUrl: string) => {
-        if (!user || controllerRef.current) return;
+        const currentUser = getUserRef.current();
+        if (!currentUser || controllerRef.current) {
+            return;
+        }
         
         setStatus('checking');
         setHubConnected(false);
@@ -66,19 +75,19 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             const link = document.createElement('link');
             link.id = 'xterm-css';
             link.rel = 'stylesheet';
-            link.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css';
+            link.href = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css';
             document.head.appendChild(link);
         }
 
         // Connect
         try {
              let actualToken = 'mock-token';
-             if (user.getIdToken) {
-                 const token = await user.getIdToken();
+             if (currentUser.getIdToken) {
+                 const token = await currentUser.getIdToken();
                  actualToken = token.includes('.') ? token : 'mock-token';
              }
 
-             controller.connect(actualToken, user.uid, (newStatus) => {
+             controller.connect(actualToken, currentUser.uid, (newStatus) => {
                  if (newStatus === 'hub-online') {
                      setHubConnected(true);
                      setStatus(prev => prev === 'online' ? 'online' : 'checking');
@@ -99,6 +108,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
              // Listen for events
              controller.socket?.on('session-created', (data: { id: string }) => {
+                 setIsCreatingSession(false);
                  setSessions(prev => {
                      if (prev.find(s => s.id === data.id)) return prev;
                      const newSession = { id: data.id, name: `Terminal ${prev.length + 1}` };
@@ -118,13 +128,13 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
              });
 
         } catch (e: any) {
-            console.error('Terminal Connect Error', e);
             setStatus('error');
             setErrorMessage(e.message);
         }
-    }, [user]);
+    }, []); // No dependencies - uses refs internally
 
     const createSession = useCallback((workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => {
+        setIsCreatingSession(true);
         controllerRef.current?.startSession({ workspaceId, workspaceName, workspaceType });
     }, []);
 
@@ -151,6 +161,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             activeSessionId,
             status,
             hubConnected,
+            isCreatingSession,
             initialize,
             createSession,
             selectSession,

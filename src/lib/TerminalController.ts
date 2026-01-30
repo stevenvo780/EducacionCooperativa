@@ -89,11 +89,17 @@ export class TerminalController {
 
       // Input handler
       this.term.onData((data: string) => {
+        // console.log('[TerminalController] Input captured:', JSON.stringify(data), 'ActiveSession:', this.activeSessionId);
         if (this.socket?.connected && this.activeSessionId) {
           this.socket.emit('execute', {
             sessionId: this.activeSessionId,
             command: data
           });
+        } else {
+             console.warn('[TerminalController] Cannot send input: Socket not connected or no active session', {
+                 socket: this.socket?.connected,
+                 activeSessionId: this.activeSessionId
+             });
         }
       });
 
@@ -105,16 +111,37 @@ export class TerminalController {
     }
   }
 
+  private mounted = false;
+
   public mount(container: HTMLElement) {
     if (!this.term || !this.fitAddon) return;
+    
+    // Prevent double mount
+    if (this.mounted && this.container === container) {
+      this.fit();
+      return;
+    }
 
     this.container = container;
-    this.term.open(container);
-    this.fitAddon.fit();
-    this.term.focus();
+    
+    // Only open if not already opened
+    if (!this.mounted) {
+      this.term.open(container);
+      this.mounted = true;
+    }
+    
+    // Delay fit to allow DOM to settle
+    setTimeout(() => {
+      this.fitAddon.fit();
+      this.term.focus();
+    }, 100);
 
+    // Setup resize observer
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
     this.resizeObserver = new ResizeObserver(() => {
-      this.fit();
+      requestAnimationFrame(() => this.fit());
     });
     this.resizeObserver.observe(container);
   }
@@ -127,41 +154,30 @@ export class TerminalController {
   ) {
     if (this.socket) this.socket.disconnect();
 
-    console.log('[Terminal] Connecting to', this.nexusUrl);
-
     this.socket = io(this.nexusUrl, {
       auth: { type: 'client', token, uid },
-      transports: ['websocket']
+      transports: ['websocket'],
+      autoConnect: false // Don't connect automatically - wait for listeners
     });
 
+    // Register listeners BEFORE connecting
     this.socket.on('connect', () => {
-      console.log('[Terminal] Socket connected');
       onStatusChange?.('hub-online');
     });
 
     this.socket.on('disconnect', () => {
-      console.log('[Terminal] Socket disconnected');
       this.clearSession('Hub disconnected');
       onStatusChange?.('hub-offline');
     });
 
     this.socket.on('connect_error', (err: any) => {
-      console.error('[Terminal] Socket connect error detailed:', {
-        message: err.message,
-        stack: err.stack,
-        url: this.nexusUrl,
-        type: err.type,
-        name: err.name
-      });
-
       if (typeof window !== 'undefined' && window.location.protocol === 'https:' && this.nexusUrl.startsWith('http:')) {
-        console.error('[Terminal] SECURITY BLOCK: Attempting to connect to insecure HTTP Hub from HTTPS origin.');
+        // Mixed content warning - nothing to log
       }
-
       onStatusChange?.('error');
     });
 
-    this.socket.on('worker-status', (data: { status: string }) => {
+    this.socket.on('worker-status', (data: { status: string; workspaceId?: string }) => {
       onStatusChange?.(data.status);
     });
 
@@ -184,6 +200,9 @@ export class TerminalController {
         this.term?.write(data.data);
       }
     });
+
+    // Now connect after all listeners are registered
+    this.socket.connect();
   }
 
   public startSession(payload?: { workspaceId?: string; workspaceName?: string; workspaceType?: string }) {
@@ -211,16 +230,23 @@ export class TerminalController {
       }
   }
 
+  public focus() {
+    this.term?.focus();
+  }
+
   public fit() {
-    if (!this.activeSessionId || !this.socket?.connected || !this.term || !this.fitAddon) return;
+    if (!this.term || !this.fitAddon) return;
     try {
       this.fitAddon.fit();
       const { cols, rows } = this.term;
-      this.socket.emit('resize', {
-        sessionId: this.activeSessionId,
-        cols,
-        rows
-      });
+      // Only send resize if we have an active session
+      if (this.activeSessionId && this.socket?.connected && cols > 0 && rows > 0) {
+        this.socket.emit('resize', {
+          sessionId: this.activeSessionId,
+          cols,
+          rows
+        });
+      }
     } catch (e) {
       // Ignore fit errors
     }

@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import {
     onAuthStateChanged,
     User,
@@ -29,25 +29,29 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+// Singleton mock user to prevent recreation on every render
+const MOCK_USER = {
+    uid: '21VuZW4cdXd9jGKOgPa5YQegICw1',
+    email: 'dev@test.com',
+    displayName: 'Dev Tester',
+    getIdToken: async () => 'mock-token'
+} as unknown as User;
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
+    const initialized = useRef(false);
 
     useEffect(() => {
+        // Run only once
+        if (initialized.current) return;
+        initialized.current = true;
+
         // DEV ONLY: Auto-login mock
         const useMock = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true';
         if (useMock && !localStorage.getItem('agora_user')) {
-            // Avoid loop if user refers to a mock already
-            if (user?.uid === '21VuZW4cdXd9jGKOgPa5YQegICw1') return;
-
-            const mockUser = {
-                uid: '21VuZW4cdXd9jGKOgPa5YQegICw1',
-                email: 'dev@test.com',
-                displayName: 'Dev Tester',
-                getIdToken: async () => 'mock-token'
-            } as any;
-            setUser(mockUser);
+            setUser(MOCK_USER);
             setLoading(false);
             return;
         }
@@ -56,16 +60,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const storedUser = localStorage.getItem('agora_user');
         if (storedUser) {
             try {
-                // Avoid re-parsing if user is already set (and matches?)
-                // Simple check: if we have a user, do we assume it matches?
-                // Better to just run this effect on mount mainly?
-                if (user) return;
-
                 setUser(JSON.parse(storedUser));
                 setLoading(false);
                 return; // SKIP Firebase Init if using local mock user
             } catch (e) {
-                console.error('Failed to parse stored user', e);
                 localStorage.removeItem('agora_user');
             }
         }
@@ -81,14 +79,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
             return () => unsubscribe();
         } catch (e) {
-            console.warn('[AuthContext] Firebase init failed, falling back to mock state if allowed.', e);
-            if (!useMock && !user) {
+            if (!useMock) {
                 // If not mock and failed, we are in trouble.
-                console.error('Firebase Auth is required but failed to initialize.');
             }
             setLoading(false);
         }
-    }, [user]);
+    }, []);
 
     const signInWithGoogle = async () => {
         // Check if Firebase is properly configured

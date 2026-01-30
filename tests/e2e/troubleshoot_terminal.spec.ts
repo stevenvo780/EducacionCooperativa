@@ -1,57 +1,63 @@
 import { test, expect } from '@playwright/test';
 
-test('Diagnose Terminal 500 Error', async ({ page }) => {
-  // Capture all console logs
-  page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
+test('Diagnose Terminal Socket Connection', async ({ page }) => {
+  // Capture all console logs - especially the TerminalController logs
+  const consoleLogs: string[] = [];
+  page.on('console', msg => {
+    const text = msg.text();
+    consoleLogs.push(text);
+    console.log(`BROWSER: ${text}`);
+  });
+  
   // Capture all network failures
   page.on('requestfailed', request =>
     console.log(`REQ FAILED: ${request.url()} - ${request.failure()?.errorText}`)
   );
-  page.on('response', response => {
-      if (response.status() >= 400) {
-        console.log(`REQ ERROR STATUS: ${response.url()} returned ${response.status()}`);
-      }
-  });
 
-  const baseURL = process.env.BASE_URL || 'https://visormarkdown-virid.vercel.app';
+  const baseURL = process.env.BASE_URL || 'http://localhost:3011';
   
-  await page.goto(`${baseURL}/login`);
-  await page.waitForLoadState('networkidle');
-
-  // Register a new random user
-  const randomSuffix = Math.floor(Math.random() * 100000);
-  const email = `testuser${randomSuffix}@example.com`;
-  const password = 'TestPassword123!';
-
-  console.log(`Attempting to register with ${email}`);
-
-  // Switch to register tab
-  await page.getByRole('button', { name: 'Registrarse' }).click();
+  // In mock mode, go directly to dashboard - auto-login will happen
+  console.log('Navigating directly to dashboard (mock auth will auto-login)...');
+  await page.goto(`${baseURL}/dashboard`);
+  await page.waitForLoadState('domcontentloaded');
   
-  await page.getByPlaceholder('usuario@ejemplo.com').fill(email);
-  await page.getByPlaceholder('••••••••').fill(password);
+  console.log('At dashboard, waiting for socket connection and worker-status event...');
   
-  // Submit
-  const submitButton = page.locator('button[type="submit"]');
-  await submitButton.click();
-  
-  // Wait for navigation to dashboard
-  await page.waitForURL('**/dashboard', { timeout: 15000 });
-  console.log('Successfully reached /dashboard');
-
-  // Navigate to terminal
-  console.log('Navigating to /dashboard/terminal...');
-  await page.goto(`${baseURL}/dashboard/terminal`);
-  
-  // Allow some time for errors to appear
+  // Wait longer for socket to connect and receive events
   await page.waitForTimeout(5000);
   
-  // Check for 500 text or typical error indicators
-  const content = await page.content();
-  if (content.includes('500') || content.includes('Internal Server Error')) {
-      console.log('Detected 500 Error on page!');
+  // Print all captured console logs
+  console.log('\n=== ALL BROWSER CONSOLE LOGS ===');
+  consoleLogs.forEach(log => console.log(log));
+  console.log('=== END BROWSER LOGS ===\n');
+  
+  // Check UI state
+  const conectando = await page.getByText('Conectando...').count();
+  const sinSesiones = await page.getByText('Sin sesiones activas').count();
+  const miAsistente = await page.getByText('MI ASISTENTE').count();
+  
+  console.log(`UI State - Conectando: ${conectando > 0}, Sin sesiones activas: ${sinSesiones > 0}, Mi Asistente: ${miAsistente > 0}`);
+  
+  // Look for TerminalController log specifically
+  const socketConnectedLog = consoleLogs.find(log => log.includes('Socket connected to hub'));
+  const workerStatusLog = consoleLogs.find(log => log.includes('worker-status event received'));
+  const statusChangeLog = consoleLogs.find(log => log.includes('Status change:'));
+  
+  console.log(`Socket logs found - Connected: ${!!socketConnectedLog}, Worker status: ${!!workerStatusLog}, Status change: ${!!statusChangeLog}`);
+  
+  // Check if worker-status 'online' was received
+  if (workerStatusLog) {
+    console.log('SUCCESS: worker-status event was received by client!');
+  } else if (socketConnectedLog) {
+    console.log('PARTIAL: Socket connected but worker-status not received');
+  } else {
+    console.log('FAIL: Socket did not connect');
   }
   
   // Take a screenshot
-  await page.screenshot({ path: 'terminal-error.png' });
+  await page.screenshot({ path: 'terminal-socket-debug.png' });
+  
+  // Verify the terminal connection is online (shows "Sin sesiones activas" instead of "Conectando...")
+  // This means status === 'online'
+  expect(sinSesiones).toBeGreaterThan(0);
 });
