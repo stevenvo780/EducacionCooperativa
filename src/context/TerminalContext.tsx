@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { TerminalController } from '@/lib/TerminalController';
 import { useAuth } from './AuthContext';
 
@@ -44,7 +44,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     // Initialize ONLY when explicitly called (usually by Dashboard) to allow dynamic Nexus URL
-    const initialize = async (nexusUrl: string) => {
+    const initialize = useCallback(async (nexusUrl: string) => {
         if (!user || controllerRef.current) return;
         
         setStatus('checking');
@@ -93,15 +93,16 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                  } else if (newStatus === 'error') {
                      setStatus('error');
                  }
-             }, () => {
-                 // On Session Ended (Legacy callback, handled via events now)
+             }, (payload) => {
+                 // Session ended callback
              });
 
              // Listen for events
              controller.socket?.on('session-created', (data: { id: string }) => {
                  setSessions(prev => {
                      if (prev.find(s => s.id === data.id)) return prev;
-                     return [...prev, { id: data.id, name: `Terminal ${prev.length + 1}` }];
+                     const newSession = { id: data.id, name: `Terminal ${prev.length + 1}` };
+                     return [...prev, newSession];
                  });
                  setActiveSessionId(data.id);
              });
@@ -121,20 +122,20 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             setStatus('error');
             setErrorMessage(e.message);
         }
-    };
+    }, [user]);
 
-    const createSession = (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => {
+    const createSession = useCallback((workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => {
         controllerRef.current?.startSession({ workspaceId, workspaceName, workspaceType });
-    };
+    }, []);
 
-    const selectSession = (sessionId: string) => {
+    const selectSession = useCallback((sessionId: string) => {
         setActiveSessionId(sessionId);
         controllerRef.current?.setActiveSession(sessionId);
-    };
+    }, []);
     
-    const destroySession = (sessionId: string) => {
+    const destroySession = useCallback((sessionId: string) => {
         controllerRef.current?.killSession(sessionId);
-    };
+    }, []);
 
     useEffect(() => {
         return () => {

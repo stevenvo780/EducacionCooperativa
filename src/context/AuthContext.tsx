@@ -38,6 +38,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // DEV ONLY: Auto-login mock
         const useMock = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true';
         if (useMock && !localStorage.getItem('agora_user')) {
+            // Avoid loop if user refers to a mock already
+            if (user?.uid === '21VuZW4cdXd9jGKOgPa5YQegICw1') return;
+
             const mockUser = {
                 uid: '21VuZW4cdXd9jGKOgPa5YQegICw1',
                 email: 'dev@test.com',
@@ -53,24 +56,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const storedUser = localStorage.getItem('agora_user');
         if (storedUser) {
             try {
+                // Avoid re-parsing if user is already set (and matches?)
+                // Simple check: if we have a user, do we assume it matches?
+                // Better to just run this effect on mount mainly?
+                if (user) return;
+
                 setUser(JSON.parse(storedUser));
+                setLoading(false);
+                return; // SKIP Firebase Init if using local mock user
             } catch (e) {
                 console.error('Failed to parse stored user', e);
                 localStorage.removeItem('agora_user');
             }
         }
 
-        const firebaseAuth = getAuth();
-        const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
-            if (authUser) {
-                setUser(authUser);
-                localStorage.removeItem('agora_user');
+        try {
+            const firebaseAuth = getAuth();
+            const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
+                if (authUser) {
+                    setUser(authUser);
+                    localStorage.removeItem('agora_user');
+                }
+                setLoading(false);
+            });
+            return () => unsubscribe();
+        } catch (e) {
+            console.warn('[AuthContext] Firebase init failed, falling back to mock state if allowed.', e);
+            if (!useMock && !user) {
+                // If not mock and failed, we are in trouble.
+                console.error('Firebase Auth is required but failed to initialize.');
             }
             setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
+        }
+    }, [user]);
 
     const signInWithGoogle = async () => {
         // Check if Firebase is properly configured
