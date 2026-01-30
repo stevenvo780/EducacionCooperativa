@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
+import { TerminalProvider } from '@/context/TerminalContext';
 
 export const metadata: Metadata = {
   title: 'AgoraSync',
@@ -16,7 +17,9 @@ export default function RootLayout({
     <html lang="es">
       <body className="">
         <AuthProvider>
-            {children}
+            <TerminalProvider>
+                {children}
+            </TerminalProvider>
         </AuthProvider>
       </body>
     </html>

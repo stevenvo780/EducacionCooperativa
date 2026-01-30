@@ -192,6 +192,25 @@ export class TerminalController {
     }
   }
 
+  public setActiveSession(sessionId: string) {
+    this.activeSessionId = sessionId;
+    // For V1: Reset terminal on switch to avoid mixing output.
+    // In a real production app, we would cache the buffer or request 'replay' from Hub.
+    this.term?.reset();
+    this.term?.writeln(`\x1b[33mSwitched to session ${sessionId}\x1b[0m`);
+    this.fit();
+  }
+
+  public killSession(sessionId: string) {
+      if (this.socket?.connected) {
+          this.socket.emit('kill-session', { sessionId });
+      }
+      if (this.activeSessionId === sessionId) {
+          this.activeSessionId = null;
+          this.term?.writeln('\x1b[31mSession ended\x1b[0m');
+      }
+  }
+
   public fit() {
     if (!this.activeSessionId || !this.socket?.connected || !this.term || !this.fitAddon) return;
     try {
