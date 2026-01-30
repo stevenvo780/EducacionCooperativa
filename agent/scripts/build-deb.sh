@@ -1,51 +1,46 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-echo "🏗️  Building Education Cooperative Agent..."
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="$(python3 - <<PY\nimport json\nfrom pathlib import Path\npkg = json.loads(Path(\"$ROOT_DIR/package.json\").read_text())\nprint(pkg.get(\"version\", \"0.0.0\"))\nPY\n)"
 
-# 1. Build TypeScript CLI
-npm run build
+echo "Building Education Cooperative Agent..."
 
-# 2. Package CLI into binary
-npm run package
+npm run build --prefix "$ROOT_DIR"
+npm run package --prefix "$ROOT_DIR"
 
-# 3. Create Debian Directory Structure
-mkdir -p deb/usr/bin
-mkdir -p deb/usr/lib/edu-agent
+BUILD_DIR="$ROOT_DIR/build/deb"
+DIST_DIR="$ROOT_DIR/dist"
 
-# 4. Copy Binary
-cp bin/edu-agent deb/usr/bin/
-chmod +x deb/usr/bin/edu-agent
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR/DEBIAN" \
+  "$BUILD_DIR/usr/bin" \
+  "$BUILD_DIR/usr/lib/edu-agent"
 
-# 5. Copy Sync Service Files (The Python Agent)
-# We copy them to /usr/lib/edu-agent so the CLI can find them
-# Assumes running from project root (agent/)
-cp sync-service/sync_agent.py deb/usr/lib/edu-agent/
-cp sync-service/requirements.txt deb/usr/lib/edu-agent/
+install -m 755 "$ROOT_DIR/bin/edu-agent" "$BUILD_DIR/usr/bin/edu-agent"
+install -m 644 "$ROOT_DIR/sync-service/sync_agent.py" "$BUILD_DIR/usr/lib/edu-agent/sync_agent.py"
+install -m 644 "$ROOT_DIR/sync-service/requirements.txt" "$BUILD_DIR/usr/lib/edu-agent/requirements.txt"
 
-# 6. Create Control File
-mkdir -p deb/DEBIAN
-cat > deb/DEBIAN/control << EOL
+cat > "$BUILD_DIR/DEBIAN/control" << EOF
 Package: edu-agent
-Version: 1.0.0
+Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: amd64
+Depends: docker.io | docker-ce
 Maintainer: Educacion Cooperativa
 Description: Local Agent for Educacion Cooperativa
  This agent runs a Dockerized worker that connects your
  local environment to the Educacion Cooperativa cloud platform.
- Includes file synchronization service.
-EOL
+EOF
 
-# 7. Post-install script (Optional: verify docker group)
-cat > deb/DEBIAN/postinst << EOL
+cat > "$BUILD_DIR/DEBIAN/postinst" << 'EOF'
 #!/bin/bash
 chmod 755 /usr/lib/edu-agent/sync_agent.py
-echo "✅ Edu-Agent installed. Run 'edu-agent setup' to configure."
-EOL
-chmod 755 deb/DEBIAN/postinst
+echo "Edu-Agent instalado. Ejecuta 'edu-agent setup' para configurar."
+EOF
+chmod 755 "$BUILD_DIR/DEBIAN/postinst"
 
-# 8. Build .deb
-dpkg-deb --build deb edu-agent_1.0.0_amd64.deb
-echo "📦 Package created: edu-agent_1.0.0_amd64.deb"
+mkdir -p "$DIST_DIR"
+dpkg-deb --build "$BUILD_DIR" "$DIST_DIR/edu-agent_${VERSION}_amd64.deb"
+echo "Paquete creado: $DIST_DIR/edu-agent_${VERSION}_amd64.deb"

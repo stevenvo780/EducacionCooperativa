@@ -4,7 +4,6 @@ import Conf from 'conf';
 import execa from 'execa';
 import chalk from 'chalk';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
 const program = new Command();
@@ -41,8 +40,14 @@ program
       {
         type: 'input',
         name: 'serviceAccountPath',
-        message: 'Path to serviceAccountKey.json (for File Sync):',
-        validate: (input: string) => fs.existsSync(input) ? true : 'File not found',
+        message: 'Path to serviceAccountKey.json (optional, for File Sync):',
+        validate: (input: string) => input.length === 0 || fs.existsSync(input) ? true : 'File not found',
+      },
+      {
+        type: 'input',
+        name: 'firebaseBucket',
+        message: 'Firebase Storage bucket (optional):',
+        default: config.get('firebaseBucket', ''),
       },
       {
         type: 'input',
@@ -54,8 +59,9 @@ program
 
     config.set('nexusUrl', answers.nexusUrl);
     config.set('token', answers.token);
-    config.set('serviceAccountPath', path.resolve(answers.serviceAccountPath));
+    config.set('serviceAccountPath', answers.serviceAccountPath ? path.resolve(answers.serviceAccountPath) : '');
     config.set('mountPath', answers.mountPath);
+    config.set('firebaseBucket', answers.firebaseBucket);
 
     console.log(chalk.green('✅ Configuration saved successfully!'));
   });
@@ -69,13 +75,18 @@ program
     const nexusUrl = config.get('nexusUrl');
     const mountPath = config.get('mountPath');
     const serviceAccountPath = config.get('serviceAccountPath');
+    const firebaseBucket = config.get('firebaseBucket');
 
-    console.log('DEBUG: Config loaded from:', config.path);
-    console.log('DEBUG: Config content:', config.store);
-
-    if (!token || !nexusUrl || !serviceAccountPath) {
+    if (!token || !nexusUrl) {
       console.log(chalk.red('❌ Agent not configured. Please run "edu-agent setup" first.'));
       return;
+    }
+    if (!mountPath) {
+      console.log(chalk.red('❌ Mount path missing. Please run "edu-agent setup" again.'));
+      return;
+    }
+    if (!fs.existsSync(mountPath)) {
+      fs.mkdirSync(mountPath, { recursive: true });
     }
 
     // Check for Docker
@@ -88,75 +99,39 @@ program
 
     console.log(chalk.yellow(`🚀 Starting Agent Container with Sync...`));
 
-    // We need to inject the sync script. In a real deb, these would be in /usr/share/edu-agent/
-    // For now, we assume they are relative to this script or we download them/write them.
-    // Let's assume the agent package includes them in dist/sync-service.
-    
-    // Construct the entrypoint script dynamically
-    const entrypointScript = `#!/bin/bash
-# Install dependencies for sync
-pip3 install watchdog firebase-admin > /dev/null 2>&1 &
-
-# Start the Node Worker (Main Process) in background
-node /app/worker/dist/index.js &
-
-# Wait a bit for pip
-sleep 5
-
-# Start Sync Agent (Non-fatal, logged)
-echo "Starting Sync Agent..."
-python3 /app/sync_agent.py > /var/log/sync_agent.log 2>&1 &
-
-# Wait for worker (Main process)
-wait -n
-`;
-    
-    // Write entrypoint and sync script to a temp dir to mount
-    const tmpDir = path.join(os.homedir(), '.edu-agent-tmp');
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-    
-    fs.writeFileSync(path.join(tmpDir, 'entrypoint.sh'), entrypointScript, { mode: 0o755 });
-    try {
-        fs.chmodSync(path.join(tmpDir, 'entrypoint.sh'), '755');
-    } catch(e) {}
-    
-    // Locate the sync agent script
-    // Priority 1: Dev environment (relative)
-    // Priority 2: Production (.deb install path)
-    let syncSrc = path.join(__dirname, '../sync-service/sync_agent.py');
-    if (!fs.existsSync(syncSrc)) {
-        syncSrc = '/usr/lib/edu-agent/sync_agent.py';
-    }
-
-    if (fs.existsSync(syncSrc)) {
-        fs.copyFileSync(syncSrc, path.join(tmpDir, 'sync_agent.py'));
-    } else {
-        console.warn(chalk.yellow('⚠️  Warning: Sync agent script not found. File sync might not work.'));
-        // Create a dummy file to prevent docker crash
-        fs.writeFileSync(path.join(tmpDir, 'sync_agent.py'), 'import time; while True: time.sleep(3600)');
-    }
-
-    const dockerArgs = [
+    const dockerArgs: string[] = [
       'run',
       options.daemon ? '-d' : '-it',
-      '--restart=always',
+    ];
+
+    if (options.daemon) {
+      dockerArgs.push('--restart=always');
+    } else {
+      dockerArgs.push('--rm');
+    }
+
+    dockerArgs.push(
       '--name=edu-worker',
-      // Environment
+      '--network=host',
       '-e', `NEXUS_URL=${nexusUrl}`,
       '-e', `WORKER_TOKEN=${token}`,
       '-e', `WORKER_NAME=${process.env.USER || 'local-user'}`,
-      // Mounts
-      '-v', `${mountPath}:/workspace`,
-      '-v', `${serviceAccountPath}:/app/serviceAccountKey.json`,
-      '-v', `${tmpDir}/entrypoint.sh:/entrypoint.sh`,
-      '-v', `${tmpDir}/sync_agent.py:/app/sync_agent.py`,
-      // Network
-      '--network=host',
-      // Entrypoint override
-      '--entrypoint', '/entrypoint.sh',
-      // Image
-      DOCKER_IMAGE
-    ];
+      '-v', `${mountPath}:/workspace`
+    );
+
+    if (firebaseBucket) {
+      dockerArgs.push('-e', `FIREBASE_BUCKET=${firebaseBucket}`);
+    }
+
+    if (serviceAccountPath) {
+      if (fs.existsSync(serviceAccountPath)) {
+        dockerArgs.push('-v', `${serviceAccountPath}:/app/serviceAccountKey.json:ro`);
+      } else {
+        console.log(chalk.yellow('⚠️  serviceAccountKey.json not found. Sync disabled.'));
+      }
+    }
+
+    dockerArgs.push(DOCKER_IMAGE);
 
     try {
       // Remove existing container if exists
