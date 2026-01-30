@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { TerminalController } from '@/lib/TerminalController';
-import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key } from 'lucide-react';
 
 interface TerminalProps {
   nexusUrl: string;
@@ -283,16 +283,42 @@ const TerminalInner: React.FC<TerminalProps> = ({
                             ) : (
                                 <>
                                     <p>No se detecta el worker en tu máquina.</p>
-                                    <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-left text-xs font-mono space-y-1">
-                                        <p className="text-slate-400">Espacio: <span className="text-slate-200">{workspaceLabel}</span></p>
-                                        <p className="text-slate-400">Codigo: <span className="text-slate-200">{workspaceCode}</span></p>
-                                        <p className="text-slate-400">Ruta: <span className="text-slate-200">{workspacePath}</span></p>
+                                    <div className="space-y-3">
+                                        {/* Token Display */}
+                                        <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-left space-y-2">
+                                            <div className="flex justify-between items-center text-xs font-mono">
+                                                <span className="text-slate-400 font-bold flex items-center gap-2">
+                                                    <Key className="w-3 h-3" /> WORKER_TOKEN (Clave de Asociación)
+                                                </span>
+                                                <button
+                                                    onClick={() => navigator.clipboard.writeText(user.uid)}
+                                                    className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors"
+                                                >
+                                                    <Copy className="w-3 h-3" /> <span className="text-[10px]">Copiar</span>
+                                                </button>
+                                            </div>
+                                            <code className="block w-full bg-black rounded border border-slate-800 p-2 text-yellow-400 text-sm font-mono break-all select-all">
+                                                {user.uid}
+                                            </code>
+                                        </div>
+
+                                        <div className="bg-slate-950/60 border border-slate-800/50 rounded-lg p-2 text-left text-xs font-mono space-y-1 opacity-75">
+                                            <p className="text-slate-500">Espacio: <span className="text-slate-300">{workspaceLabel}</span></p>
+                                            <p className="text-slate-500">Ruta: <span className="text-slate-300">{workspacePath}</span></p>
+                                        </div>
                                     </div>
-                                    <div className="bg-black p-4 rounded text-left font-mono text-sm border border-slate-800">
-                                        <p className="text-emerald-400">$ curl -fsSL {downloadUrl} -o edu-worker.deb</p>
-                                        <p className="text-emerald-400">$ sudo apt install ./edu-worker.deb</p>
-                                        <p className="text-emerald-400">$ sudo nano /etc/edu-worker/worker.env</p>
-                                        <p className="text-emerald-400">$ sudo systemctl restart edu-worker</p>
+
+                                    <div className="bg-black p-4 rounded text-left font-mono text-sm border border-slate-800 overflow-x-auto">
+                                        <p className="text-slate-500 text-xs mb-1"># 1. Descargar e Instalar</p>
+                                        <p className="text-emerald-400 whitespace-nowrap mb-3">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
+                                        
+                                        <p className="text-slate-500 text-xs mb-1"># 2. Configurar Token</p>
+                                        <p className="text-yellow-200 whitespace-pre-wrap mb-3 break-all">
+                                            $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={user.uid}/&apos; /etc/edu-worker/worker.env
+                                        </p>
+                                        
+                                        <p className="text-slate-500 text-xs mb-1"># 3. Reiniciar Servicio</p>
+                                        <p className="text-emerald-400 whitespace-nowrap">$ sudo systemctl restart edu-worker</p>
                                     </div>
                                     <a href={downloadPath} className="text-blue-400 hover:underline flex items-center justify-center gap-2">
                                         <Download className="w-4 h-4" /> Descargar Worker
