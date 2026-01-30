@@ -1,31 +1,8 @@
 #!/usr/bin/env node
 const admin = require("firebase-admin");
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
+const { requireEnv, hashPassword, loadServiceAccount } = require("./utils");
 
-function requireEnv(name) {
-  const value = process.env[name];
-  if (!value) {
-    console.error(`Falta la variable ${name}`);
-    process.exit(1);
-  }
-  return value;
-}
-
-function hashPassword(password) {
-  return crypto.createHash("sha256").update(password).digest("hex");
-}
-
-const serviceAccountPath =
-  process.env.SERVICE_ACCOUNT_PATH || path.resolve("serviceAccountKey.json");
-
-if (!fs.existsSync(serviceAccountPath)) {
-  console.error(`No existe SERVICE_ACCOUNT_PATH: ${serviceAccountPath}`);
-  process.exit(1);
-}
-
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+const serviceAccount = loadServiceAccount();
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
