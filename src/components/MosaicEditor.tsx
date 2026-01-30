@@ -237,6 +237,7 @@ export default function MosaicEditor({
   useEffect(() => {
     if (!usePolling) return;
     const interval = setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return;
         loadDoc();
     }, 5000);
     return () => clearInterval(interval);
