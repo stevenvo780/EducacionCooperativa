@@ -14,12 +14,9 @@ DIST_DIR="$ROOT_DIR/dist"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/DEBIAN" \
-  "$BUILD_DIR/usr/bin" \
-  "$BUILD_DIR/usr/lib/edu-agent"
+  "$BUILD_DIR/usr/bin"
 
 install -m 755 "$ROOT_DIR/bin/edu-agent" "$BUILD_DIR/usr/bin/edu-agent"
-install -m 644 "$ROOT_DIR/sync-service/sync_agent.py" "$BUILD_DIR/usr/lib/edu-agent/sync_agent.py"
-install -m 644 "$ROOT_DIR/sync-service/requirements.txt" "$BUILD_DIR/usr/lib/edu-agent/requirements.txt"
 
 cat > "$BUILD_DIR/DEBIAN/control" << EOF
 Package: edu-agent
@@ -36,7 +33,6 @@ EOF
 
 cat > "$BUILD_DIR/DEBIAN/postinst" << 'EOF'
 #!/bin/bash
-chmod 755 /usr/lib/edu-agent/sync_agent.py
 echo "Edu-Agent instalado. Ejecuta 'edu-agent setup' para configurar."
 EOF
 chmod 755 "$BUILD_DIR/DEBIAN/postinst"
