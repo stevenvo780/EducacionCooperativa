@@ -11,6 +11,8 @@ build/
 develop-eggs/
 dist/
 downloads/
+!public/downloads/
+!public/downloads/*.deb
 eggs/
 .eggs/
 /lib/
@@ -61,11 +63,6 @@ src/app/debug
 out/
 build/
 
-# Next.js
-.next/
-out/
-build/
-
 .env.local
 
 # Worker workspace
@@ -74,11 +71,8 @@ services/worker/workspace/*
 
 # Packaging/build artifacts
 *.deb
+!public/downloads/*.deb
 *.rpm
 *.tsbuildinfo
 terminal-error.png
 nohup.out
-agent/bin/
-agent/deb/
-agent/rpm-build/
-agent/edu-agent_*.deb

@@ -1,17 +1,25 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { TerminalController } from '@/lib/TerminalControllerLazy';
+import { TerminalController } from '@/lib/TerminalController';
 import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download } from 'lucide-react';
 
 interface TerminalProps {
   nexusUrl: string;
+  workspaceId?: string;
+  workspaceName?: string;
+  workspaceType?: 'personal' | 'shared';
 }
 
 type TerminalStatus = 'checking' | 'online' | 'offline' | 'error';
 
-const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
+const TerminalInner: React.FC<TerminalProps> = ({
+  nexusUrl,
+  workspaceId,
+  workspaceName,
+  workspaceType
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<TerminalController | null>(null);
   const { user } = useAuth();
@@ -20,6 +28,20 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
   const [sessionActive, setSessionActive] = useState(false);
   const [hubConnected, setHubConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const lastWorkspaceRef = useRef<string | null>(null);
+
+  const resolvedWorkspaceId = workspaceId || 'personal';
+  const isPersonalWorkspace = workspaceType === 'personal' || resolvedWorkspaceId === 'personal';
+  const workspaceCode = isPersonalWorkspace ? 'personal' : resolvedWorkspaceId;
+  const workspaceLabel = workspaceName || (isPersonalWorkspace ? 'Espacio Personal' : 'Espacio');
+  const workspacePath = isPersonalWorkspace
+    ? '/workspace'
+    : `/workspace/_ws/${resolvedWorkspaceId}`;
+  const sessionPayload = useMemo(() => ({
+    workspaceId: workspaceCode,
+    workspaceName: workspaceLabel,
+    workspaceType: isPersonalWorkspace ? 'personal' : 'shared'
+  }), [workspaceCode, workspaceLabel, isPersonalWorkspace]);
 
   useEffect(() => {
     if (!user || controllerRef.current) return;
@@ -170,13 +192,29 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
   }, [sessionActive]);
 
   const handleStart = () => {
-      controllerRef.current?.startSession();
+      controllerRef.current?.startSession(sessionPayload);
   };
+
+  useEffect(() => {
+    const currentWorkspace = workspaceCode;
+    if (!sessionActive || !controllerRef.current) {
+      lastWorkspaceRef.current = currentWorkspace;
+      return;
+    }
+    if (lastWorkspaceRef.current && lastWorkspaceRef.current !== currentWorkspace) {
+      controllerRef.current.startSession(sessionPayload);
+    }
+    lastWorkspaceRef.current = currentWorkspace;
+  }, [sessionActive, workspaceCode, sessionPayload]);
 
   // --- Render UI ---
   if (!user) return <div>Log in required</div>;
 
   const showHubError = status === 'error' || (!hubConnected && status !== 'checking');
+  const downloadPath = '/downloads/edu-worker_1.0.0_amd64.deb';
+  const downloadUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${downloadPath}`
+    : downloadPath;
 
   return (
     <div className="relative w-full h-full bg-black overflow-hidden">
@@ -217,7 +255,7 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
                         {status === 'online'
                             ? 'Asistente Conectado'
                             : status === 'checking'
-                                ? (hubConnected ? 'Buscando agente...' : 'Conectando al hub...')
+                                ? (hubConnected ? 'Buscando worker...' : 'Conectando al hub...')
                                 : showHubError
                                     ? 'No se pudo conectar al hub'
                                     : 'Asistente Desconectado'}
@@ -233,7 +271,7 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
                     ) : status === 'checking' ? (
                         <div className="text-slate-400 text-sm">
                             {hubConnected
-                                ? 'Hub conectado. Esperando que tu agente esté activo.'
+                                ? 'Hub conectado. Esperando que tu worker esté activo.'
                                 : 'Verificando conexión con el servidor.'}
                         </div>
                     ) : (
@@ -247,12 +285,20 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
                                 </div>
                             ) : (
                                 <>
-                                    <p>No se detecta el agente en tu máquina.</p>
-                                    <div className="bg-black p-4 rounded text-left font-mono text-sm border border-slate-800">
-                                        <p className="text-emerald-400">$ edu-agent start -d</p>
+                                    <p>No se detecta el worker en tu máquina.</p>
+                                    <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-left text-xs font-mono space-y-1">
+                                        <p className="text-slate-400">Espacio: <span className="text-slate-200">{workspaceLabel}</span></p>
+                                        <p className="text-slate-400">Codigo: <span className="text-slate-200">{workspaceCode}</span></p>
+                                        <p className="text-slate-400">Ruta: <span className="text-slate-200">{workspacePath}</span></p>
                                     </div>
-                                    <a href="/downloads/edu-agent_1.0.0_amd64.deb" className="text-blue-400 hover:underline flex items-center justify-center gap-2">
-                                        <Download className="w-4 h-4" /> Descargar Instalador
+                                    <div className="bg-black p-4 rounded text-left font-mono text-sm border border-slate-800">
+                                        <p className="text-emerald-400">$ curl -fsSL {downloadUrl} -o edu-worker.deb</p>
+                                        <p className="text-emerald-400">$ sudo apt install ./edu-worker.deb</p>
+                                        <p className="text-emerald-400">$ sudo nano /etc/edu-worker/worker.env</p>
+                                        <p className="text-emerald-400">$ sudo systemctl restart edu-worker</p>
+                                    </div>
+                                    <a href={downloadPath} className="text-blue-400 hover:underline flex items-center justify-center gap-2">
+                                        <Download className="w-4 h-4" /> Descargar Worker
                                     </a>
                                 </>
                             )}
