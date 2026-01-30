@@ -7,6 +7,7 @@ import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File 
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
+import type { DocItem, FolderItem as MosaicFolderItem, ViewMode } from '@/components/MosaicLayout';
 
 // Fix imports for server-side
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -22,20 +23,6 @@ interface Workspace {
   type: 'personal' | 'shared';
 }
 
-interface DocItem {
-  id: string;
-  name: string;
-  type?: 'text' | 'file' | 'folder' | 'terminal';
-  content?: string;
-  url?: string;
-  storagePath?: string;
-  mimeType?: string;
-  folder?: string;
-  updatedAt: any;
-  ownerId: string;
-  workspaceId?: string;
-}
-
 interface FolderItem {
   id: string;
   name: string;
@@ -44,7 +31,6 @@ interface FolderItem {
   kind: 'system' | 'record' | 'virtual';
 }
 
-type ViewMode = 'edit' | 'split' | 'preview';
 type GridMode = 1 | 2 | 4;
 
 interface UploadStatus {
@@ -363,6 +349,27 @@ export default function DashboardPage() {
       });
       setShowMobileSidebar(false);
       setShowTerminal(false);
+  };
+
+  const openFileExplorer = async () => {
+      // Create a unique ID for the file explorer panel
+      const newFilesId = `files-${Date.now()}`;
+      const newFilesItem: DocItem = {
+          id: newFilesId,
+          name: 'Archivos',
+          type: 'files',
+          updatedAt: new Date(),
+          ownerId: user?.uid || 'system'
+      };
+      
+      setOpenTabs(prev => [...prev, newFilesItem]);
+      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+      setMosaicNode(current => {
+          const leaves = getLeaves(current);
+          if (leaves.includes(newFilesId)) return current;
+          return createBalancedTreeFromLeaves([...leaves, newFilesId]);
+      });
+      setShowMobileSidebar(false);
   };
 
   const closeTabById = useCallback(async (docId: string) => {
@@ -1469,6 +1476,16 @@ export default function DashboardPage() {
                     <span className="font-bold flex-1">Mi Asistente +</span>
                 </div>
 
+                {/* Explorador de Archivos Button */}
+                <div 
+                    onClick={openFileExplorer}
+                    className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition text-surface-300 hover:bg-surface-700/50 group`}
+                    title="Añadir Explorador de Archivos al Grid"
+                >
+                    <Folder className={`w-5 h-5 text-emerald-400 group-hover:text-white transition-colors`} />
+                    <span className="font-bold flex-1">Explorador +</span>
+                </div>
+
                 <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-surface-500 uppercase mt-4">
                     <ChevronDown className="w-3 h-3" />
                     {currentWorkspace?.name}
@@ -1577,9 +1594,22 @@ export default function DashboardPage() {
                         onChange={setMosaicNode}
                         openTabs={openTabs}
                         docs={docs}
+                        folders={folders}
                         docModes={docModes}
                         onSetDocMode={setDocMode}
                         onCloseTab={closeTabById}
+                        onSelectDoc={openDocument}
+                        onCreateFile={() => createDoc(undefined, activeFolder)}
+                        onCreateFolder={() => createFolder()}
+                        onUploadFile={() => {
+                            setUploadTargetFolder(activeFolder);
+                            fileInputRef.current?.click();
+                        }}
+                        onDeleteDoc={(docId) => {
+                            const doc = docs.find(d => d.id === docId);
+                            if (doc) deleteDocument(doc, { stopPropagation: () => {} } as React.MouseEvent);
+                        }}
+                        currentWorkspaceName={currentWorkspace?.name}
                         nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"}
                    />
                </div>
