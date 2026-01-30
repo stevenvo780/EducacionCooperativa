@@ -91,7 +91,6 @@ export default function MosaicEditor({
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
 
-  // Initial Layout: Editor (Left) | Preview (Right)
   const [layout, setLayout] = useState<MosaicNode<ViewId> | null>(() => getLayoutForMode(resolvedViewMode));
 
   const { user } = useAuth();
@@ -279,9 +278,7 @@ export default function MosaicEditor({
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
-  const insert = (template: string, offset = 0) => {
-      // Simple append for now. In a real app, we'd use a Ref to the CodeMirror instance
-      // to insert at cursor position.
+  const insert = (template: string) => {
       const next = content + template;
       handleContentChange(next);
   };
@@ -507,7 +504,6 @@ export default function MosaicEditor({
 
   return (
     <div className={clsx('flex flex-col h-full bg-slate-950 text-slate-300 relative', embedded && 'editor-embedded')}>
-        {/* Global App Bar */}
         {!embedded && (
           <div className="h-10 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-3">
                <div className="flex items-center gap-3">
@@ -537,7 +533,6 @@ export default function MosaicEditor({
           </div>
         )}
 
-        {/* Mosaic Grid Area */}
         <div className="flex-1 relative overflow-hidden">
                 <Mosaic
                     renderTile={renderTile}

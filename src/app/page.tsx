@@ -10,7 +10,6 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-900 text-white">
-      {/* Navbar */}
       <header className="sticky top-0 z-50 w-full border-b border-surface-600/50 bg-surface-900/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2 font-bold text-xl">
@@ -39,9 +38,7 @@ export default function LandingPage() {
       </header>
 
       <main className="flex-1">
-        {/* Hero Section */}
         <section className="relative py-20 lg:py-32 overflow-hidden">
-            {/* Glow effect */}
             <div className="absolute inset-0 bg-gradient-glow opacity-60" />
             <div className="container mx-auto px-4 text-center relative z-10">
                 <motion.div
@@ -71,7 +68,6 @@ export default function LandingPage() {
             </div>
         </section>
 
-        {/* Features Grid */}
         <section id="features" className="py-20 bg-surface-800/50">
             <div className="container mx-auto px-4">
                 <div className="text-center mb-16">
