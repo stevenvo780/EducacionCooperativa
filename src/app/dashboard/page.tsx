@@ -29,6 +29,7 @@ interface FolderItem {
   path: string;
   parentPath: string;
   kind: 'system' | 'record' | 'virtual';
+  docId?: string;
 }
 
 type GridMode = 1 | 2 | 4;
@@ -201,7 +202,7 @@ export default function DashboardPage() {
     });
 
     const folderMap = new Map<string, FolderItem>();
-    const ensureNode = (path: string, kind: FolderItem['kind']) => {
+    const ensureNode = (path: string, kind: FolderItem['kind'], docId?: string) => {
       const normalized = normalizePath(path);
       if (!normalized) return;
       const existing = folderMap.get(normalized);
@@ -215,14 +216,20 @@ export default function DashboardPage() {
           path: normalized,
           parentPath,
           kind,
+          docId,
         });
         return;
       }
 
       const priority: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+      const next = { ...existing };
       if (priority[kind] < priority[existing.kind]) {
-        folderMap.set(normalized, { ...existing, kind });
+        next.kind = kind;
       }
+      if (docId && !next.docId) {
+        next.docId = docId;
+      }
+      folderMap.set(normalized, next);
     };
 
     const ensureAncestors = (path: string) => {
@@ -243,7 +250,7 @@ export default function DashboardPage() {
       const name = (folderDoc.name || 'Carpeta').trim() || 'Carpeta';
       const fullPath = parentPath ? `${parentPath}/${name}` : name;
       ensureAncestors(parentPath);
-      ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record');
+      ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record', folderDoc.id);
     });
 
     normalizedFileDocs.forEach(docItem => {
@@ -1140,37 +1147,113 @@ export default function DashboardPage() {
       await moveDocumentToFolder(docId, folderName);
   };
 
+  const isWithinFolder = (candidate: string, folderPath: string) => {
+      if (!candidate) return false;
+      return candidate === folderPath || candidate.startsWith(`${folderPath}/`);
+  };
+
+  const deleteDocRecords = async (docIds: string[], label: string) => {
+      const uniqueIds = Array.from(new Set(docIds)).filter(Boolean);
+      if (uniqueIds.length === 0) return;
+      try {
+        setDeletingIds(prev => {
+            const next = { ...prev };
+            uniqueIds.forEach(id => {
+                next[id] = true;
+            });
+            return next;
+        });
+        if (deleteStatusTimer.current) {
+            clearTimeout(deleteStatusTimer.current);
+        }
+        setDeleteStatus({ phase: 'deleting', name: label });
+
+        const results = await Promise.all(
+            uniqueIds.map(async id => {
+                try {
+                    const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+                    return { id, ok: res.ok };
+                } catch {
+                    return { id, ok: false };
+                }
+            })
+        );
+
+        const failed = results.filter(result => !result.ok).map(result => result.id);
+        const succeeded = results.filter(result => result.ok).map(result => result.id);
+
+        if (succeeded.length > 0) {
+            setDocs(prev => prev.filter(item => !succeeded.includes(item.id)));
+            succeeded.forEach(id => closeTabById(id));
+        }
+        await fetchDocs();
+
+        if (failed.length > 0) {
+            console.error("Error deleting", failed);
+            setDeleteStatus({ phase: 'error', name: label, error: 'Error al eliminar' });
+            alert("Error al eliminar");
+        } else {
+            setDeleteStatus({ phase: 'done', name: label });
+        }
+        scheduleDeleteStatusClear();
+      } finally {
+        setDeletingIds(prev => {
+            const next = { ...prev };
+            uniqueIds.forEach(id => {
+                delete next[id];
+            });
+            return next;
+        });
+      }
+  };
+
+  const deleteItems = async ({ docIds, folderPaths }: { docIds: string[]; folderPaths: string[] }) => {
+      const filteredFolderPaths = folderPaths
+          .map(path => normalizePath(path))
+          .filter(path => path && path !== DEFAULT_FOLDER_NAME);
+
+      if (filteredFolderPaths.length !== folderPaths.length) {
+          alert('No se puede eliminar la carpeta raíz.');
+      }
+
+      const folderDocIds = new Set<string>();
+      const docIdsFromFolders = new Set<string>();
+
+      filteredFolderPaths.forEach(folderPath => {
+          folders.forEach(folder => {
+              if (folder.docId && isWithinFolder(folder.path, folderPath)) {
+                  folderDocIds.add(folder.docId);
+              }
+          });
+          docs.forEach(doc => {
+              const docFolder = normalizeFolderPath(doc.folder);
+              if (isWithinFolder(docFolder, folderPath)) {
+                  docIdsFromFolders.add(doc.id);
+              }
+          });
+      });
+
+      const allDocIds = Array.from(new Set([...docIds, ...folderDocIds, ...docIdsFromFolders]));
+      if (allDocIds.length === 0) return;
+
+      const label = allDocIds.length === 1 ? 'Elemento' : `${allDocIds.length} elementos`;
+      if (!confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`)) return;
+      await deleteDocRecords(allDocIds, label);
+  };
+
+  const deleteFolder = async (folder: FolderItem) => {
+      if (folder.path === DEFAULT_FOLDER_NAME || folder.kind === 'system') {
+          alert('No se puede eliminar la carpeta raíz.');
+          return;
+      }
+      await deleteItems({ docIds: [], folderPaths: [folder.path] });
+  };
+
   const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
       e.stopPropagation();
       if (deletingIds[docItem.id]) return;
       if (!confirm('¿Estás seguro de que quieres eliminar este elemento?')) return;
-      try {
-        setDeletingIds(prev => ({ ...prev, [docItem.id]: true }));
-        if (deleteStatusTimer.current) {
-            clearTimeout(deleteStatusTimer.current);
-        }
-        setDeleteStatus({ phase: 'deleting', name: docItem.name });
-        const res = await fetch(`/api/documents/${docItem.id}`, { method: 'DELETE' });
-        if (!res.ok) {
-            throw new Error('API delete failed');
-        }
-        setDocs(prev => prev.filter(item => item.id !== docItem.id));
-        closeTabById(docItem.id);
-        await fetchDocs();
-        setDeleteStatus({ phase: 'done', name: docItem.name });
-        scheduleDeleteStatusClear();
-      } catch (e) {
-        console.error("Error deleting", e);
-        setDeleteStatus({ phase: 'error', name: docItem.name, error: 'Error al eliminar' });
-        scheduleDeleteStatusClear();
-        alert("Error al eliminar");
-      } finally {
-        setDeletingIds(prev => {
-            const next = { ...prev };
-            delete next[docItem.id];
-            return next;
-        });
-      }
+      await deleteDocRecords([docItem.id], docItem.name);
   };
 
   const inviteMember = async () => {
@@ -1605,10 +1688,20 @@ export default function DashboardPage() {
                             setUploadTargetFolder(activeFolder);
                             fileInputRef.current?.click();
                         }}
+                        onUploadFolder={() => {
+                            setUploadTargetFolder(activeFolder);
+                            folderInputRef.current?.click();
+                        }}
                         onDeleteDoc={(docId) => {
                             const doc = docs.find(d => d.id === docId);
                             if (doc) deleteDocument(doc, { stopPropagation: () => {} } as React.MouseEvent);
                         }}
+                        onDeleteFolder={deleteFolder}
+                        onDeleteItems={deleteItems}
+                        onDuplicateDoc={copyDocument}
+                        onMoveDoc={moveDocumentToFolder}
+                        activeFolder={activeFolder}
+                        onActiveFolderChange={setActiveFolder}
                         currentWorkspaceName={currentWorkspace?.name}
                         nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"}
                    />
