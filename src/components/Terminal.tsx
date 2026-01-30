@@ -39,12 +39,22 @@ const Terminal: React.FC<TerminalProps> = ({
 
   useEffect(() => {
       if (activeSessionId && containerRef.current && controller) {
-          try {
-              controller.mount(containerRef.current);
-              controller.fit();
-          } catch (e) {
-              console.error('Error mounting terminal', e);
-          }
+          // Wait for container to have dimensions
+          const container = containerRef.current;
+          const checkAndMount = () => {
+              if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+                  try {
+                      controller.mount(container);
+                  } catch (e) {
+                      console.error('Error mounting terminal', e);
+                  }
+              } else {
+                  // Retry after layout settles
+                  requestAnimationFrame(checkAndMount);
+              }
+          };
+          // Initial delay to let React render complete
+          setTimeout(checkAndMount, 50);
       }
   }, [activeSessionId, controller]);
 
@@ -83,7 +93,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   if (activeSessionId) {
       return (
-        <div className="h-full flex flex-col bg-black relative overflow-hidden group">
+        <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
             <div className="absolute top-4 right-4 z-10 flex gap-2 pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -94,7 +104,11 @@ const Terminal: React.FC<TerminalProps> = ({
                     SESIÓN {activeSessionId.slice(-4)}
                 </div>
             </div>
-            <div ref={containerRef} className="flex-1 min-h-0 bg-black" />
+            <div
+                ref={containerRef}
+                className="flex-1 min-h-0 w-full bg-black"
+                style={{ minHeight: '200px', minWidth: '300px' }}
+            />
         </div>
       );
   }
