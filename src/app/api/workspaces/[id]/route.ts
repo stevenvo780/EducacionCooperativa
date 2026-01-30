@@ -32,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
       await wsRef.update({
         members: FieldValue.arrayUnion(userId),
-        pendingInvites: FieldValue.arrayRemove(email),
+        pendingInvites: FieldValue.arrayRemove(email)
       });
       return NextResponse.json({ status: 'accepted' });
     }

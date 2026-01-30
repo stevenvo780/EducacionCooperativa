@@ -25,7 +25,7 @@ export default function LoginPage() {
         await registerWithEmail(email, password);
       }
     } catch (err: any) {
-      setError(err.message || "Ocurrió un error");
+      setError(err.message || 'Ocurrió un error');
     } finally {
       setLoading(false);
     }
@@ -41,7 +41,7 @@ export default function LoginPage() {
     } finally {
         setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
@@ -69,10 +69,10 @@ export default function LoginPage() {
             <div className="p-8">
                 <div className="mb-6 text-center">
                     <h2 className="text-2xl font-bold text-white">
-                        {isLogin ? "Bienvenido de nuevo" : "Crea tu cuenta"}
+                        {isLogin ? 'Bienvenido de nuevo' : 'Crea tu cuenta'}
                     </h2>
                     <p className="text-sm text-surface-400 mt-2">
-                        {isLogin ? "Accede a tus documentos y continua editando" : "Empieza a gestionar tus textos en griego"}
+                        {isLogin ? 'Accede a tus documentos y continua editando' : 'Empieza a gestionar tus textos en griego'}
                     </p>
                 </div>
 
@@ -126,14 +126,14 @@ export default function LoginPage() {
                         disabled={loading}
                         className="w-full bg-gradient-mandy text-white font-semibold py-2.5 rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-mandy-500/20"
                     >
-                        {loading ? "Procesando..." : (isLogin ? "Entrar" : "Crear cuenta")}
+                        {loading ? 'Procesando...' : (isLogin ? 'Entrar' : 'Crear cuenta')}
                     </button>
                 </form>
 
                 <div className="my-6 flex items-center justify-between">
-                    <span className="h-px w-full bg-surface-600/50"></span>
+                    <span className="h-px w-full bg-surface-600/50" />
                     <span className="px-3 text-xs text-surface-500 font-medium">O</span>
-                    <span className="h-px w-full bg-surface-600/50"></span>
+                    <span className="h-px w-full bg-surface-600/50" />
                 </div>
 
                 <button

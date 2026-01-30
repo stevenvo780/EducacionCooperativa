@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -23,7 +23,7 @@ const TerminalInner: React.FC<TerminalProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<TerminalController | null>(null);
   const { user } = useAuth();
-  
+
   const [status, setStatus] = useState<TerminalStatus>('checking');
   const [sessionActive, setSessionActive] = useState(false);
   const [hubConnected, setHubConnected] = useState(false);
@@ -62,7 +62,7 @@ const TerminalInner: React.FC<TerminalProps> = ({
 
     const initAndConnect = async () => {
         const controller = new TerminalController(nexusUrl);
-        
+
         // Initialize (lazy load xterm)
         const ok = await controller.initialize();
         if (!ok || cancelled) {
@@ -71,9 +71,9 @@ const TerminalInner: React.FC<TerminalProps> = ({
             setErrorMessage('No se pudo inicializar el terminal.');
             return;
         }
-        
+
         controllerRef.current = controller;
-        
+
         // Load CSS dynamically
         const link = document.createElement('link');
         link.rel = 'stylesheet';
@@ -163,11 +163,9 @@ const TerminalInner: React.FC<TerminalProps> = ({
     };
   }, [nexusUrl, user]);
 
-  // Mount Xterm to DOM when session becomes active and div is rendered
   useEffect(() => {
       if (sessionActive && containerRef.current && controllerRef.current) {
           try {
-              // Check if already mounted (xterm element exists)
               if (!containerRef.current.hasChildNodes()) {
                   controllerRef.current.mount(containerRef.current);
               }
@@ -222,10 +220,10 @@ const TerminalInner: React.FC<TerminalProps> = ({
             className={`absolute inset-0 ${sessionActive ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none'}`}
             style={{ minHeight: '100%' }}
         >
-            <div 
-                ref={containerRef} 
-                className="w-full h-full terminal-container" 
-                style={{ 
+            <div
+                ref={containerRef}
+                className="w-full h-full terminal-container"
+                style={{
                     height: '100%',
                     minHeight: '300px'
                 }}
@@ -250,7 +248,7 @@ const TerminalInner: React.FC<TerminalProps> = ({
                             {status !== 'online' && status !== 'checking' && <AlertCircle className="w-12 h-12 text-red-500" />}
                         </div>
                     </div>
-                    
+
                     <h2 className="text-2xl font-bold text-white">
                         {status === 'online'
                             ? 'Asistente Conectado'
@@ -262,7 +260,7 @@ const TerminalInner: React.FC<TerminalProps> = ({
                     </h2>
 
                     {status === 'online' ? (
-                        <button 
+                        <button
                             onClick={handleStart}
                             className="px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-lg flex items-center gap-2 mx-auto transition-all shadow-lg hover:shadow-emerald-900/20"
                         >

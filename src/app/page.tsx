@@ -57,9 +57,9 @@ export default function LandingPage() {
                         Crea espacios de trabajo, gestiona documentos y estudia en equipo. Edita textos y comparte conocimiento en tiempo real.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                        <Link href={user ? "/dashboard" : "/login"}>
+                        <Link href={user ? '/dashboard' : '/login'}>
                             <button className="flex items-center gap-2 bg-gradient-mandy text-white px-8 py-4 rounded-lg font-semibold text-lg hover:opacity-90 transition shadow-lg shadow-mandy-500/25 transform hover:-translate-y-1">
-                                {user ? "Ir a mis espacios" : "Comenzar gratis"}
+                                {user ? 'Ir a mis espacios' : 'Comenzar gratis'}
                                 <ArrowRight className="w-5 h-5" />
                             </button>
                         </Link>
@@ -81,9 +81,9 @@ export default function LandingPage() {
 
                 <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
                     {[
-                        { icon: Edit3, title: "Editor Markdown", desc: "Soporte nativo para escritura poltónica y formatos académicos." },
-                        { icon: Cloud, title: "Sincronización Cloud", desc: "Tus textos guardados automáticamente en la nube, accesibles desde donde sea." },
-                        { icon: Users, title: "Tiempo Real", desc: "Colabora con compañeros o profesores en el mismo documento simultáneamente." },
+                        { icon: Edit3, title: 'Editor Markdown', desc: 'Soporte nativo para escritura poltónica y formatos académicos.' },
+                        { icon: Cloud, title: 'Sincronización Cloud', desc: 'Tus textos guardados automáticamente en la nube, accesibles desde donde sea.' },
+                        { icon: Users, title: 'Tiempo Real', desc: 'Colabora con compañeros o profesores en el mismo documento simultáneamente.' }
                     ].map((feature, i) => (
                         <motion.div
                             key={i}
