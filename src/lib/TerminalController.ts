@@ -123,10 +123,13 @@ export class TerminalController {
 
     this.container = container;
 
-    // Only open if not already opened
-    if (!this.mounted) {
-      this.term.open(container);
-      this.mounted = true;
+    // If already mounted, re-parent the element
+    if (this.mounted && this.term.element) {
+        container.appendChild(this.term.element);
+        this.fit();
+    } else if (!this.mounted) {
+        this.term.open(container);
+        this.mounted = true;
     }
 
     // Delay fit to allow DOM to settle

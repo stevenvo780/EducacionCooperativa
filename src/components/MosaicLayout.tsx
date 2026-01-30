@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
 import { X, Pencil, Eye, Columns, Terminal as TerminalIcon, FileText, Folder } from 'lucide-react';
@@ -138,7 +138,11 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       </div>
   ), [renderCloseControl, onSetDocMode]);
 
-  const renderTile = (id: string, path: MosaicPath) => {
+  const fileExplorerDocs = useMemo(() => {
+      return docs.filter(d => d.type !== 'terminal' && d.type !== 'files');
+  }, [docs]);
+
+  const renderTile = useCallback((id: string, path: MosaicPath) => {
     const doc = openTabs.find(t => t.id === id) || docs.find(d => d.id === id);
     if (!doc) return <div className="p-4 text-surface-400">Documento no encontrado: {id}</div>;
 
@@ -181,7 +185,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       />
                   ) : isFileExplorer ? (
                       <FileExplorer
-                        docs={docs.filter(d => d.type !== 'terminal' && d.type !== 'files')}
+                        docs={fileExplorerDocs}
                         folders={folders}
                         onSelectDoc={onSelectDoc}
                         onCreateFile={onCreateFile}
@@ -204,7 +208,13 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             </div>
         </MosaicWindow>
     );
-  };
+  }, [
+    openTabs, docs, docModes, renderDocModeControls, renderCloseControl, nexusUrl, 
+    currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, folders,
+    onSelectDoc, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
+    onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc,
+    activeFolder, onActiveFolderChange, fileExplorerDocs
+  ]);
 
   return (
     <Mosaic<string>
