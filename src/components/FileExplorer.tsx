@@ -191,7 +191,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       setActiveFolder(fallback);
       onActiveFolderChange?.(fallback);
     }
-  }, [folders, folderChildrenMap, activeFolder]);
+  }, [folders, folderChildrenMap, activeFolder, onActiveFolderChange]);
 
   useEffect(() => {
     setSelectedKeys(new Set());

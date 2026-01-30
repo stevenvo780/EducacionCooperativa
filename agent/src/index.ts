@@ -13,6 +13,11 @@ const config = new Conf({ projectName: 'edu-agent' });
 const DEFAULT_NEXUS_URL = 'http://localhost:3002'; 
 const DOCKER_IMAGE = 'ghcr.io/educacioncooperativa/worker:latest';
 
+const getConfigString = (key: string): string => {
+  const value = config.get(key);
+  return typeof value === 'string' ? value : '';
+};
+
 program
   .name('edu-agent')
   .description('Education Cooperative Local Agent Manager')
@@ -71,11 +76,11 @@ program
   .description('Start the assistant in a Docker container')
   .option('-d, --daemon', 'Run in background', false)
   .action(async (options) => {
-    const token = config.get('token');
-    const nexusUrl = config.get('nexusUrl');
-    const mountPath = config.get('mountPath');
-    const serviceAccountPath = config.get('serviceAccountPath');
-    const firebaseBucket = config.get('firebaseBucket');
+    const token = getConfigString('token');
+    const nexusUrl = getConfigString('nexusUrl');
+    const mountPath = getConfigString('mountPath');
+    const serviceAccountPath = getConfigString('serviceAccountPath');
+    const firebaseBucket = getConfigString('firebaseBucket');
 
     if (!token || !nexusUrl) {
       console.log(chalk.red('❌ Agent not configured. Please run "edu-agent setup" first.'));
@@ -135,7 +140,11 @@ program
 
     try {
       // Remove existing container if exists
-      try { await execa('docker', ['rm', '-f', 'edu-worker']); } catch {}
+      try {
+        await execa('docker', ['rm', '-f', 'edu-worker']);
+      } catch (err) {
+        void err;
+      }
 
       if (options.daemon) {
         await execa('docker', dockerArgs);
@@ -145,8 +154,9 @@ program
         const subprocess = execa('docker', dockerArgs, { stdio: 'inherit' });
         await subprocess;
       }
-    } catch (e: any) {
-      console.error(chalk.red('Failed to start Docker container:'), e.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error(chalk.red('Failed to start Docker container:'), message);
     }
   });
 
