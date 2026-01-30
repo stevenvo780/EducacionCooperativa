@@ -79,16 +79,17 @@ const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspac
 
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
-  const { sessions, activeSessionId, selectSession, createSession, status: connectionStatus, initialize } = useTerminal();
+  const { sessions, activeSessionId, selectSession, createSession, status: connectionStatus, initialize, isCreatingSession } = useTerminal();
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const router = useRouter();
 
-  // Initialize Terminal
+  // Initialize Terminal only when user is available
   useEffect(() => {
+    if (!user) return;
     const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3010';
     initialize(nexusUrl);
-  }, [initialize]);
+  }, [initialize, user]);
 
   // Workspace State
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -1542,27 +1543,34 @@ export default function DashboardPage() {
                             MI ASISTENTE
                         </span>
                         <button
-                             disabled={connectionStatus !== 'online'}
+                             disabled={connectionStatus !== 'online' || isCreatingSession}
                              onClick={() => {
                                 if (!currentWorkspace) return;
                                 const wsId = currentWorkspace.id === 'personal' ? 'personal' : currentWorkspace.id;
                                 createSession(wsId, currentWorkspace.type, `Sesión ${sessions.length + 1}`);
                              }}
                              className={`p-1 rounded transition-colors ${
-                                 connectionStatus === 'online' 
-                                 ? 'hover:bg-surface-700 text-surface-500 hover:text-mandy-400' 
-                                 : 'text-surface-700 cursor-not-allowed'
+                                 connectionStatus === 'online' && !isCreatingSession
+                                     ? 'hover:bg-surface-700 text-surface-500 hover:text-mandy-400'
+                                     : 'text-surface-700 cursor-not-allowed'
                              }`}
-                             title={connectionStatus === 'online' ? "Nueva Sesión" : "Conectando..."}
+                             title={connectionStatus === 'online' ? (isCreatingSession ? 'Creando...' : 'Nueva Sesión') : 'Conectando...'}
                         >
-                            {connectionStatus === 'checking' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                            {connectionStatus === 'checking' || isCreatingSession ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                         </button>
                     </div>
 
                     <div className="mt-1 space-y-0.5">
                         {connectionStatus === 'checking' && <div className="px-3 py-1 text-[10px] text-surface-500 italic">Conectando...</div>}
                         
-                        {sessions.length === 0 && connectionStatus === 'online' && (
+                        {isCreatingSession && (
+                             <div className="px-3 py-1.5 flex items-center gap-2 text-[10px] text-mandy-400">
+                                 <Loader2 className="w-3 h-3 animate-spin" />
+                                 <span>Creando sesión...</span>
+                             </div>
+                        )}
+                        
+                        {sessions.length === 0 && connectionStatus === 'online' && !isCreatingSession && (
                              <div className="px-3 py-1 text-[10px] text-surface-500 italic">Sin sesiones activas</div>
                         )}
                         
