@@ -1703,6 +1703,8 @@ export default function DashboardPage() {
                         activeFolder={activeFolder}
                         onActiveFolderChange={setActiveFolder}
                         currentWorkspaceName={currentWorkspace?.name}
+                        currentWorkspaceId={currentWorkspace?.id}
+                        currentWorkspaceType={currentWorkspace?.type}
                         nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"}
                    />
                </div>

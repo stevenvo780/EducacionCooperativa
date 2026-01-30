@@ -60,6 +60,8 @@ interface MosaicLayoutProps {
   activeFolder?: string;
   onActiveFolderChange?: (folderPath: string) => void;
   currentWorkspaceName?: string;
+  currentWorkspaceId?: string;
+  currentWorkspaceType?: 'personal' | 'shared';
   nexusUrl: string;
 }
 
@@ -85,6 +87,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   activeFolder,
   onActiveFolderChange,
   currentWorkspaceName,
+  currentWorkspaceId,
+  currentWorkspaceType,
   nexusUrl
 }) => {
 
@@ -169,7 +173,12 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         >
             <div className="h-full w-full bg-black relative">
                  {isTerminal ? (
-                      <Terminal nexusUrl={nexusUrl} />
+                      <Terminal
+                        nexusUrl={nexusUrl}
+                        workspaceId={currentWorkspaceId}
+                        workspaceName={currentWorkspaceName}
+                        workspaceType={currentWorkspaceType}
+                      />
                   ) : isFileExplorer ? (
                       <FileExplorer
                         docs={docs.filter(d => d.type !== 'terminal' && d.type !== 'files')}
