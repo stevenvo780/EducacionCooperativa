@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useTerminal } from '@/context/TerminalContext';
 import { useRouter } from 'next/navigation';
 import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -78,6 +79,7 @@ const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspac
 
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
+  const { sessions, activeSessionId, selectSession, createSession, status: connectionStatus } = useTerminal();
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const router = useRouter();
@@ -337,11 +339,19 @@ export default function DashboardPage() {
   }, []);
 
   const openTerminal = async () => {
-      // Create a unique ID for the terminal
-      const newTerminalId = `terminal-${Date.now()}`;
+      const terminalId = 'terminal-main';
+      
+      // If already open, just select it
+      if (openTabs.find(t => t.id === terminalId)) {
+          setSelectedDocId(terminalId);
+          setShowMobileSidebar(false);
+          setShowTerminal(false);
+          return;
+      }
+
       const newTerminalItem: DocItem = {
-          id: newTerminalId,
-          name: 'Terminal',
+          id: terminalId,
+          name: 'Mi Asistente',
           type: 'terminal',
           updatedAt: new Date(),
           ownerId: user?.uid || 'system'
@@ -351,11 +361,12 @@ export default function DashboardPage() {
       const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
           const leaves = getLeaves(current);
-          if (leaves.includes(newTerminalId)) return current;
-          return createBalancedTreeFromLeaves([...leaves, newTerminalId]);
+          if (leaves.includes(terminalId)) return current;
+          return createBalancedTreeFromLeaves([...leaves, terminalId]);
       });
       setShowMobileSidebar(false);
       setShowTerminal(false);
+      setSelectedDocId(terminalId);
   };
 
   const openFileExplorer = async () => {
@@ -1497,142 +1508,122 @@ export default function DashboardPage() {
                 ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
             `}
         >
+            {/* Header: Actions */}
             <div className="p-3 border-b border-surface-600/50 flex justify-between items-center bg-surface-700/30 gap-2">
-                <div
-                    onClick={() => { setSelectedDocId(null); setShowTerminal(false); }}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-surface-700 px-2 py-1 rounded transition flex-1"
-                    title="Volver a Vista Cuadrícula"
-                >
-                    <Folder className="w-4 h-4 text-surface-500" />
-                    <span className="text-xs font-bold text-surface-500 uppercase tracking-wider">Archivos</span>
+                <div className="text-xs font-bold text-surface-500 uppercase tracking-wider pl-2">
+                    Navegador
                 </div>
                 <div className="flex gap-0.5">
-                    <button
-                        onClick={() => createDoc(undefined, activeFolder)}
-                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
-                        title="Nuevo Archivo"
-                    >
-                        <Plus className="w-4 h-4" />
-                    </button>
-                    <button
-                        onClick={() => createFolder()}
-                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
-                        title="Nueva Carpeta"
-                    >
-                        <FolderPlus className="w-4 h-4" />
-                    </button>
-                    <button
-                        onClick={() => {
-                            setUploadTargetFolder(DEFAULT_FOLDER_NAME);
-                            fileInputRef.current?.click();
-                        }}
-                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
-                        title="Subir Archivo"
-                    >
-                        <Upload className="w-4 h-4" />
-                    </button>
-                    <button
-                        onClick={() => {
-                            setUploadTargetFolder(DEFAULT_FOLDER_NAME);
-                            folderInputRef.current?.click();
-                        }}
-                        className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition"
-                        title="Subir Carpeta"
-                    >
-                        <FolderUp className="w-4 h-4" />
-                    </button>
-                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
-                    <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto scrollbar-hide p-2 space-y-0.5">
-                {/* Mi Asistente (Terminal) Button */}
-                <div
-                    onClick={openTerminal}
-                    className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition text-surface-300 hover:bg-surface-700/50 group`}
-                    title="Añadir Terminal al Grid"
-                >
-                    <TerminalIcon className={`w-5 h-5 text-mandy-400 group-hover:text-white transition-colors`} />
-                    <span className="font-bold flex-1">Mi Asistente +</span>
-                </div>
-
-                {/* Explorador de Archivos Button */}
-                <div
-                    onClick={openFileExplorer}
-                    className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition text-surface-300 hover:bg-surface-700/50 group`}
-                    title="Añadir Explorador de Archivos al Grid"
-                >
-                    <Folder className={`w-5 h-5 text-emerald-400 group-hover:text-white transition-colors`} />
-                    <span className="font-bold flex-1">Explorador +</span>
-                </div>
-
-                <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-surface-500 uppercase mt-4">
-                    <ChevronDown className="w-3 h-3" />
-                    {currentWorkspace?.name}
-                </div>
-
-                {docs.length === 0 && (
-                     <div className="px-4 py-8 text-center text-xs text-surface-500">
-                        Vacío
-                     </div>
-                )}
-
-                {docs.map(doc => (
-                    <div
-                        key={doc.id}
-                        onClick={() => openDocument(doc)}
-                        draggable
-                        onDragStart={(e) => handleDocDragStart(e, doc)}
-                        onDragEnd={handleDocDragEnd}
-                        className={`group flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-mandy-500/15 text-mandy-400 font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
-                    >
-                        <div className={`${selectedDocId === doc.id ? 'text-mandy-500' : 'text-surface-500'}`}>
-                            {getIcon(doc)}
-                        </div>
-                        <span className="truncate flex-1">{doc.name}</span>
-                                        <div className="ml-auto flex items-center gap-1.5">
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
-                                                {getDocBadge(doc)}
-                                            </span>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    copyDocument(doc);
-                                                }}
-                                                className="text-surface-500 hover:text-surface-200 p-0.5 transition-opacity opacity-0 group-hover:opacity-100"
-                                                title="Duplicar"
-                                            >
-                                                <Copy className="w-3 h-3" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    promptMoveDocument(doc);
-                                                }}
-                                                className="text-surface-500 hover:text-surface-200 p-0.5 transition-opacity opacity-0 group-hover:opacity-100"
-                                                title="Mover"
-                                            >
-                                                <FolderInput className="w-3 h-3" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => deleteDocument(doc, e)}
-                                                className={`text-surface-500 hover:text-mandy-500 p-0.5 transition-opacity ${deletingIds[doc.id] ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                                                disabled={!!deletingIds[doc.id]}
-                                                title="Eliminar"
-                                            >
-                                {deletingIds[doc.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                            </button>
+                    <button onClick={() => createDoc(undefined, activeFolder)} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nuevo Archivo"><Plus className="w-4 h-4" /></button>
+                    <button onClick={() => createFolder()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nueva Carpeta"><FolderPlus className="w-4 h-4" /></button>
+                    <div className="relative group/up">
+                        <button className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Subir"><Upload className="w-4 h-4" /></button>
+                        <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-600 rounded-lg shadow-xl p-1 hidden group-hover/up:flex flex-col gap-1 z-50">
+                            <button onClick={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); fileInputRef.current?.click(); }} className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"><Upload className="w-3 h-3" /> Archivos</button>
+                            <button onClick={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); folderInputRef.current?.click(); }} className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"><FolderUp className="w-3 h-3" /> Carpeta</button>
                         </div>
                     </div>
-                ))}
+                </div>
+                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
+                <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
+            </div>
+
+            <div className="flex-1 overflow-y-auto scrollbar-hide p-2 space-y-4">
+                
+                {/* 1. SECCIÓN ASISTENTE */}
+                <div>
+                     <div className="px-2 py-1 flex items-center justify-between group">
+                        <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
+                            MI ASISTENTE
+                        </span>
+                        <button
+                             onClick={() => {
+                                if (!currentWorkspace) return;
+                                const wsId = currentWorkspace.id === 'personal' ? 'personal' : currentWorkspace.id;
+                                createSession(wsId, currentWorkspace.type, `Sesión ${sessions.length + 1}`);
+                             }}
+                             className="p-1 rounded hover:bg-surface-700 text-surface-500 hover:text-mandy-400 transition-colors"
+                             title="Nueva Sesión"
+                        >
+                            <Plus className="w-3 h-3" />
+                        </button>
+                    </div>
+
+                    <div className="mt-1 space-y-0.5">
+                        {connectionStatus === 'checking' && <div className="px-3 py-1 text-[10px] text-surface-500 italic">Conectando...</div>}
+                        
+                        {sessions.length === 0 && connectionStatus === 'online' && (
+                             <div className="px-3 py-1 text-[10px] text-surface-500 italic">Sin sesiones activas</div>
+                        )}
+                        
+                        {sessions.map(sess => (
+                            <button
+                                key={sess.id}
+                                onClick={() => {
+                                    selectSession(sess.id);
+                                    openTerminal();
+                                }}
+                                className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded-md transition-colors ${
+                                    activeSessionId === sess.id
+                                        ? 'bg-mandy-500/15 text-mandy-400 font-medium'
+                                        : 'text-surface-400 hover:bg-surface-700/50 hover:text-surface-200'
+                                }`}
+                            >
+                                <TerminalIcon className="w-3.5 h-3.5" />
+                                <span className="truncate flex-1 text-left">{sess.name || 'Terminal'}</span>
+                                {activeSessionId === sess.id && <div className="w-1.5 h-1.5 rounded-full bg-mandy-500" />}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* 2. SECCIÓN EXPLORADOR */}
+                <div>
+                    <div className="px-2 py-1 flex items-center justify-between">
+                         <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
+                             ARCHIVOS: {currentWorkspace?.name}
+                        </span>
+                    </div>
+                    
+                    <div className="mt-1 space-y-0.5">
+                        {docs.length === 0 && (
+                            <div className="px-3 py-2 text-center text-xs text-surface-500">
+                                Espacio vacío
+                            </div>
+                        )}
+
+                        {docs.map(doc => (
+                            <div
+                                key={doc.id}
+                                onClick={() => openDocument(doc)}
+                                draggable
+                                onDragStart={(e) => handleDocDragStart(e, doc)}
+                                onDragEnd={handleDocDragEnd}
+                                className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
+                            >
+                                <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
+                                    {getIcon(doc)}
+                                </div>
+                                <span className="truncate flex-1">{doc.name}</span>
+                                <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={(e) => deleteDocument(doc, e)}
+                                        className={`text-surface-500 hover:text-mandy-400 p-0.5`}
+                                        title="Eliminar"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             <div className="p-3 border-t border-surface-600/50 bg-surface-800 text-xs text-surface-500 flex justify-between items-center">
-                <span>{docs.length} items</span>
+                <span>{docs.length} archivos</span>
                 <div className="flex gap-2">
                    <Settings className="w-4 h-4 hover:text-surface-300 cursor-pointer" />
-                   <HelpCircle className="w-4 h-4 hover:text-surface-300 cursor-pointer" />
                 </div>
             </div>
         </div>
