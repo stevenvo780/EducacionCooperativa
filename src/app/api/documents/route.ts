@@ -65,6 +65,19 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const ownerId = searchParams.get('ownerId');
         const workspaceId = searchParams.get('workspaceId');
+        const view = searchParams.get('view');
+        const includeContentParam = searchParams.get('includeContent');
+        const excludeContentParam = searchParams.get('excludeContent');
+        const fieldsParam = searchParams.get('fields');
+
+        const parseBoolean = (value: string | null) => value === '1' || value === 'true' || value === 'yes';
+        const shouldIncludeContent = (() => {
+            if (excludeContentParam && parseBoolean(excludeContentParam)) return false;
+            if (view === 'metadata' || view === 'list') return false;
+            if (includeContentParam !== null) return parseBoolean(includeContentParam);
+            if (view === 'full') return true;
+            return true;
+        })();
 
         let query: FirebaseFirestore.Query = adminDb.collection('documents');
 
@@ -75,8 +88,37 @@ export async function GET(req: NextRequest) {
              query = query.where('workspaceId', '==', workspaceId);
         }
 
+        if (!shouldIncludeContent) {
+            const defaultFields = [
+                'name',
+                'type',
+                'mimeType',
+                'folder',
+                'workspaceId',
+                'ownerId',
+                'url',
+                'storagePath',
+                'updatedAt',
+                'createdAt',
+                'size'
+            ];
+            const fields = fieldsParam
+                ? fieldsParam.split(',').map(part => part.trim()).filter(Boolean)
+                : defaultFields;
+            const uniqueFields = Array.from(new Set(fields));
+            if (uniqueFields.length > 0) {
+                query = query.select(...uniqueFields);
+            }
+        }
+
         const snapshot = await query.get();
-        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const docs = snapshot.docs.map(doc => {
+            const data = doc.data() as Record<string, unknown>;
+            if (!shouldIncludeContent && Object.prototype.hasOwnProperty.call(data, 'content')) {
+                delete data.content;
+            }
+            return { id: doc.id, ...data };
+        });
 
         return NextResponse.json(docs);
     } catch (error: any) {
