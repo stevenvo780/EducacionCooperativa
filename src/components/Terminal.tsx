@@ -311,12 +311,12 @@ const TerminalInner: React.FC<TerminalProps> = ({
                                     <div className="bg-black p-4 rounded text-left font-mono text-sm border border-slate-800 overflow-x-auto">
                                         <p className="text-slate-500 text-xs mb-1"># 1. Descargar e Instalar</p>
                                         <p className="text-emerald-400 whitespace-nowrap mb-3">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
-                                        
+
                                         <p className="text-slate-500 text-xs mb-1"># 2. Configurar Token</p>
                                         <p className="text-yellow-200 whitespace-pre-wrap mb-3 break-all">
                                             $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={user.uid}/&apos; /etc/edu-worker/worker.env
                                         </p>
-                                        
+
                                         <p className="text-slate-500 text-xs mb-1"># 3. Reiniciar Servicio</p>
                                         <p className="text-emerald-400 whitespace-nowrap">$ sudo systemctl restart edu-worker</p>
                                     </div>
