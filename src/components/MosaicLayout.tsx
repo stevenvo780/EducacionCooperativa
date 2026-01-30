@@ -35,6 +35,7 @@ export interface FolderItem {
   path: string;
   parentPath: string;
   kind: 'system' | 'record' | 'virtual';
+  docId?: string;
 }
 
 interface MosaicLayoutProps {
@@ -50,7 +51,14 @@ interface MosaicLayoutProps {
   onCreateFile?: () => void;
   onCreateFolder?: () => void;
   onUploadFile?: () => void;
+  onUploadFolder?: () => void;
   onDeleteDoc?: (docId: string) => void;
+  onDeleteFolder?: (folder: FolderItem) => void;
+  onDeleteItems?: (payload: { docIds: string[]; folderPaths: string[] }) => void;
+  onDuplicateDoc?: (doc: DocItem) => void;
+  onMoveDoc?: (docId: string, targetFolder: string) => void;
+  activeFolder?: string;
+  onActiveFolderChange?: (folderPath: string) => void;
   currentWorkspaceName?: string;
   nexusUrl: string;
 }
@@ -68,7 +76,14 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onCreateFile,
   onCreateFolder,
   onUploadFile,
+  onUploadFolder,
   onDeleteDoc,
+  onDeleteFolder,
+  onDeleteItems,
+  onDuplicateDoc,
+  onMoveDoc,
+  activeFolder,
+  onActiveFolderChange,
   currentWorkspaceName,
   nexusUrl
 }) => {
@@ -163,7 +178,14 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         onCreateFile={onCreateFile}
                         onCreateFolder={onCreateFolder}
                         onUploadFile={onUploadFile}
+                        onUploadFolder={onUploadFolder}
                         onDeleteDoc={onDeleteDoc}
+                        onDeleteFolder={onDeleteFolder}
+                        onDeleteItems={onDeleteItems}
+                        onDuplicateDoc={onDuplicateDoc}
+                        onMoveDoc={onMoveDoc}
+                        activeFolder={activeFolder}
+                        onActiveFolderChange={onActiveFolderChange}
                         currentWorkspaceName={currentWorkspaceName}
                         embedded
                       />
