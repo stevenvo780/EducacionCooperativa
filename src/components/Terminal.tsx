@@ -181,10 +181,18 @@ const TerminalInner: React.FC<TerminalProps> = ({ nexusUrl }) => {
   return (
     <div className="relative w-full h-full bg-black overflow-hidden">
         <div
-            className={`absolute inset-0 ${sessionActive ? 'opacity-100' : 'opacity-0 pointer-events-none'} cursor-text`}
-            onClick={() => controllerRef.current?.term.focus()}
+            className={`absolute inset-0 ${sessionActive ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none'}`}
+            style={{ minHeight: '100%' }}
         >
-            <div ref={containerRef} className="w-full h-full" />
+            <div 
+                ref={containerRef} 
+                className="w-full h-full terminal-container" 
+                style={{ 
+                    height: '100%',
+                    minHeight: '300px'
+                }}
+                onClick={() => controllerRef.current?.term?.focus()}
+            />
         </div>
         {!sessionActive && (
             <div className="flex flex-col items-center justify-center h-full p-8 bg-black text-slate-200">
