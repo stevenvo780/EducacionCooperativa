@@ -16,6 +16,7 @@ export interface DocItem {
   id: string;
   name: string;
   type?: 'text' | 'file' | 'folder' | 'terminal' | 'files';
+    sessionId?: string;
   content?: string;
   url?: string;
   folder?: string;
@@ -182,6 +183,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         workspaceId={currentWorkspaceId}
                         workspaceName={currentWorkspaceName}
                         workspaceType={currentWorkspaceType}
+                        sessionId={doc.sessionId || doc.id}
                       />
                   ) : isFileExplorer ? (
                       <FileExplorer
@@ -209,7 +211,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    openTabs, docs, docModes, renderDocModeControls, renderCloseControl, nexusUrl, 
+    openTabs, docs, docModes, renderDocModeControls, renderCloseControl, nexusUrl,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, folders,
     onSelectDoc, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc,

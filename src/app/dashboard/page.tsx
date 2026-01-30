@@ -473,11 +473,15 @@ export default function DashboardPage() {
       };
   }, []);
 
-  const openTerminal = async () => {
-      const terminalId = 'terminal-main';
+  const openTerminal = async (session?: { id: string; name?: string }) => {
+      const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
+      const terminalName = session?.name || 'Mi Asistente';
 
-      // If already open, just select it
+      // If already open, just select and ensure session is active
       if (openTabs.find(t => t.id === terminalId)) {
+          if (session?.id) {
+              selectSession(session.id);
+          }
           setSelectedDocId(terminalId);
           setShowMobileSidebar(false);
           return;
@@ -485,8 +489,9 @@ export default function DashboardPage() {
 
       const newTerminalItem: DocItem = {
           id: terminalId,
-          name: 'Mi Asistente',
+          name: terminalName,
           type: 'terminal',
+          sessionId: session?.id,
           updatedAt: new Date(),
           ownerId: user?.uid || 'system'
       };
@@ -498,6 +503,9 @@ export default function DashboardPage() {
           if (leaves.includes(terminalId)) return current;
           return createBalancedTreeFromLeaves([...leaves, terminalId]);
       });
+      if (session?.id) {
+          selectSession(session.id);
+      }
       setShowMobileSidebar(false);
       setSelectedDocId(terminalId);
   };
@@ -1858,7 +1866,7 @@ export default function DashboardPage() {
                                 key={sess.id}
                                 onClick={() => {
                                     selectSession(sess.id);
-                                    openTerminal();
+                                    openTerminal({ id: sess.id, name: sess.name || 'Mi Asistente' });
                                 }}
                                 className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded-md transition-colors ${
                                     activeSessionId === sess.id
@@ -1943,7 +1951,12 @@ export default function DashboardPage() {
                         {openTabs.map(tab => (
                             <div
                                 key={tab.id}
-                                onClick={() => setSelectedDocId(tab.id)}
+                                onClick={() => {
+                                    setSelectedDocId(tab.id);
+                                    if (tab.type === 'terminal' && tab.sessionId) {
+                                        selectSession(tab.sessionId);
+                                    }
+                                }}
                                 className={`
                                     group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-surface-600/30 select-none
                                     ${selectedDocId === tab.id ? 'bg-surface-900 text-mandy-400 border-t-2 border-t-mandy-500' : 'text-surface-500 hover:bg-surface-700/50'}
