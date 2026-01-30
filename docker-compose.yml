@@ -8,7 +8,7 @@ services:
       - "3010:3010"
     environment:
       - PORT=3010
-      - ALLOWED_ORIGINS=http://localhost:3011,https://visormarkdown-virid.vercel.app
+      - CLIENT_ORIGIN=http://localhost:3011
     networks:
       - app-network
 
@@ -28,17 +28,19 @@ services:
     command: sh -c "npm install && npm run dev"
     networks:
       - app-network
-  edu-worker-test:
+  worker:
     build: 
-      context: ./temp-worker
+      context: ./services/worker
     network_mode: host
+    env_file:
+      - .env.local
     environment:
       - NEXUS_URL=http://localhost:3010
-      - WORKER_TOKEN=21VuZW4cdXd9jGKOgPa5YQegICw1
-      - FIREBASE_BUCKET=udea-filosofia.firebasestorage.app
+      - WORKER_TOKEN=${WORKER_TOKEN:-}
+      - FIREBASE_BUCKET=${FIREBASE_BUCKET:-}
     volumes:
-      - ./temp-worker/worker:/workspace # Mount a folder as the user's workspace
-      - ./temp-worker/serviceAccountKey.json:/app/serviceAccountKey.json
+      - ./services/worker/workspace:/workspace
+      - ./serviceAccountKey.json:/app/serviceAccountKey.json
     depends_on:
       - hub
 

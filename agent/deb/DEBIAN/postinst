@@ -1,3 +1,0 @@
-#!/bin/bash
-chmod 755 /usr/lib/edu-agent/sync_agent.py
-echo "✅ Edu-Agent installed. Run 'edu-agent setup' to configure."

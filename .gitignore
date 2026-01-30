@@ -66,6 +66,19 @@ build/
 out/
 build/
 
-temp-worker
-
 .env.local
+
+# Worker workspace
+services/worker/workspace/*
+!services/worker/workspace/.gitkeep
+
+# Packaging/build artifacts
+*.deb
+*.rpm
+*.tsbuildinfo
+terminal-error.png
+nohup.out
+agent/bin/
+agent/deb/
+agent/rpm-build/
+agent/edu-agent_*.deb
