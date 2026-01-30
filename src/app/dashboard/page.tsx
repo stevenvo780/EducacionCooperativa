@@ -55,6 +55,60 @@ interface DeleteStatus {
 const PERSONAL_WORKSPACE_ID = 'personal';
 const ROOT_FOLDER_PATH = '';
 
+const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (typeof value === 'object') {
+    const candidate = value as { seconds?: number; toDate?: () => Date };
+    if (typeof candidate.seconds === 'number') return candidate.seconds * 1000;
+    if (typeof candidate.toDate === 'function') {
+      const date = candidate.toDate();
+      if (date instanceof Date) return date.getTime();
+    }
+  }
+  return 0;
+};
+
+const areDocsEquivalent = (prev: DocItem[], next: DocItem[]) => {
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i += 1) {
+    const a = prev[i];
+    const b = next[i];
+    if (a.id !== b.id) return false;
+    if (a.name !== b.name) return false;
+    if (a.type !== b.type) return false;
+    if ((a.folder || '') !== (b.folder || '')) return false;
+    if ((a.mimeType || '') !== (b.mimeType || '')) return false;
+    if ((a.url || '') !== (b.url || '')) return false;
+    if ((a.storagePath || '') !== (b.storagePath || '')) return false;
+    if ((a.workspaceId || '') !== (b.workspaceId || '')) return false;
+    if ((a.ownerId || '') !== (b.ownerId || '')) return false;
+    if ((a.size || 0) !== (b.size || 0)) return false;
+    if (getUpdatedAtValue(a.updatedAt) !== getUpdatedAtValue(b.updatedAt)) return false;
+  }
+  return true;
+};
+
+const areFoldersEquivalent = (prev: FolderItem[], next: FolderItem[]) => {
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i += 1) {
+    const a = prev[i];
+    const b = next[i];
+    if (a.id !== b.id) return false;
+    if (a.name !== b.name) return false;
+    if (a.path !== b.path) return false;
+    if (a.parentPath !== b.parentPath) return false;
+    if (a.kind !== b.kind) return false;
+    if ((a.docId || '') !== (b.docId || '')) return false;
+  }
+  return true;
+};
+
 const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspace => ({
   id: data.id,
   name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Sin nombre',
@@ -91,6 +145,7 @@ export default function DashboardPage() {
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
+    const [closedFilesTabByWorkspace, setClosedFilesTabByWorkspace] = useState<Record<string, boolean>>({});
   const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -115,7 +170,13 @@ export default function DashboardPage() {
   const dragCounter = useRef(0);
   const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const docsRef = useRef<DocItem[]>([]);
+  const fetchInFlightRef = useRef<Promise<void> | null>(null);
   const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
+
+  useEffect(() => {
+    docsRef.current = docs;
+  }, [docs]);
 
   const fetchWorkspaces = useCallback(async () => {
     if (!user) return;
@@ -268,13 +329,16 @@ export default function DashboardPage() {
       return (dateB || 0) - (dateA || 0);
     });
 
-    setDocs(normalizedFileDocs);
-    setFolders(folderList);
+    setDocs(prev => (areDocsEquivalent(prev, normalizedFileDocs) ? prev : normalizedFileDocs));
+    setFolders(prev => (areFoldersEquivalent(prev, folderList) ? prev : folderList));
   }, [currentWorkspace]);
 
-  const fetchDocs = useCallback(async () => {
+  const fetchDocs = useCallback(async (options?: { showLoading?: boolean }) => {
     if (!user || !currentWorkspace) return;
-    setLoadingDocs(true);
+    if (fetchInFlightRef.current) return fetchInFlightRef.current;
+    const showLoading = options?.showLoading ?? docsRef.current.length === 0;
+    if (showLoading) setLoadingDocs(true);
+    const fetchPromise = (async () => {
     try {
         const params = new URLSearchParams();
         if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
@@ -291,8 +355,15 @@ export default function DashboardPage() {
         applyDocsSnapshot(fetched);
     } catch (error) {
         console.error('Error fetching docs', error);
+    }
+    })();
+
+    fetchInFlightRef.current = fetchPromise;
+    try {
+      await fetchPromise;
     } finally {
-        setLoadingDocs(false);
+      fetchInFlightRef.current = null;
+      if (showLoading) setLoadingDocs(false);
     }
   }, [user, currentWorkspace, applyDocsSnapshot]);
 
@@ -305,13 +376,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
       if (currentWorkspace && user) {
-          fetchDocs();
+          fetchDocs({ showLoading: true });
       }
   }, [currentWorkspace, user, fetchDocs]);
 
   useEffect(() => {
     if (!currentWorkspace || !user) return;
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchDocs();
     }, 15000);
     return () => clearInterval(interval);
@@ -324,6 +396,7 @@ export default function DashboardPage() {
         setMosaicNode(null);
         setSelectedDocId(null);
         setDocModes({});
+        setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspaceId]: false }));
     }, [currentWorkspaceId]);
 
     // Ensure File Explorer tab is available in mosaic layout
@@ -331,7 +404,8 @@ export default function DashboardPage() {
         if (!currentWorkspace || !user) return;
         const filesTabId = `files-${currentWorkspace.id}`;
         const hasFilesTab = openTabs.some(tab => tab.id === filesTabId);
-        if (hasFilesTab) return;
+        const isClosedForWorkspace = closedFilesTabByWorkspace[currentWorkspace.id];
+        if (hasFilesTab || isClosedForWorkspace) return;
 
         (async () => {
             const newFilesItem: DocItem = {
@@ -351,7 +425,7 @@ export default function DashboardPage() {
             });
             setSelectedDocId(filesTabId);
         })();
-    }, [currentWorkspace, user, openTabs]);
+    }, [currentWorkspace, user, openTabs, closedFilesTabByWorkspace]);
 
   useEffect(() => {
     if (currentWorkspaceId) {
@@ -407,14 +481,26 @@ export default function DashboardPage() {
   };
 
   const closeTabById = useCallback(async (docId: string) => {
-      setOpenTabs(prev => prev.filter(t => t.id !== docId));
+      if (currentWorkspace && docId === `files-${currentWorkspace.id}`) {
+          setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: true }));
+      }
+
+      setOpenTabs(prev => {
+          const next = prev.filter(t => t.id !== docId);
+          if (selectedDocId === docId) {
+              setSelectedDocId(next[next.length - 1]?.id ?? null);
+          }
+          return next;
+      });
       const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
+          if (!current) return null;
           const leaves = getLeaves(current);
           const newLeaves = leaves.filter(leaf => leaf !== docId);
+          if (newLeaves.length === 0) return null;
           return createBalancedTreeFromLeaves(newLeaves);
       });
-  }, []);
+  }, [selectedDocId, currentWorkspace]);
 
   const openDocument = async (doc: DocItem) => {
       if (doc.type === 'folder') return;
@@ -440,6 +526,35 @@ export default function DashboardPage() {
       e.stopPropagation();
       closeTabById(docId);
   };
+
+  const openFilesTab = useCallback(async () => {
+      if (!currentWorkspace || !user) return;
+      const filesTabId = `files-${currentWorkspace.id}`;
+      const newFilesItem: DocItem = {
+          id: filesTabId,
+          name: 'Archivos',
+          type: 'files',
+          updatedAt: new Date(),
+          ownerId: user.uid
+      };
+
+      setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: false }));
+
+      setOpenTabs(prev => {
+          if (prev.some(tab => tab.id === filesTabId)) return prev;
+          return [...prev, newFilesItem];
+      });
+
+      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+      setMosaicNode(current => {
+          const leaves = getLeaves(current);
+          if (leaves.includes(filesTabId)) return current;
+          return createBalancedTreeFromLeaves([...leaves, filesTabId]);
+      });
+
+      setSelectedDocId(filesTabId);
+      setShowMobileSidebar(false);
+  }, [currentWorkspace, user]);
 
   useEffect(() => {
       setDocModes(prev => {
@@ -1543,6 +1658,7 @@ export default function DashboardPage() {
                     Navegador
                 </div>
                 <div className="flex gap-0.5">
+                    <button onClick={() => openFilesTab()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Abrir Explorador"><Folder className="w-4 h-4" /></button>
                     <button onClick={() => createDoc(undefined, activeFolder)} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nuevo Archivo"><Plus className="w-4 h-4" /></button>
                     <button onClick={() => createFolder()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nueva Carpeta"><FolderPlus className="w-4 h-4" /></button>
                     <div className="relative group/up">
@@ -1704,6 +1820,26 @@ export default function DashboardPage() {
                             </div>
                         ))}
                     </div>
+                    <div className="px-3 py-2">
+                        <button
+                            onClick={() => openFilesTab()}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-surface-700 text-surface-200 hover:bg-surface-600 text-xs font-medium transition"
+                        >
+                            <Plus className="w-3.5 h-3.5" /> Abrir archivo
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {openTabs.length === 0 && (
+                <div className="flex items-center justify-between border-b border-surface-600/50 bg-surface-800 px-4 py-2 text-sm text-surface-400">
+                    <span>Sin pestañas abiertas</span>
+                    <button
+                        onClick={() => openFilesTab()}
+                        className="flex items-center gap-1 px-3 py-1 rounded-md bg-surface-700 text-surface-200 hover:bg-surface-600 transition"
+                    >
+                        <Plus className="w-4 h-4" /> Abrir archivos
+                    </button>
                 </div>
             )}
 

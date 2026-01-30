@@ -38,24 +38,42 @@ const Terminal: React.FC<TerminalProps> = ({
   }, [controller, status, nexusUrl, initialize]);
 
   useEffect(() => {
-      if (activeSessionId && containerRef.current && controller) {
-          // Wait for container to have dimensions
-          const container = containerRef.current;
-          const checkAndMount = () => {
-              if (container.offsetWidth > 0 && container.offsetHeight > 0) {
-                  try {
-                      controller.mount(container);
-                  } catch (e) {
-                      console.error('Error mounting terminal', e);
-                  }
-              } else {
-                  // Retry after layout settles
-                  requestAnimationFrame(checkAndMount);
+      if (!activeSessionId || !containerRef.current || !controller) return;
+      const container = containerRef.current;
+      let mounted = false;
+
+      const tryMount = () => {
+          if (mounted) return;
+          if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+              try {
+                  controller.mount(container);
+                  mounted = true;
+              } catch (e) {
+                  console.error('Error mounting terminal', e);
               }
-          };
-          // Initial delay to let React render complete
-          setTimeout(checkAndMount, 50);
+          }
+      };
+
+      tryMount();
+      if (mounted) return;
+
+      const fallbackTimeout = window.setTimeout(tryMount, 100);
+      if (typeof ResizeObserver === 'undefined') {
+          return () => window.clearTimeout(fallbackTimeout);
       }
+
+      const observer = new ResizeObserver(() => {
+          tryMount();
+          if (mounted) {
+              observer.disconnect();
+          }
+      });
+      observer.observe(container);
+
+      return () => {
+          observer.disconnect();
+          window.clearTimeout(fallbackTimeout);
+      };
   }, [activeSessionId, controller]);
 
   useEffect(() => {
