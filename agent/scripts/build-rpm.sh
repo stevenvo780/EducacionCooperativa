@@ -41,20 +41,14 @@ local environment to the Education Cooperative cloud platform.
 
 %install
 mkdir -p %{buildroot}/usr/bin
-mkdir -p %{buildroot}/usr/lib/edu-agent
 
 # Install from the actual source location
 install -m 755 $AGENT_ROOT/bin/edu-agent %{buildroot}/usr/bin/edu-agent
-install -m 644 $AGENT_ROOT/sync-service/sync_agent.py %{buildroot}/usr/lib/edu-agent/
-install -m 644 $AGENT_ROOT/sync-service/requirements.txt %{buildroot}/usr/lib/edu-agent/
 
 %files
 /usr/bin/edu-agent
-/usr/lib/edu-agent/sync_agent.py
-/usr/lib/edu-agent/requirements.txt
 
 %post
-chmod 755 /usr/lib/edu-agent/sync_agent.py
 echo "✅ Edu-Agent installed. Run 'edu-agent setup' to configure."
 
 %changelog
