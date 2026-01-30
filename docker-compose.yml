@@ -13,7 +13,7 @@ services:
       - app-network
 
   web:
-    image: node:18-bullseye-slim
+    image: node:20-bullseye-slim
     working_dir: /app
     volumes:
       - ./:/app
@@ -36,7 +36,7 @@ services:
       - .env.local
     environment:
       - NEXUS_URL=http://localhost:3010
-      - WORKER_TOKEN=${WORKER_TOKEN:-}
+      - WORKER_TOKEN=21VuZW4cdXd9jGKOgPa5YQegICw1
       - FIREBASE_BUCKET=${FIREBASE_BUCKET:-}
     volumes:
       - ./services/worker/workspace:/workspace
