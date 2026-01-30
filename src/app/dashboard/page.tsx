@@ -14,6 +14,7 @@ import type { DocItem, FolderItem as MosaicFolderItem, ViewMode } from '@/compon
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const MosaicLayout = dynamic(() => import('@/components/MosaicLayout'), { ssr: false });
+const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 
 interface Workspace {
   id: string;
@@ -102,6 +103,7 @@ export default function DashboardPage() {
 
   // UI State
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [maximizedTabId, setMaximizedTabId] = useState<string | null>(null);
   const [showTerminal, setShowTerminal] = useState(false);
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
@@ -120,6 +122,7 @@ export default function DashboardPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [loadingDocs, setLoadingDocs] = useState(true);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
@@ -282,6 +285,7 @@ export default function DashboardPage() {
 
   const fetchDocs = useCallback(async () => {
     if (!user || !currentWorkspace) return;
+    setLoadingDocs(true);
     try {
         let url = '/api/documents?';
         if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
@@ -297,6 +301,8 @@ export default function DashboardPage() {
         applyDocsSnapshot(fetched);
     } catch (error) {
         console.error('Error fetching docs', error);
+    } finally {
+        setLoadingDocs(false);
     }
   }, [user, currentWorkspace, applyDocsSnapshot]);
 
@@ -348,9 +354,10 @@ export default function DashboardPage() {
   const openTerminal = async () => {
       const terminalId = 'terminal-main';
       
-      // If already open, just select it
+      // If already open, just select and maximize it
       if (openTabs.find(t => t.id === terminalId)) {
           setSelectedDocId(terminalId);
+          setMaximizedTabId(terminalId);
           setShowMobileSidebar(false);
           setShowTerminal(false);
           return;
@@ -374,6 +381,7 @@ export default function DashboardPage() {
       setShowMobileSidebar(false);
       setShowTerminal(false);
       setSelectedDocId(terminalId);
+      setMaximizedTabId(terminalId);
   };
 
   const openFileExplorer = async () => {
@@ -399,6 +407,8 @@ export default function DashboardPage() {
 
   const closeTabById = useCallback(async (docId: string) => {
       setOpenTabs(prev => prev.filter(t => t.id !== docId));
+      // Clear maximized state if closing the maximized tab
+      setMaximizedTabId(prev => prev === docId ? null : prev);
       const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
           const leaves = getLeaves(current);
@@ -425,6 +435,8 @@ export default function DashboardPage() {
           return createBalancedTreeFromLeaves([...leaves, doc.id]);
       });
       setShowMobileSidebar(false);
+      setSelectedDocId(doc.id);
+      setMaximizedTabId(doc.id);  // Auto-maximize the opened document
   };
 
   const closeTab = (docId: string, e: React.MouseEvent) => {
@@ -1600,11 +1612,19 @@ export default function DashboardPage() {
                     <div className="px-2 py-1 flex items-center justify-between">
                          <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
                              ARCHIVOS: {currentWorkspace?.name}
+                             {loadingDocs && <Loader2 className="w-3 h-3 animate-spin text-surface-500" />}
                         </span>
                     </div>
                     
                     <div className="mt-1 space-y-0.5">
-                        {docs.length === 0 && (
+                        {loadingDocs && docs.length === 0 && (
+                            <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Cargando archivos...
+                            </div>
+                        )}
+                        
+                        {!loadingDocs && docs.length === 0 && (
                             <div className="px-3 py-2 text-center text-xs text-surface-500">
                                 Espacio vacío
                             </div>
@@ -1656,14 +1676,26 @@ export default function DashboardPage() {
                         {openTabs.map(tab => (
                             <div
                                 key={tab.id}
-                                onClick={() => setSelectedDocId(tab.id)}
+                                onClick={() => {
+                                    setSelectedDocId(tab.id);
+                                    // Toggle maximize: if already maximized, restore; if different tab, maximize it
+                                    if (maximizedTabId === tab.id) {
+                                        setMaximizedTabId(null);
+                                    } else if (openTabs.length > 1) {
+                                        setMaximizedTabId(tab.id);
+                                    }
+                                }}
                                 className={`
                                     group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-surface-600/30 select-none
                                     ${selectedDocId === tab.id ? 'bg-surface-900 text-mandy-400 border-t-2 border-t-mandy-500' : 'text-surface-500 hover:bg-surface-700/50'}
+                                    ${maximizedTabId === tab.id ? 'ring-1 ring-mandy-500/50' : ''}
                                 `}
                             >
                                 {getIcon(tab)}
                                 <span className="truncate flex-1">{tab.name}</span>
+                                {maximizedTabId === tab.id && openTabs.length > 1 && (
+                                    <span className="text-[9px] text-mandy-400 px-1 bg-mandy-500/20 rounded">MAX</span>
+                                )}
                                 <button
                                     onClick={(e) => closeTab(tab.id, e)}
                                     className={`p-0.5 rounded-full hover:bg-surface-700 ${selectedDocId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
@@ -1677,7 +1709,61 @@ export default function DashboardPage() {
             )}
 
             {/* Content Area */}
-            {mosaicNode ? (
+            {maximizedTabId && openTabs.find(t => t.id === maximizedTabId) ? (
+               // Maximized single tab view
+               <div className="flex-1 min-h-0 relative bg-black">
+                   {(() => {
+                       const tab = openTabs.find(t => t.id === maximizedTabId);
+                       if (!tab) return null;
+                       if (tab.type === 'terminal') {
+                           return (
+                               <Terminal
+                                   nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3010'}
+                                   workspaceId={currentWorkspace?.id}
+                                   workspaceName={currentWorkspace?.name}
+                                   workspaceType={currentWorkspace?.type}
+                               />
+                           );
+                       }
+                       if (tab.type === 'files') {
+                           return (
+                               <FileExplorer
+                                   docs={docs.filter(d => d.type !== 'terminal' && d.type !== 'files')}
+                                   folders={folders}
+                                   onSelectDoc={(doc) => {
+                                       openDocument(doc);
+                                       setMaximizedTabId(null);
+                                   }}
+                                   onCreateFile={() => createDoc(undefined, activeFolder)}
+                                   onCreateFolder={() => createFolder()}
+                                   onUploadFile={() => {
+                                       setUploadTargetFolder(activeFolder);
+                                       fileInputRef.current?.click();
+                                   }}
+                                   onUploadFolder={() => {
+                                       setUploadTargetFolder(activeFolder);
+                                       folderInputRef.current?.click();
+                                   }}
+                                   onDeleteDoc={(docId) => {
+                                       const doc = docs.find(d => d.id === docId);
+                                       if (doc) deleteDocument(doc, { stopPropagation: () => {} } as React.MouseEvent);
+                                   }}
+                                   onDeleteFolder={deleteFolder}
+                                   onDeleteItems={deleteItems}
+                                   onDuplicateDoc={copyDocument}
+                                   onMoveDoc={moveDocumentToFolder}
+                                   activeFolder={activeFolder}
+                                   onActiveFolderChange={setActiveFolder}
+                                   currentWorkspaceName={currentWorkspace?.name}
+                                   embedded
+                               />
+                           );
+                       }
+                       // Regular document
+                       return <Editor roomId={tab.id} embedded viewMode={docModes[tab.id] ?? 'preview'} />;
+                   })()}
+               </div>
+            ) : mosaicNode ? (
                <div className="flex-1 min-h-0 relative">
                    <MosaicLayout
                         value={mosaicNode}

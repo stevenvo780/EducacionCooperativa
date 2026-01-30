@@ -182,3 +182,72 @@ body {
 .terminal-container .xterm-screen {
   width: 100% !important;
 }
+
+/* React Mosaic dark theme overrides */
+.mosaic-custom-dark {
+  background: transparent !important;
+}
+
+.mosaic-custom-dark .mosaic-root {
+  background: transparent !important;
+}
+
+.mosaic-custom-dark .mosaic-tile {
+  margin: 2px !important;
+}
+
+.mosaic-custom-dark .mosaic-window {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.mosaic-custom-dark .mosaic-window-toolbar {
+  background: #1a1a2e !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  height: 36px !important;
+  padding: 0 8px !important;
+}
+
+.mosaic-custom-dark .mosaic-window-toolbar .mosaic-window-title {
+  color: #e2e8f0 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.mosaic-custom-dark .mosaic-window-body {
+  background: #0a0a0f !important;
+}
+
+.mosaic-custom-dark .mosaic-preview {
+  background: rgba(233, 69, 96, 0.1) !important;
+  border: 2px dashed rgba(233, 69, 96, 0.5) !important;
+  border-radius: 8px !important;
+}
+
+.mosaic-custom-dark .mosaic-split {
+  background: transparent !important;
+}
+
+.mosaic-custom-dark .mosaic-split:hover {
+  background: rgba(233, 69, 96, 0.3) !important;
+}
+
+.mosaic-custom-dark .mosaic-split.-row {
+  width: 6px !important;
+  margin: 0 -3px !important;
+}
+
+.mosaic-custom-dark .mosaic-split.-column {
+  height: 6px !important;
+  margin: -3px 0 !important;
+}
+
+/* Zero state styling */
+.mosaic-custom-dark .mosaic-zero-state {
+  background: transparent !important;
+}
+
+/* Hide default mosaic window buttons if not needed */
+.mosaic-custom-dark .mosaic-default-control {
+  display: none !important;
+}
