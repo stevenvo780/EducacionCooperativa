@@ -18,6 +18,7 @@ import {
   Copy,
   FolderInput
 } from 'lucide-react';
+import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 
 export interface DocItem {
   id: string;
@@ -59,22 +60,6 @@ interface FileExplorerProps {
   activeFolder?: string;
   onActiveFolderChange?: (folderPath: string) => void;
 }
-
-const DEFAULT_FOLDER_NAME = 'No estructurado';
-
-const normalizePath = (value?: string) => {
-  if (!value) return '';
-  return value
-    .split('/')
-    .map(part => part.trim())
-    .filter(Boolean)
-    .join('/');
-};
-
-const normalizeFolderPath = (value?: string) => {
-  const normalized = normalizePath(value);
-  return normalized || DEFAULT_FOLDER_NAME;
-};
 
 const FileExplorer: React.FC<FileExplorerProps> = ({
   docs,
