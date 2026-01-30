@@ -79,10 +79,16 @@ const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspac
 
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
-  const { sessions, activeSessionId, selectSession, createSession, status: connectionStatus } = useTerminal();
+  const { sessions, activeSessionId, selectSession, createSession, status: connectionStatus, initialize } = useTerminal();
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const router = useRouter();
+
+  // Initialize Terminal
+  useEffect(() => {
+    const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3010';
+    initialize(nexusUrl);
+  }, [initialize]);
 
   // Workspace State
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -1161,10 +1167,7 @@ export default function DashboardPage() {
       return candidate === folderPath || candidate.startsWith(`${folderPath}/`);
   };
 
-  const deleteDocRecords = async (docIds: string[], label: string) => {
-      const uniqueIds = Array.from(new Set(docIds)).filter(Boolean);
-      if (uniqueIds.length === 0) return;
-      try {
+  const deleteDocRecords = async (uniqueIds: string[], label: string) => {
         setDeletingIds(prev => {
             const next = { ...prev };
             uniqueIds.forEach(id => {
@@ -1172,40 +1175,42 @@ export default function DashboardPage() {
             });
             return next;
         });
-        if (deleteStatusTimer.current) {
-            clearTimeout(deleteStatusTimer.current);
-        }
-        setDeleteStatus({ phase: 'deleting', name: label });
+        
+        try {
+            if (deleteStatusTimer.current) {
+                clearTimeout(deleteStatusTimer.current);
+            }
+            setDeleteStatus({ phase: 'deleting', name: label });
 
-        const results = await Promise.all(
-            uniqueIds.map(async id => {
-                try {
-                    const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
-                    return { id, ok: res.ok };
-                } catch {
-                    return { id, ok: false };
-                }
-            })
-        );
+            const results = await Promise.all(
+                uniqueIds.map(async id => {
+                    try {
+                        const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+                        return { id, ok: res.ok };
+                    } catch {
+                        return { id, ok: false };
+                    }
+                })
+            );
 
-        const failed = results.filter(result => !result.ok).map(result => result.id);
-        const succeeded = results.filter(result => result.ok).map(result => result.id);
+            const failed = results.filter(result => !result.ok).map(result => result.id);
+            const succeeded = results.filter(result => result.ok).map(result => result.id);
 
-        if (succeeded.length > 0) {
-            setDocs(prev => prev.filter(item => !succeeded.includes(item.id)));
-            succeeded.forEach(id => closeTabById(id));
-        }
-        await fetchDocs();
+            if (succeeded.length > 0) {
+                setDocs(prev => prev.filter(item => !succeeded.includes(item.id)));
+                succeeded.forEach(id => closeTabById(id));
+            }
+            await fetchDocs();
 
-        if (failed.length > 0) {
-            console.error('Error deleting', failed);
-            setDeleteStatus({ phase: 'error', name: label, error: 'Error al eliminar' });
-            alert('Error al eliminar');
-        } else {
-            setDeleteStatus({ phase: 'done', name: label });
-        }
-        scheduleDeleteStatusClear();
-      } finally {
+            if (failed.length > 0) {
+                console.error('Error deleting', failed);
+                setDeleteStatus({ phase: 'error', name: label, error: 'Error al eliminar' });
+                alert('Error al eliminar');
+            } else {
+                setDeleteStatus({ phase: 'done', name: label });
+            }
+            scheduleDeleteStatusClear();
+        } finally {
         setDeletingIds(prev => {
             const next = { ...prev };
             uniqueIds.forEach(id => {
@@ -1537,15 +1542,20 @@ export default function DashboardPage() {
                             MI ASISTENTE
                         </span>
                         <button
+                             disabled={connectionStatus !== 'online'}
                              onClick={() => {
                                 if (!currentWorkspace) return;
                                 const wsId = currentWorkspace.id === 'personal' ? 'personal' : currentWorkspace.id;
                                 createSession(wsId, currentWorkspace.type, `Sesión ${sessions.length + 1}`);
                              }}
-                             className="p-1 rounded hover:bg-surface-700 text-surface-500 hover:text-mandy-400 transition-colors"
-                             title="Nueva Sesión"
+                             className={`p-1 rounded transition-colors ${
+                                 connectionStatus === 'online' 
+                                 ? 'hover:bg-surface-700 text-surface-500 hover:text-mandy-400' 
+                                 : 'text-surface-700 cursor-not-allowed'
+                             }`}
+                             title={connectionStatus === 'online' ? "Nueva Sesión" : "Conectando..."}
                         >
-                            <Plus className="w-3 h-3" />
+                            {connectionStatus === 'checking' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                         </button>
                     </div>
 
