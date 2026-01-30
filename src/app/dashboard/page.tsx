@@ -46,6 +46,21 @@ interface UploadStatus {
   error?: string;
 }
 
+type DialogKind = 'info' | 'error' | 'confirm' | 'input';
+
+interface DialogConfig {
+    type: DialogKind;
+    title: string;
+    message?: string;
+    placeholder?: string;
+    defaultValue?: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    danger?: boolean;
+}
+
+type DialogResult = { confirmed: boolean; value?: string | null };
+
 interface DeleteStatus {
   phase: 'deleting' | 'done' | 'error';
   name?: string;
@@ -146,6 +161,8 @@ export default function DashboardPage() {
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
     const [closedFilesTabByWorkspace, setClosedFilesTabByWorkspace] = useState<Record<string, boolean>>({});
+    const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
+    const [dialogInputValue, setDialogInputValue] = useState('');
   const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -172,6 +189,7 @@ export default function DashboardPage() {
   const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const docsRef = useRef<DocItem[]>([]);
   const fetchInFlightRef = useRef<Promise<void> | null>(null);
+    const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
   const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
 
   useEffect(() => {
@@ -234,7 +252,11 @@ export default function DashboardPage() {
               throw new Error('Failed to accept invite');
           }
           await fetchWorkspaces();
-          alert('¡Te has unido al espacio!');
+          await showDialog({
+              type: 'info',
+              title: 'Invitación aceptada',
+              message: '¡Te has unido al espacio!'
+          });
       } catch (e) {
           console.error('Error accepting', e);
       }
@@ -527,6 +549,33 @@ export default function DashboardPage() {
       closeTabById(docId);
   };
 
+  const showDialog = useCallback((config: DialogConfig) => {
+      return new Promise<DialogResult>((resolve) => {
+          setDialogConfig(config);
+          setDialogInputValue(config.defaultValue ?? '');
+          dialogResolverRef.current = resolve;
+      });
+  }, []);
+
+  const resolveDialog = (result: DialogResult) => {
+      dialogResolverRef.current?.(result);
+      dialogResolverRef.current = null;
+      setDialogConfig(null);
+  };
+
+  const confirmDialog = () => {
+      if (!dialogConfig) {
+          setDialogConfig(null);
+          return;
+      }
+      const value = dialogConfig.type === 'input' ? dialogInputValue.trim() : undefined;
+      resolveDialog({ confirmed: true, value });
+  };
+
+  const cancelDialog = () => {
+      resolveDialog({ confirmed: false, value: null });
+  };
+
   const openFilesTab = useCallback(async () => {
       if (!currentWorkspace || !user) return;
       const filesTabId = `files-${currentWorkspace.id}`;
@@ -606,20 +655,25 @@ export default function DashboardPage() {
   };
 
   const createFolder = async () => {
-      const name = prompt('Nombre de carpeta');
-      if (!name) return;
-      const trimmed = name.trim();
+      const result = await showDialog({
+          type: 'input',
+          title: 'Nueva carpeta',
+          message: 'Ingresa el nombre de la carpeta',
+          placeholder: 'Nombre de carpeta'
+      });
+      if (!result.confirmed) return;
+      const trimmed = (result.value ?? '').trim();
       if (!trimmed) return;
       const parentPath = normalizePath(activeFolder);
       const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
       const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
       if (exists) {
-          alert('La carpeta ya existe');
+          await showDialog({ type: 'info', title: 'La carpeta ya existe', message: fullPath });
           return;
       }
       const created = await createFolderRecord(trimmed, parentPath);
       if (!created) {
-          alert('No se pudo crear la carpeta');
+          await showDialog({ type: 'error', title: 'No se pudo crear la carpeta' });
       }
   };
 
@@ -672,7 +726,7 @@ export default function DashboardPage() {
                   resolvedContent = await res.text();
               } catch (error) {
                   console.error('Error loading content for copy', error);
-                  alert('No se pudo cargar el contenido para copiar.');
+                  await showDialog({ type: 'error', title: 'No se pudo cargar el contenido para copiar.' });
                   return;
               }
           }
@@ -715,13 +769,21 @@ export default function DashboardPage() {
           });
       } catch (error) {
           console.error('Error copying document', error);
-          alert('Error al copiar');
+          await showDialog({ type: 'error', title: 'Error al copiar' });
       }
   };
 
   const promptMoveDocument = async (docItem: DocItem) => {
       const current = normalizeFolderPath(docItem.folder);
-      const target = prompt('Mover a carpeta', current);
+      const result = await showDialog({
+          type: 'input',
+          title: 'Mover a carpeta',
+          message: 'Ingresa la ruta de destino',
+          defaultValue: current,
+          placeholder: 'carpeta/subcarpeta'
+      });
+      if (!result.confirmed) return;
+      const target = (result.value ?? '').trim();
       if (!target) return;
       await moveDocumentToFolder(docItem.id, target);
   };
@@ -1147,7 +1209,7 @@ export default function DashboardPage() {
             error: 'Error al subir'
         } : prev);
         scheduleUploadStatusClear();
-        alert('Error al subir archivo');
+        await showDialog({ type: 'error', title: 'Error al subir archivo' });
     } finally {
         setIsUploading(false);
     }
@@ -1344,7 +1406,7 @@ export default function DashboardPage() {
             if (failed.length > 0) {
                 console.error('Error deleting', failed);
                 setDeleteStatus({ phase: 'error', name: label, error: 'Error al eliminar' });
-                alert('Error al eliminar');
+                await showDialog({ type: 'error', title: 'Error al eliminar' });
             } else {
                 setDeleteStatus({ phase: 'done', name: label });
             }
@@ -1366,7 +1428,7 @@ export default function DashboardPage() {
           .filter(path => path && path !== DEFAULT_FOLDER_NAME);
 
       if (filteredFolderPaths.length !== folderPaths.length) {
-          alert('No se puede eliminar la carpeta raíz.');
+          await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
       }
 
       const folderDocIds = new Set<string>();
@@ -1390,13 +1452,21 @@ export default function DashboardPage() {
       if (allDocIds.length === 0) return;
 
       const label = allDocIds.length === 1 ? 'Elemento' : `${allDocIds.length} elementos`;
-      if (!confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`)) return;
+      const confirmResult = await showDialog({
+          type: 'confirm',
+          title: 'Confirmar eliminación',
+          message: `¿Eliminar ${label}? Esta acción no se puede deshacer.`,
+          confirmLabel: 'Eliminar',
+          cancelLabel: 'Cancelar',
+          danger: true
+      });
+      if (!confirmResult.confirmed) return;
       await deleteDocRecords(allDocIds, label);
   };
 
   const deleteFolder = async (folder: FolderItem) => {
       if (folder.path === DEFAULT_FOLDER_NAME || folder.kind === 'system') {
-          alert('No se puede eliminar la carpeta raíz.');
+          await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
           return;
       }
       await deleteItems({ docIds: [], folderPaths: [folder.path] });
@@ -1405,7 +1475,15 @@ export default function DashboardPage() {
   const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
       e.stopPropagation();
       if (deletingIds[docItem.id]) return;
-      if (!confirm('¿Estás seguro de que quieres eliminar este elemento?')) return;
+      const confirmResult = await showDialog({
+          type: 'confirm',
+          title: 'Eliminar elemento',
+          message: 'Esta acción no se puede deshacer.',
+          confirmLabel: 'Eliminar',
+          cancelLabel: 'Cancelar',
+          danger: true
+      });
+      if (!confirmResult.confirmed) return;
       await deleteDocRecords([docItem.id], docItem.name);
   };
 
@@ -1423,12 +1501,11 @@ export default function DashboardPage() {
          if (!res.ok) {
              throw new Error('Failed to invite member');
          }
-
-         alert(`Invitación enviada a ${inviteEmail}`);
+         await showDialog({ type: 'info', title: 'Invitación enviada', message: inviteEmail });
          setInviteEmail('');
      } catch (e) {
          console.error('Error inviting', e);
-         alert('Error al invitar');
+         await showDialog({ type: 'error', title: 'Error al invitar' });
      }
   };
 
@@ -1527,6 +1604,69 @@ export default function DashboardPage() {
             )}
         </div>
       )}
+
+      <AnimatePresence>
+        {dialogConfig && (
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                onClick={() => {
+                    if (dialogConfig.type === 'confirm' || dialogConfig.type === 'input') cancelDialog();
+                }}
+            >
+                <motion.div
+                    initial={{ scale: 0.96, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.96, opacity: 0 }}
+                    className="w-full max-w-sm bg-surface-800 border border-surface-600/60 rounded-2xl shadow-2xl shadow-black/40"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="px-5 py-4 flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-semibold text-white">{dialogConfig.title}</p>
+                            {dialogConfig.message && (
+                                <p className="mt-1 text-xs text-surface-400 leading-relaxed">{dialogConfig.message}</p>
+                            )}
+                        </div>
+                        <button onClick={cancelDialog} className="p-1 text-surface-500 hover:text-surface-200 rounded">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {dialogConfig.type === 'input' && (
+                        <div className="px-5 pb-2">
+                            <input
+                                autoFocus
+                                value={dialogInputValue}
+                                onChange={(e) => setDialogInputValue(e.target.value)}
+                                placeholder={dialogConfig.placeholder || 'Ingresa un valor'}
+                                className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/60 focus:border-mandy-500 outline-none"
+                            />
+                        </div>
+                    )}
+
+                    <div className="px-5 py-4 flex justify-end gap-2">
+                        {(dialogConfig.type === 'confirm' || dialogConfig.type === 'input') && (
+                            <button
+                                onClick={cancelDialog}
+                                className="px-4 py-2 text-xs font-semibold text-surface-300 bg-surface-700 border border-surface-600 rounded-lg hover:text-white hover:border-surface-500 transition"
+                            >
+                                {dialogConfig.cancelLabel || 'Cancelar'}
+                            </button>
+                        )}
+                        <button
+                            onClick={confirmDialog}
+                            className={`px-4 py-2 text-xs font-semibold rounded-lg transition ${dialogConfig.danger ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-gradient-mandy text-white hover:opacity-90'}`}
+                        >
+                            {dialogConfig.confirmLabel || (dialogConfig.type === 'confirm' ? 'Confirmar' : 'Aceptar')}
+                        </button>
+                    </div>
+                </motion.div>
+            </motion.div>
+        )}
+      </AnimatePresence>
       {/* Top Header */}
       <header className="h-14 bg-surface-800 border-b border-surface-600/50 flex items-center justify-between px-4 shrink-0 z-50 relative">
             <div className="flex items-center gap-4">
@@ -1820,26 +1960,12 @@ export default function DashboardPage() {
                             </div>
                         ))}
                     </div>
-                    <div className="px-3 py-2">
-                        <button
-                            onClick={() => openFilesTab()}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-surface-700 text-surface-200 hover:bg-surface-600 text-xs font-medium transition"
-                        >
-                            <Plus className="w-3.5 h-3.5" /> Abrir archivo
-                        </button>
-                    </div>
                 </div>
             )}
 
             {openTabs.length === 0 && (
                 <div className="flex items-center justify-between border-b border-surface-600/50 bg-surface-800 px-4 py-2 text-sm text-surface-400">
                     <span>Sin pestañas abiertas</span>
-                    <button
-                        onClick={() => openFilesTab()}
-                        className="flex items-center gap-1 px-3 py-1 rounded-md bg-surface-700 text-surface-200 hover:bg-surface-600 transition"
-                    >
-                        <Plus className="w-4 h-4" /> Abrir archivos
-                    </button>
                 </div>
             )}
 

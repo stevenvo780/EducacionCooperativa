@@ -26,6 +26,28 @@ import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 
+// Debounced renderer to avoid excessive markdown re-renders while typing
+const DebouncedMarkdown = React.memo(({ content }: { content: string }) => {
+  const [debouncedContent, setDebouncedContent] = useState(content);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedContent(content);
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [content]);
+
+  return (
+    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+      {debouncedContent}
+    </ReactMarkdown>
+  );
+});
+DebouncedMarkdown.displayName = 'DebouncedMarkdown';
+
 type ViewId = 'editor' | 'preview' | string;
 type ViewMode = 'edit' | 'split' | 'preview';
 
@@ -420,12 +442,7 @@ export default function MosaicEditor({
               >
                 <div className="h-full overflow-auto p-8 bg-slate-900 custom-scrollbar">
                     <article className="markdown-preview">
-                        <ReactMarkdown
-                            remarkPlugins={[remarkMath, remarkGfm]}
-                            rehypePlugins={[rehypeKatex]}
-                        >
-                            {content}
-                        </ReactMarkdown>
+                        <DebouncedMarkdown content={content} />
                     </article>
                 </div>
               </MosaicWindow>
