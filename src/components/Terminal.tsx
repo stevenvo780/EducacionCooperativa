@@ -205,7 +205,6 @@ const TerminalInner: React.FC<TerminalProps> = ({
     lastWorkspaceRef.current = currentWorkspace;
   }, [sessionActive, workspaceCode, sessionPayload]);
 
-  // --- Render UI ---
   if (!user) return <div>Log in required</div>;
 
   const showHubError = status === 'error' || (!hubConnected && status !== 'checking');

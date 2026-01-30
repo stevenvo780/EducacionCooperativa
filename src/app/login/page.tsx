@@ -45,12 +45,10 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
-      {/* Background glow */}
       <div className="absolute inset-0 bg-gradient-glow opacity-40" />
 
       <div className="w-full max-w-md relative z-10">
         <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden border border-surface-600/50">
-            {/* Header / Tabs */}
             <div className="flex border-b border-surface-600/50">
                 <button
                     onClick={() => setIsLogin(true)}

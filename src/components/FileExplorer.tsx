@@ -360,7 +360,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   return (
     <div className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
-      {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-surface-700">
         <div className="flex items-center gap-2">
           <Folder className="w-5 h-5 text-amber-400" />
@@ -409,7 +408,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       </div>
 
-      {/* Search */}
       <div className="p-2 border-b border-surface-700">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -445,7 +443,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       )}
 
-      {/* Body */}
       <div className="flex-1 min-h-0 flex">
         <aside className="w-56 border-r border-surface-700/60 bg-surface-800/40 flex flex-col">
           <div className="px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Carpetas</div>
@@ -586,7 +583,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         </section>
       </div>
 
-      {/* Context Menu */}
       {contextMenu && (
         <>
           <div

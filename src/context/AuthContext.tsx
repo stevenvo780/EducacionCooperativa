@@ -60,13 +60,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
 
-        // Firebase auth listener for Google Sign-In
         const firebaseAuth = getAuth();
         const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
             if (authUser) {
-                // Firebase auth succeeded (Google Sign-In)
                 setUser(authUser);
-                localStorage.removeItem('agora_user'); // Clear custom auth if using Firebase
+                localStorage.removeItem('agora_user');
             }
             setLoading(false);
         });
@@ -118,7 +116,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             email: userData.email,
             displayName: userData.displayName || email.split('@')[0],
             photoURL: userData.photoURL || null,
-            getIdToken: async () => userData.uid // Use uid as token for API calls
+            getIdToken: async () => userData.uid
         } as unknown as User;
 
         setUser(userObj);
