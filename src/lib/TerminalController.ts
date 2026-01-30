@@ -115,7 +115,7 @@ export class TerminalController {
 
   public mount(container: HTMLElement) {
     if (!this.term || !this.fitAddon) return;
-    
+
     // Prevent double mount
     if (this.mounted && this.container === container) {
       this.fit();
@@ -123,13 +123,13 @@ export class TerminalController {
     }
 
     this.container = container;
-    
+
     // Only open if not already opened
     if (!this.mounted) {
       this.term.open(container);
       this.mounted = true;
     }
-    
+
     // Delay fit to allow DOM to settle
     setTimeout(() => {
       this.fitAddon.fit();

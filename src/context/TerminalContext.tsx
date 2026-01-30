@@ -41,7 +41,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     // Use a getter function instead of ref to always get current user
     const getUserRef = useRef(() => user);
     getUserRef.current = () => user;
-    
+
     const [sessions, setSessions] = useState<TerminalSession[]>([]);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
     const [status, setStatus] = useState<'checking' | 'online' | 'offline' | 'error'>('checking');
@@ -55,7 +55,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         if (!currentUser || controllerRef.current) {
             return;
         }
-        
+
         setStatus('checking');
         setHubConnected(false);
         setErrorMessage(null);
@@ -142,7 +142,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         setActiveSessionId(sessionId);
         controllerRef.current?.setActiveSession(sessionId);
     }, []);
-    
+
     const destroySession = useCallback((sessionId: string) => {
         controllerRef.current?.killSession(sessionId);
     }, []);
