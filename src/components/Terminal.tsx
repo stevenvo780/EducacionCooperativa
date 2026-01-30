@@ -315,6 +315,9 @@ const TerminalInner: React.FC<TerminalProps> = ({
                                         <p className="text-slate-500 text-xs mb-1"># 2. Configurar Token</p>
                                         <p className="text-yellow-200 whitespace-pre-wrap mb-3 break-all">
                                             $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={user.uid}/&apos; /etc/edu-worker/worker.env
+                                            {workspaceCode !== 'personal' && (
+                                                <> && sudo sed -i &apos;s/#WORKSPACE_ID=/WORKSPACE_ID={workspaceCode}/&apos; /etc/edu-worker/worker.env</>
+                                            )}
                                         </p>
 
                                         <p className="text-slate-500 text-xs mb-1"># 3. Reiniciar Servicio</p>
