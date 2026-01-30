@@ -10,13 +10,15 @@ interface TerminalProps {
   workspaceId?: string;
   workspaceName?: string;
   workspaceType?: 'personal' | 'shared';
+    sessionId?: string;
 }
 
 const Terminal: React.FC<TerminalProps> = ({
   nexusUrl,
   workspaceId,
   workspaceName,
-  workspaceType
+    workspaceType,
+    sessionId
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -28,8 +30,16 @@ const Terminal: React.FC<TerminalProps> = ({
     errorMessage,
     initialize,
     activeSessionId,
-    createSession
+        createSession,
+        selectSession
   } = useTerminal();
+
+    // Keep terminal tab bound to its session
+    useEffect(() => {
+            if (sessionId && activeSessionId !== sessionId) {
+                    selectSession(sessionId);
+            }
+    }, [sessionId, activeSessionId, selectSession]);
 
   useEffect(() => {
       if (!controller && status !== 'error' && nexusUrl) {

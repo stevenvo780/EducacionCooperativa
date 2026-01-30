@@ -115,8 +115,11 @@ export class TerminalController {
   public mount(container: HTMLElement) {
     if (!this.term || !this.fitAddon) return;
 
-    // Prevent double mount
-    if (this.mounted && this.container === container) {
+    const termElement = this.term.element as HTMLElement | undefined;
+    const isAttached = termElement ? container.contains(termElement) : false;
+
+    // Prevent double mount only if the terminal DOM is already attached
+    if (this.mounted && this.container === container && isAttached) {
       this.fit();
       return;
     }
@@ -124,12 +127,18 @@ export class TerminalController {
     this.container = container;
 
     // If already mounted, re-parent the element
-    if (this.mounted && this.term.element) {
-        container.appendChild(this.term.element);
-        this.fit();
-    } else if (!this.mounted) {
+    if (this.mounted) {
+      if (termElement) {
+        if (!isAttached) {
+          container.appendChild(termElement);
+        }
+      } else {
         this.term.open(container);
         this.mounted = true;
+      }
+    } else {
+      this.term.open(container);
+      this.mounted = true;
     }
 
     // Delay fit to allow DOM to settle
