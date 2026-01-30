@@ -182,7 +182,12 @@ export default function DashboardPage() {
   const applyDocsSnapshot = useCallback((fetched: DocItem[]) => {
     if (!currentWorkspace) return;
 
-    const filtered = fetched.filter(d => {
+    const sanitized = fetched.map(docItem => {
+      const { content, ...rest } = docItem;
+      return rest;
+    });
+
+    const filtered = sanitized.filter(d => {
       if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
         return !d.workspaceId || d.workspaceId === PERSONAL_WORKSPACE_ID;
       }
@@ -271,14 +276,15 @@ export default function DashboardPage() {
     if (!user || !currentWorkspace) return;
     setLoadingDocs(true);
     try {
-        let url = '/api/documents?';
+        const params = new URLSearchParams();
         if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
-            url += `ownerId=${user.uid}`;
+            params.set('ownerId', user.uid);
         } else {
-            url += `workspaceId=${currentWorkspace.id}`;
+            params.set('workspaceId', currentWorkspace.id);
         }
+        params.set('view', 'metadata');
 
-        const res = await fetch(url);
+        const res = await fetch(`/api/documents?${params.toString()}`);
         if (!res.ok) throw new Error('Failed to fetch docs via API');
         const fetched: DocItem[] = await res.json();
 
@@ -540,6 +546,22 @@ export default function DashboardPage() {
       const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
       const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
       const newName = `${docItem.name} (copia)`;
+      let resolvedContent = '';
+      if (docItem.type !== 'file') {
+          if (typeof docItem.content === 'string') {
+              resolvedContent = docItem.content;
+          } else {
+              try {
+                  const res = await fetch(`/api/documents/${docItem.id}/raw`, { cache: 'no-store' });
+                  if (!res.ok) throw new Error('Failed to load content');
+                  resolvedContent = await res.text();
+              } catch (error) {
+                  console.error('Error loading content for copy', error);
+                  alert('No se pudo cargar el contenido para copiar.');
+                  return;
+              }
+          }
+      }
       const payload: Record<string, unknown> = {
           name: newName,
           type: docItem.type || 'text',
@@ -553,7 +575,7 @@ export default function DashboardPage() {
           payload.url = docItem.url || null;
           payload.storagePath = docItem.storagePath || null;
       } else {
-          payload.content = docItem.content ?? '';
+          payload.content = resolvedContent;
       }
 
       try {
@@ -574,8 +596,7 @@ export default function DashboardPage() {
               folder: normalizeFolderPath(docItem.folder),
               mimeType: docItem.mimeType,
               url: docItem.url,
-              storagePath: docItem.storagePath,
-              content: docItem.content
+              storagePath: docItem.storagePath
           });
       } catch (error) {
           console.error('Error copying document', error);
