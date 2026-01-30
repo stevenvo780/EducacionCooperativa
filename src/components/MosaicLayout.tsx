@@ -3,18 +3,19 @@
 import React, { useCallback } from 'react';
 import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { X, Pencil, Eye, Columns, Terminal as TerminalIcon, FileText } from 'lucide-react';
+import { X, Pencil, Eye, Columns, Terminal as TerminalIcon, FileText, Folder } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
+const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 
 export type ViewMode = 'edit' | 'preview' | 'split';
 
 export interface DocItem {
   id: string;
   name: string;
-  type?: 'text' | 'file' | 'folder' | 'terminal';
+  type?: 'text' | 'file' | 'folder' | 'terminal' | 'files';
   content?: string;
   url?: string;
   folder?: string;
@@ -27,14 +28,29 @@ export interface DocItem {
   ownerId?: string;
 }
 
+export interface FolderItem {
+  id: string;
+  name: string;
+  path: string;
+  parentPath: string;
+  kind: 'system' | 'record' | 'virtual';
+}
+
 interface MosaicLayoutProps {
   value: MosaicNode<string> | null;
   onChange: (newNode: MosaicNode<string> | null) => void;
   openTabs: DocItem[];
   docs: DocItem[];
+  folders: FolderItem[];
   docModes: Record<string, ViewMode>;
   onSetDocMode: (docId: string, mode: ViewMode) => void;
   onCloseTab: (docId: string) => void;
+  onSelectDoc: (doc: DocItem) => void;
+  onCreateFile?: () => void;
+  onCreateFolder?: () => void;
+  onUploadFile?: () => void;
+  onDeleteDoc?: (docId: string) => void;
+  currentWorkspaceName?: string;
   nexusUrl: string;
 }
 
@@ -43,9 +59,16 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onChange,
   openTabs,
   docs,
+  folders,
   docModes,
   onSetDocMode,
   onCloseTab,
+  onSelectDoc,
+  onCreateFile,
+  onCreateFolder,
+  onUploadFile,
+  onDeleteDoc,
+  currentWorkspaceName,
   nexusUrl
 }) => {
 
@@ -100,17 +123,30 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     if (!doc) return <div className="p-4 text-surface-400">Documento no encontrado: {id}</div>;
 
     const isTerminal = doc.type === 'terminal';
+    const isFileExplorer = doc.type === 'files';
     const mode = docModes[doc.id] ?? 'preview';
+
+    // Determine icon and toolbar
+    let toolbarIcon = <FileText className="w-4 h-4 text-sky-400" />;
+    let toolbarControls = renderDocModeControls(doc.id, mode);
+
+    if (isTerminal) {
+      toolbarIcon = <TerminalIcon className="w-4 h-4 text-mandy-400" />;
+      toolbarControls = renderCloseControl(doc.id);
+    } else if (isFileExplorer) {
+      toolbarIcon = <Folder className="w-4 h-4 text-amber-400" />;
+      toolbarControls = renderCloseControl(doc.id);
+    }
     
     return (
         <MosaicWindow<string>
             path={path}
             title={doc.name}
             className="bg-surface-900 border border-surface-700"
-            toolbarControls={isTerminal ? renderCloseControl(doc.id) : renderDocModeControls(doc.id, mode)}
+            toolbarControls={toolbarControls}
             renderPreview={() => (
                 <div className="flex items-center gap-2 p-1">
-                   {isTerminal ? <TerminalIcon className="w-4 h-4 text-mandy-400" /> : <FileText className="w-4 h-4 text-sky-400" />}
+                   {toolbarIcon}
                    <span className="text-sm font-medium text-surface-200">{doc.name}</span>
                 </div>
             )}
@@ -118,6 +154,18 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             <div className="h-full w-full bg-black relative">
                  {isTerminal ? (
                       <Terminal nexusUrl={nexusUrl} />
+                  ) : isFileExplorer ? (
+                      <FileExplorer
+                        docs={docs.filter(d => d.type !== 'terminal' && d.type !== 'files')}
+                        folders={folders}
+                        onSelectDoc={onSelectDoc}
+                        onCreateFile={onCreateFile}
+                        onCreateFolder={onCreateFolder}
+                        onUploadFile={onUploadFile}
+                        onDeleteDoc={onDeleteDoc}
+                        currentWorkspaceName={currentWorkspaceName}
+                        embedded
+                      />
                   ) : (
                       <Editor roomId={doc.id} embedded viewMode={mode} />
                   )}

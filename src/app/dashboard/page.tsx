@@ -1458,7 +1458,7 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+            <div className="flex-1 overflow-y-auto scrollbar-hide p-2 space-y-0.5">
                 {/* Mi Asistente (Terminal) Button */}
                 <div 
                     onClick={openTerminal}
@@ -1632,7 +1632,7 @@ export default function DashboardPage() {
                             <div className="px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">
                                 Carpetas
                             </div>
-                            <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
+                            <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-4 space-y-1">
                                 <button
                                     onClick={() => setActiveFolder(ROOT_FOLDER_PATH)}
                                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${activeFolder === ROOT_FOLDER_PATH ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
@@ -1647,7 +1647,7 @@ export default function DashboardPage() {
                                 {renderFolderTree(ROOT_FOLDER_PATH)}
                             </div>
                         </aside>
-                        <section className="flex-1 min-h-0 overflow-y-auto">
+                        <section className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
                             <div className="px-6 py-4 text-xs text-surface-400 uppercase tracking-wider">
                                 Documentos
                             </div>
@@ -1788,7 +1788,7 @@ export default function DashboardPage() {
 
                     <div className="space-y-3">
                          <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Miembros ({currentWorkspace.members.length})</label>
-                         <div className="max-h-48 overflow-y-auto pr-2 space-y-2">
+                         <div className="max-h-48 overflow-y-auto scrollbar-hide pr-2 space-y-2">
                             {currentWorkspace.members.map((uid) => (
                                 <div key={uid} className="flex items-center justify-between p-2 bg-surface-700 rounded-lg text-sm">
                                     <div className="flex items-center gap-2">
