@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       members: [ownerId],
       pendingInvites: [],
       type: 'shared',
-      createdAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     };
 
     const docRef = await adminDb.collection('workspaces').add(workspaceData);
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
       ownerId,
       members: [ownerId],
       pendingInvites: [],
-      type: 'shared',
+      type: 'shared'
     });
   } catch (error: any) {
     console.error('Error creating workspace:', error);

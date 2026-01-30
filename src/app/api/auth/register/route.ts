@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
             passwordHash: hashedPassword,
             displayName: email.split('@')[0],
             createdAt: FieldValue.serverTimestamp(),
-            role: 'user',
+            role: 'user'
         };
 
         const userDocRef = await usersRef.add(newUser);
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
             members: [userId],
             pendingInvites: [],
             type: 'personal',
-            createdAt: FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp()
         };
 
         await adminDb.collection('workspaces').add(workspaceData);

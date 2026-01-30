@@ -26,7 +26,6 @@ import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 
-
 type ViewId = 'editor' | 'preview' | string;
 type ViewMode = 'edit' | 'split' | 'preview';
 
@@ -38,13 +37,12 @@ interface EditorProps {
   viewMode?: ViewMode;
 }
 
-
 const ToolbarButton = ({ onClick, icon: Icon, title, active = false }: any) => (
   <button
     onClick={onClick}
     className={clsx(
-      "p-1.5 rounded-md transition-all duration-200",
-      active ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:bg-slate-700 hover:text-slate-100"
+      'p-1.5 rounded-md transition-all duration-200',
+      active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'
     )}
     title={title}
   >
@@ -72,17 +70,16 @@ const getLayoutForMode = (mode: ViewMode): MosaicNode<ViewId> => {
     direction: 'row',
     first: 'editor',
     second: 'preview',
-    splitPercentage: 50,
+    splitPercentage: 50
   };
 };
-
 
 export default function MosaicEditor({
   initialContent = '',
   roomId,
   onClose,
   embedded = false,
-  viewMode,
+  viewMode
 }: EditorProps) {
   const resolvedViewMode = viewMode ?? 'preview';
   const [content, setContent] = useState(initialContent);
@@ -263,8 +260,8 @@ export default function MosaicEditor({
                 body: JSON.stringify({
                     content: val,
                     type: 'text',
-                    lastUpdatedBy: user?.uid,
-                }),
+                    lastUpdatedBy: user?.uid
+                })
             });
             if (!res.ok) {
                 throw new Error('Failed to save');
@@ -294,7 +291,7 @@ export default function MosaicEditor({
     const words = trimmed ? trimmed.split(/\s+/).length : 0;
     return {
       words,
-      chars: content.length,
+      chars: content.length
     };
   }, [content]);
 
@@ -347,7 +344,7 @@ export default function MosaicEditor({
               createNode={() => 'new'}
               title={`Editor`}
               className="bg-slate-900"
-              toolbarControls={[]} 
+              toolbarControls={[]}
               renderPreview={() => <div className="p-2 text-white">Editor Preview</div>}
             >
             <div className="flex flex-col h-full bg-slate-950 relative">
@@ -370,8 +367,8 @@ export default function MosaicEditor({
                         theme="dark"
                         className="text-base h-full"
                         basicSetup={{
-                            lineNumbers: true, 
-                            foldGutter: true, 
+                            lineNumbers: true,
+                            foldGutter: true,
                             highlightActiveLine: true,
                             autocompletion: true
                         }}
@@ -412,8 +409,8 @@ export default function MosaicEditor({
             </div>
           </MosaicWindow>
         );
-      } 
-      
+      }
+
       if (id === 'preview' || id.startsWith('preview')) {
           return (
               <MosaicWindow
@@ -425,8 +422,8 @@ export default function MosaicEditor({
               >
                 <div className="h-full overflow-auto p-8 bg-slate-900 custom-scrollbar">
                     <article className="markdown-preview">
-                        <ReactMarkdown 
-                            remarkPlugins={[remarkMath, remarkGfm]} 
+                        <ReactMarkdown
+                            remarkPlugins={[remarkMath, remarkGfm]}
                             rehypePlugins={[rehypeKatex]}
                         >
                             {content}
@@ -436,7 +433,7 @@ export default function MosaicEditor({
               </MosaicWindow>
           );
       }
-  
+
       return <div className="text-white p-4">Unknown Window: {id}</div>;
     };
 
@@ -509,7 +506,7 @@ export default function MosaicEditor({
   }
 
   return (
-    <div className={clsx("flex flex-col h-full bg-slate-950 text-slate-300 relative", embedded && "editor-embedded")}>
+    <div className={clsx('flex flex-col h-full bg-slate-950 text-slate-300 relative', embedded && 'editor-embedded')}>
         {/* Global App Bar */}
         {!embedded && (
           <div className="h-10 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-3">
@@ -522,15 +519,15 @@ export default function MosaicEditor({
                    <div className="h-4 w-px bg-slate-700" />
                    <span className="text-xs font-medium text-slate-500">Workspace</span>
                </div>
-               
+
                <div className="flex items-center gap-2">
-                   <button 
+                   <button
                      onClick={() => setLayout({ direction: 'row', first: 'editor', second: 'preview', splitPercentage: 50 })}
                      className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
                    >
                       <Columns className="w-3 h-3" /> Reset Layout
                    </button>
-                   <button 
+                   <button
                      onClick={() => setLayout({ direction: 'column', first: 'editor', second: 'preview', splitPercentage: 50 })}
                      className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"
                    >
@@ -635,5 +632,5 @@ function ChevronLeft(props: any) {
     >
       <path d="m15 18-6-6 6-6" />
     </svg>
-  )
+  );
 }
