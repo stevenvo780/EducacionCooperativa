@@ -1,37 +1,41 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-echo "🏗️  Building RPM for Education Cooperative Agent..."
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="$(python3 - <<PY
+import json
+from pathlib import Path
+pkg = json.loads(Path("$ROOT_DIR/package.json").read_text())
+print(pkg.get("version", "0.0.0"))
+PY
+)"
 
-# Ensure we are in agent dir
-cd "$(dirname "$0")/.."
-AGENT_ROOT=$(pwd)
+if ! command -v rpmbuild >/dev/null 2>&1; then
+  echo "rpmbuild no esta instalado. Instala rpm-build para generar RPM." >&2
+  exit 1
+fi
 
-# 1. Build & Package
-echo "📦 Compiling and Packaging..."
-npm run build
-npm run package
+echo "Building RPM for Education Cooperative Agent..."
+npm run build --prefix "$ROOT_DIR"
+npm run package --prefix "$ROOT_DIR"
 
-# 2. Setup RPM Build Dir
-RPM_BUILD_DIR="rpm-build"
-rm -rf $RPM_BUILD_DIR
-mkdir -p $RPM_BUILD_DIR/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+RPM_BUILD_DIR="$ROOT_DIR/build/rpm"
+rm -rf "$RPM_BUILD_DIR"
+mkdir -p "$RPM_BUILD_DIR"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-# 3. Generate SPEC File
 SPEC_FILE="$RPM_BUILD_DIR/SPECS/edu-agent.spec"
 
-cat > $SPEC_FILE << EOL
+cat > "$SPEC_FILE" << EOF
 Name:       edu-agent
-Version:    1.0.0
+Version:    $VERSION
 Release:    1%{?dist}
 Summary:    Local Agent for Educacion Cooperativa
 License:    Proprietary
-URL:        https://educacioncooperativa.com
 BuildArch:  x86_64
+Requires:   docker
 
 %description
-This agent runs a Dockerized worker that connects your
-local environment to the Education Cooperative cloud platform.
+Este agente ejecuta un worker en Docker para conectar el entorno local.
 
 %prep
 # No preparation needed
@@ -41,24 +45,14 @@ local environment to the Education Cooperative cloud platform.
 
 %install
 mkdir -p %{buildroot}/usr/bin
-
-# Install from the actual source location
-install -m 755 $AGENT_ROOT/bin/edu-agent %{buildroot}/usr/bin/edu-agent
+install -m 755 $ROOT_DIR/bin/edu-agent %{buildroot}/usr/bin/edu-agent
 
 %files
 /usr/bin/edu-agent
 
 %post
-echo "✅ Edu-Agent installed. Run 'edu-agent setup' to configure."
+echo "Edu-Agent instalado. Ejecuta 'edu-agent setup' para configurar."
+EOF
 
-%changelog
-* Thu Jan 29 2026 Admin <admin@educacion.coop> - 1.0.0-1
-- Initial release
-EOL
-
-# 4. Run rpmbuild
-echo "⚙️  Running rpmbuild..."
-rpmbuild --define "_topdir $AGENT_ROOT/$RPM_BUILD_DIR" -bb $SPEC_FILE
-
-echo "🎉 RPM Build Complete!"
-echo "Find your RPM at: $AGENT_ROOT/$RPM_BUILD_DIR/RPMS/x86_64/"
+rpmbuild --define "_topdir $RPM_BUILD_DIR" -bb "$SPEC_FILE"
+echo "RPM generado en $RPM_BUILD_DIR/RPMS/"
