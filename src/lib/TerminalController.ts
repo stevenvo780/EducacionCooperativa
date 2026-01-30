@@ -52,7 +52,7 @@ export class TerminalController {
     try {
       // Load xterm from CDN (avoids bundler issues)
       this.loadCSS('https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css');
-      
+
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js');
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js');
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js');
@@ -74,15 +74,15 @@ export class TerminalController {
           background: '#09090b',
           foreground: '#f4f4f5',
           cursor: '#22c55e',
-          selectionBackground: '#3f3f46',
+          selectionBackground: '#3f3f46'
         },
         fontFamily: 'monospace',
-        fontSize: 14,
+        fontSize: 14
       });
 
       this.fitAddon = new FitAddon();
       this.term.loadAddon(this.fitAddon);
-      
+
       if (WebLinksAddon) {
         this.term.loadAddon(new WebLinksAddon());
       }
@@ -92,7 +92,7 @@ export class TerminalController {
         if (this.socket?.connected && this.activeSessionId) {
           this.socket.emit('execute', {
             sessionId: this.activeSessionId,
-            command: data,
+            command: data
           });
         }
       });
@@ -107,7 +107,7 @@ export class TerminalController {
 
   public mount(container: HTMLElement) {
     if (!this.term || !this.fitAddon) return;
-    
+
     this.container = container;
     this.term.open(container);
     this.fitAddon.fit();
@@ -128,10 +128,10 @@ export class TerminalController {
     if (this.socket) this.socket.disconnect();
 
     console.log('[Terminal] Connecting to', this.nexusUrl);
-    
+
     this.socket = io(this.nexusUrl, {
       auth: { type: 'client', token, uid },
-      transports: ['websocket'],
+      transports: ['websocket']
     });
 
     this.socket.on('connect', () => {
@@ -153,7 +153,7 @@ export class TerminalController {
         type: err.type,
         name: err.name
       });
-      
+
       if (typeof window !== 'undefined' && window.location.protocol === 'https:' && this.nexusUrl.startsWith('http:')) {
         console.error('[Terminal] SECURITY BLOCK: Attempting to connect to insecure HTTP Hub from HTTPS origin.');
       }

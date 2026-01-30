@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/context/AuthContext';
@@ -7,7 +7,7 @@ const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 
 export default function TerminalPage() {
     const { user } = useAuth();
-    
+
     if (!user) return <div className="p-8">Please login to access your assistant.</div>;
 
     return (
@@ -18,7 +18,7 @@ export default function TerminalPage() {
             </header>
             <main className="flex-1 bg-black p-4">
                 {/* Point to local Nexus for dev, or env var in prod */}
-                <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"} />
+                <Terminal nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'} />
             </main>
         </div>
     );

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useCallback } from 'react';
 import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath } from 'react-mosaic-component';
@@ -21,7 +21,7 @@ export interface DocItem {
   folder?: string;
   storagePath?: string;
   workspaceId?: string;
-  
+
   // File props
   mimeType?: string;
   size?: number;
@@ -157,7 +157,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       toolbarIcon = <Folder className="w-4 h-4 text-amber-400" />;
       toolbarControls = renderCloseControl(doc.id);
     }
-    
+
     return (
         <MosaicWindow<string>
             path={path}

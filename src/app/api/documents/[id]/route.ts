@@ -6,7 +6,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     try {
         const { id } = params;
         const body = await req.json();
-        
+
         const docRef = adminDb.collection('documents').doc(id);
         const snap = await docRef.get();
         if (!snap.exists) {
@@ -25,15 +25,15 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                      const safeName = (existingData?.name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
                      const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
                      const wsId = existingData?.workspaceId;
-                     
+
                      storagePath = `users/${ownerId}/${fname}`;
                      if (wsId && wsId !== 'personal') {
                          storagePath = `workspaces/${wsId}/${fname}`;
                      }
                  }
-                 
+
                  try {
-                     await bucket.file(storagePath).save(body.content, { 
+                     await bucket.file(storagePath).save(body.content, {
                         contentType: 'text/markdown',
                         metadata: { ownerId: existingData?.ownerId }
                      });
@@ -46,9 +46,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         // Remove undefined fields if necessary, but JSON updates usually are explicit
         const updateData: any = {
             ...body,
-            updatedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
         };
-        
+
         if (storagePath && !existingData?.storagePath) {
             updateData.storagePath = storagePath;
         }

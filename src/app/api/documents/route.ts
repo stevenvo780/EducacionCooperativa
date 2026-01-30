@@ -17,13 +17,13 @@ export async function POST(req: NextRequest) {
             workspaceId: workspaceId ?? 'personal',
             folder: normalizedFolder,
             createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
         };
 
         if (typeof url === 'string') {
             docData.url = url;
         }
-        
+
         // Sync text documents to Storage for Worker compatibility
         if (typeof storagePath === 'string') {
             docData.storagePath = storagePath;
@@ -33,17 +33,17 @@ export async function POST(req: NextRequest) {
                  if (bucket.name) {
                      const safeName = (name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
                      const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
-                     
+
                      let path = `users/${ownerId || 'unknown'}/${fname}`;
                      if (workspaceId && workspaceId !== 'personal') {
                          path = `workspaces/${workspaceId}/${fname}`;
                      }
-                     
-                     await bucket.file(path).save(content ?? '', { 
+
+                     await bucket.file(path).save(content ?? '', {
                         contentType: 'text/markdown',
                         metadata: { ownerId: ownerId || 'unknown' }
                      });
-                     
+
                      docData.storagePath = path;
                  }
              } catch (err) {

@@ -73,7 +73,7 @@ const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspac
   ownerId: data.ownerId ?? '',
   members: Array.isArray(data.members) ? data.members : [],
   pendingInvites: Array.isArray(data.pendingInvites) ? data.pendingInvites : [],
-  type: data.type === 'personal' ? 'personal' : 'shared',
+  type: data.type === 'personal' ? 'personal' : 'shared'
 });
 
 export default function DashboardPage() {
@@ -123,7 +123,7 @@ export default function DashboardPage() {
 
   const fetchWorkspaces = useCallback(async () => {
     if (!user) return;
-    
+
     const personalSpace: Workspace = {
         id: PERSONAL_WORKSPACE_ID,
         name: 'Espacio Personal',
@@ -148,7 +148,7 @@ export default function DashboardPage() {
         fetched = Array.isArray(data.workspaces) ? data.workspaces.map(normalizeWorkspace) : [];
         fetchedInvites = Array.isArray(data.invites) ? data.invites.map(normalizeWorkspace) : [];
     } catch (e) {
-        console.error("Error fetching workspaces", e);
+        console.error('Error fetching workspaces', e);
     }
 
     const allWorkspaces = [personalSpace, ...fetched.filter(ws => ws.id !== PERSONAL_WORKSPACE_ID)];
@@ -162,7 +162,7 @@ export default function DashboardPage() {
   }, [user]);
 
   const acceptInvite = async (ws: Workspace) => {
-      if(!user?.email) return;
+      if (!user?.email) return;
       try {
           const res = await fetch(`/api/workspaces/${ws.id}`, {
               method: 'PATCH',
@@ -179,7 +179,7 @@ export default function DashboardPage() {
           await fetchWorkspaces();
           alert('¡Te has unido al espacio!');
       } catch (e) {
-          console.error("Error accepting", e);
+          console.error('Error accepting', e);
       }
   };
 
@@ -216,7 +216,7 @@ export default function DashboardPage() {
           path: normalized,
           parentPath,
           kind,
-          docId,
+          docId
         });
         return;
       }
@@ -280,14 +280,14 @@ export default function DashboardPage() {
         } else {
             url += `workspaceId=${currentWorkspace.id}`;
         }
-        
+
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch docs via API');
         const fetched: DocItem[] = await res.json();
 
         applyDocsSnapshot(fetched);
     } catch (error) {
-        console.error("Error fetching docs", error);
+        console.error('Error fetching docs', error);
     }
   }, [user, currentWorkspace, applyDocsSnapshot]);
 
@@ -346,7 +346,7 @@ export default function DashboardPage() {
           updatedAt: new Date(),
           ownerId: user?.uid || 'system'
       };
-      
+
       setOpenTabs(prev => [...prev, newTerminalItem]);
       const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
@@ -368,7 +368,7 @@ export default function DashboardPage() {
           updatedAt: new Date(),
           ownerId: user?.uid || 'system'
       };
-      
+
       setOpenTabs(prev => [...prev, newFilesItem]);
       const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
@@ -399,7 +399,7 @@ export default function DashboardPage() {
           }
           return [...prev, doc];
       });
-      
+
       const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
           const leaves = getLeaves(current);
@@ -430,8 +430,6 @@ export default function DashboardPage() {
           return { ...prev, [docId]: mode };
       });
   }, []);
-
-
 
   const activeFolderLabel = activeFolder || 'Raiz';
 
@@ -597,12 +595,12 @@ export default function DashboardPage() {
               type: 'shared'
           });
       } catch (e) {
-          console.error("Error creating workspace", e);
+          console.error('Error creating workspace', e);
       }
   };
 
   const createDoc = async (e?: React.FormEvent, folderName?: string) => {
-    if(e) e.preventDefault();
+    if (e) e.preventDefault();
     const name = newDocName.trim() || 'Sin título';
     if (!user) return;
     const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
@@ -619,10 +617,10 @@ export default function DashboardPage() {
                 type: 'text',
                 ownerId: user.uid,
                 workspaceId: docWorkspaceId,
-                folder: targetFolder,
+                folder: targetFolder
             })
         });
-        
+
         if (!response.ok) {
             throw new Error('Failed to create document via API');
         }
@@ -641,7 +639,7 @@ export default function DashboardPage() {
             folder: targetFolder
         });
     } catch (e) {
-        console.error("Error creating doc", e);
+        console.error('Error creating doc', e);
     } finally {
         setIsCreating(false);
     }
@@ -928,7 +926,7 @@ export default function DashboardPage() {
 
             if (isMarkdownFile(file)) {
                 const content = await file.text();
-                
+
                 const res = await fetch('/api/documents', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -942,8 +940,8 @@ export default function DashboardPage() {
                         folder: resolvedFolder
                     })
                 });
-                
-                if (!res.ok) throw new Error("Markdown upload failed");
+
+                if (!res.ok) throw new Error('Markdown upload failed');
                 const data = await res.json();
 
                 setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
@@ -953,7 +951,7 @@ export default function DashboardPage() {
                     type: 'text',
                     mimeType: file.type || 'text/markdown',
                     ownerId: user.uid,
-                    updatedAt: { seconds: Date.now()/1000 },
+                    updatedAt: { seconds: Date.now() / 1000 },
                     folder: resolvedFolder
                 });
                 continue;
@@ -970,11 +968,11 @@ export default function DashboardPage() {
                 body: formData
             });
 
-            if(!res.ok) throw new Error("API Upload failed");
-            
+            if (!res.ok) throw new Error('API Upload failed');
+
             const newDoc = await res.json();
             createdDocs.push({ ...newDoc, folder: newDoc.folder ?? resolvedFolder });
-            
+
             setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
         }
 
@@ -985,14 +983,14 @@ export default function DashboardPage() {
         setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
         scheduleUploadStatusClear();
     } catch (error) {
-        console.error("Upload failed", error);
+        console.error('Upload failed', error);
         setUploadStatus(prev => prev ? {
             ...prev,
             phase: 'error',
             error: 'Error al subir'
         } : prev);
         scheduleUploadStatusClear();
-        alert("Error al subir archivo");
+        alert('Error al subir archivo');
     } finally {
         setIsUploading(false);
     }
@@ -1189,9 +1187,9 @@ export default function DashboardPage() {
         await fetchDocs();
 
         if (failed.length > 0) {
-            console.error("Error deleting", failed);
+            console.error('Error deleting', failed);
             setDeleteStatus({ phase: 'error', name: label, error: 'Error al eliminar' });
-            alert("Error al eliminar");
+            alert('Error al eliminar');
         } else {
             setDeleteStatus({ phase: 'done', name: label });
         }
@@ -1273,9 +1271,9 @@ export default function DashboardPage() {
 
          alert(`Invitación enviada a ${inviteEmail}`);
          setInviteEmail('');
-     } catch(e) {
-         console.error("Error inviting", e);
-         alert("Error al invitar");
+     } catch (e) {
+         console.error('Error inviting', e);
+         alert('Error al invitar');
      }
   };
 
@@ -1289,11 +1287,11 @@ export default function DashboardPage() {
       return <FileText className="w-5 h-5" />;
   };
 
-  if (loading || !user) return (
+  if (loading || !user) {return (
     <div className="flex h-screen items-center justify-center bg-surface-900">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500" />
     </div>
-  );
+  );}
 
   return (
     <div
@@ -1305,7 +1303,7 @@ export default function DashboardPage() {
     >
       {isDragActive && (
         <div className="absolute inset-0 z-50 pointer-events-none">
-            <div className="absolute inset-0 bg-surface-900/70 border-2 border-dashed border-mandy-500/70"></div>
+            <div className="absolute inset-0 bg-surface-900/70 border-2 border-dashed border-mandy-500/70" />
             <div className="absolute inset-0 flex items-center justify-center">
                 <div className="bg-surface-800/80 border border-mandy-500/40 rounded-xl px-6 py-4 text-center shadow-2xl shadow-black/50">
                     <div className="text-sm font-semibold text-white">Suelta para subir</div>
@@ -1398,7 +1396,7 @@ export default function DashboardPage() {
                         )}
                         <span className="font-medium text-sm max-w-[120px] truncate text-surface-200">{currentWorkspace?.name || 'Seleccionar'}</span>
                         <ChevronDown className="w-3 h-3 text-surface-500" />
-                        {invites.length > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mandy-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-mandy-500"></span></span>}
+                        {invites.length > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mandy-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-mandy-500" /></span>}
                     </button>
 
                     {showWorkspaceMenu && (
@@ -1550,7 +1548,7 @@ export default function DashboardPage() {
 
             <div className="flex-1 overflow-y-auto scrollbar-hide p-2 space-y-0.5">
                 {/* Mi Asistente (Terminal) Button */}
-                <div 
+                <div
                     onClick={openTerminal}
                     className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition text-surface-300 hover:bg-surface-700/50 group`}
                     title="Añadir Terminal al Grid"
@@ -1560,7 +1558,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Explorador de Archivos Button */}
-                <div 
+                <div
                     onClick={openFileExplorer}
                     className={`flex items-center gap-2 px-3 py-2.5 mb-2 text-sm rounded-md cursor-pointer transition text-surface-300 hover:bg-surface-700/50 group`}
                     title="Añadir Explorador de Archivos al Grid"
@@ -1705,7 +1703,7 @@ export default function DashboardPage() {
                         currentWorkspaceName={currentWorkspace?.name}
                         currentWorkspaceId={currentWorkspace?.id}
                         currentWorkspaceType={currentWorkspace?.type}
-                        nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || "http://localhost:3002"}
+                        nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
                    />
                </div>
             ) : (
