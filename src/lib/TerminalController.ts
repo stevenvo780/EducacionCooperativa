@@ -89,7 +89,6 @@ export class TerminalController {
 
       // Input handler
       this.term.onData((data: string) => {
-        // console.log('[TerminalController] Input captured:', JSON.stringify(data), 'ActiveSession:', this.activeSessionId);
         if (this.socket?.connected && this.activeSessionId) {
           this.socket.emit('execute', {
             sessionId: this.activeSessionId,
