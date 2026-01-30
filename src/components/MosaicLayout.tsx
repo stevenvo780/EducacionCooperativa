@@ -20,6 +20,7 @@ export interface DocItem {
   url?: string;
   folder?: string;
   storagePath?: string;
+  workspaceId?: string;
   
   // File props
   mimeType?: string;
