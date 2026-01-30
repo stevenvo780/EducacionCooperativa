@@ -27,9 +27,9 @@ export async function POST(req: NextRequest) {
         }
 
         // Return user info (exclude password)
-        return NextResponse.json({ 
-            uid: userDoc.id, 
-            email: userData.email, 
+        return NextResponse.json({
+            uid: userDoc.id,
+            email: userData.email,
             displayName: userData.displayName || 'User',
             photoURL: userData.photoURL || null
         }, { status: 200 });

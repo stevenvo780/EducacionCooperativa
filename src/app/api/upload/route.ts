@@ -10,22 +10,22 @@ export async function POST(req: NextRequest) {
         const workspaceId = (formData.get('workspaceId') as string) || 'personal';
         const folderField = formData.get('folder');
         const folder = typeof folderField === 'string' ? folderField : 'No estructurado';
-        
+
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        
+
         // Use user-specific path for sync compatibility
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
         let filename = `users/${ownerId}/${safeName}`;
-        
+
         // If specific workspace provided (and not personal), use workspace path
         if (workspaceId && workspaceId !== 'personal') {
              filename = `workspaces/${workspaceId}/${safeName}`;
         }
-        
+
         const bucket = adminStorage.bucket();
         if (!bucket?.name) {
             throw new Error('Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID');
@@ -37,14 +37,14 @@ export async function POST(req: NextRequest) {
             metadata: {
                 metadata: {
                     originalName: file.name,
-                    ownerId,
+                    ownerId
                 }
             }
         });
 
         const [url] = await fileRef.getSignedUrl({
             action: 'read',
-            expires: '03-01-2500', 
+            expires: '03-01-2500'
         });
 
         // Create document in Firestore via Admin SDK
@@ -60,12 +60,12 @@ export async function POST(req: NextRequest) {
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
         });
-        
-        return NextResponse.json({ 
+
+        return NextResponse.json({
             id: docRef.id,
-            url, 
-            name: file.name, 
-            type: 'file', 
+            url,
+            name: file.name,
+            type: 'file',
             path: filename,
             storagePath: filename,
             mimeType: file.type,

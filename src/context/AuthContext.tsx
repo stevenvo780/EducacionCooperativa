@@ -24,7 +24,7 @@ const AuthContext = createContext<AuthContextType>({
     signInWithGoogle: async () => { },
     loginWithEmail: async () => { },
     registerWithEmail: async () => { },
-    logout: async () => { },
+    logout: async () => { }
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -55,7 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             try {
                 setUser(JSON.parse(storedUser));
             } catch (e) {
-                console.error("Failed to parse stored user", e);
+                console.error('Failed to parse stored user', e);
                 localStorage.removeItem('agora_user');
             }
         }
@@ -89,7 +89,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 router.push('/dashboard');
             }
         } catch (error: any) {
-            console.error("Google login failed:", error);
+            console.error('Google login failed:', error);
             if (error.code === 'auth/configuration-not-found' ||
                 error.code === 'auth/invalid-api-key' ||
                 error.code === 'auth/api-key-not-valid') {
@@ -103,7 +103,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: pass }),
+            body: JSON.stringify({ email, password: pass })
         });
 
         if (!res.ok) {
@@ -118,7 +118,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             email: userData.email,
             displayName: userData.displayName || email.split('@')[0],
             photoURL: userData.photoURL || null,
-            getIdToken: async () => userData.uid, // Use uid as token for API calls
+            getIdToken: async () => userData.uid // Use uid as token for API calls
         } as unknown as User;
 
         setUser(userObj);
@@ -126,7 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             uid: userData.uid,
             email: userData.email,
             displayName: userObj.displayName,
-            photoURL: userObj.photoURL,
+            photoURL: userObj.photoURL
         }));
 
         router.push('/dashboard');
@@ -136,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: pass }),
+            body: JSON.stringify({ email, password: pass })
         });
 
         if (!res.ok) {
@@ -152,7 +152,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             email: userData.email,
             displayName: email.split('@')[0],
             photoURL: null,
-            getIdToken: async () => userData.uid,
+            getIdToken: async () => userData.uid
         } as unknown as User;
 
         setUser(userObj);
@@ -160,7 +160,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             uid: userData.uid,
             email: userData.email,
             displayName: userObj.displayName,
-            photoURL: null,
+            photoURL: null
         }));
 
         router.push('/dashboard');

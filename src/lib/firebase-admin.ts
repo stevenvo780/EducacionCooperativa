@@ -11,7 +11,7 @@ try {
     serviceAccount = JSON.parse(serviceAccountStr);
   }
 } catch (e) {
-  console.error("Error parsing FIREBASE_SERVICE_ACCOUNT", e);
+  console.error('Error parsing FIREBASE_SERVICE_ACCOUNT', e);
 }
 
 // Ensure bucket name is always usable; fall back to the default GCS naming.
@@ -27,10 +27,10 @@ if (!getApps().length) {
     app = initializeApp({
       credential: cert(serviceAccount),
       projectId,
-      storageBucket,
+      storageBucket
     });
   } else {
-    console.warn("FIREBASE_SERVICE_ACCOUNT missing; firebase-admin will use application default credentials.");
+    console.warn('FIREBASE_SERVICE_ACCOUNT missing; firebase-admin will use application default credentials.');
     app = initializeApp({ projectId, storageBucket });
   }
 } else {
