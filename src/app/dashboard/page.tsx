@@ -4,11 +4,12 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter } from 'next/navigation';
-import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, HelpCircle, Menu, Loader2, Columns, Eye, Pencil, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp } from 'lucide-react';
+import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, Menu, Loader2, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
 import type { DocItem, FolderItem as MosaicFolderItem, ViewMode } from '@/components/MosaicLayout';
+import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 
 // Fix imports for server-side
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -52,22 +53,7 @@ interface DeleteStatus {
 }
 
 const PERSONAL_WORKSPACE_ID = 'personal';
-const DEFAULT_FOLDER_NAME = 'No estructurado';
 const ROOT_FOLDER_PATH = '';
-
-const normalizePath = (value?: string) => {
-  if (!value) return '';
-  return value
-    .split('/')
-    .map(part => part.trim())
-    .filter(Boolean)
-    .join('/');
-};
-
-const normalizeFolderPath = (value?: string) => {
-  const normalized = normalizePath(value);
-  return normalized || DEFAULT_FOLDER_NAME;
-};
 
 const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspace => ({
   id: data.id,
@@ -103,7 +89,6 @@ export default function DashboardPage() {
 
   // UI State
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const [showTerminal, setShowTerminal] = useState(false);
   const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
   const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
   const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
@@ -326,6 +311,42 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [currentWorkspace, user, fetchDocs]);
 
+    // Reset tabs/layout when workspace changes
+    useEffect(() => {
+        if (!currentWorkspaceId) return;
+        setOpenTabs([]);
+        setMosaicNode(null);
+        setSelectedDocId(null);
+        setDocModes({});
+    }, [currentWorkspaceId]);
+
+    // Ensure File Explorer tab is available in mosaic layout
+    useEffect(() => {
+        if (!currentWorkspace || !user) return;
+        const filesTabId = `files-${currentWorkspace.id}`;
+        const hasFilesTab = openTabs.some(tab => tab.id === filesTabId);
+        if (hasFilesTab) return;
+
+        (async () => {
+            const newFilesItem: DocItem = {
+                id: filesTabId,
+                name: 'Archivos',
+                type: 'files',
+                updatedAt: new Date(),
+                ownerId: user.uid
+            };
+
+            setOpenTabs(prev => [...prev, newFilesItem]);
+            const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+            setMosaicNode(current => {
+                const leaves = getLeaves(current);
+                if (leaves.includes(filesTabId)) return current;
+                return createBalancedTreeFromLeaves([...leaves, filesTabId]);
+            });
+            setSelectedDocId(filesTabId);
+        })();
+    }, [currentWorkspace, user, openTabs]);
+
   useEffect(() => {
     if (currentWorkspaceId) {
       setActiveFolder(ROOT_FOLDER_PATH);
@@ -357,7 +378,6 @@ export default function DashboardPage() {
       if (openTabs.find(t => t.id === terminalId)) {
           setSelectedDocId(terminalId);
           setShowMobileSidebar(false);
-          setShowTerminal(false);
           return;
       }
 
@@ -377,29 +397,7 @@ export default function DashboardPage() {
           return createBalancedTreeFromLeaves([...leaves, terminalId]);
       });
       setShowMobileSidebar(false);
-      setShowTerminal(false);
       setSelectedDocId(terminalId);
-  };
-
-  const openFileExplorer = async () => {
-      // Create a unique ID for the file explorer panel
-      const newFilesId = `files-${Date.now()}`;
-      const newFilesItem: DocItem = {
-          id: newFilesId,
-          name: 'Archivos',
-          type: 'files',
-          updatedAt: new Date(),
-          ownerId: user?.uid || 'system'
-      };
-
-      setOpenTabs(prev => [...prev, newFilesItem]);
-      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-      setMosaicNode(current => {
-          const leaves = getLeaves(current);
-          if (leaves.includes(newFilesId)) return current;
-          return createBalancedTreeFromLeaves([...leaves, newFilesId]);
-      });
-      setShowMobileSidebar(false);
   };
 
   const closeTabById = useCallback(async (docId: string) => {
@@ -413,7 +411,6 @@ export default function DashboardPage() {
   }, []);
 
   const openDocument = async (doc: DocItem) => {
-      setShowTerminal(false);
       if (doc.type === 'folder') return;
       setActiveFolder(normalizeFolderPath(doc.folder));
       setOpenTabs(prev => {
@@ -1126,7 +1123,6 @@ export default function DashboardPage() {
               return newTabs;
           });
           setSelectedDocId(docToOpen.id);
-          setShowTerminal(false);
       }
   };
 
@@ -1401,7 +1397,7 @@ export default function DashboardPage() {
                 <button onClick={() => setShowMobileSidebar(!showMobileSidebar)} className="md:hidden p-1.5 text-surface-400 hover:bg-surface-700 rounded">
                     <Menu className="w-5 h-5" />
                 </button>
-                <div onClick={() => { setSelectedDocId(null); setShowTerminal(false); }} className="font-bold flex items-center gap-2 text-white cursor-pointer">
+                <div onClick={() => setSelectedDocId(null)} className="font-bold flex items-center gap-2 text-white cursor-pointer">
                     <span className="bg-gradient-mandy text-white p-1 rounded-md text-xs">St</span>
                     <span className="hidden sm:inline">Studio</span>
                 </div>
