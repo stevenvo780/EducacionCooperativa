@@ -77,3 +77,5 @@ terminal-error.png
 nohup.out
 crendenciales-prod.md
 .next_blocked_by_root
+# Environment files
+.env*
