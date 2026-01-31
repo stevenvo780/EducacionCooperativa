@@ -1,12 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
-import { TerminalController } from '@/lib/TerminalController';
+import { TerminalController, WorkspaceWorkerStatus, WorkerStatus } from '@/lib/TerminalController';
 import { useAuth } from './AuthContext';
 
 export interface TerminalSession {
     id: string;
-    // We can add name or other metadata here if the backend provides it
     name?: string;
     workspaceId?: string;
 }
@@ -21,8 +20,11 @@ interface TerminalContextType {
     initialize: (nexusUrl: string) => Promise<void>;
     createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
     selectSession: (sessionId: string) => void;
-    destroySession: (sessionId: string) => void; // Optional, if we supported it
+    destroySession: (sessionId: string) => void;
     errorMessage: string | null;
+    // NEW: Per-workspace worker status tracking
+    workspaceWorkerStatuses: Map<string, WorkerStatus>;
+    getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
 }
 
 const TerminalContext = createContext<TerminalContextType | null>(null);
@@ -38,7 +40,6 @@ export const useTerminal = () => {
 export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const { user } = useAuth();
     const controllerRef = useRef<TerminalController | null>(null);
-    // Use a getter function instead of ref to always get current user
     const getUserRef = useRef(() => user);
     getUserRef.current = () => user;
 
@@ -49,7 +50,13 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isCreatingSession, setIsCreatingSession] = useState(false);
 
-    // Initialize ONLY when explicitly called (usually by Dashboard) to allow dynamic Nexus URL
+    // NEW: Track worker status per workspace
+    const [workspaceWorkerStatuses, setWorkspaceWorkerStatuses] = useState<Map<string, WorkerStatus>>(new Map());
+
+    const getWorkerStatusForWorkspace = useCallback((workspaceId: string): WorkerStatus => {
+        return workspaceWorkerStatuses.get(workspaceId) || 'unknown';
+    }, [workspaceWorkerStatuses]);
+
     const initialize = useCallback(async (nexusUrl: string) => {
         const currentUser = getUserRef.current();
         if (!currentUser || controllerRef.current) {
@@ -79,59 +86,78 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             document.head.appendChild(link);
         }
 
-        // Connect
+        // Connect with per-workspace status handler
         try {
-             let actualToken = 'mock-token';
-             if (currentUser.getIdToken) {
-                 const token = await currentUser.getIdToken();
-                 actualToken = token.includes('.') ? token : 'mock-token';
-             }
+            let actualToken = 'mock-token';
+            if (currentUser.getIdToken) {
+                const token = await currentUser.getIdToken();
+                actualToken = token.includes('.') ? token : 'mock-token';
+            }
 
-             controller.connect(actualToken, currentUser.uid, (newStatus) => {
-                 if (newStatus === 'hub-online') {
-                     setHubConnected(true);
-                     setStatus(prev => prev === 'online' ? 'online' : 'checking');
-                 } else if (newStatus === 'hub-offline') {
-                     setHubConnected(false);
-                     setStatus('offline');
-                 } else if (newStatus === 'online') {
-                     setHubConnected(true);
-                     setStatus('online');
-                 } else if (newStatus === 'offline') {
-                     setStatus('offline');
-                 } else if (newStatus === 'error') {
-                     setStatus('error');
-                 }
-             }, (payload) => {
-                 // Session ended callback
-             });
+            controller.connect(
+                actualToken,
+                currentUser.uid,
+                // Hub status callback
+                (newStatus) => {
+                    if (newStatus === 'hub-online') {
+                        setHubConnected(true);
+                        setStatus(prev => prev === 'online' ? 'online' : 'checking');
+                    } else if (newStatus === 'hub-offline') {
+                        setHubConnected(false);
+                        setStatus('offline');
+                    } else if (newStatus === 'online') {
+                        setHubConnected(true);
+                        setStatus('online');
+                    } else if (newStatus === 'offline') {
+                        setStatus('offline');
+                    } else if (newStatus === 'error') {
+                        setStatus('error');
+                    }
+                },
+                // Session ended callback
+                (_payload) => {
+                    // Handled via socket events below
+                },
+                // Per-workspace worker status callback
+                (workspaceStatus: WorkspaceWorkerStatus) => {
+                    setWorkspaceWorkerStatuses(prev => {
+                        const newMap = new Map(prev);
+                        newMap.set(workspaceStatus.workspaceId, workspaceStatus.status);
+                        return newMap;
+                    });
+                    // Also update global status if it's online (backwards compat)
+                    if (workspaceStatus.status === 'online') {
+                        setStatus('online');
+                    }
+                }
+            );
 
-             // Listen for events
-             controller.socket?.on('session-created', (data: { id: string }) => {
-                 setIsCreatingSession(false);
-                 setSessions(prev => {
-                     if (prev.find(s => s.id === data.id)) return prev;
-                     const newSession = { id: data.id, name: `Terminal ${prev.length + 1}` };
-                     return [...prev, newSession];
-                 });
-                 setActiveSessionId(data.id);
-             });
+            // Listen for events
+            controller.socket?.on('session-created', (data: { id: string }) => {
+                setIsCreatingSession(false);
+                setSessions(prev => {
+                    if (prev.find(s => s.id === data.id)) return prev;
+                    const newSession = { id: data.id, name: `Terminal ${prev.length + 1}` };
+                    return [...prev, newSession];
+                });
+                setActiveSessionId(data.id);
+            });
 
-             controller.socket?.on('session-ended', (data: { sessionId: string }) => {
-                 setSessions(prev => prev.filter(s => s.id !== data.sessionId));
-                 setActiveSessionId(prev => prev === data.sessionId ? null : prev);
-             });
+            controller.socket?.on('session-ended', (data: { sessionId: string }) => {
+                setSessions(prev => prev.filter(s => s.id !== data.sessionId));
+                setActiveSessionId(prev => prev === data.sessionId ? null : prev);
+            });
 
-             controller.socket?.on('connect_error', (err: any) => {
-                 setErrorMessage(err.message);
-                 setStatus('error');
-             });
+            controller.socket?.on('connect_error', (err: Error) => {
+                setErrorMessage(err.message);
+                setStatus('error');
+            });
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             setStatus('error');
-            setErrorMessage(e.message);
+            setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
         }
-    }, []); // No dependencies - uses refs internally
+    }, []);
 
     const createSession = useCallback((workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => {
         setIsCreatingSession(true);
@@ -166,7 +192,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             createSession,
             selectSession,
             destroySession,
-            errorMessage
+            errorMessage,
+            workspaceWorkerStatuses,
+            getWorkerStatusForWorkspace
         }}>
             {children}
         </TerminalContext.Provider>
