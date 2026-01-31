@@ -109,8 +109,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 // Hub status callback
                 (newStatus) => {
                     if (newStatus === 'hub-online') {
+                        // Hub reachable; treat as online so UI does not remain stuck in "checking" state
                         setHubConnected(true);
-                        setStatus(prev => prev === 'online' ? 'online' : 'checking');
+                        setStatus('online');
                     } else if (newStatus === 'hub-offline') {
                         setHubConnected(false);
                         setStatus('offline');
@@ -152,19 +153,21 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 originalStartSession(opts);
             };
 
-            controller.socket?.on('session-created', (data: { id: string }) => {
+            controller.socket?.on('session-created', (data: { id: string; workspaceId?: string }) => {
                 setIsCreatingSession(false);
                 setSessions(prev => {
                     if (prev.find(s => s.id === data.id)) return prev;
-                    // Count sessions for this workspace to generate name
-                    const workspaceId = pendingSessionMeta?.workspaceId || 'unknown';
+                    // Prefer server-provided workspaceId; fallback to pending meta
+                    const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
+                    const workspaceType = pendingSessionMeta?.workspaceType || 'personal';
+                    const workspaceName = pendingSessionMeta?.workspaceName;
                     const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
                     const newSession: TerminalSession = {
                         id: data.id,
                         name: `Terminal ${existingCount + 1}`,
-                        workspaceId: workspaceId,
-                        workspaceType: pendingSessionMeta?.workspaceType || 'personal',
-                        workspaceName: pendingSessionMeta?.workspaceName
+                        workspaceId,
+                        workspaceType,
+                        workspaceName
                     };
                     pendingSessionMeta = null;
                     return [...prev, newSession];

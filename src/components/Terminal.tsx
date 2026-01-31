@@ -26,11 +26,11 @@ function getWorkerToken(workspaceType: 'personal' | 'shared', workspaceId: strin
 }
 
 const Terminal: React.FC<TerminalProps> = ({
-  nexusUrl,
-  workspaceId,
-  workspaceName,
-  workspaceType = 'personal',
-  sessionId
+    nexusUrl,
+    workspaceId,
+    workspaceName,
+    workspaceType = 'personal',
+    sessionId
 }) => {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -42,11 +42,14 @@ const Terminal: React.FC<TerminalProps> = ({
     hubConnected,
     errorMessage,
     initialize,
-    activeSessionId,
+        activeSessionId,
     createSession,
     selectSession,
     getWorkerStatusForWorkspace
   } = useTerminal();
+
+    // Fallback to the currently active session when a specific sessionId prop is not provided
+    const effectiveSessionId = sessionId || activeSessionId;
 
   const setContainerRef = useCallback((node: HTMLDivElement | null) => {
       setContainerEl(node);
@@ -80,7 +83,7 @@ const Terminal: React.FC<TerminalProps> = ({
   // Mount THIS session's terminal to THIS container
   // Each session now has its own xterm instance
   useEffect(() => {
-      if (!sessionId || !containerEl || !controller) return;
+      if (!effectiveSessionId || !containerEl || !controller) return;
       let mounted = false;
 
       const tryMount = () => {
@@ -88,7 +91,7 @@ const Terminal: React.FC<TerminalProps> = ({
           if (containerEl.offsetWidth > 0 && containerEl.offsetHeight > 0) {
               try {
                   // Use the new mountSession API to mount THIS session's terminal
-                  controller.mountSession(sessionId, containerEl);
+                  controller.mountSession(effectiveSessionId, containerEl);
                   mounted = true;
               } catch (e) {
                   console.error('Error mounting terminal for session', sessionId, e);
@@ -116,19 +119,23 @@ const Terminal: React.FC<TerminalProps> = ({
           observer.disconnect();
           window.clearTimeout(fallbackTimeout);
       };
-  }, [sessionId, controller, containerEl]);
+    }, [effectiveSessionId, controller, containerEl]);
 
   useEffect(() => {
-    if (!sessionId || !controller) return;
-    const handleResize = () => controller?.fitSession(sessionId);
+        if (!effectiveSessionId || !controller) return;
+        const handleResize = () => controller?.fitSession(effectiveSessionId);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [controller, sessionId]);
+    }, [controller, effectiveSessionId]);
 
   const handleCreateSession = () => {
       if (!createSession) return;
       // Use the workerToken as the workspaceId for creating sessions
       createSession(workerToken, workspaceType, workspaceName);
+      // Ensure the next render will mount the just-created session even if no explicit sessionId prop is passed
+      if (controller && activeSessionId) {
+          controller.setActiveSession(activeSessionId);
+      }
   };
 
   const downloadPath = '/downloads/edu-worker_1.0.0_amd64.deb';
@@ -151,7 +158,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   // Si esta ventana tiene una sesión asignada, mostrar su terminal independiente
   // Cada sesión ahora tiene su propia instancia de xterm
-  if (sessionId) {
+  if (effectiveSessionId) {
       return (
         <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
             <div className="absolute top-4 right-4 z-10 flex gap-2 pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
@@ -161,7 +168,7 @@ const Terminal: React.FC<TerminalProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-indigo-500/10 border-indigo-500/20 text-indigo-400">
                     <Monitor className="w-3 h-3" />
-                    SESIÓN {sessionId.slice(-4)}
+                    SESIÓN {effectiveSessionId.slice(-4)}
                 </div>
             </div>
             <div
