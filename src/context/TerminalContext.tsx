@@ -93,15 +93,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
         controllerRef.current = controller;
 
-        // Load XTerm CSS globally once
-        if (typeof document !== 'undefined' && !document.getElementById('xterm-css')) {
-            const link = document.createElement('link');
-            link.id = 'xterm-css';
-            link.rel = 'stylesheet';
-            link.href = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css';
-            document.head.appendChild(link);
-        }
-
         // Connect with per-workspace status handler
         try {
             let actualToken = 'mock-token';
@@ -189,6 +180,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             controller.socket?.on('session-ended', (data: { sessionId: string }) => {
                 setSessions(prev => prev.filter(s => s.id !== data.sessionId));
                 setActiveSessionId(prev => prev === data.sessionId ? null : prev);
+                controllerRef.current?.disposeSession(data.sessionId);
             });
 
             controller.socket?.on('connect_error', (err: Error) => {

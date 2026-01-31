@@ -334,16 +334,12 @@ export class TerminalController {
       this.socket.emit('kill-session', { sessionId });
     }
 
-    // Clean up the terminal instance
-    const instance = this.terminals.get(sessionId);
-    if (instance) {
-      instance.term?.writeln('\x1b[31mSession ended\x1b[0m');
-      instance.resizeObserver?.disconnect();
-    }
-
     if (this.activeSessionId === sessionId) {
       this.activeSessionId = null;
     }
+
+    // Ensure resources are released for closed sessions
+    this.disposeSession(sessionId);
   }
 
   // Dispose a terminal instance (called when component unmounts)
