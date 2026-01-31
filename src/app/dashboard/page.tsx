@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter } from 'next/navigation';
-import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, Check, X, Shield, Folder, Settings, Menu, Loader2, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp } from 'lucide-react';
+import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, ChevronRight, Check, X, Shield, Folder, Settings, Menu, Loader2, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -164,6 +164,7 @@ export default function DashboardPage() {
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
   const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
+  const [sidebarExpandedFolders, setSidebarExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -195,6 +196,10 @@ export default function DashboardPage() {
   useEffect(() => {
     docsRef.current = docs;
   }, [docs]);
+
+  useEffect(() => {
+    setSidebarExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
+  }, [currentWorkspaceId]);
 
   const fetchWorkspaces = useCallback(async () => {
     if (!user) return;
@@ -950,6 +955,8 @@ export default function DashboardPage() {
   const activeChildFolders = useMemo(() => {
       return folderChildrenMap[activeFolder] ?? [];
   }, [folderChildrenMap, activeFolder]);
+
+  const sidebarHasContent = docs.length > 0 || folders.some(folder => folder.path !== DEFAULT_FOLDER_NAME);
 
   const renderFolderTree = (parentPath: string, depth = 0): React.ReactNode[] => {
       const children = folderChildrenMap[parentPath] ?? [];
@@ -1826,9 +1833,12 @@ export default function DashboardPage() {
                 {/* 1. SECCIÓN ASISTENTE */}
                 <div>
                      <div className="px-2 py-1 flex items-center justify-between group">
-                        <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
+                        <button
+                            onClick={() => openTerminal()}
+                            className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2 hover:text-mandy-400 transition-colors"
+                        >
                             MI ASISTENTE
-                        </span>
+                        </button>
                         <button
                              disabled={connectionStatus !== 'online' || isCreatingSession}
                              onClick={() => {
@@ -1859,6 +1869,17 @@ export default function DashboardPage() {
 
                         {sessions.length === 0 && connectionStatus === 'online' && !isCreatingSession && (
                              <div className="px-3 py-1 text-[10px] text-surface-500 italic">Sin sesiones activas</div>
+                        )}
+
+                        {/* Mostrar enlace para configurar worker cuando no está online y no está checking */}
+                        {sessions.length === 0 && connectionStatus !== 'online' && connectionStatus !== 'checking' && (
+                             <button
+                                onClick={() => openTerminal()}
+                                className="w-full px-3 py-1.5 text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-2 transition-colors"
+                             >
+                                 <Settings className="w-3 h-3" />
+                                 <span>Configurar Worker...</span>
+                             </button>
                         )}
 
                         {sessions.map(sess => (

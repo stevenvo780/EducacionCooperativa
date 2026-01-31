@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TerminalProps {
   nexusUrl: string;
@@ -21,6 +21,7 @@ const Terminal: React.FC<TerminalProps> = ({
   sessionId
 }) => {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
   const { user } = useAuth();
 
   const {
@@ -188,6 +189,68 @@ const Terminal: React.FC<TerminalProps> = ({
                         <TerminalIcon className="w-5 h-5" /> Iniciar Sesión Default
                     </button>
                     <p className="text-xs text-slate-500">O selecciona una sesión existente en la barra lateral.</p>
+
+                    {/* Expandable Install Guide */}
+                    <div className="border-t border-slate-800 pt-4 mt-4">
+                        <button
+                            onClick={() => setShowInstallGuide(!showInstallGuide)}
+                            className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-300 mx-auto transition-colors"
+                        >
+                            <Settings className="w-3.5 h-3.5" />
+                            <span>Instalar worker en otra máquina</span>
+                            {showInstallGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+
+                        {showInstallGuide && (
+                            <div className="mt-4 space-y-4 text-slate-400 text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
+                                    <div className="flex justify-between items-center text-xs font-mono">
+                                        <span className="text-slate-400 font-bold flex items-center gap-2">
+                                            <Key className="w-3 h-3" /> TOKEN DE VINCULACIÓN
+                                        </span>
+                                        <button onClick={() => navigator.clipboard.writeText(user.uid)} className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors">
+                                            <Copy className="w-3 h-3" /> <span className="text-[10px]">Copiar</span>
+                                        </button>
+                                    </div>
+                                    <code className="block w-full bg-black rounded border border-slate-800 p-2 text-yellow-400 text-sm font-mono break-all select-all">
+                                        {user.uid}
+                                    </code>
+                                </div>
+
+                                {workspaceCode !== 'personal' && (
+                                    <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
+                                        <div className="flex justify-between items-center text-xs font-mono">
+                                            <span className="text-slate-400 font-bold flex items-center gap-2">
+                                                <Key className="w-3 h-3" /> WORKSPACE ID
+                                            </span>
+                                            <button onClick={() => navigator.clipboard.writeText(workspaceCode || '')} className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors">
+                                                <Copy className="w-3 h-3" /> <span className="text-[10px]">Copiar</span>
+                                            </button>
+                                        </div>
+                                        <code className="block w-full bg-black rounded border border-slate-800 p-2 text-cyan-400 text-sm font-mono break-all select-all">
+                                            {workspaceCode}
+                                        </code>
+                                    </div>
+                                )}
+
+                                <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto">
+                                    <p className="text-slate-500 mb-1"># Instalación y Configuración</p>
+                                    <p className="text-emerald-400 whitespace-nowrap mb-2">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
+                                    <p className="text-yellow-200 whitespace-pre-wrap mb-2">
+                                        $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={user.uid}/&apos; /etc/edu-worker/worker.env
+                                        {workspaceCode !== 'personal' && (
+                                            <> && sudo sed -i &apos;s/#WORKSPACE_ID=/WORKSPACE_ID={workspaceCode}/&apos; /etc/edu-worker/worker.env</>
+                                        )}
+                                    </p>
+                                    <p className="text-emerald-400">$ sudo systemctl restart edu-worker</p>
+                                </div>
+
+                                <p className="text-[10px] text-slate-600 text-center">
+                                    El worker debe apuntar a: <code className="text-slate-500">{nexusUrl || 'http://148.230.88.162:3010'}</code>
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             ) : (
                 <div className="space-y-4 text-slate-400 text-left">
