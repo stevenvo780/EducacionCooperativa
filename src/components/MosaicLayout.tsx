@@ -183,7 +183,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         workspaceId={currentWorkspaceId}
                         workspaceName={currentWorkspaceName}
                         workspaceType={currentWorkspaceType}
-                        sessionId={doc.sessionId || doc.id}
+                        sessionId={doc.sessionId}
                       />
                   ) : isFileExplorer ? (
                       <FileExplorer
