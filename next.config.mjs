@@ -13,9 +13,6 @@ const nextConfig = {
         test: /[\\/]node_modules[\\/]@xterm[\\/]/,
         sideEffects: true,
       });
-      
-      // Completely disable optimization for development-like build
-      config.optimization.minimize = false;
     }
     return config;
   },
