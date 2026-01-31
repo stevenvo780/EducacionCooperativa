@@ -130,7 +130,7 @@ const Terminal: React.FC<TerminalProps> = ({
   // pero permitir activarla con un click
   if (activeSessionId && sessionId && activeSessionId !== sessionId) {
       return (
-          <div 
+          <div
               className="h-full w-full flex flex-col bg-black relative overflow-hidden cursor-pointer group"
               onClick={handleActivateSession}
           >
