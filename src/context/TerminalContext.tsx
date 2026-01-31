@@ -110,14 +110,18 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 currentUser.uid,
                 // Hub status callback
                 (newStatus) => {
+                    console.log('[TerminalContext] Hub status changed:', newStatus);
                     if (newStatus === 'hub-online') {
                         // Hub reachable; treat as online so UI does not remain stuck in "checking" state
+                        console.log('[TerminalContext] Setting hubConnected=true, status=online');
                         setHubConnected(true);
                         setStatus('online');
                     } else if (newStatus === 'hub-offline') {
+                        console.log('[TerminalContext] Setting hubConnected=false, status=offline');
                         setHubConnected(false);
                         setStatus('offline');
                     } else if (newStatus === 'online') {
+                        console.log('[TerminalContext] Setting hubConnected=true, status=online (online event)');
                         setHubConnected(true);
                         setStatus('online');
                     } else if (newStatus === 'offline') {
