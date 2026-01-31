@@ -15,6 +15,7 @@ interface AuthContextType {
     signInWithGoogle: () => Promise<void>;
     loginWithEmail: (email: string, pass: string) => Promise<void>;
     registerWithEmail: (email: string, pass: string) => Promise<void>;
+    changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
     signInWithGoogle: async () => { },
     loginWithEmail: async () => { },
     registerWithEmail: async () => { },
+    changePassword: async () => { },
     logout: async () => { }
 });
 
@@ -178,6 +180,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         router.push('/dashboard');
     };
 
+    const changePassword = async (currentPassword: string, newPassword: string) => {
+        if (!user?.uid) {
+            throw new Error('No hay usuario autenticado');
+        }
+
+        const res = await fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                uid: user.uid,
+                currentPassword,
+                newPassword
+            })
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'Error al cambiar la contraseña');
+        }
+
+        return res.json();
+    };
+
     const logout = async () => {
         try {
             const firebaseAuth = getAuth();
@@ -191,7 +216,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, logout }}>
+        <AuthContext.Provider value={{ user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, changePassword, logout }}>
             {children}
         </AuthContext.Provider>
     );
