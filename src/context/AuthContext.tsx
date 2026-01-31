@@ -4,7 +4,8 @@ import {
     onAuthStateChanged,
     User,
     signInWithPopup,
-    signOut
+    signOut,
+    sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth as getAuth, googleProvider as getGoogleProvider } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
@@ -16,6 +17,7 @@ interface AuthContextType {
     loginWithEmail: (email: string, pass: string) => Promise<void>;
     registerWithEmail: (email: string, pass: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+    resetPassword: (email: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
     loginWithEmail: async () => { },
     registerWithEmail: async () => { },
     changePassword: async () => { },
+    resetPassword: async () => { },
     logout: async () => { }
 });
 
@@ -203,6 +206,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return res.json();
     };
 
+    const resetPassword = async (email: string) => {
+        try {
+            const firebaseAuth = getAuth();
+            await sendPasswordResetEmail(firebaseAuth, email);
+        } catch (error: any) {
+            if (error.code === 'auth/user-not-found') {
+                throw new Error('No existe una cuenta con este correo electrónico');
+            }
+            if (error.code === 'auth/invalid-email') {
+                throw new Error('El correo electrónico no es válido');
+            }
+            throw new Error(error.message || 'Error al enviar el correo de recuperación');
+        }
+    };
+
     const logout = async () => {
         try {
             const firebaseAuth = getAuth();
@@ -216,7 +234,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, changePassword, logout }}>
+        <AuthContext.Provider value={{ user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, changePassword, resetPassword, logout }}>
             {children}
         </AuthContext.Provider>
     );
