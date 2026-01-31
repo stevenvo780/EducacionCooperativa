@@ -192,9 +192,16 @@ const Terminal: React.FC<TerminalProps> = ({
                 {workerOnline
                     ? 'Worker Conectado'
                     : workerOffline
-                        ? 'Worker Desconectado'
+                        ? `Sin Worker para "${workspaceName || (isPersonalWorkspace ? 'Espacio Personal' : 'este espacio')}"`
                         : 'Error de Conexión'}
             </h2>
+
+            {/* Subtítulo con más contexto */}
+            {workerOffline && !showHubError && (
+                <p className="text-amber-400/80 text-sm -mt-2">
+                    Este espacio de trabajo necesita un worker dedicado para funcionar
+                </p>
+            )}
 
             {workerOnline ? (
                 <div className="space-y-4">
@@ -272,7 +279,20 @@ const Terminal: React.FC<TerminalProps> = ({
                         </>
                     ) : (
                         <>
-                            <p className="text-center mb-4">No se detecta el worker activo para este espacio.</p>
+                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 mb-4">
+                                <p className="text-center text-amber-400 font-medium mb-2">
+                                    ¿Cómo funciona?
+                                </p>
+                                <p className="text-center text-sm text-slate-400">
+                                    Cada espacio de trabajo necesita su propio <strong className="text-white">worker</strong> (contenedor Docker)
+                                    para ejecutar comandos y sincronizar archivos de forma aislada.
+                                </p>
+                            </div>
+
+                            <p className="text-center text-xs text-slate-500 mb-4">
+                                Instala un worker en tu servidor siguiendo estos pasos:
+                            </p>
+
                             <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
                                 <div className="flex justify-between items-center text-xs font-mono">
                                     <span className="text-slate-400 font-bold flex items-center gap-2">
