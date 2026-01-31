@@ -45,28 +45,24 @@ const Terminal: React.FC<TerminalProps> = ({
       }
   }, [controller, status, nexusUrl, initialize]);
 
-  // Esta ventana debe mostrar su sesión cuando es la activa
-  const isActiveSession = !sessionId || sessionId === activeSessionId;
+  // Esta ventana muestra su propia sesión (cada sesión tiene su propio terminal ahora)
+  const hasOwnSession = !!sessionId;
 
-  // Cuando el usuario hace click en esta ventana, activamos su sesión
-  const handleActivateSession = useCallback(() => {
-      if (sessionId && sessionId !== activeSessionId) {
-          selectSession(sessionId);
-      }
-  }, [sessionId, activeSessionId, selectSession]);
-
+  // Mount THIS session's terminal to THIS container
+  // Each session now has its own xterm instance
   useEffect(() => {
-      if (!activeSessionId || !isActiveSession || !containerEl || !controller) return;
+      if (!sessionId || !containerEl || !controller) return;
       let mounted = false;
 
       const tryMount = () => {
           if (mounted) return;
           if (containerEl.offsetWidth > 0 && containerEl.offsetHeight > 0) {
               try {
-                  controller.mount(containerEl);
+                  // Use the new mountSession API to mount THIS session's terminal
+                  controller.mountSession(sessionId, containerEl);
                   mounted = true;
               } catch (e) {
-                  console.error('Error mounting terminal', e);
+                  console.error('Error mounting terminal for session', sessionId, e);
               }
           }
       };
@@ -91,13 +87,14 @@ const Terminal: React.FC<TerminalProps> = ({
           observer.disconnect();
           window.clearTimeout(fallbackTimeout);
       };
-  }, [activeSessionId, controller, containerEl, isActiveSession]);
+  }, [sessionId, controller, containerEl]);
 
   useEffect(() => {
-    const handleResize = () => controller?.fit();
+    if (!sessionId || !controller) return;
+    const handleResize = () => controller?.fitSession(sessionId);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [controller]);
+  }, [controller, sessionId]);
 
   const handleCreateSession = () => {
       if (!createSession) return;
@@ -126,30 +123,9 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const showHubError = status === 'error' || (!hubConnected && status !== 'offline');
 
-  // Mostrar vista de "sesión inactiva" cuando esta ventana no tiene la sesión activa
-  // pero permitir activarla con un click
-  if (activeSessionId && sessionId && activeSessionId !== sessionId) {
-      return (
-          <div
-              className="h-full w-full flex flex-col bg-black relative overflow-hidden cursor-pointer group"
-              onClick={handleActivateSession}
-          >
-              {/* Overlay semi-transparente indicando que no está activa */}
-              <div className="absolute inset-0 bg-black/60 z-10 flex flex-col items-center justify-center">
-                  <div className="text-xs text-slate-500 mb-2">
-                      Sesión {sessionId.slice(-4)} (inactiva)
-                  </div>
-                  <div className="text-[10px] text-slate-600">
-                      Click para activar
-                  </div>
-              </div>
-              {/* Contenedor de terminal (vacío pero reserva espacio) */}
-              <div className="flex-1 min-h-0 w-full bg-slate-950" style={{ minHeight: '200px' }} />
-          </div>
-      );
-  }
-
-  if (activeSessionId) {
+  // Si esta ventana tiene una sesión asignada, mostrar su terminal independiente
+  // Cada sesión ahora tiene su propia instancia de xterm
+  if (sessionId) {
       return (
         <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
             <div className="absolute top-4 right-4 z-10 flex gap-2 pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
@@ -159,7 +135,7 @@ const Terminal: React.FC<TerminalProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-indigo-500/10 border-indigo-500/20 text-indigo-400">
                     <Monitor className="w-3 h-3" />
-                    SESIÓN {activeSessionId.slice(-4)}
+                    SESIÓN {sessionId.slice(-4)}
                 </div>
             </div>
             <div
