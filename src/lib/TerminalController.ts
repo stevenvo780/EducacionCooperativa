@@ -18,6 +18,16 @@ export interface TerminalInstance {
   mounted: boolean;
 }
 
+// =====================================================
+// NEW: Worker status is now per-workspace
+// =====================================================
+export type WorkerStatus = 'online' | 'offline' | 'unknown';
+
+export interface WorkspaceWorkerStatus {
+  workspaceId: string;
+  status: WorkerStatus;
+}
+
 export class TerminalController {
   // Map of sessionId -> TerminalInstance (each session has its own xterm)
   private terminals: Map<string, TerminalInstance> = new Map();
@@ -25,6 +35,11 @@ export class TerminalController {
   private nexusUrl: string;
   private initialized = false;
   private activeSessionId: string | null = null;
+
+  // NEW: Track worker status per workspace
+  private workspaceStatuses: Map<string, WorkerStatus> = new Map();
+  private subscribedWorkspaces: Set<string> = new Set();
+  private onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void;
 
   // Keep a reference to the old single-terminal API for backwards compat
   public get term(): any {
@@ -194,9 +209,12 @@ export class TerminalController {
     token: string,
     uid: string,
     onStatusChange?: (status: string) => void,
-    onSessionEnded?: (payload: { sessionId: string; reason?: string }) => void
+    onSessionEnded?: (payload: { sessionId: string; reason?: string }) => void,
+    onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void
   ) {
     if (this.socket) this.socket.disconnect();
+
+    this.onWorkerStatusChange = onWorkerStatusChange;
 
     this.socket = io(this.nexusUrl, {
       auth: { type: 'client', token, uid },
@@ -206,6 +224,10 @@ export class TerminalController {
 
     this.socket.on('connect', () => {
       onStatusChange?.('hub-online');
+      // Re-subscribe to all workspaces after reconnect
+      this.subscribedWorkspaces.forEach(workspaceId => {
+        this.socket?.emit('workspace:subscribe', { workspaceId });
+      });
     });
 
     this.socket.on('disconnect', () => {
@@ -219,11 +241,21 @@ export class TerminalController {
       onStatusChange?.('error');
     });
 
-    this.socket.on('worker-status', (data: { status: string }) => {
-      onStatusChange?.(data.status);
+    // NEW: Worker status now includes workspaceId
+    this.socket.on('worker-status', (data: { status: string; workspaceId?: string }) => {
+      const workspaceId = data.workspaceId;
+      const status = data.status as WorkerStatus;
+
+      if (workspaceId) {
+        this.workspaceStatuses.set(workspaceId, status);
+        this.onWorkerStatusChange?.({ workspaceId, status });
+      } else {
+        // Legacy fallback
+        onStatusChange?.(status);
+      }
     });
 
-    this.socket.on('session-created', (data: { id: string }) => {
+    this.socket.on('session-created', (data: { id: string; workspaceId?: string }) => {
       this.activeSessionId = data.id;
       // Create terminal instance for new session
       const instance = this.getTerminalInstance(data.id);
@@ -250,7 +282,40 @@ export class TerminalController {
       }
     });
 
+    // Error handler
+    this.socket.on('error', (data: { message: string; workspaceId?: string }) => {
+      console.warn('[TerminalController] Error:', data.message);
+    });
+
     this.socket.connect();
+  }
+
+  // NEW: Subscribe to a workspace to receive worker status updates
+  public subscribeToWorkspace(workspaceId: string) {
+    this.subscribedWorkspaces.add(workspaceId);
+    if (this.socket?.connected) {
+      this.socket.emit('workspace:subscribe', { workspaceId });
+    }
+  }
+
+  // NEW: Unsubscribe from a workspace
+  public unsubscribeFromWorkspace(workspaceId: string) {
+    this.subscribedWorkspaces.delete(workspaceId);
+    if (this.socket?.connected) {
+      this.socket.emit('workspace:unsubscribe', { workspaceId });
+    }
+  }
+
+  // NEW: Check if a workspace has a worker online
+  public getWorkerStatus(workspaceId: string): WorkerStatus {
+    return this.workspaceStatuses.get(workspaceId) || 'unknown';
+  }
+
+  // NEW: Request current worker status for a workspace
+  public checkWorkerStatus(workspaceId: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('workspace:check-worker', { workspaceId });
+    }
   }
 
   public startSession(payload?: { workspaceId?: string; workspaceName?: string; workspaceType?: string }) {
@@ -346,9 +411,11 @@ export class TerminalController {
       instance.term?.dispose();
     });
     this.terminals.clear();
+    this.subscribedWorkspaces.clear();
+    this.workspaceStatuses.clear();
     this.socket?.disconnect();
     this.socket = null;
     this.activeSessionId = null;
   }
 }
-// Build Sat Jan 31 08:59:20 -05 2026
+// Build Sat Jan 31 10:55:00 -05 2026
