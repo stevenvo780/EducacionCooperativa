@@ -56,6 +56,7 @@ interface FileExplorerProps {
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   currentWorkspaceName?: string;
+  currentWorkspaceId?: string;
   embedded?: boolean;
   activeFolder?: string;
   onActiveFolderChange?: (folderPath: string) => void;
@@ -75,6 +76,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   onDuplicateDoc,
   onMoveDoc,
   currentWorkspaceName = 'Espacio Personal',
+  currentWorkspaceId,
   embedded = false,
   activeFolder: activeFolderProp,
   onActiveFolderChange
@@ -350,7 +352,21 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           <Folder className="w-5 h-5 text-amber-400" />
           <div className="flex flex-col">
             <span className="font-medium text-sm">{currentWorkspaceName}</span>
-            <span className="text-[10px] text-slate-500 truncate">Carpeta: {activeFolder}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-500 truncate">Carpeta: {activeFolder}</span>
+              {currentWorkspaceId && currentWorkspaceId !== 'personal' && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentWorkspaceId);
+                  }}
+                  className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
+                  title="Copiar ID del workspace"
+                >
+                  <span className="truncate max-w-[80px]">{currentWorkspaceId}</span>
+                  <Copy className="w-2 h-2 shrink-0" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
