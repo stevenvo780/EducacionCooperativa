@@ -69,17 +69,22 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     }, [sessions]);
 
     const initialize = useCallback(async (nexusUrl: string) => {
+        console.log('[TerminalContext] initialize called with nexusUrl:', nexusUrl);
         const currentUser = getUserRef.current();
+        console.log('[TerminalContext] currentUser:', currentUser?.uid, 'controllerRef.current:', !!controllerRef.current);
         if (!currentUser || controllerRef.current) {
+            console.log('[TerminalContext] Returning early - no user or controller already exists');
             return;
         }
 
+        console.log('[TerminalContext] Starting initialization...');
         setStatus('checking');
         setHubConnected(false);
         setErrorMessage(null);
 
         const controller = new TerminalController(nexusUrl);
         const ok = await controller.initialize();
+        console.log('[TerminalContext] Controller initialized:', ok);
         if (!ok) {
             setStatus('error');
             setErrorMessage('Failed to initialize terminal controller');
