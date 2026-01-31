@@ -18,6 +18,7 @@ services:
     volumes:
       - ./:/app
       - /app/node_modules
+      - /app/.next
     ports:
       - "3011:3000"
     env_file:

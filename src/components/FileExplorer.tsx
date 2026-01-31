@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Folder,
   FolderOpen,
@@ -285,7 +285,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     setSelectedKeys(new Set());
   };
 
-  const renderFolderTree = (parentPath: string, depth = 0): React.ReactNode[] => {
+  const renderFolderTree = useCallback((parentPath: string, depth = 0): React.ReactNode[] => {
     const children = folderChildrenMap[parentPath] ?? [];
     return children.map(folder => {
       const isExpanded = expandedFolders.has(folder.path);
@@ -341,7 +341,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       );
     });
-  };
+  }, [folderChildrenMap, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange]);
 
   return (
     <div className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
