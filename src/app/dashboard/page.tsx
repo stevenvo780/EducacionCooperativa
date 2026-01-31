@@ -69,6 +69,7 @@ interface DeleteStatus {
 
 const PERSONAL_WORKSPACE_ID = 'personal';
 const ROOT_FOLDER_PATH = '';
+const DOCS_POLL_INTERVAL_MS = 30000;
 
 const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
   if (!value) return 0;
@@ -597,7 +598,7 @@ export default function DashboardPage() {
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
       fetchDocs();
-    }, 15000);
+    }, DOCS_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [currentWorkspace, user, fetchDocs]);
 
