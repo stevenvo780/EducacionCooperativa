@@ -271,7 +271,7 @@ const Terminal: React.FC<TerminalProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="space-y-4 text-slate-400 text-left">
+                <div className="space-y-4 text-slate-400 text-left max-h-[70vh] overflow-y-auto pr-2">
                     {showHubError ? (
                         <>
                             <p className="text-center">No se pudo contactar con el servidor central (Hub).</p>
@@ -279,7 +279,8 @@ const Terminal: React.FC<TerminalProps> = ({
                         </>
                     ) : (
                         <>
-                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 mb-4">
+                            {/* Header explicativo */}
+                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
                                 <p className="text-center text-amber-400 font-medium mb-2">
                                     ¿Cómo funciona?
                                 </p>
@@ -289,10 +290,7 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </p>
                             </div>
 
-                            <p className="text-center text-xs text-slate-500 mb-4">
-                                Instala un worker en tu servidor siguiendo estos pasos:
-                            </p>
-
+                            {/* Token del workspace */}
                             <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
                                 <div className="flex justify-between items-center text-xs font-mono">
                                     <span className="text-slate-400 font-bold flex items-center gap-2">
@@ -312,22 +310,85 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </p>
                             </div>
 
-                            <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto space-y-2">
-                                <p className="text-slate-500 mb-1"># 1. Descargar e instalar el paquete</p>
-                                <p className="text-emerald-400 whitespace-nowrap mb-3">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
-
-                                <p className="text-slate-500 mb-1"># 2. Agregar worker para este workspace</p>
-                                <p className="text-emerald-400 whitespace-pre-wrap">
-{isPersonalWorkspace
-    ? `$ sudo edu-worker-manager add ${user?.uid || '<userId>'} --type personal --name "${user?.email || 'Mi Espacio'}"`
-    : `$ sudo edu-worker-manager add ${workspaceId} --name "${workspaceName || 'Workspace'}"`}
+                            {/* ========== OPCIÓN 1: COMANDO RÁPIDO ========== */}
+                            <div className="bg-emerald-500/5 border border-emerald-500/30 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold">1</div>
+                                    <h3 className="text-emerald-400 font-bold text-sm">Instalación Rápida (Un comando)</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-3">
+                                    Ejecuta este comando en tu servidor Linux para instalar y configurar el worker automáticamente:
                                 </p>
-
-                                <p className="text-slate-500 mt-3 mb-1"># Comandos útiles</p>
-                                <p className="text-slate-400">$ sudo edu-worker-manager list           <span className="text-slate-600"># Ver todos los workers</span></p>
-                                <p className="text-slate-400">$ sudo edu-worker-manager status         <span className="text-slate-600"># Estado de cada worker</span></p>
-                                <p className="text-slate-400">$ sudo edu-worker-manager logs {workerToken.slice(0,8)}...  <span className="text-slate-600"># Ver logs</span></p>
+                                <div className="relative">
+                                    <pre className="bg-black p-3 rounded border border-slate-800 text-xs overflow-x-auto">
+                                        <code className="text-emerald-400 whitespace-pre-wrap break-all">
+{`curl -fsSL ${downloadUrl} -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb && sudo edu-worker-manager add ${workerToken}${isPersonalWorkspace ? ' --type personal' : ''} --name "${workspaceName || (isPersonalWorkspace ? user?.email || 'Mi Espacio' : 'Workspace')}"`}
+                                        </code>
+                                    </pre>
+                                    <button
+                                        onClick={() => navigator.clipboard.writeText(
+                                            `curl -fsSL ${downloadUrl} -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb && sudo edu-worker-manager add ${workerToken}${isPersonalWorkspace ? ' --type personal' : ''} --name "${workspaceName || (isPersonalWorkspace ? user?.email || 'Mi Espacio' : 'Workspace')}"`
+                                        )}
+                                        className="absolute top-2 right-2 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-[10px] rounded flex items-center gap-1 transition-colors"
+                                    >
+                                        <Copy className="w-3 h-3" /> Copiar
+                                    </button>
+                                </div>
                             </div>
+
+                            {/* ========== OPCIÓN 2: INSTALACIÓN MANUAL ========== */}
+                            <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-6 h-6 rounded-full bg-slate-600/50 flex items-center justify-center text-slate-300 text-xs font-bold">2</div>
+                                    <h3 className="text-slate-300 font-bold text-sm">Instalación Manual (Paso a paso)</h3>
+                                </div>
+
+                                <div className="space-y-4 text-xs">
+                                    {/* Paso 1 */}
+                                    <div>
+                                        <p className="text-slate-500 mb-1 font-medium">Paso 1: Descargar el paquete</p>
+                                        <div className="bg-black p-2 rounded border border-slate-800">
+                                            <code className="text-blue-400">curl -fsSL {downloadUrl} -o edu-worker.deb</code>
+                                        </div>
+                                    </div>
+
+                                    {/* Paso 2 */}
+                                    <div>
+                                        <p className="text-slate-500 mb-1 font-medium">Paso 2: Instalar el paquete</p>
+                                        <div className="bg-black p-2 rounded border border-slate-800">
+                                            <code className="text-blue-400">sudo apt install ./edu-worker.deb</code>
+                                        </div>
+                                    </div>
+
+                                    {/* Paso 3 */}
+                                    <div>
+                                        <p className="text-slate-500 mb-1 font-medium">Paso 3: Agregar worker para este workspace</p>
+                                        <div className="bg-black p-2 rounded border border-slate-800 overflow-x-auto">
+                                            <code className="text-blue-400 whitespace-pre">
+{isPersonalWorkspace
+    ? `sudo edu-worker-manager add ${user?.uid || '<userId>'} --type personal --name "${user?.email || 'Mi Espacio'}"`
+    : `sudo edu-worker-manager add ${workspaceId} --name "${workspaceName || 'Workspace'}"`}
+                                            </code>
+                                        </div>
+                                    </div>
+
+                                    {/* Comandos útiles */}
+                                    <div className="border-t border-slate-700 pt-3 mt-3">
+                                        <p className="text-slate-500 mb-2 font-medium">Comandos útiles:</p>
+                                        <div className="bg-black p-2 rounded border border-slate-800 space-y-1">
+                                            <p><code className="text-slate-400">sudo edu-worker-manager list</code> <span className="text-slate-600 ml-2"># Ver workers</span></p>
+                                            <p><code className="text-slate-400">sudo edu-worker-manager status</code> <span className="text-slate-600 ml-2"># Estado</span></p>
+                                            <p><code className="text-slate-400">sudo edu-worker-manager logs {workerToken.slice(0,12)}...</code> <span className="text-slate-600 ml-2"># Logs</span></p>
+                                            <p><code className="text-slate-400">sudo edu-worker-manager remove {workerToken.slice(0,12)}...</code> <span className="text-slate-600 ml-2"># Eliminar</span></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Footer con URL del Hub */}
+                            <p className="text-[10px] text-slate-600 text-center pt-2">
+                                El worker se conectará a: <code className="text-slate-500">{nexusUrl || 'http://148.230.88.162:3001'}</code>
+                            </p>
                         </>
                     )}
                 </div>
