@@ -135,7 +135,7 @@ const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspac
 
 export default function DashboardPage() {
   const { user, loading, logout, changePassword } = useAuth();
-  const { sessions, activeSessionId, selectSession, createSession, status: connectionStatus, initialize, isCreatingSession } = useTerminal();
+  const { sessions, activeSessionId, selectSession, createSession, destroySession, status: connectionStatus, initialize, isCreatingSession } = useTerminal();
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const router = useRouter();
@@ -525,7 +525,12 @@ export default function DashboardPage() {
           setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: true }));
       }
 
+      // Verificar si es una terminal y destruir la sesión
       setOpenTabs(prev => {
+          const tabToClose = prev.find(t => t.id === docId);
+          if (tabToClose?.type === 'terminal' && tabToClose.sessionId) {
+              destroySession(tabToClose.sessionId);
+          }
           const next = prev.filter(t => t.id !== docId);
           if (selectedDocId === docId) {
               setSelectedDocId(next[next.length - 1]?.id ?? null);
@@ -540,7 +545,7 @@ export default function DashboardPage() {
           if (newLeaves.length === 0) return null;
           return createBalancedTreeFromLeaves(newLeaves);
       });
-  }, [selectedDocId, currentWorkspace]);
+  }, [selectedDocId, currentWorkspace, destroySession]);
 
   const openDocument = async (doc: DocItem) => {
       if (doc.type === 'folder') return;
@@ -1900,22 +1905,41 @@ export default function DashboardPage() {
                         )}
 
                         {sessions.map(sess => (
-                            <button
+                            <div
                                 key={sess.id}
-                                onClick={() => {
-                                    selectSession(sess.id);
-                                    openTerminal({ id: sess.id, name: sess.name || 'Mi Asistente' });
-                                }}
-                                className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded-md transition-colors ${
+                                className={`group w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded-md transition-colors ${
                                     activeSessionId === sess.id
                                         ? 'bg-mandy-500/15 text-mandy-400 font-medium'
                                         : 'text-surface-400 hover:bg-surface-700/50 hover:text-surface-200'
                                 }`}
                             >
-                                <TerminalIcon className="w-3.5 h-3.5" />
-                                <span className="truncate flex-1 text-left">{sess.name || 'Terminal'}</span>
-                                {activeSessionId === sess.id && <div className="w-1.5 h-1.5 rounded-full bg-mandy-500" />}
-                            </button>
+                                <button
+                                    onClick={() => {
+                                        selectSession(sess.id);
+                                        openTerminal({ id: sess.id, name: sess.name || 'Mi Asistente' });
+                                    }}
+                                    className="flex items-center gap-2 flex-1 min-w-0"
+                                >
+                                    <TerminalIcon className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate flex-1 text-left">{sess.name || 'Terminal'}</span>
+                                    {activeSessionId === sess.id && <div className="w-1.5 h-1.5 rounded-full bg-mandy-500 shrink-0" />}
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        destroySession(sess.id);
+                                        // También cerrar la pestaña asociada si existe
+                                        const terminalTab = openTabs.find(t => t.type === 'terminal' && t.sessionId === sess.id);
+                                        if (terminalTab) {
+                                            closeTabById(terminalTab.id);
+                                        }
+                                    }}
+                                    className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 transition-all"
+                                    title="Cerrar sesión"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
                         ))}
                     </div>
                 </div>
