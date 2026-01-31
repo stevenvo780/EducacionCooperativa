@@ -7,7 +7,9 @@ import { useAuth } from './AuthContext';
 export interface TerminalSession {
     id: string;
     name?: string;
-    workspaceId?: string;
+    workspaceId: string;
+    workspaceType: 'personal' | 'shared';
+    workspaceName?: string;
 }
 
 interface TerminalContextType {
@@ -22,9 +24,11 @@ interface TerminalContextType {
     selectSession: (sessionId: string) => void;
     destroySession: (sessionId: string) => void;
     errorMessage: string | null;
-    // NEW: Per-workspace worker status tracking
+    // Per-workspace worker status tracking
     workspaceWorkerStatuses: Map<string, WorkerStatus>;
     getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
+    // Per-workspace session filtering
+    getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
 }
 
 const TerminalContext = createContext<TerminalContextType | null>(null);
@@ -56,6 +60,11 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const getWorkerStatusForWorkspace = useCallback((workspaceId: string): WorkerStatus => {
         return workspaceWorkerStatuses.get(workspaceId) || 'unknown';
     }, [workspaceWorkerStatuses]);
+
+    // Filter sessions by workspace
+    const getSessionsForWorkspace = useCallback((workspaceId: string): TerminalSession[] => {
+        return sessions.filter(s => s.workspaceId === workspaceId);
+    }, [sessions]);
 
     const initialize = useCallback(async (nexusUrl: string) => {
         const currentUser = getUserRef.current();
@@ -133,11 +142,31 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             );
 
             // Listen for events
+            // Track pending session metadata for when session-created fires
+            let pendingSessionMeta: { workspaceId: string; workspaceType: 'personal' | 'shared'; workspaceName?: string } | null = null;
+
+            // Override startSession to capture metadata
+            const originalStartSession = controller.startSession.bind(controller);
+            controller.startSession = (opts: { workspaceId: string; workspaceName?: string; workspaceType: 'personal' | 'shared' }) => {
+                pendingSessionMeta = { workspaceId: opts.workspaceId, workspaceType: opts.workspaceType, workspaceName: opts.workspaceName };
+                originalStartSession(opts);
+            };
+
             controller.socket?.on('session-created', (data: { id: string }) => {
                 setIsCreatingSession(false);
                 setSessions(prev => {
                     if (prev.find(s => s.id === data.id)) return prev;
-                    const newSession = { id: data.id, name: `Terminal ${prev.length + 1}` };
+                    // Count sessions for this workspace to generate name
+                    const workspaceId = pendingSessionMeta?.workspaceId || 'unknown';
+                    const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
+                    const newSession: TerminalSession = {
+                        id: data.id,
+                        name: `Terminal ${existingCount + 1}`,
+                        workspaceId: workspaceId,
+                        workspaceType: pendingSessionMeta?.workspaceType || 'personal',
+                        workspaceName: pendingSessionMeta?.workspaceName
+                    };
+                    pendingSessionMeta = null;
                     return [...prev, newSession];
                 });
                 setActiveSessionId(data.id);
@@ -194,7 +223,8 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             destroySession,
             errorMessage,
             workspaceWorkerStatuses,
-            getWorkerStatusForWorkspace
+            getWorkerStatusForWorkspace,
+            getSessionsForWorkspace
         }}>
             {children}
         </TerminalContext.Provider>
