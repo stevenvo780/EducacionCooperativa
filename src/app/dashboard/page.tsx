@@ -304,7 +304,8 @@ export default function DashboardPage() {
     initialize,
     isCreatingSession,
     getSessionsForWorkspace,
-    getWorkerStatusForWorkspace
+    getWorkerStatusForWorkspace,
+    subscribeToWorkspace
   } = useTerminal();
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [folders, setFolders] = useState<FolderItem[]>([]);
@@ -330,6 +331,15 @@ export default function DashboardPage() {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const currentWorkspaceId = currentWorkspace?.id;
+
+  // Subscribe to current workspace worker status
+  useEffect(() => {
+    if (!user || !currentWorkspace) return;
+    const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
+      ? `personal:${user.uid}`
+      : currentWorkspace.id;
+    subscribeToWorkspace(workerToken);
+  }, [user, currentWorkspace, subscribeToWorkspace]);
 
   // UI State
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
