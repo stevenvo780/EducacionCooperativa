@@ -38,6 +38,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const {
     controller,
+    sessions,
     status,
     hubConnected,
     errorMessage,
@@ -50,6 +51,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
     // Fallback to the currently active session when a specific sessionId prop is not provided
     const effectiveSessionId = sessionId || activeSessionId;
+    const sessionActive = effectiveSessionId ? sessions.some(s => s.id === effectiveSessionId) : false;
 
   const setContainerRef = useCallback((node: HTMLDivElement | null) => {
       setContainerEl(node);
@@ -83,7 +85,7 @@ const Terminal: React.FC<TerminalProps> = ({
   // Mount THIS session's terminal to THIS container
   // Each session now has its own xterm instance
   useEffect(() => {
-      if (!effectiveSessionId || !containerEl || !controller) return;
+      if (!effectiveSessionId || !sessionActive || !containerEl || !controller) return;
       let mounted = false;
 
       const tryMount = () => {
@@ -119,14 +121,14 @@ const Terminal: React.FC<TerminalProps> = ({
           observer.disconnect();
           window.clearTimeout(fallbackTimeout);
       };
-    }, [effectiveSessionId, controller, containerEl]);
+    }, [effectiveSessionId, sessionActive, controller, containerEl]);
 
   useEffect(() => {
-        if (!effectiveSessionId || !controller) return;
+        if (!effectiveSessionId || !sessionActive || !controller) return;
         const handleResize = () => controller?.fitSession(effectiveSessionId);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-    }, [controller, effectiveSessionId]);
+    }, [controller, effectiveSessionId, sessionActive]);
 
   const handleCreateSession = () => {
       if (!createSession) return;
@@ -158,7 +160,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   // Si esta ventana tiene una sesión asignada, mostrar su terminal independiente
   // Cada sesión ahora tiene su propia instancia de xterm
-  if (effectiveSessionId) {
+  if (effectiveSessionId && sessionActive) {
       return (
         <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
             <div className="absolute top-4 right-4 z-10 flex gap-2 pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
