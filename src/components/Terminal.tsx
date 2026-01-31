@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X } from 'lucide-react';
@@ -10,17 +10,17 @@ interface TerminalProps {
   workspaceId?: string;
   workspaceName?: string;
   workspaceType?: 'personal' | 'shared';
-    sessionId?: string;
+  sessionId?: string;
 }
 
 const Terminal: React.FC<TerminalProps> = ({
   nexusUrl,
   workspaceId,
   workspaceName,
-    workspaceType,
-    sessionId
+  workspaceType,
+  sessionId
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const { user } = useAuth();
 
   const {
@@ -30,16 +30,13 @@ const Terminal: React.FC<TerminalProps> = ({
     errorMessage,
     initialize,
     activeSessionId,
-        createSession,
-        selectSession
+    createSession,
+    selectSession
   } = useTerminal();
 
-    // Keep terminal tab bound to its session
-    useEffect(() => {
-            if (sessionId && activeSessionId !== sessionId) {
-                    selectSession(sessionId);
-            }
-    }, [sessionId, activeSessionId, selectSession]);
+  const setContainerRef = useCallback((node: HTMLDivElement | null) => {
+      setContainerEl(node);
+  }, []);
 
   useEffect(() => {
       if (!controller && status !== 'error' && nexusUrl) {
@@ -47,16 +44,17 @@ const Terminal: React.FC<TerminalProps> = ({
       }
   }, [controller, status, nexusUrl, initialize]);
 
+  const isActiveSession = !sessionId || sessionId === activeSessionId;
+
   useEffect(() => {
-      if (!activeSessionId || !containerRef.current || !controller) return;
-      const container = containerRef.current;
+      if (!activeSessionId || !isActiveSession || !containerEl || !controller) return;
       let mounted = false;
 
       const tryMount = () => {
           if (mounted) return;
-          if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+          if (containerEl.offsetWidth > 0 && containerEl.offsetHeight > 0) {
               try {
-                  controller.mount(container);
+                  controller.mount(containerEl);
                   mounted = true;
               } catch (e) {
                   console.error('Error mounting terminal', e);
@@ -78,13 +76,13 @@ const Terminal: React.FC<TerminalProps> = ({
               observer.disconnect();
           }
       });
-      observer.observe(container);
+      observer.observe(containerEl);
 
       return () => {
           observer.disconnect();
           window.clearTimeout(fallbackTimeout);
       };
-  }, [activeSessionId, controller]);
+  }, [activeSessionId, controller, containerEl, isActiveSession]);
 
   useEffect(() => {
     const handleResize = () => controller?.fit();
@@ -119,6 +117,22 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const showHubError = status === 'error' || (!hubConnected && status !== 'offline');
 
+  if (activeSessionId && sessionId && activeSessionId !== sessionId) {
+      return (
+          <div className="h-full w-full flex flex-col items-center justify-center bg-black text-slate-200 p-6 text-center">
+              <div className="text-sm text-slate-400 mb-4">
+                  Esta ventana está vinculada a la sesión {sessionId.slice(-4)}.
+              </div>
+              <button
+                  onClick={() => selectSession(sessionId)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md text-xs font-semibold transition-colors"
+              >
+                  Activar sesión {sessionId.slice(-4)}
+              </button>
+          </div>
+      );
+  }
+
   if (activeSessionId) {
       return (
         <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
@@ -133,7 +147,7 @@ const Terminal: React.FC<TerminalProps> = ({
                 </div>
             </div>
             <div
-                ref={containerRef}
+                ref={setContainerRef}
                 className="flex-1 min-h-0 w-full bg-black"
                 style={{ minHeight: '200px', minWidth: '300px' }}
             />
