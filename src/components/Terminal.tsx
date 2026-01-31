@@ -45,7 +45,15 @@ const Terminal: React.FC<TerminalProps> = ({
       }
   }, [controller, status, nexusUrl, initialize]);
 
+  // Esta ventana debe mostrar su sesión cuando es la activa
   const isActiveSession = !sessionId || sessionId === activeSessionId;
+
+  // Cuando el usuario hace click en esta ventana, activamos su sesión
+  const handleActivateSession = useCallback(() => {
+      if (sessionId && sessionId !== activeSessionId) {
+          selectSession(sessionId);
+      }
+  }, [sessionId, activeSessionId, selectSession]);
 
   useEffect(() => {
       if (!activeSessionId || !isActiveSession || !containerEl || !controller) return;
@@ -118,18 +126,25 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const showHubError = status === 'error' || (!hubConnected && status !== 'offline');
 
+  // Mostrar vista de "sesión inactiva" cuando esta ventana no tiene la sesión activa
+  // pero permitir activarla con un click
   if (activeSessionId && sessionId && activeSessionId !== sessionId) {
       return (
-          <div className="h-full w-full flex flex-col items-center justify-center bg-black text-slate-200 p-6 text-center">
-              <div className="text-sm text-slate-400 mb-4">
-                  Esta ventana está vinculada a la sesión {sessionId.slice(-4)}.
+          <div 
+              className="h-full w-full flex flex-col bg-black relative overflow-hidden cursor-pointer group"
+              onClick={handleActivateSession}
+          >
+              {/* Overlay semi-transparente indicando que no está activa */}
+              <div className="absolute inset-0 bg-black/60 z-10 flex flex-col items-center justify-center">
+                  <div className="text-xs text-slate-500 mb-2">
+                      Sesión {sessionId.slice(-4)} (inactiva)
+                  </div>
+                  <div className="text-[10px] text-slate-600">
+                      Click para activar
+                  </div>
               </div>
-              <button
-                  onClick={() => selectSession(sessionId)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md text-xs font-semibold transition-colors"
-              >
-                  Activar sesión {sessionId.slice(-4)}
-              </button>
+              {/* Contenedor de terminal (vacío pero reserva espacio) */}
+              <div className="flex-1 min-h-0 w-full bg-slate-950" style={{ minHeight: '200px' }} />
           </div>
       );
   }
