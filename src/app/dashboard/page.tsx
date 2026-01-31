@@ -1708,13 +1708,19 @@ export default function DashboardPage() {
                     <button
                         onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
                         className="flex items-center gap-2 px-2 py-1.5 hover:bg-surface-700 rounded-lg transition border border-transparent hover:border-surface-600"
+                        title={currentWorkspace?.id && currentWorkspace.id !== PERSONAL_WORKSPACE_ID ? `ID: ${currentWorkspace.id}` : undefined}
                     >
                         {currentWorkspace?.type === 'personal' ? (
                             <User className="w-4 h-4 text-surface-400" />
                         ) : (
                             <Briefcase className="w-4 h-4 text-mandy-400" />
                         )}
-                        <span className="font-medium text-sm max-w-[120px] truncate text-surface-200">{currentWorkspace?.name || 'Seleccionar'}</span>
+                        <div className="flex flex-col items-start">
+                            <span className="font-medium text-sm max-w-[120px] truncate text-surface-200">{currentWorkspace?.name || 'Seleccionar'}</span>
+                            {currentWorkspace?.id && currentWorkspace.id !== PERSONAL_WORKSPACE_ID && (
+                                <span className="text-[9px] text-surface-500 font-mono truncate max-w-[120px]">{currentWorkspace.id.slice(0, 8)}...</span>
+                            )}
+                        </div>
                         <ChevronDown className="w-3 h-3 text-surface-500" />
                         {invites.length > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mandy-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-mandy-500" /></span>}
                     </button>
@@ -1746,18 +1752,35 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="max-h-60 overflow-y-auto">
                                     {workspaces.map(ws => (
-                                        <button
+                                        <div
                                             key={ws.id}
+                                            className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-700 transition cursor-pointer ${currentWorkspace?.id === ws.id ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
                                             onClick={() => {
                                                 setCurrentWorkspace(ws);
                                                 setShowWorkspaceMenu(false);
                                             }}
-                                            className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-700 transition ${currentWorkspace?.id === ws.id ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
                                         >
-                                            {ws.type === 'personal' ? <User className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
-                                            {ws.name}
-                                            {currentWorkspace?.id === ws.id && <Check className="w-3 h-3 ml-auto" />}
-                                        </button>
+                                            {ws.type === 'personal' ? <User className="w-4 h-4 shrink-0" /> : <Briefcase className="w-4 h-4 shrink-0" />}
+                                            <div className="flex flex-col flex-1 min-w-0">
+                                                <span className="truncate">{ws.name}</span>
+                                                {ws.id !== PERSONAL_WORKSPACE_ID && (
+                                                    <span className="text-[10px] font-mono text-surface-500 truncate">{ws.id}</span>
+                                                )}
+                                            </div>
+                                            {ws.id !== PERSONAL_WORKSPACE_ID && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        navigator.clipboard.writeText(ws.id);
+                                                    }}
+                                                    className="p-1 hover:bg-surface-600 rounded shrink-0"
+                                                    title="Copiar ID"
+                                                >
+                                                    <Copy className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                            {currentWorkspace?.id === ws.id && <Check className="w-3 h-3 shrink-0" />}
+                                        </div>
                                     ))}
                                 </div>
                                 <div className="p-2 border-t border-surface-600/50 bg-surface-700/50">
@@ -2091,7 +2114,22 @@ export default function DashboardPage() {
                             {currentWorkspace?.type === 'personal' ? <User className="w-6 h-6 text-surface-400" /> : <Briefcase className="w-6 h-6 text-mandy-400" />}
                             <div className="flex flex-col">
                                 <span className="text-lg font-bold text-white">{currentWorkspace?.name}</span>
-                                <span className="text-xs text-surface-400">Carpeta: {activeFolderLabel}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-surface-400">Carpeta: {activeFolderLabel}</span>
+                                    {currentWorkspace?.id && currentWorkspace.id !== PERSONAL_WORKSPACE_ID && (
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(currentWorkspace.id);
+                                                showDialog({ type: 'info', title: 'ID copiado', message: currentWorkspace.id });
+                                            }}
+                                            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
+                                            title="Copiar ID del workspace"
+                                        >
+                                            <span className="truncate max-w-[100px]">{currentWorkspace.id}</span>
+                                            <Copy className="w-2.5 h-2.5 shrink-0" />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">

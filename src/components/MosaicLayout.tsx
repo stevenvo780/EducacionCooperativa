@@ -202,6 +202,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         activeFolder={activeFolder}
                         onActiveFolderChange={onActiveFolderChange}
                         currentWorkspaceName={currentWorkspaceName}
+                        currentWorkspaceId={currentWorkspaceId}
                         embedded
                       />
                   ) : (
