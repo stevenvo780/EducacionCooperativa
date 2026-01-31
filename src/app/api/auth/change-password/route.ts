@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         }
 
         const userData = userDoc.data();
-        
+
         // Verificar contraseña actual
         const currentHash = hashPassword(currentPassword);
         if (currentHash !== userData?.passwordHash) {
