@@ -13,11 +13,23 @@ interface TerminalProps {
   sessionId?: string;
 }
 
+// =====================================================
+// NEW TOKEN MODEL:
+// - For personal workspace: token = "personal:{userId}"
+// - For shared workspace: token = "{workspaceId}"
+// =====================================================
+function getWorkerToken(workspaceType: 'personal' | 'shared', workspaceId: string | undefined, userId: string): string {
+  if (workspaceType === 'personal' || !workspaceId || workspaceId === 'personal') {
+    return `personal:${userId}`;
+  }
+  return workspaceId;
+}
+
 const Terminal: React.FC<TerminalProps> = ({
   nexusUrl,
   workspaceId,
   workspaceName,
-  workspaceType,
+  workspaceType = 'personal',
   sessionId
 }) => {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
@@ -32,7 +44,8 @@ const Terminal: React.FC<TerminalProps> = ({
     initialize,
     activeSessionId,
     createSession,
-    selectSession
+    selectSession,
+    getWorkerStatusForWorkspace
   } = useTerminal();
 
   const setContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -45,8 +58,24 @@ const Terminal: React.FC<TerminalProps> = ({
       }
   }, [controller, status, nexusUrl, initialize]);
 
-  // Esta ventana muestra su propia sesión (cada sesión tiene su propio terminal ahora)
-  const hasOwnSession = !!sessionId;
+  // Calculate the worker token for this workspace
+  const isPersonalWorkspace = workspaceType === 'personal' || workspaceId === 'personal' || !workspaceId;
+  const workerToken = user ? getWorkerToken(workspaceType, workspaceId, user.uid) : '';
+
+  // Get worker status for THIS workspace
+  const workspaceWorkerStatus = getWorkerStatusForWorkspace?.(workerToken) || status;
+
+  // Subscribe to workspace updates when workspace changes
+  useEffect(() => {
+    if (!controller || !workerToken) return;
+
+    controller.subscribeToWorkspace(workerToken);
+    controller.checkWorkerStatus(workerToken);
+
+    return () => {
+      controller.unsubscribeFromWorkspace(workerToken);
+    };
+  }, [controller, workerToken]);
 
   // Mount THIS session's terminal to THIS container
   // Each session now has its own xterm instance
@@ -98,14 +127,9 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const handleCreateSession = () => {
       if (!createSession) return;
-      const wsId = workspaceId === 'personal' || !workspaceId ? 'personal' : workspaceId;
-      const type = workspaceType || 'personal';
-      createSession(wsId, type, workspaceName);
+      // Use the workerToken as the workspaceId for creating sessions
+      createSession(workerToken, workspaceType, workspaceName);
   };
-
-  const isPersonalWorkspace = workspaceType === 'personal' || workspaceId === 'personal' || !workspaceId;
-  const workspaceCode = isPersonalWorkspace ? 'personal' : workspaceId;
-  const workspacePath = isPersonalWorkspace ? '/workspace' : `/workspace/_ws/${workspaceId}`;
 
   const downloadPath = '/downloads/edu-worker_1.0.0_amd64.deb';
   const downloadUrl = typeof window !== 'undefined' ? `${window.location.origin}${downloadPath}` : downloadPath;
@@ -122,6 +146,8 @@ const Terminal: React.FC<TerminalProps> = ({
   }
 
   const showHubError = status === 'error' || (!hubConnected && status !== 'offline');
+  const workerOnline = workspaceWorkerStatus === 'online';
+  const workerOffline = workspaceWorkerStatus === 'offline' || workspaceWorkerStatus === 'unknown';
 
   // Si esta ventana tiene una sesión asignada, mostrar su terminal independiente
   // Cada sesión ahora tiene su propia instancia de xterm
@@ -152,25 +178,25 @@ const Terminal: React.FC<TerminalProps> = ({
         <div className="max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl p-8 text-center space-y-6">
             <div className="flex justify-center">
                 <div className={`p-4 rounded-full border ${
-                    status === 'online' ? 'bg-emerald-500/10 border-emerald-500/20' :
-                    status === 'offline' ? 'bg-amber-500/10 border-amber-500/20' :
+                    workerOnline ? 'bg-emerald-500/10 border-emerald-500/20' :
+                    workerOffline ? 'bg-amber-500/10 border-amber-500/20' :
                     'bg-red-500/10 border-red-500/20'
                 }`}>
-                    {status === 'online' && <CheckCircle className="w-12 h-12 text-emerald-500" />}
-                    {status === 'offline' && <AlertCircle className="w-12 h-12 text-amber-500" />}
+                    {workerOnline && <CheckCircle className="w-12 h-12 text-emerald-500" />}
+                    {workerOffline && <AlertCircle className="w-12 h-12 text-amber-500" />}
                     {showHubError && <X className="w-12 h-12 text-red-500" />}
                 </div>
             </div>
 
             <h2 className="text-2xl font-bold text-white">
-                {status === 'online'
+                {workerOnline
                     ? 'Worker Conectado'
-                    : status === 'offline'
+                    : workerOffline
                         ? 'Worker Desconectado'
                         : 'Error de Conexión'}
             </h2>
 
-            {status === 'online' ? (
+            {workerOnline ? (
                 <div className="space-y-4">
                     <p className="text-slate-400">El servicio está listo. Puedes iniciar una nueva terminal.</p>
                     <button
@@ -197,41 +223,27 @@ const Terminal: React.FC<TerminalProps> = ({
                                 <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
                                     <div className="flex justify-between items-center text-xs font-mono">
                                         <span className="text-slate-400 font-bold flex items-center gap-2">
-                                            <Key className="w-3 h-3" /> TOKEN DE VINCULACIÓN
+                                            <Key className="w-3 h-3" /> WORKER TOKEN
                                         </span>
-                                        <button onClick={() => navigator.clipboard.writeText(user.uid)} className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors">
+                                        <button onClick={() => navigator.clipboard.writeText(workerToken)} className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors">
                                             <Copy className="w-3 h-3" /> <span className="text-[10px]">Copiar</span>
                                         </button>
                                     </div>
                                     <code className="block w-full bg-black rounded border border-slate-800 p-2 text-yellow-400 text-sm font-mono break-all select-all">
-                                        {user.uid}
+                                        {workerToken}
                                     </code>
+                                    <p className="text-[10px] text-slate-500">
+                                        {isPersonalWorkspace
+                                            ? 'Token personal: sincroniza archivos de tu espacio personal'
+                                            : `Token de workspace compartido: ${workspaceId}`}
+                                    </p>
                                 </div>
-
-                                {workspaceCode !== 'personal' && (
-                                    <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
-                                        <div className="flex justify-between items-center text-xs font-mono">
-                                            <span className="text-slate-400 font-bold flex items-center gap-2">
-                                                <Key className="w-3 h-3" /> WORKSPACE ID
-                                            </span>
-                                            <button onClick={() => navigator.clipboard.writeText(workspaceCode || '')} className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors">
-                                                <Copy className="w-3 h-3" /> <span className="text-[10px]">Copiar</span>
-                                            </button>
-                                        </div>
-                                        <code className="block w-full bg-black rounded border border-slate-800 p-2 text-cyan-400 text-sm font-mono break-all select-all">
-                                            {workspaceCode}
-                                        </code>
-                                    </div>
-                                )}
 
                                 <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto">
                                     <p className="text-slate-500 mb-1"># Instalación y Configuración</p>
                                     <p className="text-emerald-400 whitespace-nowrap mb-2">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
                                     <p className="text-yellow-200 whitespace-pre-wrap mb-2">
-                                        $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={user.uid}/&apos; /etc/edu-worker/worker.env
-                                        {workspaceCode !== 'personal' && (
-                                            <> && sudo sed -i &apos;s/#WORKSPACE_ID=/WORKSPACE_ID={workspaceCode}/&apos; /etc/edu-worker/worker.env</>
-                                        )}
+                                        $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={workerToken}/&apos; /etc/edu-worker/worker.env
                                     </p>
                                     <p className="text-emerald-400">$ sudo systemctl restart edu-worker</p>
                                 </div>
@@ -256,25 +268,27 @@ const Terminal: React.FC<TerminalProps> = ({
                             <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
                                 <div className="flex justify-between items-center text-xs font-mono">
                                     <span className="text-slate-400 font-bold flex items-center gap-2">
-                                        <Key className="w-3 h-3" /> TOKEN DE VINCULACIÓN
+                                        <Key className="w-3 h-3" /> WORKER TOKEN
                                     </span>
-                                    <button onClick={() => navigator.clipboard.writeText(user.uid)} className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors">
+                                    <button onClick={() => navigator.clipboard.writeText(workerToken)} className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 transition-colors">
                                         <Copy className="w-3 h-3" /> <span className="text-[10px]">Copiar</span>
                                     </button>
                                 </div>
                                 <code className="block w-full bg-black rounded border border-slate-800 p-2 text-yellow-400 text-sm font-mono break-all select-all">
-                                    {user.uid}
+                                    {workerToken}
                                 </code>
+                                <p className="text-[10px] text-slate-500">
+                                    {isPersonalWorkspace
+                                        ? 'Token personal: sincroniza archivos de tu espacio personal'
+                                        : `Token de workspace compartido: ${workspaceId}`}
+                                </p>
                             </div>
 
                             <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto">
                                 <p className="text-slate-500 mb-1"># Instalación y Configuración</p>
                                 <p className="text-emerald-400 whitespace-nowrap mb-2">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
                                 <p className="text-yellow-200 whitespace-pre-wrap mb-2">
-                                    $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={user.uid}/&apos; /etc/edu-worker/worker.env
-                                    {workspaceCode !== 'personal' && (
-                                        <> && sudo sed -i &apos;s/#WORKSPACE_ID=/WORKSPACE_ID={workspaceCode}/&apos; /etc/edu-worker/worker.env</>
-                                    )}
+                                    $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={workerToken}/&apos; /etc/edu-worker/worker.env
                                 </p>
                                 <p className="text-emerald-400">$ sudo systemctl restart edu-worker</p>
                             </div>
