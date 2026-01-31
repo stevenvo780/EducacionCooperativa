@@ -239,17 +239,25 @@ const Terminal: React.FC<TerminalProps> = ({
                                     </p>
                                 </div>
 
-                                <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto">
-                                    <p className="text-slate-500 mb-1"># Instalación y Configuración</p>
-                                    <p className="text-emerald-400 whitespace-nowrap mb-2">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
-                                    <p className="text-yellow-200 whitespace-pre-wrap mb-2">
-                                        $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={workerToken}/&apos; /etc/edu-worker/worker.env
+                                <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto space-y-2">
+                                    <p className="text-slate-500 mb-1"># 1. Descargar e instalar el paquete</p>
+                                    <p className="text-emerald-400 whitespace-nowrap mb-3">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
+                                    
+                                    <p className="text-slate-500 mb-1"># 2. Agregar worker para este workspace</p>
+                                    <p className="text-emerald-400 whitespace-pre-wrap">
+{isPersonalWorkspace 
+    ? `$ sudo edu-worker-manager add ${user?.uid || '<userId>'} --type personal --name "${user?.email || 'Mi Espacio'}"`
+    : `$ sudo edu-worker-manager add ${workspaceId} --name "${workspaceName || 'Workspace'}"`}
                                     </p>
-                                    <p className="text-emerald-400">$ sudo systemctl restart edu-worker</p>
+                                    
+                                    <p className="text-slate-500 mt-3 mb-1"># Comandos útiles</p>
+                                    <p className="text-slate-400">$ sudo edu-worker-manager list           <span className="text-slate-600"># Ver todos los workers</span></p>
+                                    <p className="text-slate-400">$ sudo edu-worker-manager status         <span className="text-slate-600"># Estado de cada worker</span></p>
+                                    <p className="text-slate-400">$ sudo edu-worker-manager logs {workerToken.slice(0,8)}...  <span className="text-slate-600"># Ver logs</span></p>
                                 </div>
 
                                 <p className="text-[10px] text-slate-600 text-center">
-                                    El worker debe apuntar a: <code className="text-slate-500">{nexusUrl || 'http://148.230.88.162:3010'}</code>
+                                    El worker se conectará a: <code className="text-slate-500">{nexusUrl || 'http://148.230.88.162:3010'}</code>
                                 </p>
                             </div>
                         )}
@@ -284,13 +292,21 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </p>
                             </div>
 
-                            <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto">
-                                <p className="text-slate-500 mb-1"># Instalación y Configuración</p>
-                                <p className="text-emerald-400 whitespace-nowrap mb-2">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
-                                <p className="text-yellow-200 whitespace-pre-wrap mb-2">
-                                    $ sudo sed -i &apos;s/WORKER_TOKEN=/WORKER_TOKEN={workerToken}/&apos; /etc/edu-worker/worker.env
+                            <div className="bg-black p-4 rounded font-mono text-xs border border-slate-800 overflow-x-auto space-y-2">
+                                <p className="text-slate-500 mb-1"># 1. Descargar e instalar el paquete</p>
+                                <p className="text-emerald-400 whitespace-nowrap mb-3">$ curl -fsSL {downloadUrl} -o edu-worker.deb && sudo apt install ./edu-worker.deb</p>
+                                
+                                <p className="text-slate-500 mb-1"># 2. Agregar worker para este workspace</p>
+                                <p className="text-emerald-400 whitespace-pre-wrap">
+{isPersonalWorkspace 
+    ? `$ sudo edu-worker-manager add ${user?.uid || '<userId>'} --type personal --name "${user?.email || 'Mi Espacio'}"`
+    : `$ sudo edu-worker-manager add ${workspaceId} --name "${workspaceName || 'Workspace'}"`}
                                 </p>
-                                <p className="text-emerald-400">$ sudo systemctl restart edu-worker</p>
+                                
+                                <p className="text-slate-500 mt-3 mb-1"># Comandos útiles</p>
+                                <p className="text-slate-400">$ sudo edu-worker-manager list           <span className="text-slate-600"># Ver todos los workers</span></p>
+                                <p className="text-slate-400">$ sudo edu-worker-manager status         <span className="text-slate-600"># Estado de cada worker</span></p>
+                                <p className="text-slate-400">$ sudo edu-worker-manager logs {workerToken.slice(0,8)}...  <span className="text-slate-600"># Ver logs</span></p>
                             </div>
                         </>
                     )}
