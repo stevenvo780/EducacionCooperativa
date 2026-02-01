@@ -89,11 +89,11 @@ export default function DashboardPage() {
     const reduceMotion = useReducedMotion();
     const [, startTransition] = useTransition();
     const modalFade = useMemo<Transition>(() => ({
-        duration: reduceMotion ? 0.01 : 0.12,
+        duration: reduceMotion ? 0.01 : 0.08,
         ease: 'easeOut'
     }), [reduceMotion]);
     const modalPop = useMemo<Transition>(() => ({
-        duration: reduceMotion ? 0.01 : 0.14,
+        duration: reduceMotion ? 0.01 : 0.1,
         ease: 'easeOut'
     }), [reduceMotion]);
 
@@ -1550,7 +1550,8 @@ export default function DashboardPage() {
                         <m.div
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             transition={modalFade}
-                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] motion-reduce:backdrop-blur-none p-4"
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+                            style={{ willChange: 'opacity' }}
                         >
                             <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-sm border border-surface-600/50">
                                 <h2 className="text-lg font-bold mb-4 text-white">Nuevo Espacio de Trabajo</h2>
@@ -1574,7 +1575,8 @@ export default function DashboardPage() {
                         <m.div
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             transition={modalFade}
-                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] motion-reduce:backdrop-blur-none p-4"
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+                            style={{ willChange: 'opacity' }}
                         >
                             <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-md border border-surface-600/50">
                                 <div className="flex justify-between items-center mb-6">
@@ -1626,7 +1628,8 @@ export default function DashboardPage() {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             transition={modalFade}
-                            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+                            className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+                            style={{ willChange: 'opacity' }}
                             onClick={() => setShowPasswordModal(false)}
                         >
                             <m.div
@@ -1635,7 +1638,8 @@ export default function DashboardPage() {
                                 exit={{ scale: 0.9, opacity: 0 }}
                                 transition={modalPop}
                                 onClick={(e) => e.stopPropagation()}
-                                className="bg-surface-800 rounded-2xl border border-surface-600/50 p-6 w-full max-w-md shadow-xl"
+                                className="bg-surface-800 rounded-2xl border border-surface-600/50 p-6 w-full max-w-md shadow-xl transform-gpu"
+                                style={{ willChange: 'transform, opacity' }}
                             >
                                 <div className="flex justify-between items-center mb-6">
                                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
