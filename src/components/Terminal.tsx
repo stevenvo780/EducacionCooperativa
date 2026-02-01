@@ -13,11 +13,6 @@ interface TerminalProps {
   sessionId?: string;
 }
 
-// =====================================================
-// NEW TOKEN MODEL:
-// - For personal workspace: token = "personal:{userId}"
-// - For shared workspace: token = "{workspaceId}"
-// =====================================================
 function getWorkerToken(workspaceType: 'personal' | 'shared', workspaceId: string | undefined, userId: string): string {
   if (workspaceType === 'personal' || !workspaceId || workspaceId === 'personal') {
     return `personal:${userId}`;
