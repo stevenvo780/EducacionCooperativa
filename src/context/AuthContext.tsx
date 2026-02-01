@@ -34,13 +34,6 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
-const MOCK_USER = {
-    uid: '21VuZW4cdXd9jGKOgPa5YQegICw1',
-    email: 'dev@test.com',
-    displayName: 'Dev Tester',
-    getIdToken: async () => 'mock-token'
-} as unknown as User;
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
@@ -50,13 +43,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         if (initialized.current) return;
         initialized.current = true;
-
-        const useMock = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true';
-        if (useMock && !localStorage.getItem('agora_user')) {
-            setUser(MOCK_USER);
-            setLoading(false);
-            return;
-        }
 
         const storedUser = localStorage.getItem('agora_user');
         if (storedUser) {
