@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState, useCallback, useLayoutEffect, useRef } from 'react';
-import { FixedSizeList, type ListChildComponentProps } from 'react-window';
+import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import {
   Folder,
   FolderOpen,
@@ -334,7 +334,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     setSelectedKeys(new Set());
   };
 
-  const renderContentRow = ({ index, style }: ListChildComponentProps) => {
+  const renderContentRow = ({ index, style }: RowComponentProps) => {
     const item = contentItems[index];
     if (!item) return null;
     const rowStyle = {
@@ -639,21 +639,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
           ) : (
             <div ref={contentListRef} className="flex-1 min-h-0">
-              <FixedSizeList
-                height={Math.max(contentListSize.height, 1)}
-                width={Math.max(contentListSize.width, 1)}
-                itemCount={contentItems.length}
-                itemSize={CONTENT_ROW_HEIGHT}
+              <VirtualizedList
+                rowCount={contentItems.length}
+                rowHeight={CONTENT_ROW_HEIGHT}
                 overscanCount={6}
                 className="scrollbar-hide"
-                itemKey={(index) => {
-                  const item = contentItems[index];
-                  if (!item) return `row-${index}`;
-                  return item.kind === 'folder' ? `folder:${item.folder.path}` : `doc:${item.doc.id}`;
+                style={{
+                  height: Math.max(contentListSize.height, 1),
+                  width: Math.max(contentListSize.width, 1)
                 }}
-              >
-                {renderContentRow}
-              </FixedSizeList>
+                rowComponent={renderContentRow}
+                rowProps={{}}
+              />
             </div>
           )}
         </section>

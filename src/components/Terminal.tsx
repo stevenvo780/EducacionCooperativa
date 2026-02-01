@@ -121,7 +121,7 @@ const Terminal: React.FC<TerminalProps> = ({
           observer.disconnect();
           window.clearTimeout(fallbackTimeout);
       };
-    }, [effectiveSessionId, sessionActive, controller, containerEl]);
+    }, [effectiveSessionId, sessionActive, controller, containerEl, sessionId]);
 
   useEffect(() => {
         if (!effectiveSessionId || !sessionActive || !controller) return;

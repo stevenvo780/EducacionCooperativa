@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
+import { LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import { BookOpen, Edit3, Cloud, Users, ArrowRight } from 'lucide-react';
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
   const reduceMotion = useReducedMotion();
-  const heroTransition = { duration: reduceMotion ? 0.01 : 0.3, ease: 'easeOut' };
-  const cardTransition = (index: number) => ({
+  const heroTransition: Transition = { duration: reduceMotion ? 0.01 : 0.3, ease: 'easeOut' };
+  const cardTransition = (index: number): Transition => ({
     delay: reduceMotion ? 0 : index * 0.12,
     duration: reduceMotion ? 0.01 : 0.25,
     ease: 'easeOut'
