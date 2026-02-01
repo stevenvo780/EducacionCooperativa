@@ -99,7 +99,6 @@ const Sidebar = ({
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
 
-  // Memoized folder tree structure
   const folderChildrenMap = useMemo(() => {
     const map: Record<string, FolderItem[]> = { '': [] };
     for (const folder of folders) {
@@ -110,7 +109,6 @@ const Sidebar = ({
     return map;
   }, [folders]);
 
-  // Count docs per folder
   const docsByFolder = useMemo(() => {
     const result: Record<string, DocItem[]> = {};
     for (const doc of docs) {
@@ -131,10 +129,9 @@ const Sidebar = ({
     });
   };
 
-  // Render files for a specific folder
   const renderFilesInFolder = (folderPath: string, depth: number): React.ReactNode[] => {
     const folderDocs = docsByFolder[folderPath] ?? [];
-    const paddingLeft = 8 + depth * 12 + 16; // Extra indent for files inside folder
+    const paddingLeft = 8 + depth * 12 + 16;
 
     return folderDocs.map(doc => (
       <div
@@ -328,7 +325,6 @@ const Sidebar = ({
               </button>
             </div>
 
-            {/* Unified Folder & Files Tree */}
             <div className="mt-2 px-1">
               {loadingDocs && docs.length === 0 && (
                 <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
@@ -343,7 +339,6 @@ const Sidebar = ({
                 </div>
               )}
 
-              {/* When searching, show flat list */}
               {sidebarSearchQuery ? (
                 <div className="space-y-0.5">
                   {sidebarFilteredDocs.length === 0 ? (
@@ -379,7 +374,6 @@ const Sidebar = ({
                   )}
                 </div>
               ) : (
-                /* Normal folder tree view */
                 <div className="space-y-0.5">
                   {renderFolderTree('')}
                 </div>

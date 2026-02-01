@@ -1,15 +1,8 @@
 #!/usr/bin/env node
-/**
- * Shared utilities for admin scripts
- */
-
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-/**
- * Require an environment variable or exit with error
- */
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) {
@@ -19,16 +12,10 @@ function requireEnv(name) {
   return value;
 }
 
-/**
- * Hash a password using SHA-256 (matches src/lib/crypto.ts)
- */
 function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-/**
- * Load Firebase Admin service account from env or file
- */
 function loadServiceAccount() {
   const serviceAccountPath =
     process.env.SERVICE_ACCOUNT_PATH || path.resolve("serviceAccountKey.json");
