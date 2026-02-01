@@ -118,11 +118,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const userData = await res.json();
 
-        // Sign in with custom token to get a real Firebase session
         if (userData.customToken) {
             try {
                 const userCredential = await signInWithCustomToken(userData.customToken);
-                // The onAuthStateChanged listener will handle setting the user
                 router.push('/dashboard');
                 return;
             } catch (tokenError) {
@@ -134,7 +132,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             throw new Error('No se pudo iniciar sesión con Firebase. Verifica la configuración.');
         }
 
-        // Fallback inseguro (solo si allowInsecureAuth)
         const userObj = {
             uid: userData.uid,
             email: userData.email,
@@ -168,11 +165,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const userData = await res.json();
 
-        // Sign in with custom token to get a real Firebase session
         if (userData.customToken) {
             try {
                 await signInWithCustomToken(userData.customToken);
-                // The onAuthStateChanged listener will handle setting the user
                 router.push('/dashboard');
                 return;
             } catch (tokenError) {
@@ -184,7 +179,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             throw new Error('No se pudo iniciar sesión con Firebase. Verifica la configuración.');
         }
 
-        // Fallback inseguro (solo si allowInsecureAuth)
         const userObj = {
             uid: userData.uid,
             email: userData.email,

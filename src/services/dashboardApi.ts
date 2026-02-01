@@ -123,3 +123,33 @@ export const uploadFileApi = async (formData: FormData) => {
   assertOk(res, 'API Upload failed');
   return (await res.json()) as DocItem;
 };
+
+export const convertFileToMarkdownApi = async (params: {
+  file: File;
+  workspaceId: string;
+  folder: string;
+  persistOriginal?: boolean;
+  createDocument?: boolean;
+}) => {
+  const formData = new FormData();
+  formData.append('file', params.file);
+  formData.append('workspaceId', params.workspaceId);
+  formData.append('folder', params.folder);
+  if (params.persistOriginal !== undefined) {
+    formData.append('persistOriginal', params.persistOriginal ? 'true' : 'false');
+  }
+  if (params.createDocument !== undefined) {
+    formData.append('createDocument', params.createDocument ? 'true' : 'false');
+  }
+
+  const res = await authFetch('/api/documents/convert', {
+    method: 'POST',
+    body: formData
+  });
+  assertOk(res, 'Failed to convert file to markdown');
+  return (await res.json()) as {
+    markdown: string;
+    suggestedName: string;
+    createdDoc: DocItem | null;
+  };
+};

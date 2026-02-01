@@ -34,7 +34,6 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Generate a custom token for the user to authenticate with the Hub
         const customToken = await adminAuth.createCustomToken(userDoc.id, {
             userEmail: userData.email
         });

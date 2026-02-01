@@ -37,7 +37,6 @@ export async function POST(req: NextRequest) {
 
         // Personal workspace se gestiona en el cliente; evitamos duplicados en Firestore.
 
-        // Generate custom token for the new user
         const customToken = await adminAuth.createCustomToken(userId, {
             userEmail: email
         });
