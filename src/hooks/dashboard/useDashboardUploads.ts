@@ -36,6 +36,7 @@ export const useDashboardUploads = ({
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragCounter = useRef(0);
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
   useEffect(() => {
     const folderInput = folderInputRef.current;
@@ -76,28 +77,6 @@ export const useDashboardUploads = ({
   }, []);
 
   const joinPaths = useCallback((...parts: string[]) => normalizePath(parts.filter(Boolean).join('/')), []);
-
-  const isSupportedFile = useCallback((file: File) => {
-    const mime = (file.type || '').toLowerCase();
-    if (mime) {
-      return (
-        mime.startsWith('text/') ||
-        mime.startsWith('image/') ||
-        mime.startsWith('video/') ||
-        mime.startsWith('audio/') ||
-        mime === 'application/pdf' ||
-        mime === 'application/json' ||
-        mime === 'application/xml'
-      );
-    }
-    const ext = (file.name.split('.').pop() || '').toLowerCase();
-    return [
-      'md', 'markdown', 'mdown', 'mkd', 'txt', 'json', 'csv', 'tsv',
-      'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'yml', 'yaml',
-      'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
-      'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'm4a'
-    ].includes(ext);
-  }, []);
 
   type FileSystemEntry = {
     isFile: boolean;
@@ -167,17 +146,20 @@ export const useDashboardUploads = ({
     options?: { preservePaths?: boolean }
   ) => {
     if (!user || files.length === 0) return;
-    const supportedFiles = files.filter(isSupportedFile);
-    if (supportedFiles.length === 0) {
+    const oversized = files.filter(file => file.size > MAX_FILE_SIZE).map(file => file.name);
+    const allowedFiles = files.filter(file => file.size <= MAX_FILE_SIZE);
+    if (oversized.length > 0) {
       setUploadStatus({
-        total: 0,
+        total: files.length,
         currentIndex: 0,
         currentName: '',
         progress: 0,
         phase: 'error',
-        error: 'No hay archivos compatibles'
+        error: `Estos archivos superan 50MB: ${oversized.slice(0, 3).join(', ')}${oversized.length > 3 ? '…' : ''}`
       });
       scheduleUploadStatusClear();
+    }
+    if (allowedFiles.length === 0) {
       return;
     }
     const baseFolder = options?.preservePaths
@@ -190,7 +172,7 @@ export const useDashboardUploads = ({
       clearTimeout(uploadStatusTimer.current);
     }
     setUploadStatus({
-      total: supportedFiles.length,
+      total: allowedFiles.length,
       currentIndex: 0,
       currentName: '',
       progress: 0,
@@ -198,8 +180,8 @@ export const useDashboardUploads = ({
     });
     try {
       const createdDocs: DocItem[] = [];
-      for (let i = 0; i < supportedFiles.length; i += 1) {
-        const file = supportedFiles[i];
+      for (let i = 0; i < allowedFiles.length; i += 1) {
+        const file = allowedFiles[i];
         setUploadStatus(prev => prev ? {
           ...prev,
           currentIndex: i + 1,
@@ -269,7 +251,6 @@ export const useDashboardUploads = ({
   }, [
     user,
     getUploadContext,
-    isSupportedFile,
     scheduleUploadStatusClear,
     getRelativeDir,
     joinPaths,
