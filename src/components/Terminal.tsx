@@ -217,7 +217,7 @@ const Terminal: React.FC<TerminalProps> = ({
                     <p className="text-slate-400">El servicio está listo. Puedes iniciar una nueva terminal.</p>
                     <button
                         onClick={handleCreateSession}
-                        className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-sm flex items-center gap-2 mx-auto transition-all shadow-lg hover:shadow-emerald-900/20"
+                        className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-sm flex items-center gap-2 mx-auto transition-[background-color,color,box-shadow] shadow-lg hover:shadow-emerald-900/20"
                     >
                         <TerminalIcon className="w-5 h-5" /> Iniciar Sesión Default
                     </button>

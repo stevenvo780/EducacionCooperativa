@@ -63,7 +63,7 @@ const ToolbarButton = ({ onClick, icon: Icon, title, active = false }: any) => (
   <button
     onClick={onClick}
     className={clsx(
-      'p-1.5 rounded-md transition-all duration-200',
+      'p-1.5 rounded-md transition-[background-color,color,box-shadow] duration-200',
       active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'
     )}
     title={title}
