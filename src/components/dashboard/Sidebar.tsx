@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useState, useMemo, useLayoutEffect, useRef } from 'react';
+import { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
@@ -139,6 +139,11 @@ const Sidebar = ({
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
+
+  // Reset expanded folders when workspace changes to ensure default folder is expanded
+  useEffect(() => {
+    setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
+  }, [currentWorkspace?.id]);
 
   const folderChildrenMap = useMemo(() => {
     const map: Record<string, FolderItem[]> = { '': [] };
