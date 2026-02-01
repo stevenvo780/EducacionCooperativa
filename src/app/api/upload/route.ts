@@ -17,11 +17,9 @@ export async function POST(req: NextRequest) {
 
         const buffer = Buffer.from(await file.arrayBuffer());
 
-        // Use user-specific path for sync compatibility
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
         let filename = `users/${ownerId}/${safeName}`;
 
-        // If specific workspace provided (and not personal), use workspace path
         if (workspaceId && workspaceId !== 'personal') {
              filename = `workspaces/${workspaceId}/${safeName}`;
         }
@@ -47,7 +45,6 @@ export async function POST(req: NextRequest) {
             expires: '03-01-2500'
         });
 
-        // Create document in Firestore via Admin SDK
         const docRef = await adminDb.collection('documents').add({
             name: file.name,
             type: 'file',
@@ -71,7 +68,7 @@ export async function POST(req: NextRequest) {
             mimeType: file.type,
             ownerId: ownerId,
             folder,
-            updatedAt: { seconds: Date.now() / 1000 } // Approximation
+            updatedAt: { seconds: Date.now() / 1000 }
         });
 
     } catch (error: any) {

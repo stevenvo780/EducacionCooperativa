@@ -14,7 +14,6 @@ try {
   console.error('Error parsing FIREBASE_SERVICE_ACCOUNT', e);
 }
 
-// Ensure bucket name is always usable; fall back to the default GCS naming.
 const projectId = process.env.FIREBASE_PROJECT_ID ? process.env.FIREBASE_PROJECT_ID.trim() : undefined;
 const configuredBucket = process.env.FIREBASE_STORAGE_BUCKET ? process.env.FIREBASE_STORAGE_BUCKET.trim() : undefined;
 const fallbackBucket = projectId ? `${projectId}.appspot.com` : undefined;

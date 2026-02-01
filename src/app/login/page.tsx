@@ -63,7 +63,6 @@ export default function LoginPage() {
     }
   };
 
-  // Vista de recuperación de contraseña
   if (showResetPassword) {
     return (
       <LazyMotion features={domAnimation}>

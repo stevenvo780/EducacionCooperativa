@@ -24,14 +24,10 @@ interface TerminalContextType {
     selectSession: (sessionId: string) => void;
     destroySession: (sessionId: string) => void;
     errorMessage: string | null;
-    // Per-workspace worker status tracking
     workspaceWorkerStatuses: Map<string, WorkerStatus>;
     getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
-    // Per-workspace session filtering
     getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
-    // Subscribe to workspace worker status
     subscribeToWorkspace: (workspaceId: string) => void;
-    // Clear active session (used when switching workspaces)
     clearActiveSession: () => void;
 }
 
@@ -58,7 +54,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isCreatingSession, setIsCreatingSession] = useState(false);
 
-    // NEW: Track worker status per workspace
     const [workspaceWorkerStatuses, setWorkspaceWorkerStatuses] = useState<Map<string, WorkerStatus>>(new Map());
 
     const debugLog = useCallback((...args: unknown[]) => {
@@ -71,7 +66,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         return workspaceWorkerStatuses.get(workspaceId) || 'unknown';
     }, [workspaceWorkerStatuses]);
 
-    // Filter sessions by workspace
     const getSessionsForWorkspace = useCallback((workspaceId: string): TerminalSession[] => {
         return sessions.filter(s => s.workspaceId === workspaceId);
     }, [sessions]);
@@ -101,7 +95,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
         controllerRef.current = controller;
 
-        // Connect with per-workspace status handler
         try {
             let actualToken = 'mock-token';
             if (currentUser.getIdToken) {
@@ -112,11 +105,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             controller.connect(
                 actualToken,
                 currentUser.uid,
-                // Hub status callback
                 (newStatus) => {
                     debugLog('[TerminalContext] Hub status changed:', newStatus);
                     if (newStatus === 'hub-online') {
-                        // Hub reachable; treat as online so UI does not remain stuck in "checking" state
                         debugLog('[TerminalContext] Setting hubConnected=true, status=online');
                         setHubConnected(true);
                         setStatus('online');
@@ -134,29 +125,22 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                         setStatus('error');
                     }
                 },
-                // Session ended callback
                 (_payload) => {
-                    // Handled via socket events below
                 },
-                // Per-workspace worker status callback
                 (workspaceStatus: WorkspaceWorkerStatus) => {
                     setWorkspaceWorkerStatuses(prev => {
                         const newMap = new Map(prev);
                         newMap.set(workspaceStatus.workspaceId, workspaceStatus.status);
                         return newMap;
                     });
-                    // Also update global status if it's online (backwards compat)
                     if (workspaceStatus.status === 'online') {
                         setStatus('online');
                     }
                 }
             );
 
-            // Listen for events
-            // Track pending session metadata for when session-created fires
             let pendingSessionMeta: { workspaceId: string; workspaceType: 'personal' | 'shared'; workspaceName?: string } | null = null;
 
-            // Override startSession to capture metadata
             const originalStartSession = controller.startSession.bind(controller);
             controller.startSession = (opts: { workspaceId: string; workspaceName?: string; workspaceType: 'personal' | 'shared' }) => {
                 pendingSessionMeta = { workspaceId: opts.workspaceId, workspaceType: opts.workspaceType, workspaceName: opts.workspaceName };
@@ -167,7 +151,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 setIsCreatingSession(false);
                 setSessions(prev => {
                     if (prev.find(s => s.id === data.id)) return prev;
-                    // Prefer server-provided workspaceId; fallback to pending meta
                     const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
                     const workspaceType = pendingSessionMeta?.workspaceType || 'personal';
                     const workspaceName = pendingSessionMeta?.workspaceName;
@@ -221,7 +204,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         controllerRef.current?.checkWorkerStatus(workspaceId);
     }, []);
 
-    // Clear active session when switching workspaces to prevent cross-workspace session leakage
     const clearActiveSession = useCallback(() => {
         setActiveSessionId(null);
     }, []);

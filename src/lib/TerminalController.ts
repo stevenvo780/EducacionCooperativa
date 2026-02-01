@@ -1,6 +1,5 @@
 import { io, Socket } from 'socket.io-client';
 
-// Global types for CDN-loaded xterm
 declare global {
   interface Window {
     Terminal: any;
@@ -9,7 +8,6 @@ declare global {
   }
 }
 
-// Represents a single terminal session with its own xterm instance
 export interface TerminalInstance {
   term: any;
   fitAddon: any;
@@ -18,9 +16,6 @@ export interface TerminalInstance {
   mounted: boolean;
 }
 
-// =====================================================
-// NEW: Worker status is now per-workspace
-// =====================================================
 export type WorkerStatus = 'online' | 'offline' | 'unknown';
 
 export interface WorkspaceWorkerStatus {
@@ -29,19 +24,16 @@ export interface WorkspaceWorkerStatus {
 }
 
 export class TerminalController {
-  // Map of sessionId -> TerminalInstance (each session has its own xterm)
   private terminals: Map<string, TerminalInstance> = new Map();
   public socket: Socket | null = null;
   private nexusUrl: string;
   private initialized = false;
   private activeSessionId: string | null = null;
 
-  // NEW: Track worker status per workspace
   private workspaceStatuses: Map<string, WorkerStatus> = new Map();
   private subscribedWorkspaces: Set<string> = new Set();
   private onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void;
 
-  // Keep a reference to the old single-terminal API for backwards compat
   public get term(): any {
     if (this.activeSessionId) {
       return this.terminals.get(this.activeSessionId)?.term ?? null;
@@ -80,14 +72,12 @@ export class TerminalController {
     if (this.initialized) return true;
 
     try {
-      // Load xterm from CDN (avoids bundler issues)
       this.loadCSS('https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css');
 
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js');
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js');
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js');
 
-      // Wait a tick for globals to be available
       await new Promise(r => setTimeout(r, 50));
 
       if (!window.Terminal || !window.FitAddon?.FitAddon) {
@@ -102,7 +92,6 @@ export class TerminalController {
     }
   }
 
-  // Create a new xterm instance for a session
   private createTerminalInstance(sessionId: string): TerminalInstance {
     const Terminal = window.Terminal;
     const FitAddon = window.FitAddon.FitAddon;
@@ -127,7 +116,6 @@ export class TerminalController {
       term.loadAddon(new WebLinksAddon());
     }
 
-    // Input handler - sends data to THIS session
     term.onData((data: string) => {
       if (this.socket?.connected) {
         this.socket.emit('execute', {
@@ -149,7 +137,6 @@ export class TerminalController {
     return instance;
   }
 
-  // Get or create a terminal instance for a session
   public getTerminalInstance(sessionId: string): TerminalInstance | null {
     if (!this.initialized) return null;
 
@@ -160,7 +147,6 @@ export class TerminalController {
     return instance;
   }
 
-  // Mount a specific session's terminal to a container
   public mountSession(sessionId: string, container: HTMLElement): boolean {
     const instance = this.getTerminalInstance(sessionId);
     if (!instance) return false;
@@ -169,7 +155,6 @@ export class TerminalController {
     const termElement = term.element as HTMLElement | undefined;
     const isAttached = termElement ? container.contains(termElement) : false;
 
-    // Prevent double mount
     if (instance.mounted && instance.container === container && isAttached) {
       this.fitSession(sessionId);
       return true;
@@ -178,7 +163,6 @@ export class TerminalController {
     instance.container = container;
 
     if (instance.mounted) {
-      // Re-parent existing terminal element
       if (termElement && !isAttached) {
         container.appendChild(termElement);
       }
@@ -187,13 +171,11 @@ export class TerminalController {
       instance.mounted = true;
     }
 
-    // Delay fit to allow DOM to settle
     setTimeout(() => {
       fitAddon.fit();
       term.focus();
     }, 100);
 
-    // Setup resize observer
     if (instance.resizeObserver) {
       instance.resizeObserver.disconnect();
     }
@@ -224,7 +206,6 @@ export class TerminalController {
 
     this.socket.on('connect', () => {
       onStatusChange?.('hub-online');
-      // Re-subscribe to all workspaces after reconnect
       this.subscribedWorkspaces.forEach(workspaceId => {
         this.socket?.emit('workspace:subscribe', { workspaceId });
       });
@@ -241,7 +222,6 @@ export class TerminalController {
       onStatusChange?.('error');
     });
 
-    // NEW: Worker status now includes workspaceId
     this.socket.on('worker-status', (data: { status: string; workspaceId?: string }) => {
       const workspaceId = data.workspaceId;
       const status = data.status as WorkerStatus;
@@ -250,14 +230,12 @@ export class TerminalController {
         this.workspaceStatuses.set(workspaceId, status);
         this.onWorkerStatusChange?.({ workspaceId, status });
       } else {
-        // Legacy fallback
         onStatusChange?.(status);
       }
     });
 
     this.socket.on('session-created', (data: { id: string; workspaceId?: string }) => {
       this.activeSessionId = data.id;
-      // Create terminal instance for new session
       const instance = this.getTerminalInstance(data.id);
       if (instance) {
         instance.term.clear();
@@ -274,7 +252,6 @@ export class TerminalController {
       onSessionEnded?.(payload);
     });
 
-    // Route output to the correct terminal instance
     this.socket.on('output', (data: { sessionId: string; data: string }) => {
       const instance = this.terminals.get(data.sessionId);
       if (instance && data.data) {
@@ -282,7 +259,6 @@ export class TerminalController {
       }
     });
 
-    // Error handler
     this.socket.on('error', (data: { message: string; workspaceId?: string }) => {
       console.warn('[TerminalController] Error:', data.message);
     });
@@ -290,7 +266,6 @@ export class TerminalController {
     this.socket.connect();
   }
 
-  // NEW: Subscribe to a workspace to receive worker status updates
   public subscribeToWorkspace(workspaceId: string) {
     this.subscribedWorkspaces.add(workspaceId);
     if (this.socket?.connected) {
@@ -298,7 +273,6 @@ export class TerminalController {
     }
   }
 
-  // NEW: Unsubscribe from a workspace
   public unsubscribeFromWorkspace(workspaceId: string) {
     this.subscribedWorkspaces.delete(workspaceId);
     if (this.socket?.connected) {
@@ -306,12 +280,10 @@ export class TerminalController {
     }
   }
 
-  // NEW: Check if a workspace has a worker online
   public getWorkerStatus(workspaceId: string): WorkerStatus {
     return this.workspaceStatuses.get(workspaceId) || 'unknown';
   }
 
-  // NEW: Request current worker status for a workspace
   public checkWorkerStatus(workspaceId: string) {
     if (this.socket?.connected) {
       this.socket.emit('workspace:check-worker', { workspaceId });
@@ -324,7 +296,6 @@ export class TerminalController {
     }
   }
 
-  // Set active session (for backwards compatibility - tracks "focused" session)
   public setActiveSession(sessionId: string) {
     this.activeSessionId = sessionId;
   }
@@ -338,11 +309,9 @@ export class TerminalController {
       this.activeSessionId = null;
     }
 
-    // Ensure resources are released for closed sessions
     this.disposeSession(sessionId);
   }
 
-  // Dispose a terminal instance (called when component unmounts)
   public disposeSession(sessionId: string) {
     const instance = this.terminals.get(sessionId);
     if (instance) {
@@ -368,11 +337,9 @@ export class TerminalController {
         this.socket.emit('resize', { sessionId, cols, rows });
       }
     } catch (e) {
-      // Ignore fit errors
     }
   }
 
-  // Legacy API - mount the "active" session
   public mount(container: HTMLElement) {
     if (this.activeSessionId) {
       this.mountSession(this.activeSessionId, container);
@@ -414,4 +381,3 @@ export class TerminalController {
     this.activeSessionId = null;
   }
 }
-// Build Sat Jan 31 10:55:00 -05 2026
