@@ -120,8 +120,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   activeFolder: activeFolderProp,
   onActiveFolderChange
 }) => {
+  const resolveActiveFolder = (value?: string) => {
+    if (value === '') return '';
+    if (value === undefined || value === null) return DEFAULT_FOLDER_NAME;
+    return normalizeFolderPath(value);
+  };
+
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
-  const [activeFolder, setActiveFolder] = useState(activeFolderProp || DEFAULT_FOLDER_NAME);
+  const [activeFolder, setActiveFolder] = useState(resolveActiveFolder(activeFolderProp));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; docId: string } | null>(null);
@@ -142,9 +148,48 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return grouped;
   }, [normalizedDocs]);
 
+  const effectiveFolders = useMemo<FolderItem[]>(() => {
+    const byPath = new Map<string, FolderItem>();
+    const derived: FolderItem[] = [];
+
+    folders.forEach(folder => {
+      byPath.set(folder.path, folder);
+    });
+
+    const ensureFolder = (rawPath?: string) => {
+      const normalized = normalizeFolderPath(rawPath);
+      if (byPath.has(normalized)) return;
+
+      const parts = normalized.split('/');
+      let acc = '';
+      for (let i = 0; i < parts.length; i += 1) {
+        const part = parts[i];
+        acc = i === 0 ? part : `${acc}/${part}`;
+        if (byPath.has(acc)) continue;
+
+        const parentPath = i === 0 ? '' : acc.slice(0, acc.lastIndexOf('/'));
+        const virtualFolder: FolderItem = {
+          id: `virtual-${acc}`,
+          name: part,
+          path: acc,
+          parentPath,
+          kind: 'virtual'
+        };
+
+        byPath.set(acc, virtualFolder);
+        derived.push(virtualFolder);
+      }
+    };
+
+    ensureFolder(DEFAULT_FOLDER_NAME);
+    normalizedDocs.forEach(doc => ensureFolder(doc.folder));
+
+    return [...folders, ...derived];
+  }, [folders, normalizedDocs]);
+
   const folderChildrenMap = useMemo(() => {
     const map: Record<string, FolderItem[]> = {};
-    folders.forEach(folder => {
+    effectiveFolders.forEach(folder => {
       const parent = folder.parentPath || '';
       if (!map[parent]) map[parent] = [];
       map[parent].push(folder);
@@ -158,7 +203,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       });
     });
     return map;
-  }, [folders]);
+  }, [effectiveFolders]);
 
   const activeChildFolders = useMemo(() => {
     return folderChildrenMap[activeFolder] ?? [];
@@ -192,8 +237,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   }, [normalizedDocs]);
 
   const folderMap = useMemo(() => {
-    return new Map(folders.map(folder => [folder.path, folder]));
-  }, [folders]);
+    return new Map(effectiveFolders.map(folder => [folder.path, folder]));
+  }, [effectiveFolders]);
 
   const selectedDocIds = useMemo(() => {
     return Array.from(selectedKeys)
@@ -211,22 +256,26 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   const hasSelection = selectedDocIds.length > 0 || selectedFolderPaths.length > 0;
 
-  useEffect(() => {
-    if (activeFolderProp && activeFolderProp !== activeFolder) {
-      setActiveFolder(activeFolderProp);
-    }
-  }, [activeFolderProp, activeFolder]);
+  const resolvedActiveFolderProp = useMemo(() => resolveActiveFolder(activeFolderProp), [activeFolderProp]);
 
   useEffect(() => {
-    if (!folders.length) return;
-    const exists = folders.some(folder => folder.path === activeFolder);
+    if (activeFolderProp === undefined) return;
+    if (resolvedActiveFolderProp !== activeFolder) {
+      setActiveFolder(resolvedActiveFolderProp);
+    }
+  }, [activeFolderProp, resolvedActiveFolderProp, activeFolder]);
+
+  useEffect(() => {
+    if (activeFolder === '') return;
+    if (!effectiveFolders.length) return;
+    const exists = effectiveFolders.some(folder => folder.path === activeFolder);
     if (!exists) {
       const rootFolders = folderChildrenMap[''] ?? [];
       const fallback = rootFolders[0]?.path || DEFAULT_FOLDER_NAME;
       setActiveFolder(fallback);
       onActiveFolderChange?.(fallback);
     }
-  }, [folders, folderChildrenMap, activeFolder, onActiveFolderChange]);
+  }, [effectiveFolders, folderChildrenMap, activeFolder, onActiveFolderChange]);
 
   useEffect(() => {
     setSelectedKeys(new Set());

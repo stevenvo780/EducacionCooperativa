@@ -32,21 +32,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (wsData?.ownerId !== auth.uid) {
         return NextResponse.json({ error: 'Only workspace owner can invite' }, { status: 403 });
       }
-      await wsRef.update({ pendingInvites: FieldValue.arrayUnion(email) });
+      const normalizedEmail = email.toLowerCase().trim();
+      await wsRef.update({ pendingInvites: FieldValue.arrayUnion(normalizedEmail) });
       return NextResponse.json({ status: 'invited' });
     }
 
     if (action === 'accept') {
-      if (!email || !auth.email || email !== auth.email) {
+      const normalizedEmail = email?.toLowerCase().trim();
+      const normalizedAuthEmail = auth.email?.toLowerCase().trim();
+      if (!normalizedEmail || !normalizedAuthEmail || normalizedEmail !== normalizedAuthEmail) {
         return NextResponse.json({ error: 'email mismatch' }, { status: 400 });
       }
-      const pending = Array.isArray(wsData?.pendingInvites) ? wsData?.pendingInvites : [];
-      if (!pending.includes(email)) {
+      const pending = Array.isArray(wsData?.pendingInvites) ? wsData.pendingInvites.map((e: string) => e.toLowerCase().trim()) : [];
+      if (!pending.includes(normalizedEmail)) {
         return NextResponse.json({ error: 'Invite not found' }, { status: 400 });
       }
       await wsRef.update({
         members: FieldValue.arrayUnion(auth.uid),
-        pendingInvites: FieldValue.arrayRemove(email)
+        pendingInvites: FieldValue.arrayRemove(normalizedEmail)
       });
       return NextResponse.json({ status: 'accepted' });
     }
