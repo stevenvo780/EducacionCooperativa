@@ -12,6 +12,40 @@ import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
 import type { DocItem, FolderItem, ViewMode, Workspace, DialogConfig, DialogResult, UploadStatus, DeleteStatus } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import {
+    setShowWorkspaceMenu as setShowWorkspaceMenuAction,
+    setShowNewWorkspaceModal as setShowNewWorkspaceModalAction,
+    setShowMembersModal as setShowMembersModalAction,
+    setShowPasswordModal as setShowPasswordModalAction,
+    setPasswordForm as setPasswordFormAction,
+    setPasswordError as setPasswordErrorAction,
+    setPasswordSuccess as setPasswordSuccessAction,
+    setIsChangingPassword as setIsChangingPasswordAction,
+    setShowQuickSearch as setShowQuickSearchAction,
+    setQuickSearchQuery as setQuickSearchQueryAction,
+    setQuickSearchIndex as setQuickSearchIndexAction,
+    setSidebarSearchQuery as setSidebarSearchQueryAction,
+    setShowMobileSidebar as setShowMobileSidebarAction,
+    setDeletingWorkspaceId as setDeletingWorkspaceIdAction,
+    setWorkspaces as setWorkspacesAction,
+    setInvites as setInvitesAction,
+    setCurrentWorkspace as setCurrentWorkspaceAction
+} from '@/store/dashboardSlice';
+import {
+    acceptInviteApi,
+    createDocumentApi,
+    createWorkspaceApi,
+    deleteDocumentApi,
+    deleteWorkspaceApi,
+    fetchDocsApi,
+    fetchDocumentRawApi,
+    fetchWorkspacesApi,
+    inviteMemberApi,
+    updateDocumentApi,
+    uploadFileApi
+} from '@/services/dashboardApi';
+import { areDocsEquivalent, areFoldersEquivalent, normalizeWorkspace } from '@/services/dashboardUtils';
 import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
 import StatusToasts from '@/components/dashboard/StatusToasts';
 import DialogModal from '@/components/dashboard/DialogModal';
@@ -31,69 +65,6 @@ const PERSONAL_WORKSPACE_ID = 'personal';
 const ROOT_FOLDER_PATH = '';
 const DOCS_POLL_INTERVAL_MS = 30000;
 
-const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
-    if (!value) return 0;
-    if (typeof value === 'number') return value;
-    if (value instanceof Date) return value.getTime();
-    if (typeof value === 'string') {
-        const parsed = Date.parse(value);
-        return Number.isNaN(parsed) ? 0 : parsed;
-    }
-    if (typeof value === 'object') {
-        const candidate = value as { seconds?: number; toDate?: () => Date };
-        if (typeof candidate.seconds === 'number') return candidate.seconds * 1000;
-        if (typeof candidate.toDate === 'function') {
-            const date = candidate.toDate();
-            if (date instanceof Date) return date.getTime();
-        }
-    }
-    return 0;
-};
-
-const areDocsEquivalent = (prev: DocItem[], next: DocItem[]) => {
-    if (prev.length !== next.length) return false;
-    for (let i = 0; i < prev.length; i += 1) {
-        const a = prev[i];
-        const b = next[i];
-        if (a.id !== b.id) return false;
-        if (a.name !== b.name) return false;
-        if (a.type !== b.type) return false;
-        if ((a.folder || '') !== (b.folder || '')) return false;
-        if ((a.mimeType || '') !== (b.mimeType || '')) return false;
-        if ((a.url || '') !== (b.url || '')) return false;
-        if ((a.storagePath || '') !== (b.storagePath || '')) return false;
-        if ((a.workspaceId || '') !== (b.workspaceId || '')) return false;
-        if ((a.ownerId || '') !== (b.ownerId || '')) return false;
-        if ((a.size || 0) !== (b.size || 0)) return false;
-        if (getUpdatedAtValue(a.updatedAt) !== getUpdatedAtValue(b.updatedAt)) return false;
-    }
-    return true;
-};
-
-const areFoldersEquivalent = (prev: FolderItem[], next: FolderItem[]) => {
-    if (prev.length !== next.length) return false;
-    for (let i = 0; i < prev.length; i += 1) {
-        const a = prev[i];
-        const b = next[i];
-        if (a.id !== b.id) return false;
-        if (a.name !== b.name) return false;
-        if (a.path !== b.path) return false;
-        if (a.parentPath !== b.parentPath) return false;
-        if (a.kind !== b.kind) return false;
-        if ((a.docId || '') !== (b.docId || '')) return false;
-    }
-    return true;
-};
-
-const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspace => ({
-    id: data.id,
-    name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Sin nombre',
-    ownerId: data.ownerId ?? '',
-    members: Array.isArray(data.members) ? data.members : [],
-    pendingInvites: Array.isArray(data.pendingInvites) ? data.pendingInvites : [],
-    type: data.type === 'personal' ? 'personal' : 'shared'
-});
-
 export default function DashboardPage() {
     const { user, loading, logout, changePassword } = useAuth();
     const {
@@ -109,6 +80,7 @@ export default function DashboardPage() {
         subscribeToWorkspace,
         clearActiveSession
     } = useTerminal();
+    const dispatch = useAppDispatch();
     const [docs, setDocs] = useState<DocItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const router = useRouter();
@@ -131,17 +103,75 @@ export default function DashboardPage() {
     }, [initialize, user]);
 
     // Workspace State
-    const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-    const [invites, setInvites] = useState<Workspace[]>([]);
-    const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
-    const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
-    const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
-    const [showMembersModal, setShowMembersModal] = useState(false);
-    const [showPasswordModal, setShowPasswordModal] = useState(false);
-    const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
-    const [passwordError, setPasswordError] = useState('');
-    const [passwordSuccess, setPasswordSuccess] = useState(false);
-    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const workspaces = useAppSelector(state => state.dashboard.workspaces);
+    const invites = useAppSelector(state => state.dashboard.invites);
+    const currentWorkspace = useAppSelector(state => state.dashboard.currentWorkspace);
+    const showWorkspaceMenu = useAppSelector(state => state.dashboard.showWorkspaceMenu);
+    const showNewWorkspaceModal = useAppSelector(state => state.dashboard.showNewWorkspaceModal);
+    const showMembersModal = useAppSelector(state => state.dashboard.showMembersModal);
+    const showPasswordModal = useAppSelector(state => state.dashboard.showPasswordModal);
+    const passwordForm = useAppSelector(state => state.dashboard.passwordForm);
+    const passwordError = useAppSelector(state => state.dashboard.passwordError);
+    const passwordSuccess = useAppSelector(state => state.dashboard.passwordSuccess);
+    const isChangingPassword = useAppSelector(state => state.dashboard.isChangingPassword);
+    const showQuickSearch = useAppSelector(state => state.dashboard.showQuickSearch);
+    const quickSearchQuery = useAppSelector(state => state.dashboard.quickSearchQuery);
+    const quickSearchIndex = useAppSelector(state => state.dashboard.quickSearchIndex);
+    const sidebarSearchQuery = useAppSelector(state => state.dashboard.sidebarSearchQuery);
+    const showMobileSidebar = useAppSelector(state => state.dashboard.showMobileSidebar);
+    const deletingWorkspaceId = useAppSelector(state => state.dashboard.deletingWorkspaceId);
+
+    const setWorkspaces = useCallback((value: Workspace[]) => {
+        dispatch(setWorkspacesAction(value));
+    }, [dispatch]);
+    const setInvites = useCallback((value: Workspace[]) => {
+        dispatch(setInvitesAction(value));
+    }, [dispatch]);
+    const setCurrentWorkspace = useCallback((value: Workspace | null) => {
+        dispatch(setCurrentWorkspaceAction(value));
+    }, [dispatch]);
+    const setShowWorkspaceMenu = useCallback((value: boolean) => {
+        dispatch(setShowWorkspaceMenuAction(value));
+    }, [dispatch]);
+    const setShowNewWorkspaceModal = useCallback((value: boolean) => {
+        dispatch(setShowNewWorkspaceModalAction(value));
+    }, [dispatch]);
+    const setShowMembersModal = useCallback((value: boolean) => {
+        dispatch(setShowMembersModalAction(value));
+    }, [dispatch]);
+    const setShowPasswordModal = useCallback((value: boolean) => {
+        dispatch(setShowPasswordModalAction(value));
+    }, [dispatch]);
+    const setPasswordForm = useCallback((value: { current: string; new: string; confirm: string }) => {
+        dispatch(setPasswordFormAction(value));
+    }, [dispatch]);
+    const setPasswordError = useCallback((value: string) => {
+        dispatch(setPasswordErrorAction(value));
+    }, [dispatch]);
+    const setPasswordSuccess = useCallback((value: boolean) => {
+        dispatch(setPasswordSuccessAction(value));
+    }, [dispatch]);
+    const setIsChangingPassword = useCallback((value: boolean) => {
+        dispatch(setIsChangingPasswordAction(value));
+    }, [dispatch]);
+    const setShowQuickSearch = useCallback((value: boolean) => {
+        dispatch(setShowQuickSearchAction(value));
+    }, [dispatch]);
+    const setQuickSearchQuery = useCallback((value: string) => {
+        dispatch(setQuickSearchQueryAction(value));
+    }, [dispatch]);
+    const setQuickSearchIndex = useCallback((value: number) => {
+        dispatch(setQuickSearchIndexAction(value));
+    }, [dispatch]);
+    const setSidebarSearchQuery = useCallback((value: string) => {
+        dispatch(setSidebarSearchQueryAction(value));
+    }, [dispatch]);
+    const setShowMobileSidebar = useCallback((value: boolean) => {
+        dispatch(setShowMobileSidebarAction(value));
+    }, [dispatch]);
+    const setDeletingWorkspaceId = useCallback((value: string | null) => {
+        dispatch(setDeletingWorkspaceIdAction(value));
+    }, [dispatch]);
     const currentWorkspaceId = currentWorkspace?.id;
 
     // Subscribe to current workspace worker status
@@ -162,7 +192,6 @@ export default function DashboardPage() {
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
-    const [showMobileSidebar, setShowMobileSidebar] = useState(false);
     const [isDragActive, setIsDragActive] = useState(false);
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
@@ -170,11 +199,7 @@ export default function DashboardPage() {
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
 
     // Quick Search State (Ctrl+P)
-    const [showQuickSearch, setShowQuickSearch] = useState(false);
-    const [quickSearchQuery, setQuickSearchQuery] = useState('');
-    const [quickSearchIndex, setQuickSearchIndex] = useState(0);
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
-    const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
     const deferredDocs = useDeferredValue(docs);
 
@@ -188,13 +213,13 @@ export default function DashboardPage() {
     const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
     const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
     const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
-    const [deletingWorkspaceId, setDeletingWorkspaceId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
     const dragCounter = useRef(0);
     const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const docsRef = useRef<DocItem[]>([]);
+    const currentWorkspaceRef = useRef<Workspace | null>(null);
     const fetchInFlightRef = useRef<Promise<void> | null>(null);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
     const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
@@ -202,6 +227,10 @@ export default function DashboardPage() {
     useEffect(() => {
         docsRef.current = docs;
     }, [docs]);
+
+    useEffect(() => {
+        currentWorkspaceRef.current = currentWorkspace;
+    }, [currentWorkspace]);
 
     const fetchWorkspaces = useCallback(async () => {
         if (!user) return;
@@ -217,18 +246,9 @@ export default function DashboardPage() {
         let fetched: Workspace[] = [];
         let fetchedInvites: Workspace[] = [];
         try {
-            const params = new URLSearchParams();
-            params.set('ownerId', user.uid);
-            if (user.email) {
-                params.set('email', user.email);
-            }
-            const res = await fetch(`/api/workspaces?${params.toString()}`);
-            if (!res.ok) {
-                throw new Error('Failed to fetch workspaces');
-            }
-            const data = await res.json();
-            fetched = Array.isArray(data.workspaces) ? data.workspaces.map(normalizeWorkspace) : [];
-            fetchedInvites = Array.isArray(data.invites) ? data.invites.map(normalizeWorkspace) : [];
+            const data = await fetchWorkspacesApi({ ownerId: user.uid, email: user.email });
+            fetched = data.workspaces.map(normalizeWorkspace);
+            fetchedInvites = data.invites.map(normalizeWorkspace);
         } catch (e) {
             console.error('Error fetching workspaces', e);
         }
@@ -236,28 +256,17 @@ export default function DashboardPage() {
         const allWorkspaces = [personalSpace, ...fetched.filter(ws => ws.id !== PERSONAL_WORKSPACE_ID)];
         setWorkspaces(allWorkspaces);
         setInvites(fetchedInvites);
-        setCurrentWorkspace(prev => {
-            if (!prev) return personalSpace;
-            const match = allWorkspaces.find(ws => ws.id === prev.id);
-            return match ?? personalSpace;
-        });
-    }, [user]);
+        const previousWorkspace = currentWorkspaceRef.current;
+        const resolvedWorkspace = previousWorkspace
+            ? (allWorkspaces.find(ws => ws.id === previousWorkspace.id) ?? personalSpace)
+            : personalSpace;
+        setCurrentWorkspace(resolvedWorkspace);
+    }, [user, setWorkspaces, setInvites, setCurrentWorkspace]);
 
     const acceptInvite = async (ws: Workspace) => {
         if (!user?.email) return;
         try {
-            const res = await fetch(`/api/workspaces/${ws.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'accept',
-                    userId: user.uid,
-                    email: user.email
-                })
-            });
-            if (!res.ok) {
-                throw new Error('Failed to accept invite');
-            }
+            await acceptInviteApi({ workspaceId: ws.id, userId: user.uid, email: user.email });
             await fetchWorkspaces();
             await showDialog({
                 type: 'info',
@@ -371,20 +380,14 @@ export default function DashboardPage() {
         if (showLoading) setLoadingDocs(true);
         const fetchPromise = (async () => {
             try {
-                const params = new URLSearchParams();
                 // Always filter by workspaceId for consistency
                 // Personal workspace uses 'personal' as workspaceId
                 const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? 'personal' : currentWorkspace.id;
-                params.set('workspaceId', wsId);
-                // Also include ownerId for personal workspace as fallback for legacy docs
-                if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
-                    params.set('ownerId', user.uid);
-                }
-                params.set('view', 'metadata');
-
-                const res = await fetch(`/api/documents?${params.toString()}`);
-                if (!res.ok) throw new Error('Failed to fetch docs via API');
-                const fetched: DocItem[] = await res.json();
+                const fetched = await fetchDocsApi({
+                    workspaceId: wsId,
+                    ownerId: currentWorkspace.id === PERSONAL_WORKSPACE_ID ? user.uid : undefined,
+                    view: 'metadata'
+                });
 
                 applyDocsSnapshot(fetched);
             } catch (error) {
@@ -521,10 +524,10 @@ export default function DashboardPage() {
     const handleQuickSearchKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setQuickSearchIndex(i => Math.min(i + 1, quickSearchResults.length - 1));
+            setQuickSearchIndex(Math.min(quickSearchIndex + 1, quickSearchResults.length - 1));
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            setQuickSearchIndex(i => Math.max(i - 1, 0));
+            setQuickSearchIndex(Math.max(quickSearchIndex - 1, 0));
         } else if (e.key === 'Enter' && quickSearchResults[quickSearchIndex]) {
             e.preventDefault();
             openDocument(quickSearchResults[quickSearchIndex]);
@@ -715,23 +718,20 @@ export default function DashboardPage() {
 
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
         const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
-        const response = await fetch('/api/documents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+        try {
+            await createDocumentApi({
                 name: trimmed,
                 type: 'folder',
                 ownerId: user.uid,
                 workspaceId: docWorkspaceId,
                 folder: parentPath
-            })
-        });
-        if (!response.ok) {
-            console.error('Failed to create folder');
+            });
+            await fetchDocs();
+            return true;
+        } catch (error) {
+            console.error('Failed to create folder', error);
             return false;
         }
-        await fetchDocs();
-        return true;
     };
 
     const createFolder = async () => {
@@ -774,14 +774,7 @@ export default function DashboardPage() {
         setOpenTabs(prev => prev.map(item => item.id === docId ? { ...item, folder: targetPath } : item));
 
         try {
-            const res = await fetch(`/api/documents/${docId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folder: targetPath })
-            });
-            if (!res.ok) {
-                throw new Error('Failed to move document');
-            }
+            await updateDocumentApi(docId, { folder: targetPath });
             await fetchDocs();
         } catch (error) {
             console.error('Error moving document', error);
@@ -801,9 +794,7 @@ export default function DashboardPage() {
                 resolvedContent = docItem.content;
             } else {
                 try {
-                    const res = await fetch(`/api/documents/${docItem.id}/raw`, { cache: 'no-store' });
-                    if (!res.ok) throw new Error('Failed to load content');
-                    resolvedContent = await res.text();
+                    resolvedContent = await fetchDocumentRawApi(docItem.id);
                 } catch (error) {
                     console.error('Error loading content for copy', error);
                     await showDialog({ type: 'error', title: 'No se pudo cargar el contenido para copiar.' });
@@ -828,16 +819,10 @@ export default function DashboardPage() {
         }
 
         try {
-            const res = await fetch('/api/documents', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error('Failed to copy document');
-            const data = await res.json();
+            const data = await createDocumentApi(payload);
             await fetchDocs();
             openDocument({
-                id: data.id,
+                id: String(data.id),
                 name: newName,
                 type: docItem.type || 'text',
                 ownerId: user.uid,
@@ -871,23 +856,12 @@ export default function DashboardPage() {
     const createWorkspace = async () => {
         if (!newWorkspaceName.trim() || !user) return;
         try {
-            const res = await fetch('/api/workspaces', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: newWorkspaceName,
-                    ownerId: user.uid
-                })
-            });
-            if (!res.ok) {
-                throw new Error('Failed to create workspace');
-            }
-            const data = await res.json();
+            const data = await createWorkspaceApi({ name: newWorkspaceName, ownerId: user.uid });
             setNewWorkspaceName('');
             setShowNewWorkspaceModal(false);
             await fetchWorkspaces();
             setCurrentWorkspace({
-                id: data.id,
+                id: String(data.id),
                 name: data.name ?? newWorkspaceName,
                 ownerId: data.ownerId ?? user.uid,
                 members: Array.isArray(data.members) ? data.members : [user.uid],
@@ -928,14 +902,7 @@ export default function DashboardPage() {
 
         try {
             setDeletingWorkspaceId(workspace.id);
-            const res = await fetch(`/api/workspaces/${workspace.id}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ownerId: user.uid })
-            });
-            if (!res.ok) {
-                throw new Error('Failed to delete workspace');
-            }
+            await deleteWorkspaceApi({ workspaceId: workspace.id, ownerId: user.uid });
             await fetchWorkspaces();
             setShowMembersModal(false);
             await showDialog({ type: 'info', title: 'Espacio eliminado', message: workspace.name });
@@ -956,25 +923,15 @@ export default function DashboardPage() {
         const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
         setIsCreating(true);
         try {
-            const response = await fetch('/api/documents', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: name,
-                    content: '# ' + name,
-                    type: 'text',
-                    ownerId: user.uid,
-                    workspaceId: docWorkspaceId,
-                    folder: targetFolder
-                })
+            const data = await createDocumentApi({
+                name: name,
+                content: '# ' + name,
+                type: 'text',
+                ownerId: user.uid,
+                workspaceId: docWorkspaceId,
+                folder: targetFolder
             });
-
-            if (!response.ok) {
-                throw new Error('Failed to create document via API');
-            }
-
-            const data = await response.json();
-            const docRef = { id: data.id };
+            const docRef = { id: String(data.id) };
 
             setNewDocName('');
             await fetchDocs();
@@ -1275,26 +1232,19 @@ export default function DashboardPage() {
                 if (isMarkdownFile(file)) {
                     const content = await file.text();
 
-                    const res = await fetch('/api/documents', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            name: file.name,
-                            content: content,
-                            type: 'text',
-                            mimeType: file.type || 'text/markdown',
-                            ownerId: user.uid,
-                            workspaceId: context.workspaceId,
-                            folder: resolvedFolder
-                        })
+                    const data = await createDocumentApi({
+                        name: file.name,
+                        content: content,
+                        type: 'text',
+                        mimeType: file.type || 'text/markdown',
+                        ownerId: user.uid,
+                        workspaceId: context.workspaceId,
+                        folder: resolvedFolder
                     });
-
-                    if (!res.ok) throw new Error('Markdown upload failed');
-                    const data = await res.json();
 
                     setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
                     createdDocs.push({
-                        id: data.id,
+                        id: String(data.id),
                         name: file.name,
                         type: 'text',
                         mimeType: file.type || 'text/markdown',
@@ -1311,14 +1261,7 @@ export default function DashboardPage() {
                 formData.append('workspaceId', context.workspaceId || 'personal');
                 formData.append('folder', resolvedFolder);
 
-                const res = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!res.ok) throw new Error('API Upload failed');
-
-                const newDoc = await res.json();
+                const newDoc = await uploadFileApi(formData);
                 createdDocs.push({ ...newDoc, folder: newDoc.folder ?? resolvedFolder });
 
                 setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
@@ -1515,8 +1458,8 @@ export default function DashboardPage() {
             const results = await Promise.all(
                 uniqueIds.map(async id => {
                     try {
-                        const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
-                        return { id, ok: res.ok };
+                        const ok = await deleteDocumentApi(id);
+                        return { id, ok };
                     } catch {
                         return { id, ok: false };
                     }
@@ -1619,17 +1562,7 @@ export default function DashboardPage() {
     const inviteMember = async () => {
         if (!inviteEmail || !currentWorkspace || currentWorkspace.type === 'personal') return;
         try {
-            const res = await fetch(`/api/workspaces/${currentWorkspace.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'invite',
-                    email: inviteEmail
-                })
-            });
-            if (!res.ok) {
-                throw new Error('Failed to invite member');
-            }
+            await inviteMemberApi({ workspaceId: currentWorkspace.id, email: inviteEmail });
             await showDialog({ type: 'info', title: 'Invitación enviada', message: inviteEmail });
             setInviteEmail('');
         } catch (e) {
@@ -2023,7 +1956,7 @@ export default function DashboardPage() {
                                                 <input
                                                     type="password"
                                                     value={passwordForm.current}
-                                                    onChange={(e) => setPasswordForm(prev => ({ ...prev, current: e.target.value }))}
+                                                    onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
                                                     className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
                                                     placeholder="••••••••"
                                                     required
@@ -2038,7 +1971,7 @@ export default function DashboardPage() {
                                             <input
                                                 type="password"
                                                 value={passwordForm.new}
-                                                onChange={(e) => setPasswordForm(prev => ({ ...prev, new: e.target.value }))}
+                                                onChange={(e) => setPasswordForm({ ...passwordForm, new: e.target.value })}
                                                 className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
                                                 placeholder="Mínimo 6 caracteres"
                                                 required
@@ -2053,7 +1986,7 @@ export default function DashboardPage() {
                                             <input
                                                 type="password"
                                                 value={passwordForm.confirm}
-                                                onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
+                                                onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
                                                 className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
                                                 placeholder="Repite la nueva contraseña"
                                                 required
