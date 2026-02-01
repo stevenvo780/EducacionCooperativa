@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2, Upload } from 'lucide-react';
+import { Check, FileText, Loader2, Upload } from 'lucide-react';
 import type { DeleteStatus, UploadStatus } from '@/components/dashboard/types';
 
 interface StatusToastsProps {
@@ -21,10 +21,13 @@ const StatusToasts = ({ uploadStatus, deleteStatus }: StatusToastsProps) => {
                 ? 'Subida completa'
                 : uploadStatus.phase === 'error'
                   ? 'Error de carga'
-                  : `Subiendo ${uploadStatus.currentIndex}/${uploadStatus.total}`}
+                  : uploadStatus.phase === 'converting'
+                    ? `Convirtiendo a Markdown...`
+                    : `Subiendo ${uploadStatus.currentIndex}/${uploadStatus.total}`}
             </span>
             {uploadStatus.phase === 'done' && <Check className="w-3 h-3 text-emerald-400" />}
             {uploadStatus.phase === 'uploading' && <Upload className="w-3 h-3 text-mandy-400" />}
+            {uploadStatus.phase === 'converting' && <FileText className="w-3 h-3 text-blue-400 animate-pulse" />}
           </div>
           {uploadStatus.currentName && (
             <div className="mt-1 text-[11px] text-surface-400 truncate">{uploadStatus.currentName}</div>

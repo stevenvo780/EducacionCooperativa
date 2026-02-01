@@ -13,7 +13,20 @@ const nextConfig = {
         test: /[\\/]node_modules[\\/]@xterm[\\/]/,
         sideEffects: true,
       });
+      
+      // Handle pdfjs-dist for browser
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        canvas: false,
+      };
     }
+    
+    // Exclude canvas from bundling (Node.js only module)
+    config.externals = config.externals || [];
+    if (Array.isArray(config.externals)) {
+      config.externals.push('canvas');
+    }
+    
     return config;
   },
 };

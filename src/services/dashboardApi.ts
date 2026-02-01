@@ -115,13 +115,62 @@ export const deleteDocumentApi = async (docId: string) => {
   return res.ok;
 };
 
+/**
+ * Uploads a file directly to Firebase Storage via signed URL, then registers it in Firestore.
+ * This bypasses Vercel's 4.5MB limit by not routing the file through serverless functions.
+ */
 export const uploadFileApi = async (formData: FormData) => {
-  const res = await authFetch('/api/upload', {
+  const file = formData.get('file') as File;
+  const workspaceId = (formData.get('workspaceId') as string) || 'personal';
+  const folder = (formData.get('folder') as string) || 'No estructurado';
+
+  if (!file) {
+    throw new Error('No file provided');
+  }
+
+  // Step 1: Get signed URL for direct upload
+  const signedUrlRes = await authFetch('/api/upload/signed-url', {
     method: 'POST',
-    body: formData
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      workspaceId,
+      folder
+    })
   });
-  assertOk(res, 'API Upload failed');
-  return (await res.json()) as DocItem;
+  assertOk(signedUrlRes, 'Failed to get upload URL');
+  const uploadInfo = await signedUrlRes.json();
+
+  // Step 2: Upload directly to Firebase Storage using the signed URL
+  const uploadRes = await fetch(uploadInfo.signedUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream'
+    },
+    body: file
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Direct upload failed: ${uploadRes.status}`);
+  }
+
+  // Step 3: Register the uploaded file in Firestore
+  const registerRes = await authFetch('/api/upload/register', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      storagePath: uploadInfo.storagePath,
+      fileName: uploadInfo.fileName,
+      originalName: uploadInfo.originalName,
+      mimeType: uploadInfo.mimeType,
+      workspaceId: uploadInfo.workspaceId,
+      folder: uploadInfo.folder
+    })
+  });
+  assertOk(registerRes, 'Failed to register upload');
+
+  return (await registerRes.json()) as DocItem;
 };
 
 export const convertFileToMarkdownApi = async (params: {

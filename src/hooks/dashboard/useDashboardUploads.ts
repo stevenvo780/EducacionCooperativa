@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import type { DocItem, DialogConfig, DialogResult, UploadStatus, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
-import { convertFileToMarkdownApi, createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
+import { createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
 import { isMarkdownConvertibleFile, isMarkdownDocItem, isMarkdownFile } from '@/services/dashboardDocUtils';
+import { convertToMarkdown, canConvertToMarkdown } from '@/lib/clientMarkdownConversion';
 import type { User as FirebaseUser } from 'firebase/auth';
 
 interface UseDashboardUploadsParams {
@@ -231,19 +232,39 @@ export const useDashboardUploads = ({
         const fileDoc = { ...newDoc, folder: newDoc.folder ?? resolvedFolder };
         createdDocs.push(fileDoc);
 
-        if (shouldConvert) {
+        // Client-side markdown conversion (no server limits!)
+        if (shouldConvert && canConvertToMarkdown(file)) {
           try {
-            const conversion = await convertFileToMarkdownApi({
-              file,
-              workspaceId: context.workspaceId || 'personal',
-              folder: resolvedFolder,
-              persistOriginal: false,
-              createDocument: true
+            setUploadStatus(prev => prev ? {
+              ...prev,
+              phase: 'converting' as UploadStatus['phase'],
+              progress: 0
+            } : prev);
+
+            const conversion = await convertToMarkdown(file, (progress) => {
+              setUploadStatus(prev => prev ? { ...prev, progress } : prev);
             });
 
-            if (conversion.createdDoc) {
-              createdDocs.push({ ...conversion.createdDoc, folder: conversion.createdDoc.folder ?? resolvedFolder });
-            }
+            // Create the markdown document
+            const mdDoc = await createDocumentApi({
+              name: conversion.suggestedName,
+              content: conversion.markdown,
+              type: 'text',
+              mimeType: 'text/markdown',
+              ownerId: user.uid,
+              workspaceId: context.workspaceId,
+              folder: resolvedFolder
+            });
+
+            createdDocs.push({
+              id: String(mdDoc.id),
+              name: conversion.suggestedName,
+              type: 'text',
+              mimeType: 'text/markdown',
+              ownerId: user.uid,
+              updatedAt: { seconds: Date.now() / 1000 },
+              folder: resolvedFolder
+            });
           } catch (conversionError) {
             console.error('Markdown conversion failed', conversionError);
           }
