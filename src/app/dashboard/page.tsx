@@ -1,15 +1,25 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue, useTransition } from 'react';
+import type React from 'react';
+import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter } from 'next/navigation';
-import { FileText, Plus, Trash2, LogOut, User, Upload, Image as ImageIcon, File as FileIcon, Users, Briefcase, ChevronDown, ChevronRight, Check, X, Shield, Folder, Settings, Menu, Loader2, Terminal as TerminalIcon, FolderPlus, Copy, FolderInput, FolderUp, Key, Eye, EyeOff, AlertCircle, Search } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Check, FileText, Folder, Image as ImageIcon, File as FileIcon, Key, Loader2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
-import type { DocItem, FolderItem as MosaicFolderItem, ViewMode } from '@/components/MosaicLayout';
+import type { DocItem, FolderItem, ViewMode, Workspace, DialogConfig, DialogResult, UploadStatus, DeleteStatus } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
+import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
+import StatusToasts from '@/components/dashboard/StatusToasts';
+import DialogModal from '@/components/dashboard/DialogModal';
+import DragOverlay from '@/components/dashboard/DragOverlay';
+import HeaderBar from '@/components/dashboard/HeaderBar';
+import Sidebar from '@/components/dashboard/Sidebar';
+import TabsBar from '@/components/dashboard/TabsBar';
+import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 
 // Fix imports for server-side
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -17,599 +27,401 @@ const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const MosaicLayout = dynamic(() => import('@/components/MosaicLayout'), { ssr: false });
 const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 
-interface Workspace {
-  id: string;
-  name: string;
-  ownerId: string;
-  members: string[];
-  pendingInvites?: string[];
-  type: 'personal' | 'shared';
-}
-
-interface FolderItem {
-  id: string;
-  name: string;
-  path: string;
-  parentPath: string;
-  kind: 'system' | 'record' | 'virtual';
-  docId?: string;
-}
-
-type GridMode = 1 | 2 | 4;
-
-interface UploadStatus {
-  total: number;
-  currentIndex: number;
-  currentName: string;
-  progress: number;
-  phase: 'uploading' | 'done' | 'error';
-  error?: string;
-}
-
-type DialogKind = 'info' | 'error' | 'confirm' | 'input';
-
-interface DialogConfig {
-    type: DialogKind;
-    title: string;
-    message?: string;
-    placeholder?: string;
-    defaultValue?: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-    danger?: boolean;
-}
-
-type DialogResult = { confirmed: boolean; value?: string | null };
-
-interface DeleteStatus {
-  phase: 'deleting' | 'done' | 'error';
-  name?: string;
-  error?: string;
-}
-
 const PERSONAL_WORKSPACE_ID = 'personal';
 const ROOT_FOLDER_PATH = '';
 const DOCS_POLL_INTERVAL_MS = 30000;
 
 const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
-  if (!value) return 0;
-  if (typeof value === 'number') return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  if (typeof value === 'object') {
-    const candidate = value as { seconds?: number; toDate?: () => Date };
-    if (typeof candidate.seconds === 'number') return candidate.seconds * 1000;
-    if (typeof candidate.toDate === 'function') {
-      const date = candidate.toDate();
-      if (date instanceof Date) return date.getTime();
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'string') {
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? 0 : parsed;
     }
-  }
-  return 0;
+    if (typeof value === 'object') {
+        const candidate = value as { seconds?: number; toDate?: () => Date };
+        if (typeof candidate.seconds === 'number') return candidate.seconds * 1000;
+        if (typeof candidate.toDate === 'function') {
+            const date = candidate.toDate();
+            if (date instanceof Date) return date.getTime();
+        }
+    }
+    return 0;
 };
 
 const areDocsEquivalent = (prev: DocItem[], next: DocItem[]) => {
-  if (prev.length !== next.length) return false;
-  for (let i = 0; i < prev.length; i += 1) {
-    const a = prev[i];
-    const b = next[i];
-    if (a.id !== b.id) return false;
-    if (a.name !== b.name) return false;
-    if (a.type !== b.type) return false;
-    if ((a.folder || '') !== (b.folder || '')) return false;
-    if ((a.mimeType || '') !== (b.mimeType || '')) return false;
-    if ((a.url || '') !== (b.url || '')) return false;
-    if ((a.storagePath || '') !== (b.storagePath || '')) return false;
-    if ((a.workspaceId || '') !== (b.workspaceId || '')) return false;
-    if ((a.ownerId || '') !== (b.ownerId || '')) return false;
-    if ((a.size || 0) !== (b.size || 0)) return false;
-    if (getUpdatedAtValue(a.updatedAt) !== getUpdatedAtValue(b.updatedAt)) return false;
-  }
-  return true;
+    if (prev.length !== next.length) return false;
+    for (let i = 0; i < prev.length; i += 1) {
+        const a = prev[i];
+        const b = next[i];
+        if (a.id !== b.id) return false;
+        if (a.name !== b.name) return false;
+        if (a.type !== b.type) return false;
+        if ((a.folder || '') !== (b.folder || '')) return false;
+        if ((a.mimeType || '') !== (b.mimeType || '')) return false;
+        if ((a.url || '') !== (b.url || '')) return false;
+        if ((a.storagePath || '') !== (b.storagePath || '')) return false;
+        if ((a.workspaceId || '') !== (b.workspaceId || '')) return false;
+        if ((a.ownerId || '') !== (b.ownerId || '')) return false;
+        if ((a.size || 0) !== (b.size || 0)) return false;
+        if (getUpdatedAtValue(a.updatedAt) !== getUpdatedAtValue(b.updatedAt)) return false;
+    }
+    return true;
 };
 
 const areFoldersEquivalent = (prev: FolderItem[], next: FolderItem[]) => {
-  if (prev.length !== next.length) return false;
-  for (let i = 0; i < prev.length; i += 1) {
-    const a = prev[i];
-    const b = next[i];
-    if (a.id !== b.id) return false;
-    if (a.name !== b.name) return false;
-    if (a.path !== b.path) return false;
-    if (a.parentPath !== b.parentPath) return false;
-    if (a.kind !== b.kind) return false;
-    if ((a.docId || '') !== (b.docId || '')) return false;
-  }
-  return true;
+    if (prev.length !== next.length) return false;
+    for (let i = 0; i < prev.length; i += 1) {
+        const a = prev[i];
+        const b = next[i];
+        if (a.id !== b.id) return false;
+        if (a.name !== b.name) return false;
+        if (a.path !== b.path) return false;
+        if (a.parentPath !== b.parentPath) return false;
+        if (a.kind !== b.kind) return false;
+        if ((a.docId || '') !== (b.docId || '')) return false;
+    }
+    return true;
 };
 
 const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): Workspace => ({
-  id: data.id,
-  name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Sin nombre',
-  ownerId: data.ownerId ?? '',
-  members: Array.isArray(data.members) ? data.members : [],
-  pendingInvites: Array.isArray(data.pendingInvites) ? data.pendingInvites : [],
-  type: data.type === 'personal' ? 'personal' : 'shared'
+    id: data.id,
+    name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Sin nombre',
+    ownerId: data.ownerId ?? '',
+    members: Array.isArray(data.members) ? data.members : [],
+    pendingInvites: Array.isArray(data.pendingInvites) ? data.pendingInvites : [],
+    type: data.type === 'personal' ? 'personal' : 'shared'
 });
 
-// ============================================================================
-// AssistantSection - Muestra sesiones filtradas por workspace
-// ============================================================================
-import type { TerminalSession } from '@/context/TerminalContext';
-import type { WorkerStatus } from '@/lib/TerminalController';
-import type { User as FirebaseUser } from 'firebase/auth';
-
-interface AssistantSectionProps {
-  currentWorkspace: Workspace | null;
-  user: FirebaseUser | null;
-  connectionStatus: 'checking' | 'online' | 'offline' | 'error';
-  isCreatingSession: boolean;
-  activeSessionId: string | null;
-  getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
-  getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
-  createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
-  selectSession: (sessionId: string) => void;
-  destroySession: (sessionId: string) => void;
-  openTerminal: (session?: { id: string; name: string }) => void;
-  openTabs: DocItem[];
-  closeTabById: (tabId: string) => void;
-}
-
-function AssistantSection({
-  currentWorkspace,
-  user,
-  connectionStatus,
-  isCreatingSession,
-  activeSessionId,
-  getWorkerStatusForWorkspace,
-  getSessionsForWorkspace,
-  createSession,
-  selectSession,
-  destroySession,
-  openTerminal,
-  openTabs,
-  closeTabById
-}: AssistantSectionProps) {
-  // Calculate worker token for current workspace
-  const workerToken = currentWorkspace && user
-    ? (currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
-        ? `personal:${user.uid}`
-        : currentWorkspace.id)
-    : '';
-
-  const workerStatus = workerToken ? getWorkerStatusForWorkspace(workerToken) : 'unknown';
-  const isWorkerOnline = workerStatus === 'online';
-  const workspaceSessions = workerToken ? getSessionsForWorkspace(workerToken) : [];
-
-  const handleCreateSession = () => {
-    if (!currentWorkspace || !user || !workerToken) return;
-    createSession(workerToken, currentWorkspace.type, `Terminal ${workspaceSessions.length + 1}`);
-  };
-
-  return (
-    <div>
-      <div className="px-2 py-1 flex items-center justify-between group">
-        <button
-          onClick={() => openTerminal()}
-          className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2 hover:text-mandy-400 transition-colors"
-        >
-          MI ASISTENTE
-        </button>
-        <button
-          disabled={!isWorkerOnline || isCreatingSession}
-          onClick={handleCreateSession}
-          className={`p-1 rounded transition-colors ${
-            isWorkerOnline && !isCreatingSession
-              ? 'hover:bg-surface-700 text-surface-500 hover:text-mandy-400'
-              : 'text-surface-700 cursor-not-allowed'
-          }`}
-          title={isWorkerOnline ? (isCreatingSession ? 'Creando...' : 'Nueva Sesión') : 'Worker no conectado para este espacio'}
-        >
-          {connectionStatus === 'checking' || isCreatingSession ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-        </button>
-      </div>
-
-      <div className="mt-1 space-y-0.5">
-        {/* Conectando al Hub */}
-        {connectionStatus === 'checking' && (
-          <div className="px-3 py-1 text-[10px] text-surface-500 italic flex items-center gap-2">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Conectando al Hub...
-          </div>
-        )}
-
-        {/* Creando sesión */}
-        {isCreatingSession && (
-          <div className="px-3 py-1.5 flex items-center gap-2 text-[10px] text-mandy-400">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            <span>Creando sesión...</span>
-          </div>
-        )}
-
-        {/* Worker online pero sin sesiones para este workspace */}
-        {workspaceSessions.length === 0 && isWorkerOnline && !isCreatingSession && connectionStatus !== 'checking' && (
-          <div className="px-3 py-1 text-[10px] text-emerald-400/70 italic flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Worker listo - Sin sesiones activas
-          </div>
-        )}
-
-        {/* Worker offline - mostrar botón para configurar */}
-        {!isWorkerOnline && connectionStatus !== 'checking' && (
-          <button
-            onClick={() => openTerminal()}
-            className="w-full px-3 py-2 text-[10px] bg-amber-500/10 border border-amber-500/20 rounded-md text-amber-400 hover:bg-amber-500/20 flex items-center gap-2 transition-colors"
-          >
-            <AlertCircle className="w-3.5 h-3.5" />
-            <span className="flex-1 text-left">
-              Sin worker para <strong>{currentWorkspace?.name || 'este espacio'}</strong>
-            </span>
-            <Settings className="w-3 h-3" />
-          </button>
-        )}
-
-        {/* Lista de sesiones del workspace actual */}
-        {workspaceSessions.map(sess => (
-          <div
-            key={sess.id}
-            className={`group w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded-md transition-colors ${
-              activeSessionId === sess.id
-                ? 'bg-mandy-500/15 text-mandy-400 font-medium'
-                : 'text-surface-400 hover:bg-surface-700/50 hover:text-surface-200'
-            }`}
-          >
-            <button
-              onClick={() => {
-                selectSession(sess.id);
-                openTerminal({ id: sess.id, name: sess.name || 'Mi Asistente' });
-              }}
-              className="flex items-center gap-2 flex-1 min-w-0"
-            >
-              <TerminalIcon className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate flex-1 text-left">{sess.name || 'Terminal'}</span>
-              {activeSessionId === sess.id && <div className="w-1.5 h-1.5 rounded-full bg-mandy-500 shrink-0" />}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                destroySession(sess.id);
-                // También cerrar la pestaña asociada si existe
-                const terminalTab = openTabs.find(t => t.type === 'terminal' && t.sessionId === sess.id);
-                if (terminalTab) {
-                  closeTabById(terminalTab.id);
-                }
-              }}
-              className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 transition-all"
-              title="Cerrar sesión"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function DashboardPage() {
-  const { user, loading, logout, changePassword } = useAuth();
-  const {
-    sessions,
-    activeSessionId,
-    selectSession,
-    createSession,
-    destroySession,
-    status: connectionStatus,
-    initialize,
-    isCreatingSession,
-    getSessionsForWorkspace,
-    getWorkerStatusForWorkspace,
-    subscribeToWorkspace,
-    clearActiveSession
-  } = useTerminal();
-  const [docs, setDocs] = useState<DocItem[]>([]);
-  const [folders, setFolders] = useState<FolderItem[]>([]);
-  const router = useRouter();
+    const { user, loading, logout, changePassword } = useAuth();
+    const {
+        activeSessionId,
+        selectSession,
+        createSession,
+        destroySession,
+        status: connectionStatus,
+        initialize,
+        isCreatingSession,
+        getSessionsForWorkspace,
+        getWorkerStatusForWorkspace,
+        subscribeToWorkspace,
+        clearActiveSession
+    } = useTerminal();
+    const [docs, setDocs] = useState<DocItem[]>([]);
+    const [folders, setFolders] = useState<FolderItem[]>([]);
+    const router = useRouter();
+    const reduceMotion = useReducedMotion();
+    const [, startTransition] = useTransition();
+    const modalFade = useMemo(() => ({
+        duration: reduceMotion ? 0.01 : 0.12,
+        ease: 'easeOut'
+    }), [reduceMotion]);
+    const modalPop = useMemo(() => ({
+        duration: reduceMotion ? 0.01 : 0.14,
+        ease: 'easeOut'
+    }), [reduceMotion]);
 
-  // Initialize Terminal only when user is available
-  useEffect(() => {
-    if (!user) return;
-    const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3010';
-    initialize(nexusUrl);
-  }, [initialize, user]);
+    // Initialize Terminal only when user is available
+    useEffect(() => {
+        if (!user) return;
+        const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3010';
+        initialize(nexusUrl);
+    }, [initialize, user]);
 
-  // Workspace State
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [invites, setInvites] = useState<Workspace[]>([]);
-  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
-  const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
-  const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
-  const [showMembersModal, setShowMembersModal] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
-  const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const currentWorkspaceId = currentWorkspace?.id;
+    // Workspace State
+    const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+    const [invites, setInvites] = useState<Workspace[]>([]);
+    const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
+    const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
+    const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
+    const [showMembersModal, setShowMembersModal] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
+    const [passwordError, setPasswordError] = useState('');
+    const [passwordSuccess, setPasswordSuccess] = useState(false);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const currentWorkspaceId = currentWorkspace?.id;
 
-  // Subscribe to current workspace worker status
-  useEffect(() => {
-    if (!user || !currentWorkspace) return;
-    const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
-      ? `personal:${user.uid}`
-      : currentWorkspace.id;
-    subscribeToWorkspace(workerToken);
-  }, [user, currentWorkspace, subscribeToWorkspace]);
+    // Subscribe to current workspace worker status
+    useEffect(() => {
+        if (!user || !currentWorkspace) return;
+        const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
+            ? `personal:${user.uid}`
+            : currentWorkspace.id;
+        subscribeToWorkspace(workerToken);
+    }, [user, currentWorkspace, subscribeToWorkspace]);
 
-  // UI State
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
-  const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
+    // UI State
+    const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+    const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
+    const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
     const [closedFilesTabByWorkspace, setClosedFilesTabByWorkspace] = useState<Record<string, boolean>>({});
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
-  const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
-  const [sidebarExpandedFolders, setSidebarExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
-  const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const [isDragActive, setIsDragActive] = useState(false);
-  const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
-  const [dropPosition, setDropPosition] = useState<number | null>(null);
-  const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(null);
-  const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
+    const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
+    const [sidebarWidth, setSidebarWidth] = useState(260);
+    const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+    const [isDragActive, setIsDragActive] = useState(false);
+    const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
+    const [dropPosition, setDropPosition] = useState<number | null>(null);
+    const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(null);
+    const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
 
-  // Quick Search State (Ctrl+P)
-  const [showQuickSearch, setShowQuickSearch] = useState(false);
-  const [quickSearchQuery, setQuickSearchQuery] = useState('');
-  const [quickSearchIndex, setQuickSearchIndex] = useState(0);
-  const quickSearchInputRef = useRef<HTMLInputElement>(null);
-  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
+    // Quick Search State (Ctrl+P)
+    const [showQuickSearch, setShowQuickSearch] = useState(false);
+    const [quickSearchQuery, setQuickSearchQuery] = useState('');
+    const [quickSearchIndex, setQuickSearchIndex] = useState(0);
+    const quickSearchInputRef = useRef<HTMLInputElement>(null);
+    const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
+    const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
+    const deferredDocs = useDeferredValue(docs);
 
-  // Actions State
-  const [newDocName, setNewDocName] = useState('');
-  const [newWorkspaceName, setNewWorkspaceName] = useState('');
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [loadingDocs, setLoadingDocs] = useState(true);
-  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
-  const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
-  const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
-  const [deletingWorkspaceId, setDeletingWorkspaceId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
-  const dragCounter = useRef(0);
-  const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const docsRef = useRef<DocItem[]>([]);
-  const fetchInFlightRef = useRef<Promise<void> | null>(null);
+    // Actions State
+    const [newDocName, setNewDocName] = useState('');
+    const [newWorkspaceName, setNewWorkspaceName] = useState('');
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [isCreating, setIsCreating] = useState(false);
+    const [, setIsUploading] = useState(false);
+    const [loadingDocs, setLoadingDocs] = useState(true);
+    const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
+    const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
+    const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+    const [deletingWorkspaceId, setDeletingWorkspaceId] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const folderInputRef = useRef<HTMLInputElement>(null);
+    const dragCounter = useRef(0);
+    const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const docsRef = useRef<DocItem[]>([]);
+    const fetchInFlightRef = useRef<Promise<void> | null>(null);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
-  const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
+    const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
 
-  useEffect(() => {
-    docsRef.current = docs;
-  }, [docs]);
+    useEffect(() => {
+        docsRef.current = docs;
+    }, [docs]);
 
-  useEffect(() => {
-    setSidebarExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
-  }, [currentWorkspaceId]);
+    const fetchWorkspaces = useCallback(async () => {
+        if (!user) return;
 
-  const fetchWorkspaces = useCallback(async () => {
-    if (!user) return;
+        const personalSpace: Workspace = {
+            id: PERSONAL_WORKSPACE_ID,
+            name: 'Espacio Personal',
+            ownerId: user.uid,
+            members: [user.uid],
+            type: 'personal'
+        };
 
-    const personalSpace: Workspace = {
-        id: PERSONAL_WORKSPACE_ID,
-        name: 'Espacio Personal',
-        ownerId: user.uid,
-        members: [user.uid],
-        type: 'personal'
-    };
-
-    let fetched: Workspace[] = [];
-    let fetchedInvites: Workspace[] = [];
-    try {
-        const params = new URLSearchParams();
-        params.set('ownerId', user.uid);
-        if (user.email) {
-          params.set('email', user.email);
-        }
-        const res = await fetch(`/api/workspaces?${params.toString()}`);
-        if (!res.ok) {
-          throw new Error('Failed to fetch workspaces');
-        }
-        const data = await res.json();
-        fetched = Array.isArray(data.workspaces) ? data.workspaces.map(normalizeWorkspace) : [];
-        fetchedInvites = Array.isArray(data.invites) ? data.invites.map(normalizeWorkspace) : [];
-    } catch (e) {
-        console.error('Error fetching workspaces', e);
-    }
-
-    const allWorkspaces = [personalSpace, ...fetched.filter(ws => ws.id !== PERSONAL_WORKSPACE_ID)];
-    setWorkspaces(allWorkspaces);
-    setInvites(fetchedInvites);
-    setCurrentWorkspace(prev => {
-      if (!prev) return personalSpace;
-      const match = allWorkspaces.find(ws => ws.id === prev.id);
-      return match ?? personalSpace;
-    });
-  }, [user]);
-
-  const acceptInvite = async (ws: Workspace) => {
-      if (!user?.email) return;
-      try {
-          const res = await fetch(`/api/workspaces/${ws.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  action: 'accept',
-                  userId: user.uid,
-                  email: user.email
-              })
-          });
-          if (!res.ok) {
-              throw new Error('Failed to accept invite');
-          }
-          await fetchWorkspaces();
-          await showDialog({
-              type: 'info',
-              title: 'Invitación aceptada',
-              message: '¡Te has unido al espacio!'
-          });
-      } catch (e) {
-          console.error('Error accepting', e);
-      }
-  };
-
-  const applyDocsSnapshot = useCallback((fetched: DocItem[]) => {
-    if (!currentWorkspace) return;
-
-    const sanitized = fetched.map(docItem => {
-      const { content, ...rest } = docItem;
-      return rest;
-    });
-
-    const filtered = sanitized.filter(d => {
-      if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
-        return !d.workspaceId || d.workspaceId === PERSONAL_WORKSPACE_ID;
-      }
-      return d.workspaceId === currentWorkspace.id;
-    });
-
-    const folderDocs = filtered.filter(item => item.type === 'folder');
-    const fileDocs = filtered.filter(item => item.type !== 'folder');
-
-    const normalizedFileDocs = fileDocs.map(docItem => {
-      const folderPath = normalizeFolderPath(docItem.folder);
-      return { ...docItem, folder: folderPath };
-    });
-
-    const folderMap = new Map<string, FolderItem>();
-    const ensureNode = (path: string, kind: FolderItem['kind'], docId?: string) => {
-      const normalized = normalizePath(path);
-      if (!normalized) return;
-      const existing = folderMap.get(normalized);
-      const name = normalized.split('/').slice(-1)[0] || normalized;
-      const parentPath = normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '';
-
-      if (!existing) {
-        folderMap.set(normalized, {
-          id: `path:${normalized}`,
-          name,
-          path: normalized,
-          parentPath,
-          kind,
-          docId
-        });
-        return;
-      }
-
-      const priority: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
-      const next = { ...existing };
-      if (priority[kind] < priority[existing.kind]) {
-        next.kind = kind;
-      }
-      if (docId && !next.docId) {
-        next.docId = docId;
-      }
-      folderMap.set(normalized, next);
-    };
-
-    const ensureAncestors = (path: string) => {
-      const normalized = normalizePath(path);
-      if (!normalized) return;
-      const parts = normalized.split('/');
-      let current = '';
-      parts.forEach(part => {
-        current = current ? `${current}/${part}` : part;
-        ensureNode(current, current === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
-      });
-    };
-
-    ensureNode(DEFAULT_FOLDER_NAME, 'system');
-
-    folderDocs.forEach(folderDoc => {
-      const parentPath = normalizePath(folderDoc.folder);
-      const name = (folderDoc.name || 'Carpeta').trim() || 'Carpeta';
-      const fullPath = parentPath ? `${parentPath}/${name}` : name;
-      ensureAncestors(parentPath);
-      ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record', folderDoc.id);
-    });
-
-    normalizedFileDocs.forEach(docItem => {
-      const folderPath = normalizeFolderPath(docItem.folder);
-      ensureAncestors(folderPath);
-      ensureNode(folderPath, folderPath === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
-    });
-
-    const folderList = Array.from(folderMap.values());
-
-    normalizedFileDocs.sort((a, b) => {
-      const dateA = a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : new Date(a.updatedAt).getTime();
-      const dateB = b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : new Date(b.updatedAt).getTime();
-      return (dateB || 0) - (dateA || 0);
-    });
-
-    setDocs(prev => (areDocsEquivalent(prev, normalizedFileDocs) ? prev : normalizedFileDocs));
-    setFolders(prev => (areFoldersEquivalent(prev, folderList) ? prev : folderList));
-  }, [currentWorkspace]);
-
-  const fetchDocs = useCallback(async (options?: { showLoading?: boolean }) => {
-    if (!user || !currentWorkspace) return;
-    if (fetchInFlightRef.current) return fetchInFlightRef.current;
-    const showLoading = options?.showLoading ?? docsRef.current.length === 0;
-    if (showLoading) setLoadingDocs(true);
-    const fetchPromise = (async () => {
-    try {
-        const params = new URLSearchParams();
-        if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
+        let fetched: Workspace[] = [];
+        let fetchedInvites: Workspace[] = [];
+        try {
+            const params = new URLSearchParams();
             params.set('ownerId', user.uid);
-        } else {
-            params.set('workspaceId', currentWorkspace.id);
+            if (user.email) {
+                params.set('email', user.email);
+            }
+            const res = await fetch(`/api/workspaces?${params.toString()}`);
+            if (!res.ok) {
+                throw new Error('Failed to fetch workspaces');
+            }
+            const data = await res.json();
+            fetched = Array.isArray(data.workspaces) ? data.workspaces.map(normalizeWorkspace) : [];
+            fetchedInvites = Array.isArray(data.invites) ? data.invites.map(normalizeWorkspace) : [];
+        } catch (e) {
+            console.error('Error fetching workspaces', e);
         }
-        params.set('view', 'metadata');
 
-        const res = await fetch(`/api/documents?${params.toString()}`);
-        if (!res.ok) throw new Error('Failed to fetch docs via API');
-        const fetched: DocItem[] = await res.json();
+        const allWorkspaces = [personalSpace, ...fetched.filter(ws => ws.id !== PERSONAL_WORKSPACE_ID)];
+        setWorkspaces(allWorkspaces);
+        setInvites(fetchedInvites);
+        setCurrentWorkspace(prev => {
+            if (!prev) return personalSpace;
+            const match = allWorkspaces.find(ws => ws.id === prev.id);
+            return match ?? personalSpace;
+        });
+    }, [user]);
 
-        applyDocsSnapshot(fetched);
-    } catch (error) {
-        console.error('Error fetching docs', error);
-    }
-    })();
+    const acceptInvite = async (ws: Workspace) => {
+        if (!user?.email) return;
+        try {
+            const res = await fetch(`/api/workspaces/${ws.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'accept',
+                    userId: user.uid,
+                    email: user.email
+                })
+            });
+            if (!res.ok) {
+                throw new Error('Failed to accept invite');
+            }
+            await fetchWorkspaces();
+            await showDialog({
+                type: 'info',
+                title: 'Invitación aceptada',
+                message: '¡Te has unido al espacio!'
+            });
+        } catch (e) {
+            console.error('Error accepting', e);
+        }
+    };
 
-    fetchInFlightRef.current = fetchPromise;
-    try {
-      await fetchPromise;
-    } finally {
-      fetchInFlightRef.current = null;
-      if (showLoading) setLoadingDocs(false);
-    }
-  }, [user, currentWorkspace, applyDocsSnapshot]);
+    const applyDocsSnapshot = useCallback((fetched: DocItem[]) => {
+        if (!currentWorkspace) return;
 
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-    if (user) {
-        fetchWorkspaces();
-    }
-  }, [user, loading, router, fetchWorkspaces]);
+        const sanitized = fetched.map(docItem => {
+            const { content, ...rest } = docItem;
+            return rest;
+        });
 
-  useEffect(() => {
-      if (currentWorkspace && user) {
-          fetchDocs({ showLoading: true });
-      }
-  }, [currentWorkspace, user, fetchDocs]);
+        const filtered = sanitized.filter(d => {
+            if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
+                return !d.workspaceId || d.workspaceId === PERSONAL_WORKSPACE_ID;
+            }
+            return d.workspaceId === currentWorkspace.id;
+        });
 
-  useEffect(() => {
-    if (!currentWorkspace || !user) return;
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      fetchDocs();
-    }, DOCS_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [currentWorkspace, user, fetchDocs]);
+        const folderDocs = filtered.filter(item => item.type === 'folder');
+        const fileDocs = filtered.filter(item => item.type !== 'folder');
+
+        const normalizedFileDocs = fileDocs.map(docItem => {
+            const folderPath = normalizeFolderPath(docItem.folder);
+            return { ...docItem, folder: folderPath };
+        });
+
+        const folderMap = new Map<string, FolderItem>();
+        const ensureNode = (path: string, kind: FolderItem['kind'], docId?: string) => {
+            const normalized = normalizePath(path);
+            if (!normalized) return;
+            const existing = folderMap.get(normalized);
+            const name = normalized.split('/').slice(-1)[0] || normalized;
+            const parentPath = normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '';
+
+            if (!existing) {
+                folderMap.set(normalized, {
+                    id: `path:${normalized}`,
+                    name,
+                    path: normalized,
+                    parentPath,
+                    kind,
+                    docId
+                });
+                return;
+            }
+
+            const priority: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+            const next = { ...existing };
+            if (priority[kind] < priority[existing.kind]) {
+                next.kind = kind;
+            }
+            if (docId && !next.docId) {
+                next.docId = docId;
+            }
+            folderMap.set(normalized, next);
+        };
+
+        const ensureAncestors = (path: string) => {
+            const normalized = normalizePath(path);
+            if (!normalized) return;
+            const parts = normalized.split('/');
+            let current = '';
+            parts.forEach(part => {
+                current = current ? `${current}/${part}` : part;
+                ensureNode(current, current === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
+            });
+        };
+
+        ensureNode(DEFAULT_FOLDER_NAME, 'system');
+
+        folderDocs.forEach(folderDoc => {
+            const parentPath = normalizePath(folderDoc.folder);
+            const name = (folderDoc.name || 'Carpeta').trim() || 'Carpeta';
+            const fullPath = parentPath ? `${parentPath}/${name}` : name;
+            ensureAncestors(parentPath);
+            ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record', folderDoc.id);
+        });
+
+        normalizedFileDocs.forEach(docItem => {
+            const folderPath = normalizeFolderPath(docItem.folder);
+            ensureAncestors(folderPath);
+            ensureNode(folderPath, folderPath === DEFAULT_FOLDER_NAME ? 'system' : 'virtual');
+        });
+
+        const folderList = Array.from(folderMap.values());
+
+        normalizedFileDocs.sort((a, b) => {
+            const dateA = a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : new Date(a.updatedAt).getTime();
+            const dateB = b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : new Date(b.updatedAt).getTime();
+            return (dateB || 0) - (dateA || 0);
+        });
+
+        startTransition(() => {
+            setDocs(prev => (areDocsEquivalent(prev, normalizedFileDocs) ? prev : normalizedFileDocs));
+            setFolders(prev => (areFoldersEquivalent(prev, folderList) ? prev : folderList));
+        });
+    }, [currentWorkspace, startTransition]);
+
+    const fetchDocs = useCallback(async (options?: { showLoading?: boolean }) => {
+        if (!user || !currentWorkspace) return;
+        if (fetchInFlightRef.current) return fetchInFlightRef.current;
+        const showLoading = options?.showLoading ?? docsRef.current.length === 0;
+        if (showLoading) setLoadingDocs(true);
+        const fetchPromise = (async () => {
+            try {
+                const params = new URLSearchParams();
+                // Always filter by workspaceId for consistency
+                // Personal workspace uses 'personal' as workspaceId
+                const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? 'personal' : currentWorkspace.id;
+                params.set('workspaceId', wsId);
+                // Also include ownerId for personal workspace as fallback for legacy docs
+                if (currentWorkspace.id === PERSONAL_WORKSPACE_ID) {
+                    params.set('ownerId', user.uid);
+                }
+                params.set('view', 'metadata');
+
+                const res = await fetch(`/api/documents?${params.toString()}`);
+                if (!res.ok) throw new Error('Failed to fetch docs via API');
+                const fetched: DocItem[] = await res.json();
+
+                applyDocsSnapshot(fetched);
+            } catch (error) {
+                console.error('Error fetching docs', error);
+            }
+        })();
+
+        fetchInFlightRef.current = fetchPromise;
+        try {
+            await fetchPromise;
+        } finally {
+            fetchInFlightRef.current = null;
+            if (showLoading) setLoadingDocs(false);
+        }
+    }, [user, currentWorkspace, applyDocsSnapshot]);
+
+    useEffect(() => {
+        if (!loading && !user) router.push('/login');
+        if (user) {
+            fetchWorkspaces();
+        }
+    }, [user, loading, router, fetchWorkspaces]);
+
+    useEffect(() => {
+        if (currentWorkspace && user) {
+            fetchDocs({ showLoading: true });
+        }
+    }, [currentWorkspace, user, fetchDocs]);
+
+    useEffect(() => {
+        if (!currentWorkspace || !user) return;
+        const interval = setInterval(() => {
+            if (typeof document !== 'undefined' && document.hidden) return;
+            fetchDocs();
+        }, DOCS_POLL_INTERVAL_MS);
+        return () => clearInterval(interval);
+    }, [currentWorkspace, user, fetchDocs]);
 
     // Reset tabs/layout when workspace changes
     useEffect(() => {
@@ -651,1043 +463,1041 @@ export default function DashboardPage() {
         })();
     }, [currentWorkspace, user, openTabs, closedFilesTabByWorkspace]);
 
-  useEffect(() => {
-    if (currentWorkspaceId) {
-      setActiveFolder(ROOT_FOLDER_PATH);
-    }
-  }, [currentWorkspaceId]);
+    useEffect(() => {
+        if (currentWorkspaceId) {
+            setActiveFolder(ROOT_FOLDER_PATH);
+        }
+    }, [currentWorkspaceId]);
 
-  useEffect(() => {
-      const folderInput = folderInputRef.current;
-      if (!folderInput) return;
-      folderInput.setAttribute('webkitdirectory', 'true');
-      folderInput.setAttribute('directory', 'true');
-  }, []);
+    useEffect(() => {
+        const folderInput = folderInputRef.current;
+        if (!folderInput) return;
+        folderInput.setAttribute('webkitdirectory', 'true');
+        folderInput.setAttribute('directory', 'true');
+    }, []);
 
-  useEffect(() => {
-      return () => {
-          if (uploadStatusTimer.current) {
-              clearTimeout(uploadStatusTimer.current);
-          }
-          if (deleteStatusTimer.current) {
-              clearTimeout(deleteStatusTimer.current);
-          }
-      };
-  }, []);
+    useEffect(() => {
+        return () => {
+            if (uploadStatusTimer.current) {
+                clearTimeout(uploadStatusTimer.current);
+            }
+            if (deleteStatusTimer.current) {
+                clearTimeout(deleteStatusTimer.current);
+            }
+        };
+    }, []);
 
-  // Keyboard shortcuts: Ctrl+P for quick file search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+P or Cmd+P to open quick search
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-        e.preventDefault();
-        setShowQuickSearch(true);
-        setQuickSearchQuery('');
-        setQuickSearchIndex(0);
-        setTimeout(() => quickSearchInputRef.current?.focus(), 50);
-      }
-      // Escape to close quick search
-      if (e.key === 'Escape' && showQuickSearch) {
-        setShowQuickSearch(false);
-        setQuickSearchQuery('');
-      }
+    // Keyboard shortcuts: Ctrl+P for quick file search
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Ctrl+P or Cmd+P to open quick search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+                e.preventDefault();
+                setShowQuickSearch(true);
+                setQuickSearchQuery('');
+                setQuickSearchIndex(0);
+                setTimeout(() => quickSearchInputRef.current?.focus(), 50);
+            }
+            // Escape to close quick search
+            if (e.key === 'Escape' && showQuickSearch) {
+                setShowQuickSearch(false);
+                setQuickSearchQuery('');
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showQuickSearch]);
+
+    // Filtered docs for quick search
+    const quickSearchResults = useMemo(() => {
+        const query = deferredQuickSearchQuery.trim().toLowerCase();
+        if (!query) return deferredDocs.slice(0, 10);
+        return deferredDocs
+            .filter(d => d.type !== 'folder' && d.name.toLowerCase().includes(query))
+            .slice(0, 15);
+    }, [deferredDocs, deferredQuickSearchQuery]);
+
+    // Handle quick search keyboard navigation
+    const handleQuickSearchKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setQuickSearchIndex(i => Math.min(i + 1, quickSearchResults.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setQuickSearchIndex(i => Math.max(i - 1, 0));
+        } else if (e.key === 'Enter' && quickSearchResults[quickSearchIndex]) {
+            e.preventDefault();
+            openDocument(quickSearchResults[quickSearchIndex]);
+            setShowQuickSearch(false);
+            setQuickSearchQuery('');
+        }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showQuickSearch]);
 
-  // Filtered docs for quick search
-  const quickSearchResults = useMemo(() => {
-    if (!quickSearchQuery.trim()) return docs.slice(0, 10);
-    const query = quickSearchQuery.toLowerCase();
-    return docs
-      .filter(d => d.type !== 'folder' && d.name.toLowerCase().includes(query))
-      .slice(0, 15);
-  }, [docs, quickSearchQuery]);
+    // Filtered docs for sidebar search
+    const sidebarFilteredDocs = useMemo(() => {
+        if (!sidebarSearchQuery.trim()) return docs;
+        const query = sidebarSearchQuery.toLowerCase();
+        return docs.filter(d => d.name.toLowerCase().includes(query));
+    }, [docs, sidebarSearchQuery]);
 
-  // Handle quick search keyboard navigation
-  const handleQuickSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setQuickSearchIndex(i => Math.min(i + 1, quickSearchResults.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setQuickSearchIndex(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter' && quickSearchResults[quickSearchIndex]) {
-      e.preventDefault();
-      openDocument(quickSearchResults[quickSearchIndex]);
-      setShowQuickSearch(false);
-      setQuickSearchQuery('');
-    }
-  };
+    const openTerminal = async (session?: { id: string; name?: string }) => {
+        const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
+        const terminalName = session?.name || 'Mi Asistente';
 
-  // Filtered docs for sidebar search
-  const sidebarFilteredDocs = useMemo(() => {
-    if (!sidebarSearchQuery.trim()) return docs;
-    const query = sidebarSearchQuery.toLowerCase();
-    return docs.filter(d => d.name.toLowerCase().includes(query));
-  }, [docs, sidebarSearchQuery]);
+        // If already open, just select and ensure session is active
+        if (openTabs.find(t => t.id === terminalId)) {
+            if (session?.id) {
+                selectSession(session.id);
+            }
+            setSelectedDocId(terminalId);
+            setShowMobileSidebar(false);
+            return;
+        }
 
-  const openTerminal = async (session?: { id: string; name?: string }) => {
-      const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
-      const terminalName = session?.name || 'Mi Asistente';
+        const newTerminalItem: DocItem = {
+            id: terminalId,
+            name: terminalName,
+            type: 'terminal',
+            sessionId: session?.id,
+            updatedAt: new Date(),
+            ownerId: user?.uid || 'system'
+        };
 
-      // If already open, just select and ensure session is active
-      if (openTabs.find(t => t.id === terminalId)) {
-          if (session?.id) {
-              selectSession(session.id);
-          }
-          setSelectedDocId(terminalId);
-          setShowMobileSidebar(false);
-          return;
-      }
+        setOpenTabs(prev => [...prev, newTerminalItem]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(terminalId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, terminalId]);
+        });
+        if (session?.id) {
+            selectSession(session.id);
+        }
+        setShowMobileSidebar(false);
+        setSelectedDocId(terminalId);
+    };
 
-      const newTerminalItem: DocItem = {
-          id: terminalId,
-          name: terminalName,
-          type: 'terminal',
-          sessionId: session?.id,
-          updatedAt: new Date(),
-          ownerId: user?.uid || 'system'
-      };
+    const closeTabById = useCallback(async (docId: string) => {
+        if (currentWorkspace && docId === `files-${currentWorkspace.id}`) {
+            setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: true }));
+        }
 
-      setOpenTabs(prev => [...prev, newTerminalItem]);
-      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-      setMosaicNode(current => {
-          const leaves = getLeaves(current);
-          if (leaves.includes(terminalId)) return current;
-          return createBalancedTreeFromLeaves([...leaves, terminalId]);
-      });
-      if (session?.id) {
-          selectSession(session.id);
-      }
-      setShowMobileSidebar(false);
-      setSelectedDocId(terminalId);
-  };
+        // Verificar si es una terminal y destruir la sesión
+        setOpenTabs(prev => {
+            const tabToClose = prev.find(t => t.id === docId);
+            if (tabToClose?.type === 'terminal' && tabToClose.sessionId) {
+                destroySession(tabToClose.sessionId);
+            }
+            const next = prev.filter(t => t.id !== docId);
+            if (selectedDocId === docId) {
+                setSelectedDocId(next[next.length - 1]?.id ?? null);
+            }
+            return next;
+        });
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            if (!current) return null;
+            const leaves = getLeaves(current);
+            const newLeaves = leaves.filter(leaf => leaf !== docId);
+            if (newLeaves.length === 0) return null;
+            return createBalancedTreeFromLeaves(newLeaves);
+        });
+    }, [selectedDocId, currentWorkspace, destroySession]);
 
-  const closeTabById = useCallback(async (docId: string) => {
-      if (currentWorkspace && docId === `files-${currentWorkspace.id}`) {
-          setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: true }));
-      }
+    const openDocument = async (doc: DocItem) => {
+        if (doc.type === 'folder') return;
+        setActiveFolder(normalizeFolderPath(doc.folder));
+        setOpenTabs(prev => {
+            if (prev.find(t => t.id === doc.id)) {
+                return prev;
+            }
+            return [...prev, doc];
+        });
 
-      // Verificar si es una terminal y destruir la sesión
-      setOpenTabs(prev => {
-          const tabToClose = prev.find(t => t.id === docId);
-          if (tabToClose?.type === 'terminal' && tabToClose.sessionId) {
-              destroySession(tabToClose.sessionId);
-          }
-          const next = prev.filter(t => t.id !== docId);
-          if (selectedDocId === docId) {
-              setSelectedDocId(next[next.length - 1]?.id ?? null);
-          }
-          return next;
-      });
-      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-      setMosaicNode(current => {
-          if (!current) return null;
-          const leaves = getLeaves(current);
-          const newLeaves = leaves.filter(leaf => leaf !== docId);
-          if (newLeaves.length === 0) return null;
-          return createBalancedTreeFromLeaves(newLeaves);
-      });
-  }, [selectedDocId, currentWorkspace, destroySession]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(doc.id)) return current;
+            return createBalancedTreeFromLeaves([...leaves, doc.id]);
+        });
+        setShowMobileSidebar(false);
+        setSelectedDocId(doc.id);
+    };
 
-  const openDocument = async (doc: DocItem) => {
-      if (doc.type === 'folder') return;
-      setActiveFolder(normalizeFolderPath(doc.folder));
-      setOpenTabs(prev => {
-          if (prev.find(t => t.id === doc.id)) {
-              return prev;
-          }
-          return [...prev, doc];
-      });
+    const closeTab = (docId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        closeTabById(docId);
+    };
 
-      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-      setMosaicNode(current => {
-          const leaves = getLeaves(current);
-          if (leaves.includes(doc.id)) return current;
-          return createBalancedTreeFromLeaves([...leaves, doc.id]);
-      });
-      setShowMobileSidebar(false);
-      setSelectedDocId(doc.id);
-  };
+    const showDialog = useCallback((config: DialogConfig) => {
+        return new Promise<DialogResult>((resolve) => {
+            setDialogConfig(config);
+            setDialogInputValue(config.defaultValue ?? '');
+            dialogResolverRef.current = resolve;
+        });
+    }, []);
 
-  const closeTab = (docId: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      closeTabById(docId);
-  };
+    const resolveDialog = (result: DialogResult) => {
+        dialogResolverRef.current?.(result);
+        dialogResolverRef.current = null;
+        setDialogConfig(null);
+    };
 
-  const showDialog = useCallback((config: DialogConfig) => {
-      return new Promise<DialogResult>((resolve) => {
-          setDialogConfig(config);
-          setDialogInputValue(config.defaultValue ?? '');
-          dialogResolverRef.current = resolve;
-      });
-  }, []);
+    const confirmDialog = () => {
+        if (!dialogConfig) {
+            setDialogConfig(null);
+            return;
+        }
+        const value = dialogConfig.type === 'input' ? dialogInputValue.trim() : undefined;
+        resolveDialog({ confirmed: true, value });
+    };
 
-  const resolveDialog = (result: DialogResult) => {
-      dialogResolverRef.current?.(result);
-      dialogResolverRef.current = null;
-      setDialogConfig(null);
-  };
+    const cancelDialog = () => {
+        resolveDialog({ confirmed: false, value: null });
+    };
 
-  const confirmDialog = () => {
-      if (!dialogConfig) {
-          setDialogConfig(null);
-          return;
-      }
-      const value = dialogConfig.type === 'input' ? dialogInputValue.trim() : undefined;
-      resolveDialog({ confirmed: true, value });
-  };
+    const openFilesTab = useCallback(async () => {
+        if (!currentWorkspace || !user) return;
+        const filesTabId = `files-${currentWorkspace.id}`;
+        const newFilesItem: DocItem = {
+            id: filesTabId,
+            name: 'Archivos',
+            type: 'files',
+            updatedAt: new Date(),
+            ownerId: user.uid
+        };
 
-  const cancelDialog = () => {
-      resolveDialog({ confirmed: false, value: null });
-  };
+        setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: false }));
 
-  const openFilesTab = useCallback(async () => {
-      if (!currentWorkspace || !user) return;
-      const filesTabId = `files-${currentWorkspace.id}`;
-      const newFilesItem: DocItem = {
-          id: filesTabId,
-          name: 'Archivos',
-          type: 'files',
-          updatedAt: new Date(),
-          ownerId: user.uid
-      };
+        setOpenTabs(prev => {
+            if (prev.some(tab => tab.id === filesTabId)) return prev;
+            return [...prev, newFilesItem];
+        });
 
-      setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: false }));
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(filesTabId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, filesTabId]);
+        });
 
-      setOpenTabs(prev => {
-          if (prev.some(tab => tab.id === filesTabId)) return prev;
-          return [...prev, newFilesItem];
-      });
+        setSelectedDocId(filesTabId);
+        setShowMobileSidebar(false);
+    }, [currentWorkspace, user]);
 
-      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-      setMosaicNode(current => {
-          const leaves = getLeaves(current);
-          if (leaves.includes(filesTabId)) return current;
-          return createBalancedTreeFromLeaves([...leaves, filesTabId]);
-      });
+    useEffect(() => {
+        setDocModes(prev => {
+            const next: Record<string, ViewMode> = {};
+            openTabs.forEach(tab => {
+                next[tab.id] = prev[tab.id] ?? 'preview';
+            });
+            return next;
+        });
+    }, [openTabs]);
 
-      setSelectedDocId(filesTabId);
-      setShowMobileSidebar(false);
-  }, [currentWorkspace, user]);
+    const setDocMode = useCallback((docId: string, mode: ViewMode) => {
+        setDocModes(prev => {
+            if (prev[docId] === mode) return prev;
+            return { ...prev, [docId]: mode };
+        });
+    }, []);
 
-  useEffect(() => {
-      setDocModes(prev => {
-          const next: Record<string, ViewMode> = {};
-          openTabs.forEach(tab => {
-              next[tab.id] = prev[tab.id] ?? 'preview';
-          });
-          return next;
-      });
-  }, [openTabs]);
+    const activeFolderLabel = activeFolder || 'Raiz';
 
-  const setDocMode = useCallback((docId: string, mode: ViewMode) => {
-      setDocModes(prev => {
-          if (prev[docId] === mode) return prev;
-          return { ...prev, [docId]: mode };
-      });
-  }, []);
+    const createFolderRecord = async (folderName: string, parentOverride?: string) => {
+        if (!user) return false;
+        const trimmed = folderName.trim();
+        if (!trimmed) return false;
+        const parentPath = normalizePath(parentOverride ?? activeFolder);
+        const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+        const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
+        if (exists) return false;
 
-  const activeFolderLabel = activeFolder || 'Raiz';
-
-  const createFolderRecord = async (folderName: string, parentOverride?: string) => {
-      if (!user) return false;
-      const trimmed = folderName.trim();
-      if (!trimmed) return false;
-      const parentPath = normalizePath(parentOverride ?? activeFolder);
-      const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
-      const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
-      if (exists) return false;
-
-      const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-      const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
-      const response = await fetch('/api/documents', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              name: trimmed,
-              type: 'folder',
-              ownerId: user.uid,
-              workspaceId: docWorkspaceId,
-              folder: parentPath
-          })
-      });
-      if (!response.ok) {
-          console.error('Failed to create folder');
-          return false;
-      }
-      await fetchDocs();
-      return true;
-  };
-
-  const createFolder = async () => {
-      const result = await showDialog({
-          type: 'input',
-          title: 'Nueva carpeta',
-          message: 'Ingresa el nombre de la carpeta',
-          placeholder: 'Nombre de carpeta'
-      });
-      if (!result.confirmed) return;
-      const trimmed = (result.value ?? '').trim();
-      if (!trimmed) return;
-      const parentPath = normalizePath(activeFolder);
-      const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
-      const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
-      if (exists) {
-          await showDialog({ type: 'info', title: 'La carpeta ya existe', message: fullPath });
-          return;
-      }
-      const created = await createFolderRecord(trimmed, parentPath);
-      if (!created) {
-          await showDialog({ type: 'error', title: 'No se pudo crear la carpeta' });
-      }
-  };
-
-  const moveDocumentToFolder = async (docId: string, folderPath: string) => {
-      const targetPath = normalizeFolderPath(folderPath);
-
-      if (targetPath !== DEFAULT_FOLDER_NAME) {
-          const segments = targetPath.split('/');
-          const leafName = segments[segments.length - 1];
-          const parentPath = segments.slice(0, -1).join('/');
-          const exists = folders.some(folder => folder.path.toLowerCase() === targetPath.toLowerCase());
-          if (!exists) {
-              await createFolderRecord(leafName, parentPath);
-          }
-      }
-
-      setDocs(prev => prev.map(item => item.id === docId ? { ...item, folder: targetPath } : item));
-      setOpenTabs(prev => prev.map(item => item.id === docId ? { ...item, folder: targetPath } : item));
-
-      try {
-          const res = await fetch(`/api/documents/${docId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ folder: targetPath })
-          });
-          if (!res.ok) {
-              throw new Error('Failed to move document');
-          }
-          await fetchDocs();
-      } catch (error) {
-          console.error('Error moving document', error);
-          await fetchDocs();
-      }
-  };
-
-  const copyDocument = async (docItem: DocItem) => {
-      if (!user) return;
-      if (docItem.type === 'folder') return;
-      const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-      const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
-      const newName = `${docItem.name} (copia)`;
-      let resolvedContent = '';
-      if (docItem.type !== 'file') {
-          if (typeof docItem.content === 'string') {
-              resolvedContent = docItem.content;
-          } else {
-              try {
-                  const res = await fetch(`/api/documents/${docItem.id}/raw`, { cache: 'no-store' });
-                  if (!res.ok) throw new Error('Failed to load content');
-                  resolvedContent = await res.text();
-              } catch (error) {
-                  console.error('Error loading content for copy', error);
-                  await showDialog({ type: 'error', title: 'No se pudo cargar el contenido para copiar.' });
-                  return;
-              }
-          }
-      }
-      const payload: Record<string, unknown> = {
-          name: newName,
-          type: docItem.type || 'text',
-          ownerId: user.uid,
-          workspaceId: docWorkspaceId,
-          folder: normalizeFolderPath(docItem.folder),
-          mimeType: docItem.mimeType || null
-      };
-
-      if (docItem.type === 'file') {
-          payload.url = docItem.url || null;
-          payload.storagePath = docItem.storagePath || null;
-      } else {
-          payload.content = resolvedContent;
-      }
-
-      try {
-          const res = await fetch('/api/documents', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error('Failed to copy document');
-          const data = await res.json();
-          await fetchDocs();
-          openDocument({
-              id: data.id,
-              name: newName,
-              type: docItem.type || 'text',
-              ownerId: user.uid,
-              updatedAt: { seconds: Date.now() / 1000 },
-              folder: normalizeFolderPath(docItem.folder),
-              mimeType: docItem.mimeType,
-              url: docItem.url,
-              storagePath: docItem.storagePath
-          });
-      } catch (error) {
-          console.error('Error copying document', error);
-          await showDialog({ type: 'error', title: 'Error al copiar' });
-      }
-  };
-
-  const promptMoveDocument = async (docItem: DocItem) => {
-      const current = normalizeFolderPath(docItem.folder);
-      const result = await showDialog({
-          type: 'input',
-          title: 'Mover a carpeta',
-          message: 'Ingresa la ruta de destino',
-          defaultValue: current,
-          placeholder: 'carpeta/subcarpeta'
-      });
-      if (!result.confirmed) return;
-      const target = (result.value ?? '').trim();
-      if (!target) return;
-      await moveDocumentToFolder(docItem.id, target);
-  };
-
-  const createWorkspace = async () => {
-      if (!newWorkspaceName.trim() || !user) return;
-      try {
-          const res = await fetch('/api/workspaces', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  name: newWorkspaceName,
-                  ownerId: user.uid
-              })
-          });
-          if (!res.ok) {
-              throw new Error('Failed to create workspace');
-          }
-          const data = await res.json();
-          setNewWorkspaceName('');
-          setShowNewWorkspaceModal(false);
-          await fetchWorkspaces();
-          setCurrentWorkspace({
-              id: data.id,
-              name: data.name ?? newWorkspaceName,
-              ownerId: data.ownerId ?? user.uid,
-              members: Array.isArray(data.members) ? data.members : [user.uid],
-              type: 'shared'
-          });
-      } catch (e) {
-          console.error('Error creating workspace', e);
-      }
-  };
-
-  const deleteWorkspace = async (workspace: Workspace) => {
-      if (!user) return;
-      if (workspace.id === PERSONAL_WORKSPACE_ID || workspace.type === 'personal') {
-          await showDialog({ type: 'info', title: 'No se puede eliminar', message: 'El espacio personal no se puede borrar.' });
-          return;
-      }
-      if (workspace.ownerId && workspace.ownerId !== user.uid) {
-          await showDialog({ type: 'error', title: 'Sin permisos', message: 'Solo el administrador puede eliminar este espacio.' });
-          return;
-      }
-
-      setShowWorkspaceMenu(false);
-      const confirmResult = await showDialog({
-          type: 'input',
-          title: 'Eliminar espacio de trabajo',
-          message: `Escribe "${workspace.name}" para confirmar. Esta acción eliminará documentos y archivos asociados.`,
-          placeholder: workspace.name,
-          confirmLabel: 'Eliminar',
-          cancelLabel: 'Cancelar',
-          danger: true
-      });
-      if (!confirmResult.confirmed) return;
-      const typedName = (confirmResult.value ?? '').trim();
-      if (typedName !== workspace.name.trim()) {
-          await showDialog({ type: 'error', title: 'Nombre incorrecto', message: 'El nombre no coincide.' });
-          return;
-      }
-
-      try {
-          setDeletingWorkspaceId(workspace.id);
-          const res = await fetch(`/api/workspaces/${workspace.id}`, {
-              method: 'DELETE',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ownerId: user.uid })
-          });
-          if (!res.ok) {
-              throw new Error('Failed to delete workspace');
-          }
-          await fetchWorkspaces();
-          setShowMembersModal(false);
-          await showDialog({ type: 'info', title: 'Espacio eliminado', message: workspace.name });
-      } catch (e) {
-          console.error('Error deleting workspace', e);
-          await showDialog({ type: 'error', title: 'Error al eliminar', message: workspace.name });
-      } finally {
-          setDeletingWorkspaceId(null);
-      }
-  };
-
-  const createDoc = async (e?: React.FormEvent, folderName?: string) => {
-    if (e) e.preventDefault();
-    const name = newDocName.trim() || 'Sin título';
-    if (!user) return;
-    const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
-    const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-    const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? null : workspaceId;
-    setIsCreating(true);
-    try {
+        const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
         const response = await fetch('/api/documents', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                name: name,
-                content: '# ' + name,
-                type: 'text',
+                name: trimmed,
+                type: 'folder',
                 ownerId: user.uid,
                 workspaceId: docWorkspaceId,
-                folder: targetFolder
+                folder: parentPath
             })
         });
-
         if (!response.ok) {
-            throw new Error('Failed to create document via API');
+            console.error('Failed to create folder');
+            return false;
         }
-
-        const data = await response.json();
-        const docRef = { id: data.id };
-
-        setNewDocName('');
         await fetchDocs();
-        openDocument({
-            id: docRef.id,
-            name: name,
-            type: 'text',
-            ownerId: user.uid,
-            updatedAt: { seconds: Date.now() / 1000 },
-            folder: targetFolder
-        });
-    } catch (e) {
-        console.error('Error creating doc', e);
-    } finally {
-        setIsCreating(false);
-    }
-  };
-
-  const getUploadContext = () => {
-    if (!user) return null;
-    const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-    const isPersonal = workspaceId === PERSONAL_WORKSPACE_ID;
-    const basePath = isPersonal ? `users/${user.uid}` : `workspaces/${workspaceId}`;
-
-    return {
-        workspaceId: isPersonal ? null : workspaceId,
-        storageFolder: `${basePath}/${DEFAULT_FOLDER_NAME}`
+        return true;
     };
-  };
 
-  const isMarkdownName = (name?: string) => {
-    const lower = (name ?? '').toLowerCase();
-    return lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.mdown') || lower.endsWith('.mkd');
-  };
-
-  const isMarkdownFile = (file: File) => {
-    if (file.type && file.type.toLowerCase().includes('markdown')) return true;
-    return isMarkdownName(file.name);
-  };
-
-  const isMarkdownDocItem = (doc: DocItem) => {
-    if (doc.mimeType && doc.mimeType.toLowerCase().includes('markdown')) return true;
-    return isMarkdownName(doc.name);
-  };
-
-  const getFileExtension = (name: string) => {
-    const parts = name.split('.');
-    if (parts.length < 2) return '';
-    return parts[parts.length - 1].toUpperCase();
-  };
-
-  const getDocBadge = (doc: DocItem) => {
-    if (doc.type === 'terminal') return 'TERM';
-    if (doc.type === 'file') {
-        if (isMarkdownDocItem(doc)) return 'MD';
-        const ext = getFileExtension(doc.name);
-        return ext ? (ext.length > 4 ? ext.slice(0, 4) : ext) : 'FILE';
-    }
-    return isMarkdownName(doc.name) ? 'MD' : 'DOC';
-  };
-
-  const docsByFolder = useMemo(() => {
-      const grouped: Record<string, DocItem[]> = {};
-      docs.forEach(docItem => {
-          const folderName = normalizeFolderPath(docItem.folder);
-          if (!grouped[folderName]) grouped[folderName] = [];
-          grouped[folderName].push(docItem);
-      });
-      return grouped;
-  }, [docs]);
-
-  const activeFolderDocs = useMemo(() => {
-      return docsByFolder[activeFolder] ?? [];
-  }, [docsByFolder, activeFolder]);
-
-  const folderChildrenMap = useMemo(() => {
-      const map: Record<string, FolderItem[]> = {};
-      folders.forEach(folder => {
-          const parent = folder.parentPath || '';
-          if (!map[parent]) map[parent] = [];
-          map[parent].push(folder);
-      });
-      Object.values(map).forEach(list => {
-          list.sort((a, b) => {
-              const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
-              const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
-              if (weightDiff !== 0) return weightDiff;
-              return a.name.localeCompare(b.name);
-          });
-      });
-      return map;
-  }, [folders]);
-
-  const activeChildFolders = useMemo(() => {
-      return folderChildrenMap[activeFolder] ?? [];
-  }, [folderChildrenMap, activeFolder]);
-
-  const sidebarHasContent = docs.length > 0 || folders.some(folder => folder.path !== DEFAULT_FOLDER_NAME);
-
-  const renderFolderTree = (parentPath: string, depth = 0): React.ReactNode[] => {
-      const children = folderChildrenMap[parentPath] ?? [];
-      return children.map(folder => {
-          const count = docsByFolder[folder.path]?.length ?? 0;
-          const isActive = activeFolder === folder.path;
-          const isDropActive = folderDragOver === folder.path;
-          const paddingLeft = 12 + depth * 12;
-
-          return (
-              <div key={folder.path}>
-                  <button
-                      onClick={() => setActiveFolder(folder.path)}
-                      onDragOver={(e) => handleFolderDragOver(e, folder.path)}
-                      onDrop={(e) => handleFolderDrop(e, folder.path)}
-                      onDragLeave={() => handleFolderDragLeave(folder.path)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10 text-mandy-300' : isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
-                      style={{ paddingLeft }}
-                  >
-                      <Folder className={`w-4 h-4 ${isActive ? 'text-mandy-400' : 'text-surface-500'}`} />
-                      <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
-                      <span className="text-[10px] text-surface-500">{count}</span>
-                  </button>
-                  {renderFolderTree(folder.path, depth + 1)}
-              </div>
-          );
-      });
-  };
-
-  useEffect(() => {
-      if (activeFolder === ROOT_FOLDER_PATH) return;
-      if (folders.length === 0) {
-          setActiveFolder(ROOT_FOLDER_PATH);
-          return;
-      }
-      const exists = folders.some(folder => folder.path === activeFolder);
-      if (!exists) {
-          const rootFolders = folderChildrenMap[ROOT_FOLDER_PATH] ?? [];
-          const fallback = rootFolders[0]?.path || ROOT_FOLDER_PATH;
-          setActiveFolder(fallback);
-      }
-  }, [folders, activeFolder, folderChildrenMap]);
-
-  const scheduleUploadStatusClear = () => {
-    if (uploadStatusTimer.current) {
-        clearTimeout(uploadStatusTimer.current);
-    }
-    uploadStatusTimer.current = setTimeout(() => setUploadStatus(null), 2000);
-  };
-
-  const scheduleDeleteStatusClear = () => {
-    if (deleteStatusTimer.current) {
-        clearTimeout(deleteStatusTimer.current);
-    }
-    deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
-  };
-
-  const getRelativeDir = (file: File) => {
-    const raw = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? '';
-    if (!raw) return '';
-    return normalizePath(raw.split('/').slice(0, -1).join('/'));
-  };
-
-  const joinPaths = (...parts: string[]) => normalizePath(parts.filter(Boolean).join('/'));
-
-  const isSupportedFile = (file: File) => {
-    const mime = (file.type || '').toLowerCase();
-    if (mime) {
-        return (
-            mime.startsWith('text/') ||
-            mime.startsWith('image/') ||
-            mime.startsWith('video/') ||
-            mime.startsWith('audio/') ||
-            mime === 'application/pdf' ||
-            mime === 'application/json' ||
-            mime === 'application/xml'
-        );
-    }
-    const ext = (file.name.split('.').pop() || '').toLowerCase();
-    return [
-        'md', 'markdown', 'mdown', 'mkd', 'txt', 'json', 'csv', 'tsv',
-        'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'yml', 'yaml',
-        'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
-        'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'm4a'
-    ].includes(ext);
-  };
-
-  type FileSystemEntry = {
-    isFile: boolean;
-    isDirectory: boolean;
-    name: string;
-    fullPath?: string;
-    file?: (success: (file: File) => void, error?: (err: unknown) => void) => void;
-    createReader?: () => FileSystemDirectoryReader;
-  };
-
-  type FileSystemDirectoryReader = {
-    readEntries: (success: (entries: FileSystemEntry[]) => void, error?: (err: unknown) => void) => void;
-  };
-
-  const readAllEntries = async (dirEntry: FileSystemEntry) => {
-    const reader = dirEntry.createReader?.();
-    if (!reader) return [];
-    const all: FileSystemEntry[] = [];
-    while (true) {
-        const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
-            reader.readEntries(resolve, reject);
+    const createFolder = async () => {
+        const result = await showDialog({
+            type: 'input',
+            title: 'Nueva carpeta',
+            message: 'Ingresa el nombre de la carpeta',
+            placeholder: 'Nombre de carpeta'
         });
-        if (batch.length === 0) break;
-        all.push(...batch);
-    }
-    return all;
-  };
-
-  const collectFilesFromEntry = async (entry: FileSystemEntry): Promise<File[]> => {
-    if (entry.isFile && entry.file) {
-        const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
-        const rawPath = entry.fullPath ?? file.name;
-        const relativePath = rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
-        if (relativePath) {
-            Object.defineProperty(file, 'webkitRelativePath', { value: relativePath });
+        if (!result.confirmed) return;
+        const trimmed = (result.value ?? '').trim();
+        if (!trimmed) return;
+        const parentPath = normalizePath(activeFolder);
+        const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+        const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
+        if (exists) {
+            await showDialog({ type: 'info', title: 'La carpeta ya existe', message: fullPath });
+            return;
         }
-        return [file];
-    }
-    if (entry.isDirectory) {
-        const entries = await readAllEntries(entry);
-        const nested = await Promise.all(entries.map(collectFilesFromEntry));
-        return nested.flat();
-    }
-    return [];
-  };
+        const created = await createFolderRecord(trimmed, parentPath);
+        if (!created) {
+            await showDialog({ type: 'error', title: 'No se pudo crear la carpeta' });
+        }
+    };
 
-  const collectDroppedFiles = async (e: React.DragEvent) => {
-    const items = Array.from(e.dataTransfer.items ?? []);
-    if (items.length === 0) {
-        return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
-    }
-    const entries = items
-        .map(item => (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry?.())
-        .filter((entry) => Boolean(entry)) as FileSystemEntry[];
-    if (entries.length === 0) {
-        return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
-    }
-    const fileGroups = await Promise.all(entries.map(collectFilesFromEntry));
-    const files = fileGroups.flat();
-    const preservePaths = entries.some(entry => entry.isDirectory) || files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
-    return { files, preservePaths };
-  };
+    const moveDocumentToFolder = async (docId: string, folderPath: string) => {
+        const targetPath = normalizeFolderPath(folderPath);
 
-  const uploadFiles = async (
-    files: File[],
-    targetFolder?: string,
-    options?: { preservePaths?: boolean }
-  ) => {
-    if (!user || files.length === 0) return;
-    const supportedFiles = files.filter(isSupportedFile);
-    if (supportedFiles.length === 0) {
+        if (targetPath !== DEFAULT_FOLDER_NAME) {
+            const segments = targetPath.split('/');
+            const leafName = segments[segments.length - 1];
+            const parentPath = segments.slice(0, -1).join('/');
+            const exists = folders.some(folder => folder.path.toLowerCase() === targetPath.toLowerCase());
+            if (!exists) {
+                await createFolderRecord(leafName, parentPath);
+            }
+        }
+
+        setDocs(prev => prev.map(item => item.id === docId ? { ...item, folder: targetPath } : item));
+        setOpenTabs(prev => prev.map(item => item.id === docId ? { ...item, folder: targetPath } : item));
+
+        try {
+            const res = await fetch(`/api/documents/${docId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder: targetPath })
+            });
+            if (!res.ok) {
+                throw new Error('Failed to move document');
+            }
+            await fetchDocs();
+        } catch (error) {
+            console.error('Error moving document', error);
+            await fetchDocs();
+        }
+    };
+
+    const copyDocument = async (docItem: DocItem) => {
+        if (!user) return;
+        if (docItem.type === 'folder') return;
+        const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
+        const newName = `${docItem.name} (copia)`;
+        let resolvedContent = '';
+        if (docItem.type !== 'file') {
+            if (typeof docItem.content === 'string') {
+                resolvedContent = docItem.content;
+            } else {
+                try {
+                    const res = await fetch(`/api/documents/${docItem.id}/raw`, { cache: 'no-store' });
+                    if (!res.ok) throw new Error('Failed to load content');
+                    resolvedContent = await res.text();
+                } catch (error) {
+                    console.error('Error loading content for copy', error);
+                    await showDialog({ type: 'error', title: 'No se pudo cargar el contenido para copiar.' });
+                    return;
+                }
+            }
+        }
+        const payload: Record<string, unknown> = {
+            name: newName,
+            type: docItem.type || 'text',
+            ownerId: user.uid,
+            workspaceId: docWorkspaceId,
+            folder: normalizeFolderPath(docItem.folder),
+            mimeType: docItem.mimeType || null
+        };
+
+        if (docItem.type === 'file') {
+            payload.url = docItem.url || null;
+            payload.storagePath = docItem.storagePath || null;
+        } else {
+            payload.content = resolvedContent;
+        }
+
+        try {
+            const res = await fetch('/api/documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('Failed to copy document');
+            const data = await res.json();
+            await fetchDocs();
+            openDocument({
+                id: data.id,
+                name: newName,
+                type: docItem.type || 'text',
+                ownerId: user.uid,
+                updatedAt: { seconds: Date.now() / 1000 },
+                folder: normalizeFolderPath(docItem.folder),
+                mimeType: docItem.mimeType,
+                url: docItem.url,
+                storagePath: docItem.storagePath
+            });
+        } catch (error) {
+            console.error('Error copying document', error);
+            await showDialog({ type: 'error', title: 'Error al copiar' });
+        }
+    };
+
+    const promptMoveDocument = async (docItem: DocItem) => {
+        const current = normalizeFolderPath(docItem.folder);
+        const result = await showDialog({
+            type: 'input',
+            title: 'Mover a carpeta',
+            message: 'Ingresa la ruta de destino',
+            defaultValue: current,
+            placeholder: 'carpeta/subcarpeta'
+        });
+        if (!result.confirmed) return;
+        const target = (result.value ?? '').trim();
+        if (!target) return;
+        await moveDocumentToFolder(docItem.id, target);
+    };
+
+    const createWorkspace = async () => {
+        if (!newWorkspaceName.trim() || !user) return;
+        try {
+            const res = await fetch('/api/workspaces', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: newWorkspaceName,
+                    ownerId: user.uid
+                })
+            });
+            if (!res.ok) {
+                throw new Error('Failed to create workspace');
+            }
+            const data = await res.json();
+            setNewWorkspaceName('');
+            setShowNewWorkspaceModal(false);
+            await fetchWorkspaces();
+            setCurrentWorkspace({
+                id: data.id,
+                name: data.name ?? newWorkspaceName,
+                ownerId: data.ownerId ?? user.uid,
+                members: Array.isArray(data.members) ? data.members : [user.uid],
+                type: 'shared'
+            });
+        } catch (e) {
+            console.error('Error creating workspace', e);
+        }
+    };
+
+    const deleteWorkspace = async (workspace: Workspace) => {
+        if (!user) return;
+        if (workspace.id === PERSONAL_WORKSPACE_ID || workspace.type === 'personal') {
+            await showDialog({ type: 'info', title: 'No se puede eliminar', message: 'El espacio personal no se puede borrar.' });
+            return;
+        }
+        if (workspace.ownerId && workspace.ownerId !== user.uid) {
+            await showDialog({ type: 'error', title: 'Sin permisos', message: 'Solo el administrador puede eliminar este espacio.' });
+            return;
+        }
+
+        setShowWorkspaceMenu(false);
+        const confirmResult = await showDialog({
+            type: 'input',
+            title: 'Eliminar espacio de trabajo',
+            message: `Escribe "${workspace.name}" para confirmar. Esta acción eliminará documentos y archivos asociados.`,
+            placeholder: workspace.name,
+            confirmLabel: 'Eliminar',
+            cancelLabel: 'Cancelar',
+            danger: true
+        });
+        if (!confirmResult.confirmed) return;
+        const typedName = (confirmResult.value ?? '').trim();
+        if (typedName !== workspace.name.trim()) {
+            await showDialog({ type: 'error', title: 'Nombre incorrecto', message: 'El nombre no coincide.' });
+            return;
+        }
+
+        try {
+            setDeletingWorkspaceId(workspace.id);
+            const res = await fetch(`/api/workspaces/${workspace.id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ownerId: user.uid })
+            });
+            if (!res.ok) {
+                throw new Error('Failed to delete workspace');
+            }
+            await fetchWorkspaces();
+            setShowMembersModal(false);
+            await showDialog({ type: 'info', title: 'Espacio eliminado', message: workspace.name });
+        } catch (e) {
+            console.error('Error deleting workspace', e);
+            await showDialog({ type: 'error', title: 'Error al eliminar', message: workspace.name });
+        } finally {
+            setDeletingWorkspaceId(null);
+        }
+    };
+
+    const createDoc = async (e?: React.FormEvent, folderName?: string) => {
+        if (e) e.preventDefault();
+        const name = newDocName.trim() || 'Sin título';
+        if (!user) return;
+        const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
+        const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
+        setIsCreating(true);
+        try {
+            const response = await fetch('/api/documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    content: '# ' + name,
+                    type: 'text',
+                    ownerId: user.uid,
+                    workspaceId: docWorkspaceId,
+                    folder: targetFolder
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to create document via API');
+            }
+
+            const data = await response.json();
+            const docRef = { id: data.id };
+
+            setNewDocName('');
+            await fetchDocs();
+            openDocument({
+                id: docRef.id,
+                name: name,
+                type: 'text',
+                ownerId: user.uid,
+                updatedAt: { seconds: Date.now() / 1000 },
+                folder: targetFolder
+            });
+        } catch (e) {
+            console.error('Error creating doc', e);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const getUploadContext = () => {
+        if (!user) return null;
+        const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+        const isPersonal = workspaceId === PERSONAL_WORKSPACE_ID;
+        const basePath = isPersonal ? `users/${user.uid}` : `workspaces/${workspaceId}`;
+
+        return {
+            workspaceId: isPersonal ? 'personal' : workspaceId,
+            storageFolder: `${basePath}/${DEFAULT_FOLDER_NAME}`
+        };
+    };
+
+    const isMarkdownName = (name?: string) => {
+        const lower = (name ?? '').toLowerCase();
+        return lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.mdown') || lower.endsWith('.mkd');
+    };
+
+    const isMarkdownFile = (file: File) => {
+        if (file.type && file.type.toLowerCase().includes('markdown')) return true;
+        return isMarkdownName(file.name);
+    };
+
+    const isMarkdownDocItem = (doc: DocItem) => {
+        if (doc.mimeType && doc.mimeType.toLowerCase().includes('markdown')) return true;
+        return isMarkdownName(doc.name);
+    };
+
+    const getFileExtension = (name: string) => {
+        const parts = name.split('.');
+        if (parts.length < 2) return '';
+        return parts[parts.length - 1].toUpperCase();
+    };
+
+    const getDocBadge = (doc: DocItem) => {
+        if (doc.type === 'terminal') return 'TERM';
+        if (doc.type === 'file') {
+            if (isMarkdownDocItem(doc)) return 'MD';
+            const ext = getFileExtension(doc.name);
+            return ext ? (ext.length > 4 ? ext.slice(0, 4) : ext) : 'FILE';
+        }
+        return isMarkdownName(doc.name) ? 'MD' : 'DOC';
+    };
+
+    const docsByFolder = useMemo(() => {
+        const grouped: Record<string, DocItem[]> = {};
+        docs.forEach(docItem => {
+            const folderName = normalizeFolderPath(docItem.folder);
+            if (!grouped[folderName]) grouped[folderName] = [];
+            grouped[folderName].push(docItem);
+        });
+        return grouped;
+    }, [docs]);
+
+    const activeFolderDocs = useMemo(() => {
+        return docsByFolder[activeFolder] ?? [];
+    }, [docsByFolder, activeFolder]);
+
+    const folderChildrenMap = useMemo(() => {
+        const map: Record<string, FolderItem[]> = {};
+        folders.forEach(folder => {
+            const parent = folder.parentPath || '';
+            if (!map[parent]) map[parent] = [];
+            map[parent].push(folder);
+        });
+        Object.values(map).forEach(list => {
+            list.sort((a, b) => {
+                const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+                const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
+                if (weightDiff !== 0) return weightDiff;
+                return a.name.localeCompare(b.name);
+            });
+        });
+        return map;
+    }, [folders]);
+
+    const activeChildFolders = useMemo(() => {
+        return folderChildrenMap[activeFolder] ?? [];
+    }, [folderChildrenMap, activeFolder]);
+
+    const renderFolderTree = (parentPath: string, depth = 0): ReactNode[] => {
+        const children = folderChildrenMap[parentPath] ?? [];
+        return children.map(folder => {
+            const count = docsByFolder[folder.path]?.length ?? 0;
+            const isActive = activeFolder === folder.path;
+            const isDropActive = folderDragOver === folder.path;
+            const paddingLeft = 12 + depth * 12;
+
+            return (
+                <div key={folder.path}>
+                    <button
+                        onClick={() => setActiveFolder(folder.path)}
+                        onDragOver={(e) => handleFolderDragOver(e, folder.path)}
+                        onDrop={(e) => handleFolderDrop(e, folder.path)}
+                        onDragLeave={() => handleFolderDragLeave(folder.path)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10 text-mandy-300' : isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
+                        style={{ paddingLeft }}
+                    >
+                        <Folder className={`w-4 h-4 ${isActive ? 'text-mandy-400' : 'text-surface-500'}`} />
+                        <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
+                        <span className="text-[10px] text-surface-500">{count}</span>
+                    </button>
+                    {renderFolderTree(folder.path, depth + 1)}
+                </div>
+            );
+        });
+    };
+
+    useEffect(() => {
+        if (activeFolder === ROOT_FOLDER_PATH) return;
+        if (folders.length === 0) {
+            setActiveFolder(ROOT_FOLDER_PATH);
+            return;
+        }
+        const exists = folders.some(folder => folder.path === activeFolder);
+        if (!exists) {
+            const rootFolders = folderChildrenMap[ROOT_FOLDER_PATH] ?? [];
+            const fallback = rootFolders[0]?.path || ROOT_FOLDER_PATH;
+            setActiveFolder(fallback);
+        }
+    }, [folders, activeFolder, folderChildrenMap]);
+
+    const scheduleUploadStatusClear = () => {
+        if (uploadStatusTimer.current) {
+            clearTimeout(uploadStatusTimer.current);
+        }
+        uploadStatusTimer.current = setTimeout(() => setUploadStatus(null), 2000);
+    };
+
+    const scheduleDeleteStatusClear = () => {
+        if (deleteStatusTimer.current) {
+            clearTimeout(deleteStatusTimer.current);
+        }
+        deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
+    };
+
+    const getRelativeDir = (file: File) => {
+        const raw = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? '';
+        if (!raw) return '';
+        return normalizePath(raw.split('/').slice(0, -1).join('/'));
+    };
+
+    const joinPaths = (...parts: string[]) => normalizePath(parts.filter(Boolean).join('/'));
+
+    const isSupportedFile = (file: File) => {
+        const mime = (file.type || '').toLowerCase();
+        if (mime) {
+            return (
+                mime.startsWith('text/') ||
+                mime.startsWith('image/') ||
+                mime.startsWith('video/') ||
+                mime.startsWith('audio/') ||
+                mime === 'application/pdf' ||
+                mime === 'application/json' ||
+                mime === 'application/xml'
+            );
+        }
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        return [
+            'md', 'markdown', 'mdown', 'mkd', 'txt', 'json', 'csv', 'tsv',
+            'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'yml', 'yaml',
+            'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+            'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'm4a'
+        ].includes(ext);
+    };
+
+    type FileSystemEntry = {
+        isFile: boolean;
+        isDirectory: boolean;
+        name: string;
+        fullPath?: string;
+        file?: (success: (file: File) => void, error?: (err: unknown) => void) => void;
+        createReader?: () => FileSystemDirectoryReader;
+    };
+
+    type FileSystemDirectoryReader = {
+        readEntries: (success: (entries: FileSystemEntry[]) => void, error?: (err: unknown) => void) => void;
+    };
+
+    const readAllEntries = async (dirEntry: FileSystemEntry) => {
+        const reader = dirEntry.createReader?.();
+        if (!reader) return [];
+        const all: FileSystemEntry[] = [];
+        while (true) {
+            const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+                reader.readEntries(resolve, reject);
+            });
+            if (batch.length === 0) break;
+            all.push(...batch);
+        }
+        return all;
+    };
+
+    const collectFilesFromEntry = async (entry: FileSystemEntry): Promise<File[]> => {
+        if (entry.isFile && entry.file) {
+            const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
+            const rawPath = entry.fullPath ?? file.name;
+            const relativePath = rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
+            if (relativePath) {
+                Object.defineProperty(file, 'webkitRelativePath', { value: relativePath });
+            }
+            return [file];
+        }
+        if (entry.isDirectory) {
+            const entries = await readAllEntries(entry);
+            const nested = await Promise.all(entries.map(collectFilesFromEntry));
+            return nested.flat();
+        }
+        return [];
+    };
+
+    const collectDroppedFiles = async (e: React.DragEvent) => {
+        const items = Array.from(e.dataTransfer.items ?? []);
+        if (items.length === 0) {
+            return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
+        }
+        const entries = items
+            .map(item => (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry?.())
+            .filter((entry) => Boolean(entry)) as FileSystemEntry[];
+        if (entries.length === 0) {
+            return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
+        }
+        const fileGroups = await Promise.all(entries.map(collectFilesFromEntry));
+        const files = fileGroups.flat();
+        const preservePaths = entries.some(entry => entry.isDirectory) || files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
+        return { files, preservePaths };
+    };
+
+    const uploadFiles = async (
+        files: File[],
+        targetFolder?: string,
+        options?: { preservePaths?: boolean }
+    ) => {
+        if (!user || files.length === 0) return;
+        const supportedFiles = files.filter(isSupportedFile);
+        if (supportedFiles.length === 0) {
+            setUploadStatus({
+                total: 0,
+                currentIndex: 0,
+                currentName: '',
+                progress: 0,
+                phase: 'error',
+                error: 'No hay archivos compatibles'
+            });
+            scheduleUploadStatusClear();
+            return;
+        }
+        const baseFolder = options?.preservePaths
+            ? normalizePath(targetFolder ?? '')
+            : normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
+        const context = getUploadContext();
+        if (!context) return;
+
+        if (uploadStatusTimer.current) {
+            clearTimeout(uploadStatusTimer.current);
+        }
         setUploadStatus({
-            total: 0,
+            total: supportedFiles.length,
             currentIndex: 0,
             currentName: '',
             progress: 0,
-            phase: 'error',
-            error: 'No hay archivos compatibles'
+            phase: 'uploading'
         });
-        scheduleUploadStatusClear();
-        return;
-    }
-    const baseFolder = options?.preservePaths
-        ? normalizePath(targetFolder ?? '')
-        : normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
-    const context = getUploadContext();
-    if (!context) return;
+        setIsUploading(true);
+        try {
+            const createdDocs: DocItem[] = [];
+            for (let i = 0; i < supportedFiles.length; i += 1) {
+                const file = supportedFiles[i];
+                setUploadStatus(prev => prev ? {
+                    ...prev,
+                    currentIndex: i + 1,
+                    currentName: file.name,
+                    progress: 0,
+                    phase: 'uploading',
+                    error: undefined
+                } : prev);
 
-    if (uploadStatusTimer.current) {
-        clearTimeout(uploadStatusTimer.current);
-    }
-    setUploadStatus({
-        total: supportedFiles.length,
-        currentIndex: 0,
-        currentName: '',
-        progress: 0,
-        phase: 'uploading'
-    });
-    setIsUploading(true);
-    try {
-        const createdDocs: DocItem[] = [];
-        for (let i = 0; i < supportedFiles.length; i += 1) {
-            const file = supportedFiles[i];
-            setUploadStatus(prev => prev ? {
-                ...prev,
-                currentIndex: i + 1,
-                currentName: file.name,
-                progress: 0,
-                phase: 'uploading',
-                error: undefined
-            } : prev);
+                const relativeDir = options?.preservePaths ? getRelativeDir(file) : '';
+                const resolvedFolder = joinPaths(baseFolder, relativeDir) || DEFAULT_FOLDER_NAME;
 
-            const relativeDir = options?.preservePaths ? getRelativeDir(file) : '';
-            const resolvedFolder = joinPaths(baseFolder, relativeDir) || DEFAULT_FOLDER_NAME;
+                if (isMarkdownFile(file)) {
+                    const content = await file.text();
 
-            if (isMarkdownFile(file)) {
-                const content = await file.text();
+                    const res = await fetch('/api/documents', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: file.name,
+                            content: content,
+                            type: 'text',
+                            mimeType: file.type || 'text/markdown',
+                            ownerId: user.uid,
+                            workspaceId: context.workspaceId,
+                            folder: resolvedFolder
+                        })
+                    });
 
-                const res = await fetch('/api/documents', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                    if (!res.ok) throw new Error('Markdown upload failed');
+                    const data = await res.json();
+
+                    setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
+                    createdDocs.push({
+                        id: data.id,
                         name: file.name,
-                        content: content,
                         type: 'text',
                         mimeType: file.type || 'text/markdown',
                         ownerId: user.uid,
-                        workspaceId: context.workspaceId,
+                        updatedAt: { seconds: Date.now() / 1000 },
                         folder: resolvedFolder
-                    })
+                    });
+                    continue;
+                }
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('ownerId', user.uid);
+                formData.append('workspaceId', context.workspaceId || 'personal');
+                formData.append('folder', resolvedFolder);
+
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
                 });
 
-                if (!res.ok) throw new Error('Markdown upload failed');
-                const data = await res.json();
+                if (!res.ok) throw new Error('API Upload failed');
+
+                const newDoc = await res.json();
+                createdDocs.push({ ...newDoc, folder: newDoc.folder ?? resolvedFolder });
 
                 setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
-                createdDocs.push({
-                    id: data.id,
-                    name: file.name,
-                    type: 'text',
-                    mimeType: file.type || 'text/markdown',
-                    ownerId: user.uid,
-                    updatedAt: { seconds: Date.now() / 1000 },
-                    folder: resolvedFolder
-                });
-                continue;
             }
 
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('ownerId', user.uid);
-            formData.append('workspaceId', context.workspaceId || 'personal');
-            formData.append('folder', resolvedFolder);
-
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!res.ok) throw new Error('API Upload failed');
-
-            const newDoc = await res.json();
-            createdDocs.push({ ...newDoc, folder: newDoc.folder ?? resolvedFolder });
-
-            setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
+            await fetchDocs();
+            if (createdDocs.length === 1) {
+                openDocument(createdDocs[0]);
+            }
+            setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
+            scheduleUploadStatusClear();
+        } catch (error) {
+            console.error('Upload failed', error);
+            setUploadStatus(prev => prev ? {
+                ...prev,
+                phase: 'error',
+                error: 'Error al subir'
+            } : prev);
+            scheduleUploadStatusClear();
+            await showDialog({ type: 'error', title: 'Error al subir archivo' });
+        } finally {
+            setIsUploading(false);
         }
+    };
 
-        await fetchDocs();
-        if (createdDocs.length === 1) {
-            openDocument(createdDocs[0]);
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files ?? []);
+        if (files.length === 0) return;
+        const targetFolder = uploadTargetFolder ?? DEFAULT_FOLDER_NAME;
+        setUploadTargetFolder(null);
+        await uploadFiles(files, targetFolder);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files ?? []);
+        if (files.length === 0) return;
+        const targetFolder = uploadTargetFolder ?? activeFolder ?? ROOT_FOLDER_PATH;
+        setUploadTargetFolder(null);
+        await uploadFiles(files, targetFolder, { preservePaths: true });
+        if (folderInputRef.current) folderInputRef.current.value = '';
+    };
+
+    const isFileDrag = (e: React.DragEvent) => {
+        const types = Array.from(e.dataTransfer?.types ?? []);
+        if (types.includes('Files')) return true;
+        return Array.from(e.dataTransfer?.items ?? []).some(item => item.kind === 'file');
+    };
+
+    const handleDragEnter = (e: React.DragEvent) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current += 1;
+        setIsDragActive(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        if (!isDragActive) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current -= 1;
+        if (dragCounter.current <= 0) {
+            dragCounter.current = 0;
+            setIsDragActive(false);
         }
-        setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
-        scheduleUploadStatusClear();
-    } catch (error) {
-        console.error('Upload failed', error);
-        setUploadStatus(prev => prev ? {
-            ...prev,
-            phase: 'error',
-            error: 'Error al subir'
-        } : prev);
-        scheduleUploadStatusClear();
-        await showDialog({ type: 'error', title: 'Error al subir archivo' });
-    } finally {
-        setIsUploading(false);
-    }
-  };
+    };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    const targetFolder = uploadTargetFolder ?? DEFAULT_FOLDER_NAME;
-    setUploadTargetFolder(null);
-    await uploadFiles(files, targetFolder);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+    const handleDragOver = (e: React.DragEvent) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+    };
 
-  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    const targetFolder = uploadTargetFolder ?? activeFolder ?? ROOT_FOLDER_PATH;
-    setUploadTargetFolder(null);
-    await uploadFiles(files, targetFolder, { preservePaths: true });
-    if (folderInputRef.current) folderInputRef.current.value = '';
-  };
-
-  const isFileDrag = (e: React.DragEvent) => {
-    const types = Array.from(e.dataTransfer?.types ?? []);
-    if (types.includes('Files')) return true;
-    return Array.from(e.dataTransfer?.items ?? []).some(item => item.kind === 'file');
-  };
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current += 1;
-    setIsDragActive(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    if (!isDragActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current -= 1;
-    if (dragCounter.current <= 0) {
+    const handleDrop = async (e: React.DragEvent) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
         dragCounter.current = 0;
         setIsDragActive(false);
-    }
-  };
+        const { files, preservePaths } = await collectDroppedFiles(e);
+        if (files.length === 0) return;
+        await uploadFiles(files, DEFAULT_FOLDER_NAME, { preservePaths });
+    };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-  };
+    const handleDocDragStart = (e: React.DragEvent, docItem: DocItem) => {
+        e.dataTransfer.setData('application/x-doc-id', docItem.id);
+        e.dataTransfer.setData('text/plain', docItem.id);
+        e.dataTransfer.effectAllowed = 'move';
+    };
 
-  const handleDrop = async (e: React.DragEvent) => {
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current = 0;
-    setIsDragActive(false);
-    const { files, preservePaths } = await collectDroppedFiles(e);
-    if (files.length === 0) return;
-    await uploadFiles(files, DEFAULT_FOLDER_NAME, { preservePaths });
-  };
+    const handleDocDragEnd = () => {
+        setFolderDragOver(null);
+        setDropPosition(null);
+    };
 
-  const handleDocDragStart = (e: React.DragEvent, docItem: DocItem) => {
-      e.dataTransfer.setData('application/x-doc-id', docItem.id);
-      e.dataTransfer.setData('text/plain', docItem.id);
-      e.dataTransfer.effectAllowed = 'move';
-  };
+    const handleDropZoneDragOver = (e: React.DragEvent, position: number) => {
+        const types = Array.from(e.dataTransfer.types ?? []);
+        const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+        if (!hasDocId || types.includes('Files')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setDropPosition(position);
+    };
 
-  const handleDocDragEnd = () => {
-      setFolderDragOver(null);
-      setDropPosition(null);
-  };
+    const handleDropZoneDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDropPosition(null);
+    };
 
-  const handleDropZoneDragOver = (e: React.DragEvent, position: number) => {
-      const types = Array.from(e.dataTransfer.types ?? []);
-      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
-      if (!hasDocId || types.includes('Files')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setDropPosition(position);
-  };
+    const handleDropZoneDrop = (e: React.DragEvent, position: number) => {
+        const types = Array.from(e.dataTransfer.types ?? []);
+        const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+        if (!hasDocId || types.includes('Files')) return;
+        const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
+        if (!docId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setDropPosition(null);
+        const docToOpen = docs.find(d => d.id === docId) || openTabs.find(d => d.id === docId);
+        if (docToOpen) {
+            // Insert at specific position in openTabs
+            setOpenTabs(prev => {
+                const filtered = prev.filter(t => t.id !== docToOpen.id);
+                const newTabs = [...filtered];
+                newTabs.splice(position, 0, docToOpen);
+                return newTabs;
+            });
+            setSelectedDocId(docToOpen.id);
+        }
+    };
 
-  const handleDropZoneDragLeave = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setDropPosition(null);
-  };
+    const handleFolderDragOver = (e: React.DragEvent, folderName: string) => {
+        const types = Array.from(e.dataTransfer.types ?? []);
+        const hasFiles = types.includes('Files');
+        const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+        if (hasFiles) {
+            e.preventDefault();
+            setFolderDragOver(folderName);
+            return;
+        }
+        if (!hasDocId) return;
+        e.preventDefault();
+        setFolderDragOver(folderName);
+    };
 
-  const handleDropZoneDrop = (e: React.DragEvent, position: number) => {
-      const types = Array.from(e.dataTransfer.types ?? []);
-      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
-      if (!hasDocId || types.includes('Files')) return;
-      const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
-      if (!docId) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setDropPosition(null);
-      const docToOpen = docs.find(d => d.id === docId) || openTabs.find(d => d.id === docId);
-      if (docToOpen) {
-          // Insert at specific position in openTabs
-          setOpenTabs(prev => {
-              const filtered = prev.filter(t => t.id !== docToOpen.id);
-              const newTabs = [...filtered];
-              newTabs.splice(position, 0, docToOpen);
-              return newTabs;
-          });
-          setSelectedDocId(docToOpen.id);
-      }
-  };
+    const handleFolderDragLeave = (folderName: string) => {
+        if (folderDragOver === folderName) {
+            setFolderDragOver(null);
+        }
+    };
 
-  const handleFolderDragOver = (e: React.DragEvent, folderName: string) => {
-      const types = Array.from(e.dataTransfer.types ?? []);
-      const hasFiles = types.includes('Files');
-      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
-      if (hasFiles) {
-          e.preventDefault();
-          setFolderDragOver(folderName);
-          return;
-      }
-      if (!hasDocId) return;
-      e.preventDefault();
-      setFolderDragOver(folderName);
-  };
+    const handleFolderDrop = async (e: React.DragEvent, folderName: string) => {
+        const { files, preservePaths } = await collectDroppedFiles(e);
+        if (files.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            setFolderDragOver(null);
+            await uploadFiles(files, folderName, { preservePaths });
+            return;
+        }
+        const types = Array.from(e.dataTransfer.types ?? []);
+        const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+        if (!hasDocId) return;
+        const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
+        if (!docId) return;
+        e.preventDefault();
+        setFolderDragOver(null);
+        await moveDocumentToFolder(docId, folderName);
+    };
 
-  const handleFolderDragLeave = (folderName: string) => {
-      if (folderDragOver === folderName) {
-          setFolderDragOver(null);
-      }
-  };
+    const isWithinFolder = (candidate: string, folderPath: string) => {
+        if (!candidate) return false;
+        return candidate === folderPath || candidate.startsWith(`${folderPath}/`);
+    };
 
-  const handleFolderDrop = async (e: React.DragEvent, folderName: string) => {
-      const { files, preservePaths } = await collectDroppedFiles(e);
-      if (files.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          setFolderDragOver(null);
-          await uploadFiles(files, folderName, { preservePaths });
-          return;
-      }
-      const types = Array.from(e.dataTransfer.types ?? []);
-      const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
-      if (!hasDocId) return;
-      const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
-      if (!docId) return;
-      e.preventDefault();
-      setFolderDragOver(null);
-      await moveDocumentToFolder(docId, folderName);
-  };
-
-  const isWithinFolder = (candidate: string, folderPath: string) => {
-      if (!candidate) return false;
-      return candidate === folderPath || candidate.startsWith(`${folderPath}/`);
-  };
-
-  const deleteDocRecords = async (uniqueIds: string[], label: string) => {
+    const deleteDocRecords = async (uniqueIds: string[], label: string) => {
         setDeletingIds(prev => {
             const next = { ...prev };
             uniqueIds.forEach(id => {
@@ -1731,1107 +1541,561 @@ export default function DashboardPage() {
             }
             scheduleDeleteStatusClear();
         } finally {
-        setDeletingIds(prev => {
-            const next = { ...prev };
-            uniqueIds.forEach(id => {
-                delete next[id];
+            setDeletingIds(prev => {
+                const next = { ...prev };
+                uniqueIds.forEach(id => {
+                    delete next[id];
+                });
+                return next;
             });
-            return next;
+        }
+    };
+
+    const deleteItems = async ({ docIds, folderPaths }: { docIds: string[]; folderPaths: string[] }) => {
+        const filteredFolderPaths = folderPaths
+            .map(path => normalizePath(path))
+            .filter(path => path && path !== DEFAULT_FOLDER_NAME);
+
+        if (filteredFolderPaths.length !== folderPaths.length) {
+            await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
+        }
+
+        const folderDocIds = new Set<string>();
+        const docIdsFromFolders = new Set<string>();
+
+        filteredFolderPaths.forEach(folderPath => {
+            folders.forEach(folder => {
+                if (folder.docId && isWithinFolder(folder.path, folderPath)) {
+                    folderDocIds.add(folder.docId);
+                }
+            });
+            docs.forEach(doc => {
+                const docFolder = normalizeFolderPath(doc.folder);
+                if (isWithinFolder(docFolder, folderPath)) {
+                    docIdsFromFolders.add(doc.id);
+                }
+            });
         });
-      }
-  };
 
-  const deleteItems = async ({ docIds, folderPaths }: { docIds: string[]; folderPaths: string[] }) => {
-      const filteredFolderPaths = folderPaths
-          .map(path => normalizePath(path))
-          .filter(path => path && path !== DEFAULT_FOLDER_NAME);
+        const allDocIds = Array.from(new Set([...docIds, ...folderDocIds, ...docIdsFromFolders]));
+        if (allDocIds.length === 0) return;
 
-      if (filteredFolderPaths.length !== folderPaths.length) {
-          await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
-      }
+        const label = allDocIds.length === 1 ? 'Elemento' : `${allDocIds.length} elementos`;
+        const confirmResult = await showDialog({
+            type: 'confirm',
+            title: 'Confirmar eliminación',
+            message: `¿Eliminar ${label}? Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            cancelLabel: 'Cancelar',
+            danger: true
+        });
+        if (!confirmResult.confirmed) return;
+        await deleteDocRecords(allDocIds, label);
+    };
 
-      const folderDocIds = new Set<string>();
-      const docIdsFromFolders = new Set<string>();
+    const deleteFolder = async (folder: FolderItem) => {
+        if (folder.path === DEFAULT_FOLDER_NAME || folder.kind === 'system') {
+            await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
+            return;
+        }
+        await deleteItems({ docIds: [], folderPaths: [folder.path] });
+    };
 
-      filteredFolderPaths.forEach(folderPath => {
-          folders.forEach(folder => {
-              if (folder.docId && isWithinFolder(folder.path, folderPath)) {
-                  folderDocIds.add(folder.docId);
-              }
-          });
-          docs.forEach(doc => {
-              const docFolder = normalizeFolderPath(doc.folder);
-              if (isWithinFolder(docFolder, folderPath)) {
-                  docIdsFromFolders.add(doc.id);
-              }
-          });
-      });
+    const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (deletingIds[docItem.id]) return;
+        const confirmResult = await showDialog({
+            type: 'confirm',
+            title: 'Eliminar elemento',
+            message: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            cancelLabel: 'Cancelar',
+            danger: true
+        });
+        if (!confirmResult.confirmed) return;
+        await deleteDocRecords([docItem.id], docItem.name);
+    };
 
-      const allDocIds = Array.from(new Set([...docIds, ...folderDocIds, ...docIdsFromFolders]));
-      if (allDocIds.length === 0) return;
+    const inviteMember = async () => {
+        if (!inviteEmail || !currentWorkspace || currentWorkspace.type === 'personal') return;
+        try {
+            const res = await fetch(`/api/workspaces/${currentWorkspace.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'invite',
+                    email: inviteEmail
+                })
+            });
+            if (!res.ok) {
+                throw new Error('Failed to invite member');
+            }
+            await showDialog({ type: 'info', title: 'Invitación enviada', message: inviteEmail });
+            setInviteEmail('');
+        } catch (e) {
+            console.error('Error inviting', e);
+            await showDialog({ type: 'error', title: 'Error al invitar' });
+        }
+    };
 
-      const label = allDocIds.length === 1 ? 'Elemento' : `${allDocIds.length} elementos`;
-      const confirmResult = await showDialog({
-          type: 'confirm',
-          title: 'Confirmar eliminación',
-          message: `¿Eliminar ${label}? Esta acción no se puede deshacer.`,
-          confirmLabel: 'Eliminar',
-          cancelLabel: 'Cancelar',
-          danger: true
-      });
-      if (!confirmResult.confirmed) return;
-      await deleteDocRecords(allDocIds, label);
-  };
+    const getIcon = (doc: DocItem) => {
+        if (doc.type === 'terminal') return <TerminalIcon className="w-5 h-5" />;
+        if (doc.type === 'file') {
+            if (doc.mimeType?.startsWith('image/')) return <ImageIcon className="w-5 h-5" />;
+            if (isMarkdownDocItem(doc)) return <FileText className="w-5 h-5" />;
+            return <FileIcon className="w-5 h-5" />;
+        }
+        return <FileText className="w-5 h-5" />;
+    };
 
-  const deleteFolder = async (folder: FolderItem) => {
-      if (folder.path === DEFAULT_FOLDER_NAME || folder.kind === 'system') {
-          await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
-          return;
-      }
-      await deleteItems({ docIds: [], folderPaths: [folder.path] });
-  };
+    if (loading || !user) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-surface-900">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500" />
+            </div>
+        );
+    }
 
-  const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (deletingIds[docItem.id]) return;
-      const confirmResult = await showDialog({
-          type: 'confirm',
-          title: 'Eliminar elemento',
-          message: 'Esta acción no se puede deshacer.',
-          confirmLabel: 'Eliminar',
-          cancelLabel: 'Cancelar',
-          danger: true
-      });
-      if (!confirmResult.confirmed) return;
-      await deleteDocRecords([docItem.id], docItem.name);
-  };
-
-  const inviteMember = async () => {
-     if (!inviteEmail || !currentWorkspace || currentWorkspace.type === 'personal') return;
-     try {
-         const res = await fetch(`/api/workspaces/${currentWorkspace.id}`, {
-             method: 'PATCH',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-                 action: 'invite',
-                 email: inviteEmail
-             })
-         });
-         if (!res.ok) {
-             throw new Error('Failed to invite member');
-         }
-         await showDialog({ type: 'info', title: 'Invitación enviada', message: inviteEmail });
-         setInviteEmail('');
-     } catch (e) {
-         console.error('Error inviting', e);
-         await showDialog({ type: 'error', title: 'Error al invitar' });
-     }
-  };
-
-  const getIcon = (doc: DocItem) => {
-      if (doc.type === 'terminal') return <TerminalIcon className="w-5 h-5" />;
-      if (doc.type === 'file') {
-          if (doc.mimeType?.startsWith('image/')) return <ImageIcon className="w-5 h-5" />;
-          if (isMarkdownDocItem(doc)) return <FileText className="w-5 h-5" />;
-          return <FileIcon className="w-5 h-5" />;
-      }
-      return <FileText className="w-5 h-5" />;
-  };
-
-  if (loading || !user) {return (
-    <div className="flex h-screen items-center justify-center bg-surface-900">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500" />
-    </div>
-  );}
-
-  return (
-    <div
-      className="h-screen bg-surface-900 flex flex-col text-white overflow-hidden relative"
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
-      {/* Quick Search Modal (Ctrl+P) */}
-      <AnimatePresence>
-        {showQuickSearch && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowQuickSearch(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: -20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -20 }}
-              transition={{ duration: 0.15 }}
-              className="w-full max-w-xl bg-surface-800 border border-surface-600 rounded-xl shadow-2xl overflow-hidden"
-              onClick={e => e.stopPropagation()}
+    return (
+        <LazyMotion features={domAnimation}>
+            <div
+                className="h-screen bg-surface-900 flex flex-col text-white overflow-hidden relative"
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
             >
-              {/* Search Input */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-700">
-                <Search className="w-5 h-5 text-surface-400" />
-                <input
-                  ref={quickSearchInputRef}
-                  type="text"
-                  value={quickSearchQuery}
-                  onChange={e => { setQuickSearchQuery(e.target.value); setQuickSearchIndex(0); }}
-                  onKeyDown={handleQuickSearchKeyDown}
-                  placeholder="Buscar archivos... (↑↓ navegar, Enter abrir)"
-                  className="flex-1 bg-transparent text-white placeholder-surface-500 outline-none text-sm"
-                  autoFocus
+                {/* Quick Search Modal (Ctrl+P) */}
+                <QuickSearchModal
+                    open={showQuickSearch}
+                    query={quickSearchQuery}
+                    onQueryChange={setQuickSearchQuery}
+                    results={quickSearchResults}
+                    selectedIndex={quickSearchIndex}
+                    onSelectIndex={setQuickSearchIndex}
+                    onClose={() => setShowQuickSearch(false)}
+                    onSelect={(doc) => {
+                        openDocument(doc);
+                        setShowQuickSearch(false);
+                        setQuickSearchQuery('');
+                    }}
+                    onKeyDown={handleQuickSearchKeyDown}
+                    inputRef={quickSearchInputRef}
+                    getIcon={getIcon}
+                    modalFade={modalFade}
+                    modalPop={modalPop}
                 />
-                <kbd className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-medium bg-surface-700 text-surface-400 rounded">ESC</kbd>
-              </div>
-              {/* Results List */}
-              <div className="max-h-80 overflow-y-auto">
-                {quickSearchResults.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-surface-500 text-sm">
-                    No se encontraron archivos
-                  </div>
-                ) : (
-                  quickSearchResults.map((doc, idx) => (
-                    <button
-                      key={doc.id}
-                      onClick={() => { openDocument(doc); setShowQuickSearch(false); setQuickSearchQuery(''); }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        idx === quickSearchIndex
-                          ? 'bg-mandy-500/20 text-white'
-                          : 'text-surface-300 hover:bg-surface-700/50'
-                      }`}
-                    >
-                      {getIcon(doc)}
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{doc.name}</div>
-                        {doc.folder && (
-                          <div className="text-xs text-surface-500 truncate">{doc.folder || '/'}</div>
-                        )}
-                      </div>
-                      {idx === quickSearchIndex && (
-                        <kbd className="px-1.5 py-0.5 text-[10px] bg-surface-600 text-surface-400 rounded">↵</kbd>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-              {/* Footer hint */}
-              <div className="px-4 py-2 border-t border-surface-700 flex items-center justify-between text-[10px] text-surface-500">
-                <span>Tip: Usa <kbd className="px-1 py-0.5 bg-surface-700 rounded mx-1">Ctrl+P</kbd> para abrir este buscador</span>
-                <span>{quickSearchResults.length} archivos</span>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {isDragActive && (
-        <div className="absolute inset-0 z-50 pointer-events-none">
-            <div className="absolute inset-0 bg-surface-900/70 border-2 border-dashed border-mandy-500/70" />
-            <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-surface-800/80 border border-mandy-500/40 rounded-xl px-6 py-4 text-center shadow-2xl shadow-black/50">
-                    <div className="text-sm font-semibold text-white">Suelta para subir</div>
-                    <div className="text-xs text-surface-300">
-                        Destino: {currentWorkspace?.name || 'Espacio Personal'} / {DEFAULT_FOLDER_NAME}
-                    </div>
-                </div>
-            </div>
-        </div>
-      )}
-      {(uploadStatus || deleteStatus) && (
-        <div className="absolute right-4 top-16 z-50 w-72 flex flex-col gap-2">
-            {uploadStatus && (
-                <div className="bg-surface-800 border border-surface-600/50 rounded-xl p-3 shadow-2xl shadow-black/40">
-                    <div className="flex items-center justify-between text-xs font-semibold text-surface-200">
-                        <span>
-                            {uploadStatus.phase === 'done'
-                                ? 'Subida completa'
-                                : uploadStatus.phase === 'error'
-                                    ? 'Error de carga'
-                                    : `Subiendo ${uploadStatus.currentIndex}/${uploadStatus.total}`}
-                        </span>
-                        {uploadStatus.phase === 'done' && <Check className="w-3 h-3 text-emerald-400" />}
-                        {uploadStatus.phase === 'uploading' && <Upload className="w-3 h-3 text-mandy-400" />}
-                    </div>
-                    {uploadStatus.currentName && (
-                        <div className="mt-1 text-[11px] text-surface-400 truncate">{uploadStatus.currentName}</div>
-                    )}
-                    <div className="mt-2 h-1.5 w-full bg-surface-700 rounded-full overflow-hidden">
-                        <div
-                            className={`${uploadStatus.phase === 'error' ? 'bg-red-500' : 'bg-mandy-500'} h-full transition-all`}
-                            style={{ width: `${uploadStatus.progress}%` }}
-                        />
-                    </div>
-                    {uploadStatus.phase === 'error' && uploadStatus.error && (
-                        <div className="mt-1 text-[11px] text-red-400">{uploadStatus.error}</div>
-                    )}
-                </div>
-            )}
-            {deleteStatus && (
-                <div className="bg-surface-800 border border-surface-600/50 rounded-xl p-3 shadow-2xl shadow-black/40">
-                    <div className="flex items-center justify-between text-xs font-semibold text-surface-200">
-                        <span>
-                            {deleteStatus.phase === 'done'
-                                ? 'Eliminado'
-                                : deleteStatus.phase === 'error'
-                                    ? 'Error al eliminar'
-                                    : 'Eliminando...'}
-                        </span>
-                        {deleteStatus.phase === 'done' && <Check className="w-3 h-3 text-emerald-400" />}
-                        {deleteStatus.phase === 'deleting' && <Loader2 className="w-3 h-3 text-mandy-400 animate-spin" />}
-                    </div>
-                    {deleteStatus.name && (
-                        <div className="mt-1 text-[11px] text-surface-400 truncate">{deleteStatus.name}</div>
-                    )}
-                    <div className="mt-2 h-1.5 w-full bg-surface-700 rounded-full overflow-hidden">
-                        <div
-                            className={`${deleteStatus.phase === 'error' ? 'bg-red-500' : 'bg-amber-500'} h-full transition-all ${deleteStatus.phase === 'deleting' ? 'animate-pulse' : ''}`}
-                            style={{ width: deleteStatus.phase === 'deleting' ? '60%' : '100%' }}
-                        />
-                    </div>
-                    {deleteStatus.phase === 'error' && deleteStatus.error && (
-                        <div className="mt-1 text-[11px] text-red-400">{deleteStatus.error}</div>
-                    )}
-                </div>
-            )}
-        </div>
-      )}
+                <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} />
+                <StatusToasts uploadStatus={uploadStatus} deleteStatus={deleteStatus} />
+                <DialogModal
+                    dialogConfig={dialogConfig}
+                    dialogInputValue={dialogInputValue}
+                    onDialogInputChange={setDialogInputValue}
+                    onConfirm={confirmDialog}
+                    onCancel={cancelDialog}
+                    modalFade={modalFade}
+                    modalPop={modalPop}
+                />
 
-      <AnimatePresence>
-        {dialogConfig && (
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-                onClick={() => {
-                    if (dialogConfig.type === 'confirm' || dialogConfig.type === 'input') cancelDialog();
-                }}
-            >
-                <motion.div
-                    initial={{ scale: 0.96, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.96, opacity: 0 }}
-                    className="w-full max-w-sm bg-surface-800 border border-surface-600/60 rounded-2xl shadow-2xl shadow-black/40"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="px-5 py-4 flex items-start justify-between gap-3">
-                        <div>
-                            <p className="text-sm font-semibold text-white">{dialogConfig.title}</p>
-                            {dialogConfig.message && (
-                                <p className="mt-1 text-xs text-surface-400 leading-relaxed">{dialogConfig.message}</p>
-                            )}
-                        </div>
-                        <button onClick={cancelDialog} className="p-1 text-surface-500 hover:text-surface-200 rounded">
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-
-                    {dialogConfig.type === 'input' && (
-                        <div className="px-5 pb-2">
-                            <input
-                                autoFocus
-                                value={dialogInputValue}
-                                onChange={(e) => setDialogInputValue(e.target.value)}
-                                placeholder={dialogConfig.placeholder || 'Ingresa un valor'}
-                                className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/60 focus:border-mandy-500 outline-none"
-                            />
-                        </div>
-                    )}
-
-                    <div className="px-5 py-4 flex justify-end gap-2">
-                        {(dialogConfig.type === 'confirm' || dialogConfig.type === 'input') && (
-                            <button
-                                onClick={cancelDialog}
-                                className="px-4 py-2 text-xs font-semibold text-surface-300 bg-surface-700 border border-surface-600 rounded-lg hover:text-white hover:border-surface-500 transition"
-                            >
-                                {dialogConfig.cancelLabel || 'Cancelar'}
-                            </button>
-                        )}
-                        <button
-                            onClick={confirmDialog}
-                            className={`px-4 py-2 text-xs font-semibold rounded-lg transition ${dialogConfig.danger ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-gradient-mandy text-white hover:opacity-90'}`}
-                        >
-                            {dialogConfig.confirmLabel || (dialogConfig.type === 'confirm' ? 'Confirmar' : 'Aceptar')}
-                        </button>
-                    </div>
-                </motion.div>
-            </motion.div>
-        )}
-      </AnimatePresence>
-      {/* Top Header */}
-      <header className="h-14 bg-surface-800 border-b border-surface-600/50 flex items-center justify-between px-4 shrink-0 z-50 relative">
-            <div className="flex items-center gap-4">
-                <button onClick={() => setShowMobileSidebar(!showMobileSidebar)} className="md:hidden p-1.5 text-surface-400 hover:bg-surface-700 rounded">
-                    <Menu className="w-5 h-5" />
-                </button>
-                <div onClick={() => setSelectedDocId(null)} className="font-bold flex items-center gap-2 text-white cursor-pointer">
-                    <span className="bg-gradient-mandy text-white p-1 rounded-md text-xs">St</span>
-                    <span className="hidden sm:inline">Studio</span>
-                </div>
-
-                {/* Workspace Selector */}
-                <div className="relative">
-                    <button
-                        onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
-                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-surface-700 rounded-lg transition border border-transparent hover:border-surface-600"
-                        title={currentWorkspace?.id && currentWorkspace.id !== PERSONAL_WORKSPACE_ID ? `ID: ${currentWorkspace.id}` : undefined}
-                    >
-                        {currentWorkspace?.type === 'personal' ? (
-                            <User className="w-4 h-4 text-surface-400" />
-                        ) : (
-                            <Briefcase className="w-4 h-4 text-mandy-400" />
-                        )}
-                        <div className="flex flex-col items-start">
-                            <span className="font-medium text-sm max-w-[120px] truncate text-surface-200">{currentWorkspace?.name || 'Seleccionar'}</span>
-                            {currentWorkspace?.id && currentWorkspace.id !== PERSONAL_WORKSPACE_ID && (
-                                <span className="text-[9px] text-surface-500 font-mono truncate max-w-[120px]">{currentWorkspace.id.slice(0, 8)}...</span>
-                            )}
-                        </div>
-                        <ChevronDown className="w-3 h-3 text-surface-500" />
-                        {invites.length > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mandy-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-mandy-500" /></span>}
-                    </button>
-
-                    {showWorkspaceMenu && (
-                        <>
-                            <div className="fixed inset-0 z-10" onClick={() => setShowWorkspaceMenu(false)} />
-                            <div className="absolute top-full left-0 mt-2 w-64 bg-surface-800 border border-surface-600/50 shadow-2xl shadow-black/50 rounded-xl z-20 overflow-hidden">
-                                {invites.length > 0 && (
-                                    <>
-                                        <div className="p-2 border-b border-surface-600/50 bg-mandy-500/10">
-                                            <span className="text-xs font-semibold text-mandy-400 uppercase tracking-wider px-2">Invitaciones</span>
-                                        </div>
-                                        {invites.map(ws => (
-                                            <div key={ws.id} className="px-4 py-3 flex items-center justify-between hover:bg-surface-700 border-b border-surface-600/30">
-                                                <span className="text-sm font-medium text-surface-200 truncate max-w-[120px]">{ws.name}</span>
-                                                <button
-                                                    onClick={() => acceptInvite(ws)}
-                                                    className="text-xs bg-mandy-500 text-white px-2 py-1 rounded hover:bg-mandy-600"
-                                                >
-                                                    Unirse
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </>
-                                )}
-                                <div className="p-2 border-b border-surface-600/50">
-                                    <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider px-2">Mis Espacios</span>
-                                </div>
-                                <div className="max-h-60 overflow-y-auto">
-                                    {workspaces.map(ws => (
-                                        <div
-                                            key={ws.id}
-                                            className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-700 transition cursor-pointer ${currentWorkspace?.id === ws.id ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
-                                            onClick={() => {
-                                                setCurrentWorkspace(ws);
-                                                setShowWorkspaceMenu(false);
-                                            }}
-                                        >
-                                            {ws.type === 'personal' ? <User className="w-4 h-4 shrink-0" /> : <Briefcase className="w-4 h-4 shrink-0" />}
-                                            <div className="flex flex-col flex-1 min-w-0">
-                                                <span className="truncate">{ws.name}</span>
-                                                {ws.id !== PERSONAL_WORKSPACE_ID && (
-                                                    <span className="text-[10px] font-mono text-surface-500 truncate">{ws.id}</span>
-                                                )}
-                                            </div>
-                                            {ws.id !== PERSONAL_WORKSPACE_ID && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        navigator.clipboard.writeText(ws.id);
-                                                    }}
-                                                    className="p-1 hover:bg-surface-600 rounded shrink-0"
-                                                    title="Copiar ID"
-                                                >
-                                                    <Copy className="w-3 h-3" />
-                                                </button>
-                                            )}
-                                            {user && ws.type === 'shared' && ws.ownerId === user.uid && ws.id !== PERSONAL_WORKSPACE_ID && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        deleteWorkspace(ws);
-                                                    }}
-                                                    className="p-1 hover:bg-red-500/20 rounded shrink-0 text-red-400 disabled:opacity-50"
-                                                    title="Eliminar workspace"
-                                                    disabled={deletingWorkspaceId === ws.id}
-                                                >
-                                                    {deletingWorkspaceId === ws.id ? (
-                                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                                    ) : (
-                                                        <Trash2 className="w-3 h-3" />
-                                                    )}
-                                                </button>
-                                            )}
-                                            {currentWorkspace?.id === ws.id && <Check className="w-3 h-3 shrink-0" />}
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="p-2 border-t border-surface-600/50 bg-surface-700/50">
-                                    <button
-                                        onClick={() => {
-                                            setShowNewWorkspaceModal(true);
-                                            setShowWorkspaceMenu(false);
-                                        }}
-                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-xs font-medium hover:border-mandy-500/50 hover:text-mandy-400 transition"
-                                    >
-                                        <Plus className="w-3 h-3" /> Nuevo Espacio
-                                    </button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                {currentWorkspace?.members && (
-                    <button
-                        onClick={() => setShowMembersModal(true)}
-                        className="items-center gap-1.5 text-xs font-medium text-surface-500 hover:text-surface-200 px-2 py-1 rounded hover:bg-surface-700 transition hidden sm:flex"
-                    >
-                        <Users className="w-3.5 h-3.5" />
-                        {currentWorkspace.members.length}
-                    </button>
-                )}
-            </div>
-
-            <div className="flex items-center gap-4">
-                 <div className="flex items-center gap-2 text-sm text-surface-400 bg-surface-700 px-3 py-1.5 rounded-full">
-                    <User className="w-4 h-4" />
-                    <span className="truncate max-w-[150px] hidden md:inline">{user.email}</span>
-                </div>
-                <button
-                    onClick={() => {
+                {/* Top Header */}
+                <HeaderBar
+                    onToggleMobileSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
+                    onClearSelectedDoc={() => setSelectedDocId(null)}
+                    showWorkspaceMenu={showWorkspaceMenu}
+                    setShowWorkspaceMenu={setShowWorkspaceMenu}
+                    currentWorkspace={currentWorkspace}
+                    invites={invites}
+                    workspaces={workspaces}
+                    user={user}
+                    deletingWorkspaceId={deletingWorkspaceId}
+                    personalWorkspaceId={PERSONAL_WORKSPACE_ID}
+                    onAcceptInvite={acceptInvite}
+                    onSelectWorkspace={setCurrentWorkspace}
+                    onDeleteWorkspace={deleteWorkspace}
+                    onNewWorkspace={() => setShowNewWorkspaceModal(true)}
+                    onShowMembers={() => setShowMembersModal(true)}
+                    onOpenPassword={() => {
                         setPasswordForm({ current: '', new: '', confirm: '' });
                         setPasswordError('');
                         setPasswordSuccess(false);
                         setShowPasswordModal(true);
                     }}
-                    className="p-2 text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
-                    title="Cambiar Contraseña"
-                >
-                    <Key className="w-5 h-5" />
-                </button>
-                <button
-                    onClick={() => logout()}
-                    className="p-2 text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
-                    title="Cerrar Sesión"
-                >
-                    <LogOut className="w-5 h-5" />
-                </button>
-            </div>
-      </header>
-
-      {/* Main Layout (Sidebar + Content) */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Mobile Sidebar Overlay */}
-        {showMobileSidebar && (
-             <div className="absolute inset-0 z-30 bg-black/40 md:hidden" onClick={() => setShowMobileSidebar(false)} />
-        )}
-
-        {/* Sidebar */}
-        <div
-            style={{ width: sidebarWidth }}
-            className={`
-                bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 transition-transform duration-300 absolute md:relative z-40 h-full
-                ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-            `}
-        >
-            {/* Header: Actions */}
-            <div className="p-3 border-b border-surface-600/50 flex justify-between items-center bg-surface-700/30 gap-2">
-                <div className="text-xs font-bold text-surface-500 uppercase tracking-wider pl-2">
-                    Navegador
-                </div>
-                <div className="flex gap-0.5">
-                    <button onClick={() => openFilesTab()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Abrir Explorador"><Folder className="w-4 h-4" /></button>
-                    <button onClick={() => createDoc(undefined, activeFolder)} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nuevo Archivo"><Plus className="w-4 h-4" /></button>
-                    <button onClick={() => createFolder()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nueva Carpeta"><FolderPlus className="w-4 h-4" /></button>
-                    <div className="relative group/up">
-                        <button className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Subir"><Upload className="w-4 h-4" /></button>
-                        <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-600 rounded-lg shadow-xl p-1 hidden group-hover/up:flex flex-col gap-1 z-50">
-                            <button onClick={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); fileInputRef.current?.click(); }} className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"><Upload className="w-3 h-3" /> Archivos</button>
-                            <button onClick={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); folderInputRef.current?.click(); }} className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"><FolderUp className="w-3 h-3" /> Carpeta</button>
-                        </div>
-                    </div>
-                </div>
-                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
-                <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
-            </div>
-
-            <div className="flex-1 overflow-y-auto scrollbar-hide p-2 space-y-4">
-
-                {/* 1. SECCIÓN ASISTENTE */}
-                <AssistantSection
-                    currentWorkspace={currentWorkspace}
-                    user={user}
-                    connectionStatus={connectionStatus}
-                    isCreatingSession={isCreatingSession}
-                    activeSessionId={activeSessionId}
-                    getWorkerStatusForWorkspace={getWorkerStatusForWorkspace}
-                    getSessionsForWorkspace={getSessionsForWorkspace}
-                    createSession={createSession}
-                    selectSession={selectSession}
-                    destroySession={destroySession}
-                    openTerminal={openTerminal}
-                    openTabs={openTabs}
-                    closeTabById={closeTabById}
+                    onLogout={() => logout()}
                 />
 
-                {/* 2. SECCIÓN EXPLORADOR */}
-                <div>
-                    <div className="px-2 py-1 flex items-center justify-between">
-                         <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
-                             ARCHIVOS: {currentWorkspace?.name}
-                             {loadingDocs && <Loader2 className="w-3 h-3 animate-spin text-surface-500" />}
-                        </span>
-                    </div>
-
-                    {/* Sidebar Search */}
-                    <div className="px-2 py-1">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
-                        <input
-                          type="text"
-                          value={sidebarSearchQuery}
-                          onChange={e => setSidebarSearchQuery(e.target.value)}
-                          placeholder="Buscar..."
-                          className="w-full pl-7 pr-7 py-1.5 text-xs bg-surface-800 border border-surface-700 rounded-md text-white placeholder-surface-500 outline-none focus:border-mandy-500/50 transition"
-                        />
-                        {sidebarSearchQuery && (
-                          <button
-                            onClick={() => setSidebarSearchQuery('')}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-300"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => { setShowQuickSearch(true); setTimeout(() => quickSearchInputRef.current?.focus(), 50); }}
-                        className="w-full mt-1 px-2 py-1 text-[10px] text-surface-500 hover:text-surface-300 flex items-center gap-1 justify-center hover:bg-surface-800 rounded transition"
-                      >
-                        <kbd className="px-1 py-0.5 bg-surface-700 rounded text-[9px]">Ctrl+P</kbd>
-                        <span>Búsqueda rápida</span>
-                      </button>
-                    </div>
-
-                    <div className="mt-1 space-y-0.5">
-                        {loadingDocs && docs.length === 0 && (
-                            <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                Cargando archivos...
-                            </div>
-                        )}
-
-                        {!loadingDocs && sidebarFilteredDocs.length === 0 && (
-                            <div className="px-3 py-2 text-center text-xs text-surface-500">
-                                {sidebarSearchQuery ? 'Sin resultados' : 'Espacio vacío'}
-                            </div>
-                        )}
-
-                        {sidebarFilteredDocs.map(doc => (
-                            <div
-                                key={doc.id}
-                                onClick={() => openDocument(doc)}
-                                draggable
-                                onDragStart={(e) => handleDocDragStart(e, doc)}
-                                onDragEnd={handleDocDragEnd}
-                                className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
-                            >
-                                <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
-                                    {getIcon(doc)}
-                                </div>
-                                <span className="truncate flex-1">{doc.name}</span>
-                                <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={(e) => deleteDocument(doc, e)}
-                                        className={`text-surface-500 hover:text-mandy-400 p-0.5`}
-                                        title="Eliminar"
-                                    >
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            <div className="p-3 border-t border-surface-600/50 bg-surface-800 text-xs text-surface-500 flex justify-between items-center">
-                <span>{sidebarSearchQuery ? `${sidebarFilteredDocs.length} de ${docs.length}` : `${docs.length} archivos`}</span>
-                <div className="flex gap-2">
-                   <Settings className="w-4 h-4 hover:text-surface-300 cursor-pointer" />
-                </div>
-            </div>
-        </div>
-
-        {/* Central Pane */}
-        <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
-
-            {/* Tabs Bar */}
-            {openTabs.length > 0 && (
-                <div className="flex items-center border-b border-surface-600/50 bg-surface-800">
-                    <div className="flex-1 flex items-center overflow-x-auto scrollbar-hide">
-                        {openTabs.map(tab => (
-                            <div
-                                key={tab.id}
-                                onClick={() => {
-                                    setSelectedDocId(tab.id);
-                                    if (tab.type === 'terminal' && tab.sessionId) {
-                                        selectSession(tab.sessionId);
-                                    }
-                                }}
-                                className={`
-                                    group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-surface-600/30 select-none
-                                    ${selectedDocId === tab.id ? 'bg-surface-900 text-mandy-400 border-t-2 border-t-mandy-500' : 'text-surface-500 hover:bg-surface-700/50'}
-                                `}
-                            >
-                                {getIcon(tab)}
-                                <span className="truncate flex-1">{tab.name}</span>
-                                <button
-                                    onClick={(e) => closeTab(tab.id, e)}
-                                    className={`p-0.5 rounded-full hover:bg-surface-700 ${selectedDocId === tab.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {openTabs.length === 0 && (
-                <div className="flex items-center justify-between border-b border-surface-600/50 bg-surface-800 px-4 py-2 text-sm text-surface-400">
-                    <span>Sin pestañas abiertas</span>
-                </div>
-            )}
-
-            {/* Content Area */}
-            {mosaicNode ? (
-               <div className="flex-1 min-h-0 relative">
-                   <MosaicLayout
-                        value={mosaicNode}
-                        onChange={setMosaicNode}
-                        openTabs={openTabs}
-                        docs={docs}
-                        folders={folders}
-                        docModes={docModes}
-                        onSetDocMode={setDocMode}
-                        onCloseTab={closeTabById}
-                        onSelectDoc={openDocument}
-                        onCreateFile={() => createDoc(undefined, activeFolder)}
-                        onCreateFolder={() => createFolder()}
-                        onUploadFile={() => {
-                            setUploadTargetFolder(activeFolder);
-                            fileInputRef.current?.click();
-                        }}
-                        onUploadFolder={() => {
-                            setUploadTargetFolder(activeFolder);
-                            folderInputRef.current?.click();
-                        }}
-                        onDeleteDoc={(docId) => {
-                            const doc = docs.find(d => d.id === docId);
-                            if (doc) deleteDocument(doc, { stopPropagation: () => {} } as React.MouseEvent);
-                        }}
-                        onDeleteFolder={deleteFolder}
-                        onDeleteItems={deleteItems}
-                        onDuplicateDoc={copyDocument}
-                        onMoveDoc={moveDocumentToFolder}
+                {/* Main Layout (Sidebar + Content) */}
+                <div className="flex flex-1 overflow-hidden relative">
+                    <Sidebar
+                        sidebarWidth={sidebarWidth}
+                        showMobileSidebar={showMobileSidebar}
+                        onCloseMobileSidebar={() => setShowMobileSidebar(false)}
+                        openFilesTab={openFilesTab}
+                        createDoc={createDoc}
+                        createFolder={createFolder}
+                        setUploadTargetFolder={setUploadTargetFolder}
+                        fileInputRef={fileInputRef}
+                        folderInputRef={folderInputRef}
+                        handleFileUpload={handleFileUpload}
+                        handleFolderUpload={handleFolderUpload}
+                        folderInputProps={folderInputProps}
+                        currentWorkspace={currentWorkspace}
                         activeFolder={activeFolder}
-                        onActiveFolderChange={setActiveFolder}
-                        currentWorkspaceName={currentWorkspace?.name}
-                        currentWorkspaceId={currentWorkspace?.id}
-                        currentWorkspaceType={currentWorkspace?.type}
-                        nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
-                   />
-               </div>
-            ) : (
-                // Archivos Explorer
-                <div className="flex-1 min-h-0 flex flex-col bg-surface-900">
-                    <div className="px-6 py-4 border-b border-surface-700/60 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                            {currentWorkspace?.type === 'personal' ? <User className="w-6 h-6 text-surface-400" /> : <Briefcase className="w-6 h-6 text-mandy-400" />}
-                            <div className="flex flex-col">
-                                <span className="text-lg font-bold text-white">{currentWorkspace?.name}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-surface-400">Carpeta: {activeFolderLabel}</span>
-                                    {currentWorkspace?.id && currentWorkspace.id !== PERSONAL_WORKSPACE_ID && (
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(currentWorkspace.id);
-                                                showDialog({ type: 'info', title: 'ID copiado', message: currentWorkspace.id });
-                                            }}
-                                            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
-                                            title="Copiar ID del workspace"
-                                        >
-                                            <span className="truncate max-w-[100px]">{currentWorkspace.id}</span>
-                                            <Copy className="w-2.5 h-2.5 shrink-0" />
-                                        </button>
-                                    )}
-                                </div>
+                        connectionStatus={connectionStatus}
+                        isCreatingSession={isCreatingSession}
+                        activeSessionId={activeSessionId}
+                        getWorkerStatusForWorkspace={getWorkerStatusForWorkspace}
+                        getSessionsForWorkspace={getSessionsForWorkspace}
+                        createSession={createSession}
+                        selectSession={selectSession}
+                        destroySession={destroySession}
+                        openTerminal={openTerminal}
+                        openTabs={openTabs}
+                        closeTabById={closeTabById}
+                        user={user}
+                        loadingDocs={loadingDocs}
+                        docs={docs}
+                        sidebarSearchQuery={sidebarSearchQuery}
+                        setSidebarSearchQuery={setSidebarSearchQuery}
+                        sidebarFilteredDocs={sidebarFilteredDocs}
+                        selectedDocId={selectedDocId}
+                        openDocument={openDocument}
+                        handleDocDragStart={handleDocDragStart}
+                        handleDocDragEnd={handleDocDragEnd}
+                        deleteDocument={deleteDocument}
+                        setShowQuickSearch={setShowQuickSearch}
+                        quickSearchInputRef={quickSearchInputRef}
+                        getIcon={getIcon}
+                    />
+
+                    {/* Central Pane */}
+                    <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
+
+                        {/* Tabs Bar */}
+                        <TabsBar
+                            openTabs={openTabs}
+                            selectedDocId={selectedDocId}
+                            onSelectTab={(tab) => {
+                                setSelectedDocId(tab.id);
+                                if (tab.type === 'terminal' && tab.sessionId) {
+                                    selectSession(tab.sessionId);
+                                }
+                            }}
+                            onCloseTab={closeTab}
+                            getIcon={getIcon}
+                        />
+
+                        {/* Content Area */}
+                        {mosaicNode ? (
+                            <div className="flex-1 min-h-0 relative">
+                                <MosaicLayout
+                                    value={mosaicNode}
+                                    onChange={setMosaicNode}
+                                    openTabs={openTabs}
+                                    docs={docs}
+                                    folders={folders}
+                                    docModes={docModes}
+                                    onSetDocMode={setDocMode}
+                                    onCloseTab={closeTabById}
+                                    onSelectDoc={openDocument}
+                                    onCreateFile={() => createDoc(undefined, activeFolder)}
+                                    onCreateFolder={() => createFolder()}
+                                    onUploadFile={() => {
+                                        setUploadTargetFolder(activeFolder);
+                                        fileInputRef.current?.click();
+                                    }}
+                                    onUploadFolder={() => {
+                                        setUploadTargetFolder(activeFolder);
+                                        folderInputRef.current?.click();
+                                    }}
+                                    onDeleteDoc={(docId) => {
+                                        const doc = docs.find(d => d.id === docId);
+                                        if (doc) deleteDocument(doc, { stopPropagation: () => { } } as React.MouseEvent);
+                                    }}
+                                    onDeleteFolder={deleteFolder}
+                                    onDeleteItems={deleteItems}
+                                    onDuplicateDoc={copyDocument}
+                                    onMoveDoc={moveDocumentToFolder}
+                                    activeFolder={activeFolder}
+                                    onActiveFolderChange={setActiveFolder}
+                                    currentWorkspaceName={currentWorkspace?.name}
+                                    currentWorkspaceId={currentWorkspace?.id}
+                                    currentWorkspaceType={currentWorkspace?.type}
+                                    nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                                />
                             </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => createDoc(undefined, activeFolder)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
-                            >
-                                <Plus className="w-3.5 h-3.5" /> Nuevo Doc
-                            </button>
-                            <button
-                                onClick={() => createFolder()}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
-                            >
-                                <FolderPlus className="w-3.5 h-3.5" /> Nueva Carpeta
-                            </button>
-                            <button
-                                onClick={() => {
+                        ) : (
+                            <WorkspaceExplorer
+                                currentWorkspace={currentWorkspace}
+                                activeFolder={activeFolder}
+                                activeFolderLabel={activeFolderLabel}
+                                activeChildFolders={activeChildFolders}
+                                activeFolderDocs={activeFolderDocs}
+                                docsByFolder={docsByFolder}
+                                folderTree={renderFolderTree(ROOT_FOLDER_PATH)}
+                                folderDragOver={folderDragOver}
+                                onFolderDragOver={handleFolderDragOver}
+                                onFolderDrop={handleFolderDrop}
+                                onFolderDragLeave={handleFolderDragLeave}
+                                onDocDragStart={handleDocDragStart}
+                                onDocDragEnd={handleDocDragEnd}
+                                onActiveFolderChange={setActiveFolder}
+                                onOpenDocument={openDocument}
+                                onCreateDoc={() => createDoc(undefined, activeFolder)}
+                                onCreateFolder={() => createFolder()}
+                                onUploadFile={() => {
                                     setUploadTargetFolder(activeFolder);
                                     fileInputRef.current?.click();
                                 }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
-                            >
-                                <Upload className="w-3.5 h-3.5" /> Subir
-                            </button>
-                            <button
-                                onClick={() => {
+                                onUploadFolder={() => {
                                     setUploadTargetFolder(activeFolder);
                                     folderInputRef.current?.click();
                                 }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
-                            >
-                                <FolderUp className="w-3.5 h-3.5" /> Subir Carpeta
-                            </button>
-                        </div>
-                    </div>
-                    <div className="flex-1 min-h-0 flex">
-                        <aside className="w-64 border-r border-surface-700/60 bg-surface-800/40 flex flex-col">
-                            <div className="px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">
-                                Carpetas
-                            </div>
-                            <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-4 space-y-1">
-                                <button
-                                    onClick={() => setActiveFolder(ROOT_FOLDER_PATH)}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${activeFolder === ROOT_FOLDER_PATH ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
-                                >
-                                    {currentWorkspace?.type === 'personal'
-                                        ? <User className={`w-4 h-4 ${activeFolder === ROOT_FOLDER_PATH ? 'text-mandy-400' : 'text-surface-500'}`} />
-                                        : <Briefcase className={`w-4 h-4 ${activeFolder === ROOT_FOLDER_PATH ? 'text-mandy-400' : 'text-surface-500'}`} />
-                                    }
-                                    <span className="text-sm font-semibold truncate flex-1">{currentWorkspace?.name || 'Espacio Personal'}</span>
-                                    <span className="text-[10px] text-surface-500">Raiz</span>
-                                </button>
-                                {renderFolderTree(ROOT_FOLDER_PATH)}
-                            </div>
-                        </aside>
-                        <section className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
-                            <div className="px-6 py-4 text-xs text-surface-400 uppercase tracking-wider">
-                                Documentos
-                            </div>
-                            <div className="px-4 pb-6 space-y-1">
-                                {activeChildFolders.map(folder => {
-                                    const count = docsByFolder[folder.path]?.length ?? 0;
-                                    const isDropActive = folderDragOver === folder.path;
-                                    return (
-                                        <div
-                                            key={folder.path}
-                                            onClick={() => setActiveFolder(folder.path)}
-                                            onDragOver={(e) => handleFolderDragOver(e, folder.path)}
-                                            onDrop={(e) => handleFolderDrop(e, folder.path)}
-                                            onDragLeave={() => handleFolderDragLeave(folder.path)}
-                                            className={`group flex items-center gap-3 px-4 py-3 rounded-lg border transition cursor-pointer ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'}`}
-                                        >
-                                            <Folder className="w-4 h-4 text-surface-500" />
-                                            <div className="flex flex-col min-w-0 flex-1">
-                                                <span className="text-sm font-semibold text-surface-200 truncate">{folder.name}</span>
-                                                <span className="text-[11px] text-surface-500 truncate">{folder.path}</span>
-                                            </div>
-                                            <span className="text-[10px] text-surface-500">{count}</span>
-                                        </div>
-                                    );
-                                })}
-                                {activeChildFolders.length === 0 && activeFolderDocs.length === 0 ? (
-                                    <div className="px-4 py-6 text-sm text-surface-500">
-                                        {activeFolder === ROOT_FOLDER_PATH ? 'Este espacio está vacío.' : 'Esta carpeta está vacía.'}
-                                    </div>
-                                ) : activeFolderDocs.map(doc => (
-                                    <div
-                                        key={doc.id}
-                                        onClick={() => openDocument(doc)}
-                                        draggable
-                                        onDragStart={(e) => handleDocDragStart(e, doc)}
-                                        onDragEnd={handleDocDragEnd}
-                                        className="group flex items-center gap-3 px-4 py-3 rounded-lg border border-surface-800/80 bg-surface-800/40 hover:bg-surface-800/70 hover:border-surface-600/80 transition cursor-pointer"
-                                    >
-                                        <div className="text-surface-500">{getIcon(doc)}</div>
-                                        <div className="flex flex-col min-w-0 flex-1">
-                                            <span className="text-sm font-semibold text-surface-200 truncate">{doc.name}</span>
-                                            <span className="text-[11px] text-surface-500 truncate">{doc.folder || DEFAULT_FOLDER_NAME}</span>
-                                        </div>
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
-                                            {getDocBadge(doc)}
-                                        </span>
-                                        <div className="ml-auto flex items-center gap-2">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    copyDocument(doc);
-                                                }}
-                                                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
-                                                title="Duplicar"
-                                            >
-                                                <Copy className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    promptMoveDocument(doc);
-                                                }}
-                                                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
-                                                title="Mover"
-                                            >
-                                                <FolderInput className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => deleteDocument(doc, e)}
-                                                className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
-                                                title="Eliminar"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </section>
-                    </div>
-                </div>
-            )}
-        </div>
-      </div>
-
-      {/* Modals */}
-      <AnimatePresence>
-        {showNewWorkspaceModal && (
-            <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-            >
-                <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/50 p-6 w-full max-w-sm border border-surface-600/50">
-                    <h2 className="text-lg font-bold mb-4 text-white">Nuevo Espacio de Trabajo</h2>
-                    <input
-                        type="text"
-                        placeholder="Nombre, ej: Grupo Física"
-                        value={newWorkspaceName}
-                        onChange={(e) => setNewWorkspaceName(e.target.value)}
-                        className="w-full px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg mb-4 text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                        autoFocus
-                    />
-                    <div className="flex gap-2 justify-end">
-                        <button onClick={() => setShowNewWorkspaceModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:bg-surface-700 rounded-lg">Cancelar</button>
-                        <button onClick={createWorkspace} disabled={!newWorkspaceName.trim()} className="px-4 py-2 text-sm bg-gradient-mandy text-white rounded-lg hover:opacity-90 disabled:opacity-50">Crear</button>
-                    </div>
-                </div>
-            </motion.div>
-        )}
-
-        {showMembersModal && currentWorkspace && (
-             <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-            >
-                <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/50 p-6 w-full max-w-md border border-surface-600/50">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-bold flex items-center gap-2 text-white">
-                            <Users className="w-5 h-5 text-mandy-400" />
-                            Miembros de {currentWorkspace.name}
-                        </h2>
-                        <button onClick={() => setShowMembersModal(false)} className="p-1 hover:bg-surface-700 rounded-full text-surface-400"><X className="w-4 h-4" /></button>
-                    </div>
-
-                    <div className="mb-6">
-                        <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Invitar por Email</label>
-                        <div className="flex gap-2">
-                             <input
-                                type="email"
-                                placeholder="usuario@ejemplo.com"
-                                value={inviteEmail}
-                                onChange={(e) => setInviteEmail(e.target.value)}
-                                className="flex-1 px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
+                                onCopyWorkspaceId={(id) => {
+                                    navigator.clipboard.writeText(id);
+                                    showDialog({ type: 'info', title: 'ID copiado', message: id });
+                                }}
+                                onCopyDocument={copyDocument}
+                                onMoveDocument={promptMoveDocument}
+                                onDeleteDocument={deleteDocument}
+                                getIcon={getIcon}
+                                getDocBadge={getDocBadge}
+                                personalWorkspaceId={PERSONAL_WORKSPACE_ID}
+                                rootFolderPath={ROOT_FOLDER_PATH}
+                                defaultFolderName={DEFAULT_FOLDER_NAME}
                             />
-                            <button onClick={inviteMember} className="bg-gradient-mandy text-white px-4 py-2 rounded-lg text-sm hover:opacity-90">Enviar</button>
-                        </div>
-                    </div>
+                        )}
 
-                    <div className="space-y-3">
-                         <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Miembros ({currentWorkspace.members.length})</label>
-                         <div className="max-h-48 overflow-y-auto scrollbar-hide pr-2 space-y-2">
-                            {currentWorkspace.members.map((uid) => (
-                                <div key={uid} className="flex items-center justify-between p-2 bg-surface-700 rounded-lg text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 bg-mandy-500/15 text-mandy-400 rounded-full flex items-center justify-center text-xs font-bold">
-                                            U
-                                        </div>
-                                        <span className="text-surface-300 font-mono text-xs">{uid.substring(0, 8)}...</span>
-                                        {uid === currentWorkspace.ownerId && <span className="bg-accent-purple/20 text-accent-purple-light text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
-                                    </div>
-                                    <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
-                                </div>
-                            ))}
-                         </div>
                     </div>
                 </div>
-             </motion.div>
-        )}
 
-        {/* Modal Cambiar Contraseña */}
-        {showPasswordModal && (
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-                onClick={() => setShowPasswordModal(false)}
-            >
-                <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="bg-surface-800 rounded-2xl border border-surface-600/50 p-6 w-full max-w-md shadow-2xl"
-                >
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                            <Key className="w-5 h-5 text-mandy-400" />
-                            Cambiar Contraseña
-                        </h2>
-                        <button onClick={() => setShowPasswordModal(false)} className="p-1 hover:bg-surface-700 rounded-full text-surface-400">
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-
-                    {passwordSuccess ? (
-                        <div className="text-center py-8">
-                            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Check className="w-8 h-8 text-green-400" />
-                            </div>
-                            <h3 className="text-lg font-semibold text-white mb-2">¡Contraseña actualizada!</h3>
-                            <p className="text-surface-400 text-sm">Tu contraseña ha sido cambiada exitosamente.</p>
-                            <button
-                                onClick={() => setShowPasswordModal(false)}
-                                className="mt-6 px-6 py-2 bg-gradient-mandy text-white rounded-lg hover:opacity-90"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
-                    ) : (
-                        <form
-                            onSubmit={async (e) => {
-                                e.preventDefault();
-                                setPasswordError('');
-
-                                if (passwordForm.new !== passwordForm.confirm) {
-                                    setPasswordError('Las contraseñas nuevas no coinciden');
-                                    return;
-                                }
-
-                                if (passwordForm.new.length < 6) {
-                                    setPasswordError('La nueva contraseña debe tener al menos 6 caracteres');
-                                    return;
-                                }
-
-                                setIsChangingPassword(true);
-                                try {
-                                    await changePassword(passwordForm.current, passwordForm.new);
-                                    setPasswordSuccess(true);
-                                } catch (err: any) {
-                                    setPasswordError(err.message || 'Error al cambiar la contraseña');
-                                } finally {
-                                    setIsChangingPassword(false);
-                                }
-                            }}
-                            className="space-y-4"
+                {/* Modals */}
+                <AnimatePresence>
+                    {showNewWorkspaceModal && (
+                        <m.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            transition={modalFade}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] motion-reduce:backdrop-blur-none p-4"
                         >
-                            <div>
-                                <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
-                                    Contraseña Actual
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="password"
-                                        value={passwordForm.current}
-                                        onChange={(e) => setPasswordForm(prev => ({ ...prev, current: e.target.value }))}
-                                        className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                        placeholder="••••••••"
-                                        required
-                                    />
+                            <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-sm border border-surface-600/50">
+                                <h2 className="text-lg font-bold mb-4 text-white">Nuevo Espacio de Trabajo</h2>
+                                <input
+                                    type="text"
+                                    placeholder="Nombre, ej: Grupo Física"
+                                    value={newWorkspaceName}
+                                    onChange={(e) => setNewWorkspaceName(e.target.value)}
+                                    className="w-full px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg mb-4 text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
+                                    autoFocus
+                                />
+                                <div className="flex gap-2 justify-end">
+                                    <button onClick={() => setShowNewWorkspaceModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:bg-surface-700 rounded-lg">Cancelar</button>
+                                    <button onClick={createWorkspace} disabled={!newWorkspaceName.trim()} className="px-4 py-2 text-sm bg-gradient-mandy text-white rounded-lg hover:opacity-90 disabled:opacity-50">Crear</button>
                                 </div>
                             </div>
-
-                            <div>
-                                <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
-                                    Nueva Contraseña
-                                </label>
-                                <input
-                                    type="password"
-                                    value={passwordForm.new}
-                                    onChange={(e) => setPasswordForm(prev => ({ ...prev, new: e.target.value }))}
-                                    className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                    placeholder="Mínimo 6 caracteres"
-                                    required
-                                    minLength={6}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
-                                    Confirmar Nueva Contraseña
-                                </label>
-                                <input
-                                    type="password"
-                                    value={passwordForm.confirm}
-                                    onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
-                                    className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                    placeholder="Repite la nueva contraseña"
-                                    required
-                                />
-                            </div>
-
-                            {passwordError && (
-                                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                                    {passwordError}
-                                </div>
-                            )}
-
-                            <div className="flex gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPasswordModal(false)}
-                                    className="flex-1 px-4 py-3 bg-surface-700 text-surface-300 rounded-lg hover:bg-surface-600 transition"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isChangingPassword}
-                                    className="flex-1 px-4 py-3 bg-gradient-mandy text-white rounded-lg hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {isChangingPassword ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Cambiando...
-                                        </>
-                                    ) : (
-                                        'Cambiar Contraseña'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                        </m.div>
                     )}
-                </motion.div>
-            </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+
+                    {showMembersModal && currentWorkspace && (
+                        <m.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            transition={modalFade}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] motion-reduce:backdrop-blur-none p-4"
+                        >
+                            <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-md border border-surface-600/50">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-lg font-bold flex items-center gap-2 text-white">
+                                        <Users className="w-5 h-5 text-mandy-400" />
+                                        Miembros de {currentWorkspace.name}
+                                    </h2>
+                                    <button onClick={() => setShowMembersModal(false)} className="p-1 hover:bg-surface-700 rounded-full text-surface-400"><X className="w-4 h-4" /></button>
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Invitar por Email</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="email"
+                                            placeholder="usuario@ejemplo.com"
+                                            value={inviteEmail}
+                                            onChange={(e) => setInviteEmail(e.target.value)}
+                                            className="flex-1 px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
+                                        />
+                                        <button onClick={inviteMember} className="bg-gradient-mandy text-white px-4 py-2 rounded-lg text-sm hover:opacity-90">Enviar</button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Miembros ({currentWorkspace.members.length})</label>
+                                    <div className="max-h-48 overflow-y-auto scrollbar-hide pr-2 space-y-2">
+                                        {currentWorkspace.members.map((uid) => (
+                                            <div key={uid} className="flex items-center justify-between p-2 bg-surface-700 rounded-lg text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 bg-mandy-500/15 text-mandy-400 rounded-full flex items-center justify-center text-xs font-bold">
+                                                        U
+                                                    </div>
+                                                    <span className="text-surface-300 font-mono text-xs">{uid.substring(0, 8)}...</span>
+                                                    {uid === currentWorkspace.ownerId && <span className="bg-accent-purple/20 text-accent-purple-light text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
+                                                </div>
+                                                <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </m.div>
+                    )}
+
+                    {/* Modal Cambiar Contraseña */}
+                    {showPasswordModal && (
+                        <m.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={modalFade}
+                            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+                            onClick={() => setShowPasswordModal(false)}
+                        >
+                            <m.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                transition={modalPop}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-surface-800 rounded-2xl border border-surface-600/50 p-6 w-full max-w-md shadow-xl"
+                            >
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <Key className="w-5 h-5 text-mandy-400" />
+                                        Cambiar Contraseña
+                                    </h2>
+                                    <button onClick={() => setShowPasswordModal(false)} className="p-1 hover:bg-surface-700 rounded-full text-surface-400">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                {passwordSuccess ? (
+                                    <div className="text-center py-8">
+                                        <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <Check className="w-8 h-8 text-green-400" />
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-white mb-2">¡Contraseña actualizada!</h3>
+                                        <p className="text-surface-400 text-sm">Tu contraseña ha sido cambiada exitosamente.</p>
+                                        <button
+                                            onClick={() => setShowPasswordModal(false)}
+                                            className="mt-6 px-6 py-2 bg-gradient-mandy text-white rounded-lg hover:opacity-90"
+                                        >
+                                            Cerrar
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <form
+                                        onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            setPasswordError('');
+
+                                            if (passwordForm.new !== passwordForm.confirm) {
+                                                setPasswordError('Las contraseñas nuevas no coinciden');
+                                                return;
+                                            }
+
+                                            if (passwordForm.new.length < 6) {
+                                                setPasswordError('La nueva contraseña debe tener al menos 6 caracteres');
+                                                return;
+                                            }
+
+                                            setIsChangingPassword(true);
+                                            try {
+                                                await changePassword(passwordForm.current, passwordForm.new);
+                                                setPasswordSuccess(true);
+                                            } catch (err: any) {
+                                                setPasswordError(err.message || 'Error al cambiar la contraseña');
+                                            } finally {
+                                                setIsChangingPassword(false);
+                                            }
+                                        }}
+                                        className="space-y-4"
+                                    >
+                                        <div>
+                                            <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
+                                                Contraseña Actual
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type="password"
+                                                    value={passwordForm.current}
+                                                    onChange={(e) => setPasswordForm(prev => ({ ...prev, current: e.target.value }))}
+                                                    className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
+                                                    placeholder="••••••••"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
+                                                Nueva Contraseña
+                                            </label>
+                                            <input
+                                                type="password"
+                                                value={passwordForm.new}
+                                                onChange={(e) => setPasswordForm(prev => ({ ...prev, new: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
+                                                placeholder="Mínimo 6 caracteres"
+                                                required
+                                                minLength={6}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
+                                                Confirmar Nueva Contraseña
+                                            </label>
+                                            <input
+                                                type="password"
+                                                value={passwordForm.confirm}
+                                                onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
+                                                placeholder="Repite la nueva contraseña"
+                                                required
+                                            />
+                                        </div>
+
+                                        {passwordError && (
+                                            <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                                                {passwordError}
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPasswordModal(false)}
+                                                className="flex-1 px-4 py-3 bg-surface-700 text-surface-300 rounded-lg hover:bg-surface-600 transition"
+                                            >
+                                                Cancelar
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={isChangingPassword}
+                                                className="flex-1 px-4 py-3 bg-gradient-mandy text-white rounded-lg hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                                            >
+                                                {isChangingPassword ? (
+                                                    <>
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                        Cambiando...
+                                                    </>
+                                                ) : (
+                                                    'Cambiar Contraseña'
+                                                )}
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+                            </m.div>
+                        </m.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        </LazyMotion>
+    );
 }

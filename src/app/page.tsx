@@ -2,13 +2,21 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { motion } from 'framer-motion';
+import { LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
 import { BookOpen, Edit3, Cloud, Users, ArrowRight } from 'lucide-react';
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
+  const reduceMotion = useReducedMotion();
+  const heroTransition = { duration: reduceMotion ? 0.01 : 0.3, ease: 'easeOut' };
+  const cardTransition = (index: number) => ({
+    delay: reduceMotion ? 0 : index * 0.12,
+    duration: reduceMotion ? 0.01 : 0.25,
+    ease: 'easeOut'
+  });
 
   return (
+    <LazyMotion features={domAnimation}>
     <div className="min-h-screen flex flex-col bg-surface-900 text-white">
       <header className="sticky top-0 z-50 w-full border-b border-surface-600/50 bg-surface-900/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -41,10 +49,10 @@ export default function LandingPage() {
         <section className="relative py-20 lg:py-32 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-glow opacity-60" />
             <div className="container mx-auto px-4 text-center relative z-10">
-                <motion.div
+                <m.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
+                    transition={heroTransition}
                     className="max-w-3xl mx-auto space-y-8"
                 >
                     <h1 className="text-4xl lg:text-6xl font-extrabold tracking-tight text-white">
@@ -64,7 +72,7 @@ export default function LandingPage() {
                             Saber más
                         </a>
                     </div>
-                </motion.div>
+                </m.div>
             </div>
         </section>
 
@@ -81,12 +89,12 @@ export default function LandingPage() {
                         { icon: Cloud, title: 'Sincronización Cloud', desc: 'Tus textos guardados automáticamente en la nube, accesibles desde donde sea.' },
                         { icon: Users, title: 'Tiempo Real', desc: 'Colabora con compañeros o profesores en el mismo documento simultáneamente.' }
                     ].map((feature, i) => (
-                        <motion.div
+                        <m.div
                             key={i}
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
-                            transition={{ delay: i * 0.2 }}
+                            transition={cardTransition(i)}
                             className="bg-surface-700/50 p-8 rounded-2xl hover:bg-surface-700/80 transition border border-surface-600/50 backdrop-blur-sm"
                         >
                             <div className="bg-mandy-500/10 w-12 h-12 rounded-lg flex items-center justify-center text-mandy-500 mb-6">
@@ -94,7 +102,7 @@ export default function LandingPage() {
                             </div>
                             <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
                             <p className="text-surface-400">{feature.desc}</p>
-                        </motion.div>
+                        </m.div>
                     ))}
                 </div>
             </div>
@@ -113,5 +121,6 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+    </LazyMotion>
   );
 }
