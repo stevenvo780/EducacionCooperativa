@@ -20,9 +20,10 @@ export async function GET(req: NextRequest) {
     workspaces = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     if (auth.email) {
+      const normalizedEmail = auth.email.toLowerCase().trim();
       const inviteSnap = await adminDb
         .collection('workspaces')
-        .where('pendingInvites', 'array-contains', auth.email)
+        .where('pendingInvites', 'array-contains', normalizedEmail)
         .get();
       invites = inviteSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
