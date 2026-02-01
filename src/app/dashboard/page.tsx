@@ -194,6 +194,14 @@ export default function DashboardPage() {
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
+    const resolveActiveFolder = useCallback((path?: string) => {
+        if (path === ROOT_FOLDER_PATH) return ROOT_FOLDER_PATH;
+        return normalizeFolderPath(path);
+    }, []);
+
+    const setActiveFolderSafe = useCallback((path: string) => {
+        setActiveFolder(resolveActiveFolder(path));
+    }, [resolveActiveFolder]);
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
@@ -427,7 +435,9 @@ export default function DashboardPage() {
         const persisted = loadDashboardState(currentWorkspaceId);
         if (persisted) {
             if (persisted.sidebarWidth) setSidebarWidth(persisted.sidebarWidth);
-            if (persisted.activeFolder) setActiveFolder(persisted.activeFolder);
+            if (typeof persisted.activeFolder === 'string') {
+                setActiveFolderSafe(persisted.activeFolder);
+            }
             if (persisted.docModes) setDocModes(persisted.docModes);
         } else {
             setDocModes({});
@@ -438,7 +448,7 @@ export default function DashboardPage() {
         setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspaceId]: false }));
         setStateRestoredForWorkspace(null);
         clearActiveSession();
-    }, [currentWorkspaceId, clearActiveSession]);
+    }, [currentWorkspaceId, clearActiveSession, setActiveFolderSafe]);
 
     useEffect(() => {
         if (!currentWorkspace || !user) return;
@@ -528,10 +538,10 @@ export default function DashboardPage() {
         if (currentWorkspaceId) {
             const persisted = loadDashboardState(currentWorkspaceId);
             if (!persisted?.activeFolder) {
-                setActiveFolder(ROOT_FOLDER_PATH);
+                setActiveFolderSafe(ROOT_FOLDER_PATH);
             }
         }
-    }, [currentWorkspaceId]);
+    }, [currentWorkspaceId, setActiveFolderSafe]);
 
     useEffect(() => {
         return () => {
@@ -652,7 +662,7 @@ export default function DashboardPage() {
 
     const openDocument = async (doc: DocItem) => {
         if (doc.type === 'folder') return;
-        setActiveFolder(normalizeFolderPath(doc.folder));
+        setActiveFolderSafe(normalizeFolderPath(doc.folder));
         setOpenTabs(prev => {
             if (prev.find(t => t.id === doc.id)) {
                 return prev;
@@ -1063,7 +1073,7 @@ export default function DashboardPage() {
             return (
                 <div key={folder.path}>
                     <button
-                        onClick={() => setActiveFolder(folder.path)}
+                        onClick={() => setActiveFolderSafe(folder.path)}
                         onDragOver={(e) => handleFolderDragOver(e, folder.path)}
                         onDrop={(e) => handleFolderDrop(e, folder.path)}
                         onDragLeave={() => handleFolderDragLeave(folder.path)}
@@ -1083,14 +1093,14 @@ export default function DashboardPage() {
     useEffect(() => {
         if (activeFolder === ROOT_FOLDER_PATH) return;
         if (folders.length === 0) {
-            setActiveFolder(ROOT_FOLDER_PATH);
+            setActiveFolderSafe(ROOT_FOLDER_PATH);
             return;
         }
         const exists = folders.some(folder => folder.path === activeFolder);
         if (!exists) {
             const rootFolders = folderChildrenMap[ROOT_FOLDER_PATH] ?? [];
             const fallback = rootFolders[0]?.path || ROOT_FOLDER_PATH;
-            setActiveFolder(fallback);
+            setActiveFolderSafe(fallback);
         }
     }, [folders, activeFolder, folderChildrenMap]);
 
@@ -1422,7 +1432,7 @@ export default function DashboardPage() {
                         folderInputProps={folderInputProps}
                         currentWorkspace={currentWorkspace}
                         activeFolder={activeFolder}
-                        setActiveFolder={setActiveFolder}
+                        setActiveFolder={setActiveFolderSafe}
                         folders={folders}
                         connectionStatus={connectionStatus}
                         isCreatingSession={isCreatingSession}
@@ -1504,7 +1514,7 @@ export default function DashboardPage() {
                                             onDuplicateDoc={copyDocument}
                                             onMoveDoc={moveDocumentToFolder}
                                             activeFolder={activeFolder}
-                                            onActiveFolderChange={setActiveFolder}
+                                            onActiveFolderChange={setActiveFolderSafe}
                                             currentWorkspaceName={currentWorkspace?.name}
                                             currentWorkspaceId={currentWorkspace?.id}
                                             currentWorkspaceType={currentWorkspace?.type}
@@ -1526,7 +1536,7 @@ export default function DashboardPage() {
                                         onFolderDragLeave={handleFolderDragLeave}
                                         onDocDragStart={handleDocDragStart}
                                         onDocDragEnd={handleDocDragEnd}
-                                        onActiveFolderChange={setActiveFolder}
+                                        onActiveFolderChange={setActiveFolderSafe}
                                         onOpenDocument={openDocument}
                                         onCreateDoc={() => createDoc(undefined, activeFolder)}
                                         onCreateFolder={() => createFolder()}
