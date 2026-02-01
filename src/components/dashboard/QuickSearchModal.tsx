@@ -44,7 +44,8 @@ const QuickSearchModal = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={modalFade}
-          className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-black/60 backdrop-blur-[2px] motion-reduce:backdrop-blur-none"
+          className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-black/70"
+          style={{ willChange: 'opacity' }}
           onClick={onClose}
         >
           <m.div
@@ -52,7 +53,8 @@ const QuickSearchModal = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -20 }}
             transition={modalPop}
-            className="w-full max-w-xl bg-surface-800 border border-surface-600 rounded-xl shadow-xl overflow-hidden"
+            className="w-full max-w-xl bg-surface-800 border border-surface-600 rounded-xl shadow-xl overflow-hidden transform-gpu"
+            style={{ willChange: 'transform, opacity' }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-700">
