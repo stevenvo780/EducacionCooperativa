@@ -141,7 +141,6 @@ const Sidebar = ({
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
 
-  // Reset expanded/collapsed folders when workspace changes
   useEffect(() => {
     setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
     setCollapsedByUser(new Set());
@@ -215,7 +214,6 @@ const Sidebar = ({
       else next.add(path);
       return next;
     });
-    // Track if user explicitly collapsed the default folder
     if (path === DEFAULT_FOLDER_NAME) {
       setCollapsedByUser(prev => {
         const next = new Set(prev);
@@ -239,7 +237,6 @@ const Sidebar = ({
         const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
         items.push({ kind: 'folder', folder, depth, hasChildren });
 
-        // Default folder is ALWAYS expanded unless user explicitly collapsed it
         const isDefaultFolder = folder.path === DEFAULT_FOLDER_NAME;
         const isUserCollapsed = collapsedByUser.has(folder.path);
         const shouldExpand = isDefaultFolder
@@ -247,9 +244,7 @@ const Sidebar = ({
           : expandedFolders.has(folder.path);
 
         if (shouldExpand) {
-          // First add subfolders recursively
           walk(folder.path, depth + 1);
-          // Then add files at this level
           for (const doc of folderFiles) {
             items.push({ kind: 'doc', doc, depth: depth + 1 });
           }

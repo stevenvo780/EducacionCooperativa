@@ -9,7 +9,6 @@ const getAuthToken = async () => {
       return await user.getIdToken();
     }
   } catch {
-    // ignore
   }
   return null;
 };
