@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { hashPassword } from '@/lib/crypto';
 
 export async function POST(req: NextRequest) {
@@ -26,11 +26,15 @@ export async function POST(req: NextRequest) {
              return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
+        // Generate a custom token for the user to authenticate with the Hub
+        const customToken = await adminAuth.createCustomToken(userDoc.id);
+
         return NextResponse.json({
             uid: userDoc.id,
             email: userData.email,
             displayName: userData.displayName || 'User',
-            photoURL: userData.photoURL || null
+            photoURL: userData.photoURL || null,
+            customToken
         }, { status: 200 });
 
     } catch (error: any) {

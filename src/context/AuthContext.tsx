@@ -7,7 +7,7 @@ import {
     signOut,
     sendPasswordResetEmail
 } from 'firebase/auth';
-import { auth as getAuth, googleProvider as getGoogleProvider } from '@/lib/firebase';
+import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomToken } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -47,7 +47,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const storedUser = localStorage.getItem('agora_user');
         if (storedUser) {
             try {
-                setUser(JSON.parse(storedUser));
+                const parsedUser = JSON.parse(storedUser);
+                const restoredUserObj = {
+                    ...parsedUser,
+                    getIdToken: async () => parsedUser.uid
+                } as unknown as User;
+                setUser(restoredUserObj);
                 setLoading(false);
                 return;
             } catch (e) {
@@ -108,6 +113,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const userData = await res.json();
 
+        // Sign in with custom token to get a real Firebase session
+        if (userData.customToken) {
+            try {
+                const userCredential = await signInWithCustomToken(userData.customToken);
+                // The onAuthStateChanged listener will handle setting the user
+                router.push('/dashboard');
+                return;
+            } catch (tokenError) {
+                console.warn('Custom token sign-in failed, using fallback:', tokenError);
+            }
+        }
+
+        // Fallback for when custom token fails (shouldn't happen in normal flow)
         const userObj = {
             uid: userData.uid,
             email: userData.email,
@@ -141,6 +159,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const userData = await res.json();
 
+        // Sign in with custom token to get a real Firebase session
+        if (userData.customToken) {
+            try {
+                await signInWithCustomToken(userData.customToken);
+                // The onAuthStateChanged listener will handle setting the user
+                router.push('/dashboard');
+                return;
+            } catch (tokenError) {
+                console.warn('Custom token sign-in failed, using fallback:', tokenError);
+            }
+        }
+
+        // Fallback
         const userObj = {
             uid: userData.uid,
             email: userData.email,
