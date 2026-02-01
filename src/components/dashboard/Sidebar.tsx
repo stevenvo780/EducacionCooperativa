@@ -221,7 +221,7 @@ const Sidebar = ({
       <div
         style={{ width: sidebarWidth }}
         className={`
-          bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 transition-transform duration-200 absolute md:relative z-40 h-full
+          bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 transition-transform duration-150 absolute md:relative z-40 h-full
           ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >

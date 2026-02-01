@@ -31,7 +31,8 @@ const DialogModal = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={modalFade}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] motion-reduce:backdrop-blur-none p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          style={{ willChange: 'opacity' }}
           onClick={() => {
             if (dialogConfig.type === 'confirm' || dialogConfig.type === 'input') onCancel();
           }}
@@ -41,7 +42,8 @@ const DialogModal = ({
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.96, opacity: 0 }}
             transition={modalPop}
-            className="w-full max-w-sm bg-surface-800 border border-surface-600/60 rounded-2xl shadow-xl shadow-black/30"
+            className="w-full max-w-sm bg-surface-800 border border-surface-600/60 rounded-2xl shadow-xl shadow-black/30 transform-gpu"
+            style={{ willChange: 'transform, opacity' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 flex items-start justify-between gap-3">
