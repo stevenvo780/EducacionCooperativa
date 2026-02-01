@@ -594,29 +594,37 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   return (
     <div className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
-      <div className="flex items-center justify-between p-3 border-b border-surface-700">
-        <div className="flex items-center gap-2">
-          <Folder className="w-5 h-5 text-amber-400" />
-          <div className="flex flex-col">
-            <span className="font-medium text-sm">{currentWorkspaceName}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-500 truncate">Carpeta: {activeFolder}</span>
-              {currentWorkspaceId && currentWorkspaceId !== 'personal' && (
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(currentWorkspaceId);
-                  }}
-                  className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
-                  title="Copiar ID del workspace"
-                >
-                  <span className="truncate max-w-[80px]">{currentWorkspaceId}</span>
-                  <Copy className="w-2 h-2 shrink-0" />
-                </button>
-              )}
-            </div>
+      <div className="flex items-center gap-3 px-3 py-2 border-b border-surface-700">
+        <div className="flex items-center gap-2 shrink-0">
+          <Folder className="w-4 h-4 text-amber-400" />
+          <span className="font-medium text-sm truncate max-w-[120px]">{currentWorkspaceName}</span>
+          {currentWorkspaceId && currentWorkspaceId !== 'personal' && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(currentWorkspaceId);
+              }}
+              className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
+              title="Copiar ID del workspace"
+            >
+              <Copy className="w-2.5 h-2.5 shrink-0" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar..."
+              className="w-full pl-7 pr-3 py-1 bg-surface-800 border border-surface-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50"
+            />
           </div>
         </div>
-        <div className="flex items-center gap-1">
+
+        <div className="flex items-center gap-0.5 shrink-0">
           {onCreateFile && (
             <button
               onClick={onCreateFile}
@@ -653,19 +661,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               <FolderInput className="w-4 h-4 text-slate-400" />
             </button>
           )}
-        </div>
-      </div>
-
-      <div className="p-2 border-b border-surface-700">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar archivos..."
-            className="w-full pl-8 pr-3 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50"
-          />
         </div>
       </div>
 
