@@ -96,11 +96,10 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         controllerRef.current = controller;
 
         try {
-            let actualToken = 'mock-token';
-            if (currentUser.getIdToken) {
-                const token = await currentUser.getIdToken();
-                actualToken = token.includes('.') ? token : 'mock-token';
+            if (!currentUser.getIdToken) {
+                throw new Error('User does not have getIdToken method - Firebase auth required');
             }
+            const actualToken = await currentUser.getIdToken();
 
             controller.connect(
                 actualToken,
