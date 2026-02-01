@@ -33,7 +33,7 @@ export interface UploadStatus {
   currentIndex: number;
   currentName: string;
   progress: number;
-  phase: 'uploading' | 'done' | 'error';
+  phase: 'uploading' | 'converting' | 'done' | 'error';
   error?: string;
 }
 
