@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
@@ -69,9 +69,15 @@ function getGoogleProvider(): GoogleAuthProvider {
   return googleProvider;
 }
 
+async function signInWithCustomTokenWrapper(customToken: string) {
+  const firebaseAuth = getFirebaseAuth();
+  return signInWithCustomToken(firebaseAuth, customToken);
+}
+
 export {
   getFirebaseAuth as auth,
   getFirebaseDb as db,
   getFirebaseStorage as storage,
-  getGoogleProvider as googleProvider
+  getGoogleProvider as googleProvider,
+  signInWithCustomTokenWrapper as signInWithCustomToken
 };
