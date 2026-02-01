@@ -1,31 +1,53 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 export async function POST(req: NextRequest) {
     try {
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const body = await req.json();
-        const { name, content, type, ownerId, workspaceId, folder, mimeType, url, storagePath } = body;
+        const { name, content, type, workspaceId, folder, mimeType, url, storagePath } = body;
         const normalizedFolder = typeof folder === 'string' ? folder : 'No estructurado';
+        const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : 'personal';
+        const ownerId = auth.uid;
+
+        if (resolvedWorkspaceId !== 'personal') {
+            const member = await isWorkspaceMember(resolvedWorkspaceId, auth.uid);
+            if (!member) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        }
 
         const docData: Record<string, unknown> = {
             name: name || 'Sin título',
             content: content ?? '',
             type: type || 'text',
             mimeType: mimeType || null,
-            ownerId: ownerId || 'unknown',
-            workspaceId: workspaceId ?? 'personal',
+            ownerId,
+            workspaceId: resolvedWorkspaceId,
             folder: normalizedFolder,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
         };
 
-        if (typeof url === 'string') {
-            docData.url = url;
-        }
+        const allowedPrefix = resolvedWorkspaceId === 'personal'
+            ? `users/${ownerId}/`
+            : `workspaces/${resolvedWorkspaceId}/`;
 
         if (typeof storagePath === 'string') {
+            if (!storagePath.startsWith(allowedPrefix)) {
+                return NextResponse.json({ error: 'Invalid storagePath' }, { status: 403 });
+            }
             docData.storagePath = storagePath;
+        }
+
+        if (typeof url === 'string' && docData.storagePath) {
+            docData.url = url;
         } else if (!storagePath && (!type || type === 'text' || type === 'markdown')) {
              try {
                  const bucket = adminStorage.bucket();
@@ -33,14 +55,14 @@ export async function POST(req: NextRequest) {
                      const safeName = (name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
                      const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
 
-                     let path = `users/${ownerId || 'unknown'}/${fname}`;
-                     if (workspaceId && workspaceId !== 'personal') {
-                         path = `workspaces/${workspaceId}/${fname}`;
+                     let path = `users/${ownerId}/${fname}`;
+                     if (resolvedWorkspaceId && resolvedWorkspaceId !== 'personal') {
+                         path = `workspaces/${resolvedWorkspaceId}/${fname}`;
                      }
 
                      await bucket.file(path).save(content ?? '', {
                         contentType: 'text/markdown',
-                        metadata: { ownerId: ownerId || 'unknown' }
+                        metadata: { ownerId }
                      });
 
                      docData.storagePath = path;
@@ -61,8 +83,12 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     try {
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(req.url);
-        const ownerId = searchParams.get('ownerId');
         const workspaceId = searchParams.get('workspaceId');
         const view = searchParams.get('view');
         const includeContentParam = searchParams.get('includeContent');
@@ -80,14 +106,17 @@ export async function GET(req: NextRequest) {
 
         let query: FirebaseFirestore.Query = adminDb.collection('documents');
 
-        const isPersonalWorkspace = workspaceId === 'personal';
-
-        if (isPersonalWorkspace && ownerId) {
-            query = query.where('ownerId', '==', ownerId);
-        } else if (workspaceId) {
+        if (workspaceId && workspaceId !== 'personal') {
+            const member = await isWorkspaceMember(workspaceId, auth.uid);
+            if (!member) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
             query = query.where('workspaceId', '==', workspaceId);
-        } else if (ownerId) {
-            query = query.where('ownerId', '==', ownerId);
+        } else {
+            query = query.where('ownerId', '==', auth.uid);
+            if (workspaceId === 'personal') {
+                query = query.where('workspaceId', '==', 'personal');
+            }
         }
 
         if (!shouldIncludeContent) {

@@ -1,32 +1,28 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/server-auth';
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const ownerId = searchParams.get('ownerId');
-    const email = searchParams.get('email');
-
-    if (!ownerId && !email) {
-      return NextResponse.json({ error: 'ownerId or email is required' }, { status: 400 });
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
     let workspaces: unknown[] = [];
     let invites: unknown[] = [];
 
-    if (ownerId) {
-      const snapshot = await adminDb
-        .collection('workspaces')
-        .where('members', 'array-contains', ownerId)
-        .get();
-      workspaces = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    }
+    const snapshot = await adminDb
+      .collection('workspaces')
+      .where('members', 'array-contains', auth.uid)
+      .get();
+    workspaces = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    if (email) {
+    if (auth.email) {
       const inviteSnap = await adminDb
         .collection('workspaces')
-        .where('pendingInvites', 'array-contains', email)
+        .where('pendingInvites', 'array-contains', auth.email)
         .get();
       invites = inviteSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
@@ -40,17 +36,22 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { name, ownerId } = body;
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
 
-    if (!name || !ownerId) {
-      return NextResponse.json({ error: 'name and ownerId are required' }, { status: 400 });
+    const body = await req.json();
+    const { name } = body;
+
+    if (!name) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
     const workspaceData = {
       name,
-      ownerId,
-      members: [ownerId],
+      ownerId: auth.uid,
+      members: [auth.uid],
       pendingInvites: [],
       type: 'shared',
       createdAt: FieldValue.serverTimestamp()
@@ -61,8 +62,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       id: docRef.id,
       name,
-      ownerId,
-      members: [ownerId],
+      ownerId: auth.uid,
+      members: [auth.uid],
       pendingInvites: [],
       type: 'shared'
     });

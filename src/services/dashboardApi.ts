@@ -1,4 +1,5 @@
 import type { DocItem, Workspace } from '@/components/dashboard/types';
+import { authFetch } from '@/services/apiClient';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -14,7 +15,7 @@ export const fetchWorkspacesApi = async (params: { ownerId: string; email?: stri
   if (params.email) {
     search.set('email', params.email);
   }
-  const res = await fetch(`/api/workspaces?${search.toString()}`);
+  const res = await authFetch(`/api/workspaces?${search.toString()}`);
   assertOk(res, 'Failed to fetch workspaces');
   const data = (await res.json()) as { workspaces?: Workspace[]; invites?: Workspace[] };
   return {
@@ -24,7 +25,7 @@ export const fetchWorkspacesApi = async (params: { ownerId: string; email?: stri
 };
 
 export const acceptInviteApi = async (params: { workspaceId: string; userId: string; email: string }) => {
-  const res = await fetch(`/api/workspaces/${params.workspaceId}`, {
+  const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -37,7 +38,7 @@ export const acceptInviteApi = async (params: { workspaceId: string; userId: str
 };
 
 export const inviteMemberApi = async (params: { workspaceId: string; email: string }) => {
-  const res = await fetch(`/api/workspaces/${params.workspaceId}`, {
+  const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -49,7 +50,7 @@ export const inviteMemberApi = async (params: { workspaceId: string; email: stri
 };
 
 export const createWorkspaceApi = async (params: { name: string; ownerId: string }) => {
-  const res = await fetch('/api/workspaces', {
+  const res = await authFetch('/api/workspaces', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -62,7 +63,7 @@ export const createWorkspaceApi = async (params: { name: string; ownerId: string
 };
 
 export const deleteWorkspaceApi = async (params: { workspaceId: string; ownerId: string }) => {
-  const res = await fetch(`/api/workspaces/${params.workspaceId}`, {
+  const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
     method: 'DELETE',
     headers: JSON_HEADERS,
     body: JSON.stringify({ ownerId: params.ownerId })
@@ -79,19 +80,19 @@ export const fetchDocsApi = async (params: { workspaceId: string; ownerId?: stri
   if (params.view) {
     search.set('view', params.view);
   }
-  const res = await fetch(`/api/documents?${search.toString()}`);
+  const res = await authFetch(`/api/documents?${search.toString()}`);
   assertOk(res, 'Failed to fetch docs via API');
   return (await res.json()) as DocItem[];
 };
 
 export const fetchDocumentRawApi = async (docId: string) => {
-  const res = await fetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
+  const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
   assertOk(res, 'Failed to load content');
   return res.text();
 };
 
 export const createDocumentApi = async (payload: Record<string, unknown>) => {
-  const res = await fetch('/api/documents', {
+  const res = await authFetch('/api/documents', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -101,7 +102,7 @@ export const createDocumentApi = async (payload: Record<string, unknown>) => {
 };
 
 export const updateDocumentApi = async (docId: string, payload: Record<string, unknown>) => {
-  const res = await fetch(`/api/documents/${docId}`, {
+  const res = await authFetch(`/api/documents/${docId}`, {
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -110,12 +111,12 @@ export const updateDocumentApi = async (docId: string, payload: Record<string, u
 };
 
 export const deleteDocumentApi = async (docId: string) => {
-  const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
+  const res = await authFetch(`/api/documents/${docId}`, { method: 'DELETE' });
   return res.ok;
 };
 
 export const uploadFileApi = async (formData: FormData) => {
-  const res = await fetch('/api/upload', {
+  const res = await authFetch('/api/upload', {
     method: 'POST',
     body: formData
   });

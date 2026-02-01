@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
-import { hashPassword } from '@/lib/crypto';
+import { hashPassword, verifyPassword } from '@/lib/crypto';
+import { requireAuth } from '@/lib/server-auth';
 
 export async function POST(req: NextRequest) {
     try {
-        const { uid, currentPassword, newPassword } = await req.json();
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
 
-        if (!uid || !currentPassword || !newPassword) {
+        const { currentPassword, newPassword } = await req.json();
+
+        if (!currentPassword || !newPassword) {
             return NextResponse.json(
                 { error: 'Se requieren todos los campos' },
                 { status: 400 }
@@ -20,7 +26,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const userDoc = await adminDb.collection('users').doc(uid).get();
+        const userDoc = await adminDb.collection('users').doc(auth.uid).get();
 
         if (!userDoc.exists) {
             return NextResponse.json(
@@ -31,17 +37,17 @@ export async function POST(req: NextRequest) {
 
         const userData = userDoc.data();
 
-        const currentHash = hashPassword(currentPassword);
-        if (currentHash !== userData?.passwordHash) {
+        const verification = await verifyPassword(currentPassword, userData?.passwordHash);
+        if (!verification.ok) {
             return NextResponse.json(
                 { error: 'Contraseña actual incorrecta' },
                 { status: 401 }
             );
         }
 
-        const newPasswordHash = hashPassword(newPassword);
+        const newPasswordHash = await hashPassword(newPassword);
 
-        await adminDb.collection('users').doc(uid).update({
+        await adminDb.collection('users').doc(auth.uid).update({
             passwordHash: newPasswordHash,
             updatedAt: new Date()
         });

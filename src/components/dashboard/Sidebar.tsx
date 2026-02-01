@@ -138,11 +138,13 @@ const Sidebar = ({
   getIcon
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
+  const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
 
-  // Reset expanded folders when workspace changes to ensure default folder is expanded
+  // Reset expanded/collapsed folders when workspace changes
   useEffect(() => {
     setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
+    setCollapsedByUser(new Set());
   }, [currentWorkspace?.id]);
 
   const folderChildrenMap = useMemo(() => {
@@ -173,6 +175,15 @@ const Sidebar = ({
       else next.add(path);
       return next;
     });
+    // Track if user explicitly collapsed the default folder
+    if (path === DEFAULT_FOLDER_NAME) {
+      setCollapsedByUser(prev => {
+        const next = new Set(prev);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+    }
   };
 
   const isSearchMode = sidebarSearchQuery.trim().length > 0;
@@ -188,16 +199,27 @@ const Sidebar = ({
         const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
         items.push({ kind: 'folder', folder, depth, hasChildren });
 
-        if (expandedFolders.has(folder.path)) {
+        // Default folder is ALWAYS expanded unless user explicitly collapsed it
+        const isDefaultFolder = folder.path === DEFAULT_FOLDER_NAME;
+        const isUserCollapsed = collapsedByUser.has(folder.path);
+        const shouldExpand = isDefaultFolder
+          ? !isUserCollapsed
+          : expandedFolders.has(folder.path);
+
+        if (shouldExpand) {
+          // First add subfolders recursively
           walk(folder.path, depth + 1);
-          folderFiles.forEach(doc => items.push({ kind: 'doc', doc, depth }));
+          // Then add files at this level
+          for (const doc of folderFiles) {
+            items.push({ kind: 'doc', doc, depth: depth + 1 });
+          }
         }
       }
     };
 
     walk('', 0);
     return items;
-  }, [docsByFolder, expandedFolders, folderChildrenMap]);
+  }, [docsByFolder, expandedFolders, folderChildrenMap, collapsedByUser]);
 
   const listItems = useMemo<SidebarListItem[]>(() => {
     if (isSearchMode) {
@@ -245,7 +267,11 @@ const Sidebar = ({
     }
 
     if (item.kind === 'folder') {
-      const isExpanded = expandedFolders.has(item.folder.path);
+      const isDefaultFolder = item.folder.path === DEFAULT_FOLDER_NAME;
+      const isUserCollapsed = collapsedByUser.has(item.folder.path);
+      const isExpanded = isDefaultFolder
+        ? !isUserCollapsed
+        : expandedFolders.has(item.folder.path);
       const isActive = activeFolder === item.folder.path;
       const count = docsByFolder[item.folder.path]?.length ?? 0;
       const paddingLeft = 8 + item.depth * 12;

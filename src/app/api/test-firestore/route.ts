@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { adminDb } from '@/lib/firebase-admin';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/server-auth';
 
 const hasFirestoreCredentials = Boolean(
     process.env.FIREBASE_SERVICE_ACCOUNT ||
@@ -10,6 +11,11 @@ const hasFirestoreCredentials = Boolean(
 );
 
 export async function GET(req: NextRequest) {
+    const auth = await requireAuth(req);
+    if (!auth) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     if (!hasFirestoreCredentials) {
         return NextResponse.json(
             { error: 'Firestore credentials are not configured' },
