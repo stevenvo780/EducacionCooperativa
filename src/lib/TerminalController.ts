@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { io, Socket } from 'socket.io-client';
 
 declare global {
@@ -71,12 +72,23 @@ export class TerminalController {
     if (typeof window === 'undefined') return false;
     if (this.initialized) return true;
 
+    const startTime = performance.now();
+    console.log('[TerminalController] Starting initialization...');
+
     try {
       this.loadCSS('https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css');
 
+      const xtermStart = performance.now();
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js');
+      console.log(`[TerminalController] xterm.js loaded in ${(performance.now() - xtermStart).toFixed(0)}ms`);
+
+      const fitStart = performance.now();
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js');
+      console.log(`[TerminalController] fit addon loaded in ${(performance.now() - fitStart).toFixed(0)}ms`);
+
+      const linksStart = performance.now();
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js');
+      console.log(`[TerminalController] links addon loaded in ${(performance.now() - linksStart).toFixed(0)}ms`);
 
       await new Promise(r => setTimeout(r, 50));
 
@@ -85,6 +97,7 @@ export class TerminalController {
       }
 
       this.initialized = true;
+      console.log(`[TerminalController] Total initialization: ${(performance.now() - startTime).toFixed(0)}ms`);
       return true;
     } catch (err) {
       console.error('[TerminalController] Failed to load xterm:', err);
@@ -198,13 +211,20 @@ export class TerminalController {
 
     this.onWorkerStatusChange = onWorkerStatusChange;
 
+    const connectStart = performance.now();
+    console.log('[TerminalController] Starting socket connection to:', this.nexusUrl);
+
     this.socket = io(this.nexusUrl, {
       auth: { type: 'client', token, uid },
       transports: ['websocket'],
-      autoConnect: false
+      autoConnect: false,
+      timeout: 10000, // 10 segundos timeout
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000
     });
 
     this.socket.on('connect', () => {
+      console.log(`[TerminalController] Socket connected in ${(performance.now() - connectStart).toFixed(0)}ms`);
       onStatusChange?.('hub-online');
       this.subscribedWorkspaces.forEach(workspaceId => {
         this.socket?.emit('workspace:subscribe', { workspaceId });
@@ -218,13 +238,15 @@ export class TerminalController {
       onStatusChange?.('hub-offline');
     });
 
-    this.socket.on('connect_error', () => {
+    this.socket.on('connect_error', (err) => {
+      console.error('[TerminalController] Connection error:', err.message);
       onStatusChange?.('error');
     });
 
     this.socket.on('worker-status', (data: { status: string; workspaceId?: string }) => {
       const workspaceId = data.workspaceId;
       const status = data.status as WorkerStatus;
+      console.log(`[TerminalController] Received worker-status: ${status} for workspace: ${workspaceId}`);
 
       if (workspaceId) {
         this.workspaceStatuses.set(workspaceId, status);
