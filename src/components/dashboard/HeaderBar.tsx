@@ -1,6 +1,6 @@
 'use client';
 
-import { Briefcase, Check, ChevronDown, Copy, Key, Loader2, LogOut, Menu, Plus, Trash2, User, Users } from 'lucide-react';
+import { Briefcase, Check, ChevronDown, Copy, KanbanSquare, Key, Loader2, LogOut, Menu, Plus, Trash2, User, Users } from 'lucide-react';
 import type { Workspace } from '@/components/dashboard/types';
 import type { User as FirebaseUser } from 'firebase/auth';
 
@@ -15,6 +15,8 @@ interface HeaderBarProps {
   user: FirebaseUser | null;
   deletingWorkspaceId: string | null;
   personalWorkspaceId: string;
+  isBoardView: boolean;
+  onToggleBoardView: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
   onDeleteWorkspace: (ws: Workspace) => void;
@@ -35,6 +37,8 @@ const HeaderBar = ({
   user,
   deletingWorkspaceId,
   personalWorkspaceId,
+  isBoardView,
+  onToggleBoardView,
   onAcceptInvite,
   onSelectWorkspace,
   onDeleteWorkspace,
@@ -190,6 +194,18 @@ const HeaderBar = ({
           <User className="w-4 h-4" />
           <span className="truncate max-w-[150px] hidden md:inline">{user?.email}</span>
         </div>
+        <button
+          onClick={onToggleBoardView}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition ${
+            isBoardView
+              ? 'bg-mandy-500/15 text-mandy-300 border-mandy-500/40'
+              : 'bg-surface-700 text-surface-300 border-surface-600/60 hover:text-white hover:border-mandy-500/40'
+          }`}
+          title={isBoardView ? 'Volver a documentos' : 'Ir al tablero'}
+        >
+          <KanbanSquare className="w-4 h-4" />
+          <span className="hidden md:inline">{isBoardView ? 'Documentos' : 'Tablero'}</span>
+        </button>
         <button
           onClick={onOpenPassword}
           className="p-2 text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
