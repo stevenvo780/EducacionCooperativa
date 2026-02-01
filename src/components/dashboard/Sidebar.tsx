@@ -1,7 +1,8 @@
 'use client';
 
 import type React from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useLayoutEffect, useRef } from 'react';
+import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME } from '@/lib/folder-utils';
@@ -9,6 +10,45 @@ import AssistantSection from '@/components/dashboard/AssistantSection';
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { WorkerStatus } from '@/lib/TerminalController';
 import type { User as FirebaseUser } from 'firebase/auth';
+
+const ROW_HEIGHT = 28;
+
+const useElementSize = <T extends HTMLElement>() => {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const update = () => {
+      setSize({ width: element.clientWidth, height: element.clientHeight });
+    };
+
+    update();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setSize({ width, height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, size] as const;
+};
+
+type SidebarListItem =
+  | { kind: 'folder'; folder: FolderItem; depth: number; hasChildren: boolean }
+  | { kind: 'doc'; doc: DocItem; depth: number }
+  | { kind: 'search'; doc: DocItem };
 
 interface SidebarProps {
   sidebarWidth: number;
@@ -98,6 +138,7 @@ const Sidebar = ({
   getIcon
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
+  const [listRef, listSize] = useElementSize<HTMLDivElement>();
 
   const folderChildrenMap = useMemo(() => {
     const map: Record<string, FolderItem[]> = { '': [] };
@@ -129,57 +170,88 @@ const Sidebar = ({
     });
   };
 
-  const renderFilesInFolder = (folderPath: string, depth: number): React.ReactNode[] => {
-    const folderDocs = docsByFolder[folderPath] ?? [];
-    const paddingLeft = 8 + depth * 12 + 16;
+  const isSearchMode = sidebarSearchQuery.trim().length > 0;
 
-    return folderDocs.map(doc => (
-      <div
-        key={doc.id}
-        onClick={() => openDocument(doc)}
-        draggable
-        onDragStart={(e) => handleDocDragStart(e, doc)}
-        onDragEnd={handleDocDragEnd}
-        className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
-          selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-400 hover:bg-surface-700/40'
-        }`}
-        style={{ paddingLeft }}
-      >
-        <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
-          {getIcon(doc)}
-        </div>
-        <span className="truncate flex-1">{doc.name}</span>
-        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => deleteDocument(doc, e)}
-            className="text-surface-500 hover:text-mandy-400 p-0.5"
-            title="Eliminar"
+  const treeItems = useMemo<SidebarListItem[]>(() => {
+    const items: SidebarListItem[] = [];
+
+    const walk = (parentPath: string, depth: number) => {
+      const children = folderChildrenMap[parentPath] ?? [];
+      for (const folder of children) {
+        const subfolders = folderChildrenMap[folder.path] ?? [];
+        const folderFiles = docsByFolder[folder.path] ?? [];
+        const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
+        items.push({ kind: 'folder', folder, depth, hasChildren });
+
+        if (expandedFolders.has(folder.path)) {
+          walk(folder.path, depth + 1);
+          folderFiles.forEach(doc => items.push({ kind: 'doc', doc, depth }));
+        }
+      }
+    };
+
+    walk('', 0);
+    return items;
+  }, [docsByFolder, expandedFolders, folderChildrenMap]);
+
+  const listItems = useMemo<SidebarListItem[]>(() => {
+    if (isSearchMode) {
+      return sidebarFilteredDocs.map(doc => ({ kind: 'search', doc }));
+    }
+    return treeItems;
+  }, [isSearchMode, sidebarFilteredDocs, treeItems]);
+
+  const renderSidebarRow = ({ index, style, ariaAttributes }: RowComponentProps) => {
+    const item = listItems[index];
+    if (!item) return null;
+
+    if (item.kind === 'search') {
+      return (
+        <div
+          style={{ ...style, paddingLeft: 12, paddingRight: 12 } as React.CSSProperties}
+          {...ariaAttributes}
+        >
+          <div
+            onClick={() => openDocument(item.doc)}
+            draggable
+            onDragStart={(e) => handleDocDragStart(e, item.doc)}
+            onDragEnd={handleDocDragEnd}
+            className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${
+              selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'
+            }`}
           >
-            <Trash2 className="w-3 h-3" />
-          </button>
+            <div className={`${selectedDocId === item.doc.id ? 'text-white' : 'text-surface-500'}`}>
+              {getIcon(item.doc)}
+            </div>
+            <span className="truncate flex-1">{item.doc.name}</span>
+            <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{item.doc.folder?.split('/').pop()}</span>
+            <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => deleteDocument(item.doc, e)}
+                className="text-surface-500 hover:text-mandy-400 p-0.5"
+                title="Eliminar"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    ));
-  };
+      );
+    }
 
-  const renderFolderTree = (parentPath: string, depth = 0): React.ReactNode[] => {
-    const children = folderChildrenMap[parentPath] ?? [];
-    return children.map(folder => {
-      const isExpanded = expandedFolders.has(folder.path);
-      const subfolders = folderChildrenMap[folder.path] ?? [];
-      const folderFiles = docsByFolder[folder.path] ?? [];
-      const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
-      const count = folderFiles.length;
-      const isActive = activeFolder === folder.path;
-      const paddingLeft = 8 + depth * 12;
+    if (item.kind === 'folder') {
+      const isExpanded = expandedFolders.has(item.folder.path);
+      const isActive = activeFolder === item.folder.path;
+      const count = docsByFolder[item.folder.path]?.length ?? 0;
+      const paddingLeft = 8 + item.depth * 12;
 
       return (
-        <div key={folder.path}>
+        <div style={style} {...ariaAttributes}>
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setActiveFolder(folder.path);
-              toggleFolder(folder.path);
+              setActiveFolder(item.folder.path);
+              toggleFolder(item.folder.path);
             }}
             className={`w-full flex items-center gap-1.5 py-1 px-2 rounded text-xs transition ${
               isActive ? 'bg-mandy-500/15 text-mandy-300' : 'text-surface-300 hover:bg-surface-700/40'
@@ -187,7 +259,7 @@ const Sidebar = ({
             style={{ paddingLeft }}
           >
             <span className="w-3 h-3 flex items-center justify-center">
-              {hasChildren ? (
+              {item.hasChildren ? (
                 isExpanded ? <ChevronDown className="w-3 h-3 text-surface-500" /> : <ChevronRight className="w-3 h-3 text-surface-500" />
               ) : (
                 <span className="w-3" />
@@ -198,18 +270,42 @@ const Sidebar = ({
             ) : (
               <Folder className="w-3.5 h-3.5 text-amber-400" />
             )}
-            <span className="truncate flex-1 text-left">{folder.name}</span>
+            <span className="truncate flex-1 text-left">{item.folder.name}</span>
             {count > 0 && <span className="text-[9px] text-surface-500">{count}</span>}
           </button>
-          {isExpanded && (
-            <div>
-              {renderFolderTree(folder.path, depth + 1)}
-              {renderFilesInFolder(folder.path, depth)}
-            </div>
-          )}
         </div>
       );
-    });
+    }
+
+    const paddingLeft = 8 + item.depth * 12 + 16;
+    return (
+      <div style={style} {...ariaAttributes}>
+        <div
+          onClick={() => openDocument(item.doc)}
+          draggable
+          onDragStart={(e) => handleDocDragStart(e, item.doc)}
+          onDragEnd={handleDocDragEnd}
+          className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
+            selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-400 hover:bg-surface-700/40'
+          }`}
+          style={{ paddingLeft }}
+        >
+          <div className={`${selectedDocId === item.doc.id ? 'text-white' : 'text-surface-500'}`}>
+            {getIcon(item.doc)}
+          </div>
+          <span className="truncate flex-1">{item.doc.name}</span>
+          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => deleteDocument(item.doc, e)}
+              className="text-surface-500 hover:text-mandy-400 p-0.5"
+              title="Eliminar"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -269,7 +365,7 @@ const Sidebar = ({
           <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide p-2 space-y-4">
+        <div className="flex-1 overflow-hidden p-2 flex flex-col gap-4">
           <AssistantSection
             currentWorkspace={currentWorkspace}
             user={user}
@@ -286,7 +382,7 @@ const Sidebar = ({
             closeTabById={closeTabById}
           />
 
-          <div>
+          <div className="flex-1 min-h-0 flex flex-col">
             <div className="px-2 py-1 flex items-center justify-between">
               <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
                 ARCHIVOS: {currentWorkspace?.name}
@@ -325,7 +421,7 @@ const Sidebar = ({
               </button>
             </div>
 
-            <div className="mt-2 px-1">
+            <div className="mt-2 px-1 flex-1 min-h-0">
               {loadingDocs && docs.length === 0 && (
                 <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -333,49 +429,32 @@ const Sidebar = ({
                 </div>
               )}
 
-              {!loadingDocs && docs.length === 0 && !sidebarSearchQuery && (
+              {!loadingDocs && docs.length === 0 && !isSearchMode && (
                 <div className="px-3 py-2 text-center text-xs text-surface-500">
                   Espacio vacío
                 </div>
               )}
 
-              {sidebarSearchQuery ? (
-                <div className="space-y-0.5">
-                  {sidebarFilteredDocs.length === 0 ? (
-                    <div className="px-3 py-2 text-center text-xs text-surface-500">
-                      Sin resultados
-                    </div>
-                  ) : (
-                    sidebarFilteredDocs.map(doc => (
-                      <div
-                        key={doc.id}
-                        onClick={() => openDocument(doc)}
-                        draggable
-                        onDragStart={(e) => handleDocDragStart(e, doc)}
-                        onDragEnd={handleDocDragEnd}
-                        className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
-                      >
-                        <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
-                          {getIcon(doc)}
-                        </div>
-                        <span className="truncate flex-1">{doc.name}</span>
-                        <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{doc.folder?.split('/').pop()}</span>
-                        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => deleteDocument(doc, e)}
-                            className="text-surface-500 hover:text-mandy-400 p-0.5"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
+              {isSearchMode && sidebarFilteredDocs.length === 0 && (
+                <div className="px-3 py-2 text-center text-xs text-surface-500">
+                  Sin resultados
                 </div>
-              ) : (
-                <div className="space-y-0.5">
-                  {renderFolderTree('')}
+              )}
+
+              {listItems.length > 0 && (
+                <div ref={listRef} className="h-full">
+                  <VirtualizedList
+                    rowCount={listItems.length}
+                    rowHeight={ROW_HEIGHT}
+                    overscanCount={6}
+                    className="scrollbar-hide"
+                    style={{
+                      height: Math.max(listSize.height, 1),
+                      width: Math.max(listSize.width, 1)
+                    }}
+                    rowComponent={renderSidebarRow}
+                    rowProps={{}}
+                  />
                 </div>
               )}
             </div>

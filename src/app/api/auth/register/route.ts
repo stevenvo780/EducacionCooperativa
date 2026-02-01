@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { hashPassword } from '@/lib/crypto';
 
@@ -46,7 +46,10 @@ export async function POST(req: NextRequest) {
 
         await adminDb.collection('workspaces').add(workspaceData);
 
-        return NextResponse.json({ uid: userId, email: email }, { status: 201 });
+        // Generate custom token for the new user
+        const customToken = await adminAuth.createCustomToken(userId);
+
+        return NextResponse.json({ uid: userId, email: email, customToken }, { status: 201 });
 
     } catch (error: any) {
         console.error('Error creating user (custom auth):', error);
