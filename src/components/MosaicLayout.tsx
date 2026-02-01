@@ -165,7 +165,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         <MosaicWindow<string>
             path={path}
             title={doc.name}
-            className="bg-surface-900 border border-surface-700"
+            className="bg-surface-900 border border-surface-700 mosaic-window-compact-title"
             toolbarControls={toolbarControls}
             renderPreview={() => (
                 <div className="flex items-center gap-2 p-1">
@@ -218,23 +218,30 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   ]);
 
   return (
-    <Mosaic<string>
-        renderTile={renderTile}
-        value={value}
-        onChange={onChange}
-        className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
-        zeroStateView={
-            <div className="h-full w-full flex flex-col items-center justify-center text-surface-400 p-8 text-center">
-                <div className="max-w-md space-y-4">
-                    <div className="w-16 h-16 bg-surface-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <Columns className="w-8 h-8 text-surface-400" />
-                    </div>
-                    <h3 className="text-xl font-medium text-surface-200">No hay paneles abiertos</h3>
-                    <p className="text-surface-400">Selecciona un archivo del explorador o abre una nueva terminal para comenzar.</p>
-                </div>
-            </div>
+    <>
+      <Mosaic<string>
+          renderTile={renderTile}
+          value={value}
+          onChange={onChange}
+          className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
+          zeroStateView={
+              <div className="h-full w-full flex flex-col items-center justify-center text-surface-400 p-8 text-center">
+                  <div className="max-w-md space-y-4">
+                      <div className="w-16 h-16 bg-surface-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                          <Columns className="w-8 h-8 text-surface-400" />
+                      </div>
+                      <h3 className="text-xl font-medium text-surface-200">No hay paneles abiertos</h3>
+                      <p className="text-surface-400">Selecciona un archivo del explorador o abre una nueva terminal para comenzar.</p>
+                  </div>
+              </div>
+          }
+      />
+      <style jsx global>{`
+        .mosaic-window-compact-title .mosaic-window-title {
+          display: none !important;
         }
-    />
+      `}</style>
+    </>
   );
 };
 
