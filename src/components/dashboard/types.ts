@@ -23,6 +23,7 @@ export interface DialogConfig {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  required?: boolean;
 }
 
 export type DialogResult = { confirmed: boolean; value?: string | null };

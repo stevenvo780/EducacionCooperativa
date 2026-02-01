@@ -1343,6 +1343,8 @@ export default function DashboardPage() {
                         folderInputProps={folderInputProps}
                         currentWorkspace={currentWorkspace}
                         activeFolder={activeFolder}
+                        setActiveFolder={setActiveFolder}
+                        folders={folders}
                         connectionStatus={connectionStatus}
                         isCreatingSession={isCreatingSession}
                         activeSessionId={activeSessionId}

@@ -79,7 +79,8 @@ const DialogModal = ({
               )}
               <button
                 onClick={onConfirm}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg transition ${dialogConfig.danger ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-gradient-mandy text-white hover:opacity-90'}`}
+                disabled={dialogConfig.type === 'input' && dialogConfig.required !== false && !dialogInputValue.trim()}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed ${dialogConfig.danger ? 'bg-red-600 text-white hover:bg-red-500 disabled:hover:bg-red-600' : 'bg-gradient-mandy text-white hover:opacity-90 disabled:hover:opacity-50'}`}
               >
                 {dialogConfig.confirmLabel || (dialogConfig.type === 'confirm' ? 'Confirmar' : 'Aceptar')}
               </button>
