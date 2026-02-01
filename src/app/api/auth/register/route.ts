@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'User already exists' }, { status: 409 });
         }
 
-        const hashedPassword = hashPassword(password);
+        const hashedPassword = await hashPassword(password);
 
         const newUser = {
             email,
@@ -35,19 +35,12 @@ export async function POST(req: NextRequest) {
         const userDocRef = await usersRef.add(newUser);
         const userId = userDocRef.id;
 
-        const workspaceData = {
-            name: 'Mi Espacio',
-            ownerId: userId,
-            members: [userId],
-            pendingInvites: [],
-            type: 'personal',
-            createdAt: FieldValue.serverTimestamp()
-        };
-
-        await adminDb.collection('workspaces').add(workspaceData);
+        // Personal workspace se gestiona en el cliente; evitamos duplicados en Firestore.
 
         // Generate custom token for the new user
-        const customToken = await adminAuth.createCustomToken(userId);
+        const customToken = await adminAuth.createCustomToken(userId, {
+            userEmail: email
+        });
 
         return NextResponse.json({ uid: userId, email: email, customToken }, { status: 201 });
 

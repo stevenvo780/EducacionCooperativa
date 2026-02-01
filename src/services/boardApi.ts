@@ -1,4 +1,5 @@
 import type { BoardCard, BoardColumn, BoardData } from '@/components/dashboard/types';
+import { authFetch } from '@/services/apiClient';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -11,13 +12,13 @@ const assertOk = (res: Response, fallbackMessage: string) => {
 export const fetchBoardApi = async (params: { workspaceId: string }) => {
   const search = new URLSearchParams();
   search.set('workspaceId', params.workspaceId);
-  const res = await fetch(`/api/boards?${search.toString()}`, { cache: 'no-store' });
+  const res = await authFetch(`/api/boards?${search.toString()}`, { cache: 'no-store' });
   assertOk(res, 'Failed to fetch board');
   return res.json() as Promise<BoardData>;
 };
 
 export const createBoardColumnApi = async (params: { workspaceId: string; name: string }) => {
-  const res = await fetch('/api/boards', {
+  const res = await authFetch('/api/boards', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -31,7 +32,7 @@ export const createBoardColumnApi = async (params: { workspaceId: string; name: 
 };
 
 export const updateBoardColumnApi = async (params: { workspaceId: string; columnId: string; name?: string; order?: number }) => {
-  const res = await fetch('/api/boards', {
+  const res = await authFetch('/api/boards', {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -48,7 +49,7 @@ export const updateBoardColumnApi = async (params: { workspaceId: string; column
 };
 
 export const deleteBoardColumnApi = async (params: { workspaceId: string; columnId: string }) => {
-  const res = await fetch('/api/boards', {
+  const res = await authFetch('/api/boards', {
     method: 'DELETE',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -67,7 +68,7 @@ export const createBoardCardApi = async (params: {
   description?: string;
   ownerId?: string | null;
 }) => {
-  const res = await fetch('/api/boards', {
+  const res = await authFetch('/api/boards', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -91,7 +92,7 @@ export const updateBoardCardApi = async (params: {
   columnId?: string;
   order?: number;
 }) => {
-  const res = await fetch('/api/boards', {
+  const res = await authFetch('/api/boards', {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -110,7 +111,7 @@ export const updateBoardCardApi = async (params: {
 };
 
 export const deleteBoardCardApi = async (params: { workspaceId: string; cardId: string }) => {
-  const res = await fetch('/api/boards', {
+  const res = await authFetch('/api/boards', {
     method: 'DELETE',
     headers: JSON_HEADERS,
     body: JSON.stringify({

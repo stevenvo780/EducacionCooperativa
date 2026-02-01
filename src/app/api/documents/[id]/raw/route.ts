@@ -1,8 +1,14 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { NextRequest, NextResponse } from 'next/server';
+import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const { id } = params;
         const docSnap = await adminDb.collection('documents').doc(id).get();
         if (!docSnap.exists) {
@@ -10,6 +16,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         }
 
         const data = docSnap.data() as any;
+        const workspaceId = data?.workspaceId;
+        if (!workspaceId || workspaceId === 'personal') {
+            if (data?.ownerId !== auth.uid) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        } else {
+            const member = await isWorkspaceMember(workspaceId, auth.uid);
+            if (!member) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        }
         if (typeof data?.content === 'string' && data.content.length > 0) {
             return new Response(data.content, {
                 headers: { 'Content-Type': 'text/plain; charset=utf-8' }
@@ -34,6 +51,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         }
 
         if (url) {
+            let parsed: URL;
+            try {
+                parsed = new URL(url);
+            } catch {
+                return NextResponse.json({ error: 'Invalid url' }, { status: 400 });
+            }
+
+            const host = parsed.host.toLowerCase();
+            const isAllowedHost = host === 'firebasestorage.googleapis.com' || host.endsWith('.storage.googleapis.com');
+            if (parsed.protocol !== 'https:' || !isAllowedHost) {
+                return NextResponse.json({ error: 'URL not allowed' }, { status: 400 });
+            }
+
             const upstream = await fetch(url);
             if (!upstream.ok) {
                 return NextResponse.json({ error: 'Failed to fetch file' }, { status: 502 });

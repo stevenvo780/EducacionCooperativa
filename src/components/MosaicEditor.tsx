@@ -25,6 +25,7 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
+import { authFetch, withAuthToken } from '@/services/apiClient';
 
 const DebouncedMarkdown = React.memo(({ content }: { content: string }) => {
   const [debouncedContent, setDebouncedContent] = useState(content);
@@ -146,7 +147,7 @@ export default function MosaicEditor({
     rawLoadInFlightRef.current = true;
     lastRawKeyRef.current = key;
     try {
-        const res = await fetch(`/api/documents/${roomId}/raw`, { cache: 'no-store' });
+        const res = await authFetch(`/api/documents/${roomId}/raw`, { cache: 'no-store' });
         if (!res.ok) return;
         const text = await res.text();
         if (text && text !== contentRef.current) {
@@ -207,7 +208,7 @@ export default function MosaicEditor({
   const loadDoc = useCallback(async () => {
     if (!roomId) return;
     try {
-        const res = await fetch(`/api/documents/${roomId}`, { cache: 'no-store' });
+        const res = await authFetch(`/api/documents/${roomId}`, { cache: 'no-store' });
         if (!res.ok) {
             resetDocState();
             return;
@@ -230,28 +231,38 @@ export default function MosaicEditor({
 
   useEffect(() => {
     if (!roomId) return;
-    const source = new EventSource(`/api/documents/${roomId}/stream`);
+    let source: EventSource | null = null;
+    let cancelled = false;
 
-    source.onmessage = (event) => {
-        try {
-            const payload = JSON.parse(event.data);
-            if (payload?.type === 'snapshot') {
-                applyDocData(payload.data);
-            } else if (payload?.type === 'deleted') {
-                resetDocState();
+    const init = async () => {
+        const url = await withAuthToken(`/api/documents/${roomId}/stream`);
+        if (cancelled) return;
+        source = new EventSource(url);
+
+        source.onmessage = (event) => {
+            try {
+                const payload = JSON.parse(event.data);
+                if (payload?.type === 'snapshot') {
+                    applyDocData(payload.data);
+                } else if (payload?.type === 'deleted') {
+                    resetDocState();
+                }
+            } catch (e) {
+                console.error('Error parsing live update:', e);
             }
-        } catch (e) {
-            console.error('Error parsing live update:', e);
-        }
+        };
+
+        source.onerror = () => {
+            source?.close();
+            setUsePolling(true);
+        };
     };
 
-    source.onerror = () => {
-        source.close();
-        setUsePolling(true);
-    };
+    init();
 
     return () => {
-        source.close();
+        cancelled = true;
+        source?.close();
     };
   }, [roomId, applyDocData, resetDocState]);
 
@@ -275,7 +286,7 @@ export default function MosaicEditor({
 
     saveTimeoutRef.current = setTimeout(async () => {
         try {
-            const res = await fetch(`/api/documents/${roomId}`, {
+            const res = await authFetch(`/api/documents/${roomId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
