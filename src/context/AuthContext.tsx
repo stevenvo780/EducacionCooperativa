@@ -34,6 +34,8 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+const allowInsecureAuth = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
@@ -44,19 +46,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (initialized.current) return;
         initialized.current = true;
 
-        const storedUser = localStorage.getItem('agora_user');
-        if (storedUser) {
-            try {
-                const parsedUser = JSON.parse(storedUser);
-                const restoredUserObj = {
-                    ...parsedUser,
-                    getIdToken: async () => parsedUser.uid
-                } as unknown as User;
-                setUser(restoredUserObj);
-                setLoading(false);
-                return;
-            } catch (e) {
-                localStorage.removeItem('agora_user');
+        if (allowInsecureAuth) {
+            const storedUser = localStorage.getItem('agora_user');
+            if (storedUser) {
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    const restoredUserObj = {
+                        ...parsedUser,
+                        getIdToken: async () => parsedUser.uid
+                    } as unknown as User;
+                    setUser(restoredUserObj);
+                    setLoading(false);
+                    return;
+                } catch (e) {
+                    localStorage.removeItem('agora_user');
+                }
             }
         }
 
@@ -73,6 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (e) {
             setLoading(false);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const signInWithGoogle = async () => {
@@ -125,7 +130,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
 
-        // Fallback for when custom token fails (shouldn't happen in normal flow)
+        if (!allowInsecureAuth) {
+            throw new Error('No se pudo iniciar sesión con Firebase. Verifica la configuración.');
+        }
+
+        // Fallback inseguro (solo si allowInsecureAuth)
         const userObj = {
             uid: userData.uid,
             email: userData.email,
@@ -171,7 +180,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
 
-        // Fallback
+        if (!allowInsecureAuth) {
+            throw new Error('No se pudo iniciar sesión con Firebase. Verifica la configuración.');
+        }
+
+        // Fallback inseguro (solo si allowInsecureAuth)
         const userObj = {
             uid: userData.uid,
             email: userData.email,
@@ -195,12 +208,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!user?.uid) {
             throw new Error('No hay usuario autenticado');
         }
+        const token = await user.getIdToken?.();
 
         const res = await fetch('/api/auth/change-password', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({
-                uid: user.uid,
                 currentPassword,
                 newPassword
             })

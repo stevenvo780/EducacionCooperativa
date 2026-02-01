@@ -1,18 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 export async function POST(req: NextRequest) {
     try {
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const formData = await req.formData();
         const file = formData.get('file') as File;
-        const ownerId = (formData.get('ownerId') as string) || 'unknown';
+        const ownerId = auth.uid;
         const workspaceId = (formData.get('workspaceId') as string) || 'personal';
         const folderField = formData.get('folder');
         const folder = typeof folderField === 'string' ? folderField : 'No estructurado';
 
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+        }
+
+        if (workspaceId !== 'personal') {
+            const member = await isWorkspaceMember(workspaceId, auth.uid);
+            if (!member) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
