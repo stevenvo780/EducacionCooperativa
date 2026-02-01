@@ -178,7 +178,6 @@ export default function DashboardPage() {
         dispatch(setDeletingWorkspaceIdAction(value));
     }, [dispatch]);
     const currentWorkspaceId = currentWorkspace?.id;
-    const isBoardView = dashboardView === 'board';
 
     useEffect(() => {
         if (!user || !currentWorkspace) return;
@@ -200,6 +199,7 @@ export default function DashboardPage() {
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
     const [dashboardView, setDashboardView] = useState<'docs' | 'board'>('docs');
+    const isBoardView = dashboardView === 'board';
 
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
