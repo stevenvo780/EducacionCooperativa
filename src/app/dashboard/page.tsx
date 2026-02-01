@@ -414,23 +414,18 @@ export default function DashboardPage() {
         return () => clearInterval(interval);
     }, [currentWorkspace, user, fetchDocs]);
 
-    // Flag to track if state has been restored for this workspace
     const [stateRestoredForWorkspace, setStateRestoredForWorkspace] = useState<string | null>(null);
 
     useEffect(() => {
         if (!currentWorkspaceId) return;
-        // Load persisted state for this workspace
         const persisted = loadDashboardState(currentWorkspaceId);
         if (persisted) {
-            // Restore sidebar width and active folder immediately
             if (persisted.sidebarWidth) setSidebarWidth(persisted.sidebarWidth);
             if (persisted.activeFolder) setActiveFolder(persisted.activeFolder);
             if (persisted.docModes) setDocModes(persisted.docModes);
         } else {
-            // No persisted state, reset to defaults
             setDocModes({});
         }
-        // Clear tabs for now, they'll be restored after docs load
         setOpenTabs([]);
         setMosaicNode(null);
         setSelectedDocId(null);
@@ -466,23 +461,20 @@ export default function DashboardPage() {
         })();
     }, [currentWorkspace, user, openTabs, closedFilesTabByWorkspace]);
 
-    // Restore open tabs from persisted state after docs are loaded
     useEffect(() => {
         if (!currentWorkspaceId || !docs.length || loadingDocs) return;
-        if (stateRestoredForWorkspace === currentWorkspaceId) return; // Already restored
+        if (stateRestoredForWorkspace === currentWorkspaceId) return;
 
         const persisted = loadDashboardState(currentWorkspaceId);
         if (persisted?.openTabs && persisted.openTabs.length > 0) {
             const restoredTabs = restoreOpenTabs(persisted.openTabs, docs);
             if (restoredTabs.length > 0) {
                 setOpenTabs(prev => {
-                    // Merge with existing tabs (like files tab)
                     const existingIds = new Set(prev.map(t => t.id));
                     const newTabs = restoredTabs.filter(t => !existingIds.has(t.id));
                     return [...prev, ...newTabs];
                 });
 
-                // Restore mosaic layout
                 if (persisted.mosaicNode) {
                     (async () => {
                         const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
@@ -493,14 +485,12 @@ export default function DashboardPage() {
                             ]);
                             const validated = validateMosaicNode(persisted.mosaicNode!, tabIds);
                             if (validated) return validated;
-                            // Fallback: create balanced tree from all tabs
                             const allIds = [...tabIds];
                             return allIds.length > 0 ? createBalancedTreeFromLeaves(allIds) : null;
                         });
                     })();
                 }
 
-                // Restore selected doc
                 if (persisted.selectedDocId) {
                     const selectedExists = restoredTabs.some(t => t.id === persisted.selectedDocId) ||
                         openTabs.some(t => t.id === persisted.selectedDocId);
@@ -513,10 +503,8 @@ export default function DashboardPage() {
         setStateRestoredForWorkspace(currentWorkspaceId);
     }, [currentWorkspaceId, docs, loadingDocs, stateRestoredForWorkspace, openTabs]);
 
-    // Save state when relevant state changes
     useEffect(() => {
         if (!currentWorkspaceId || loadingDocs) return;
-        // Debounce save to avoid too many writes
         const timeoutId = setTimeout(() => {
             saveDashboardState(currentWorkspaceId, {
                 openTabs,
@@ -532,7 +520,6 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (currentWorkspaceId) {
-            // Only reset activeFolder if no persisted state
             const persisted = loadDashboardState(currentWorkspaceId);
             if (!persisted?.activeFolder) {
                 setActiveFolder(ROOT_FOLDER_PATH);
