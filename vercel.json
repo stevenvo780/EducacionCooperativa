@@ -2,5 +2,26 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "installCommand": "npm install",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/upload",
+      "methods": ["POST"],
+      "headers": {
+        "x-vercel-proxy-request-body-size": "52428800"
+      }
+    },
+    {
+      "src": "/api/documents/convert",
+      "methods": ["POST"],
+      "headers": {
+        "x-vercel-proxy-request-body-size": "52428800"
+      }
+    }
+  ]
 }
