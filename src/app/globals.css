@@ -209,7 +209,8 @@ body {
 .mosaic-custom-dark .mosaic-window-toolbar {
   background: #1a1a2e !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-  height: 36px !important;
+  height: 28px !important;
+  min-height: 28px !important;
   padding: 0 8px !important;
 }
 
@@ -224,9 +225,7 @@ body {
 }
 
 .mosaic-custom-dark .mosaic-preview {
-  background: rgba(233, 69, 96, 0.1) !important;
-  border: 2px dashed rgba(233, 69, 96, 0.5) !important;
-  border-radius: 8px !important;
+  display: none !important;
 }
 
 .mosaic-custom-dark .mosaic-split {

@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { X, Pencil, Eye, Columns, Terminal as TerminalIcon, FileText, Folder } from 'lucide-react';
+import { Columns, Eye, Pencil, X, Terminal as TerminalIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -91,56 +91,51 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   currentWorkspaceType,
   nexusUrl
 }) => {
-
-  const renderCloseControl = useCallback((docId: string) => (
-      <button
-          onClick={(e) => {
-              e.stopPropagation();
-              onCloseTab(docId);
-          }}
-          className="p-1 rounded transition text-slate-400 hover:bg-mandy-600/20 hover:text-mandy-300"
-          title="Cerrar"
-      >
-          <X className="w-4 h-4" />
-      </button>
-  ), [onCloseTab]);
-
-  const renderDocModeControls = useCallback((docId: string, mode: ViewMode) => (
-      <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-          <button
-              onClick={() => onSetDocMode(docId, 'edit')}
-              className={`p-1 rounded transition ${mode === 'edit' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
-              title="Edicion"
-              aria-pressed={mode === 'edit'}
-          >
-              <Pencil className="w-4 h-4" />
-          </button>
-          <button
-              onClick={() => onSetDocMode(docId, 'preview')}
-              className={`p-1 rounded transition ${mode === 'preview' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
-              title="Vista"
-              aria-pressed={mode === 'preview'}
-          >
-              <Eye className="w-4 h-4" />
-          </button>
-          <button
-              onClick={() => onSetDocMode(docId, 'split')}
-              className={`p-1 rounded transition ${mode === 'split' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'}`}
-              title="Dividir"
-              aria-pressed={mode === 'split'}
-          >
-              <Columns className="w-4 h-4" />
-          </button>
-          </div>
-          <span className="h-4 w-px bg-slate-700" />
-          {renderCloseControl(docId)}
-      </div>
-  ), [renderCloseControl, onSetDocMode]);
-
   const fileExplorerDocs = useMemo(() => {
       return docs.filter(d => d.type !== 'terminal' && d.type !== 'files');
   }, [docs]);
+
+  const renderToolbarControls = useCallback((doc: { id: string; type?: string }, mode: ViewMode) => {
+    const isTextDoc = doc.type !== 'terminal' && doc.type !== 'files';
+
+    return (
+      <div className="flex items-center gap-1">
+        {isTextDoc && (
+          <>
+            <button
+              onClick={() => onSetDocMode(doc.id, 'edit')}
+              className={`p-1 rounded transition ${mode === 'edit' ? 'bg-sky-600 text-white' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
+              title="Edicion"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onSetDocMode(doc.id, 'preview')}
+              className={`p-1 rounded transition ${mode === 'preview' ? 'bg-emerald-600 text-white' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
+              title="Vista"
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onSetDocMode(doc.id, 'split')}
+              className={`p-1 rounded transition ${mode === 'split' ? 'bg-indigo-600 text-white' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
+              title="Dividir"
+            >
+              <Columns className="w-3.5 h-3.5" />
+            </button>
+            <span className="w-px h-4 bg-surface-600 mx-1" />
+          </>
+        )}
+        <button
+          onClick={() => onCloseTab(doc.id)}
+          className="p-1 rounded text-surface-400 hover:bg-mandy-600/20 hover:text-mandy-300 transition"
+          title="Cerrar"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }, [onSetDocMode, onCloseTab]);
 
   const renderTile = useCallback((id: string, path: MosaicPath) => {
     const doc = openTabs.find(t => t.id === id) || docs.find(d => d.id === id);
@@ -150,29 +145,12 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isFileExplorer = doc.type === 'files';
     const mode = docModes[doc.id] ?? 'preview';
 
-    let toolbarIcon = <FileText className="w-4 h-4 text-sky-400" />;
-    let toolbarControls = renderDocModeControls(doc.id, mode);
-
-    if (isTerminal) {
-      toolbarIcon = <TerminalIcon className="w-4 h-4 text-mandy-400" />;
-      toolbarControls = renderCloseControl(doc.id);
-    } else if (isFileExplorer) {
-      toolbarIcon = <Folder className="w-4 h-4 text-amber-400" />;
-      toolbarControls = renderCloseControl(doc.id);
-    }
-
     return (
         <MosaicWindow<string>
             path={path}
             title={doc.name}
-            className="bg-surface-900 border border-surface-700 mosaic-window-compact-title"
-            toolbarControls={toolbarControls}
-            renderPreview={() => (
-                <div className="flex items-center gap-2 p-1">
-                   {toolbarIcon}
-                   <span className="text-sm font-medium text-surface-200">{doc.name}</span>
-                </div>
-            )}
+            className="bg-surface-900 mosaic-window-compact"
+            toolbarControls={renderToolbarControls(doc, mode)}
         >
             <div className="h-full w-full bg-black relative">
                  {isTerminal ? (
@@ -210,7 +188,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    openTabs, docs, docModes, renderDocModeControls, renderCloseControl, nexusUrl,
+    openTabs, docs, docModes, nexusUrl, renderToolbarControls,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, folders,
     onSelectDoc, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc,
@@ -237,8 +215,15 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           }
       />
       <style jsx global>{`
-        .mosaic-window-compact-title .mosaic-window-title {
-          display: none !important;
+        .mosaic-window-compact .mosaic-window-toolbar {
+          height: 28px !important;
+          min-height: 28px !important;
+          background: rgb(30 30 35) !important;
+          border-bottom: 1px solid rgb(55 55 65) !important;
+        }
+        .mosaic-window-compact .mosaic-window-title {
+          font-size: 11px !important;
+          color: rgb(180 180 190) !important;
         }
       `}</style>
     </>

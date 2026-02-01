@@ -118,7 +118,8 @@ export async function POST(req: NextRequest) {
       };
       await columnRef.set(data);
       await touchBoard(boardRef);
-      return NextResponse.json({ id: columnRef.id, ...data });
+      const snap = await columnRef.get();
+      return NextResponse.json({ id: columnRef.id, ...snap.data() });
     }
 
     if (type === 'card') {
@@ -139,7 +140,8 @@ export async function POST(req: NextRequest) {
       };
       await cardRef.set(data);
       await touchBoard(boardRef);
-      return NextResponse.json({ id: cardRef.id, ...data });
+      const snap = await cardRef.get();
+      return NextResponse.json({ id: cardRef.id, ...snap.data() });
     }
 
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
