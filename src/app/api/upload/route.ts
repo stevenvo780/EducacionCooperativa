@@ -5,7 +5,6 @@ import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 // Limit uploads to 50 MB and force Node runtime (edge has smaller limits)
 export const runtime = 'nodejs';
-export const maxRequestBodySize = '50mb';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 

@@ -218,7 +218,7 @@ export class TerminalController {
       auth: { type: 'client', token, uid },
       transports: ['websocket'],
       autoConnect: false,
-      timeout: 10000, // 10 segundos timeout
+      timeout: 10000,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000
     });

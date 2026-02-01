@@ -254,6 +254,7 @@ export const useDashboardUploads = ({
     scheduleUploadStatusClear,
     getRelativeDir,
     joinPaths,
+    MAX_FILE_SIZE,
     fetchDocs,
     openDocument,
     showDialog
