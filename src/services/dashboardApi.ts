@@ -1,0 +1,124 @@
+import type { DocItem, Workspace } from '@/components/dashboard/types';
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+const assertOk = (res: Response, fallbackMessage: string) => {
+  if (!res.ok) {
+    throw new Error(fallbackMessage);
+  }
+};
+
+export const fetchWorkspacesApi = async (params: { ownerId: string; email?: string | null }) => {
+  const search = new URLSearchParams();
+  search.set('ownerId', params.ownerId);
+  if (params.email) {
+    search.set('email', params.email);
+  }
+  const res = await fetch(`/api/workspaces?${search.toString()}`);
+  assertOk(res, 'Failed to fetch workspaces');
+  const data = (await res.json()) as { workspaces?: Workspace[]; invites?: Workspace[] };
+  return {
+    workspaces: Array.isArray(data.workspaces) ? data.workspaces : [],
+    invites: Array.isArray(data.invites) ? data.invites : []
+  };
+};
+
+export const acceptInviteApi = async (params: { workspaceId: string; userId: string; email: string }) => {
+  const res = await fetch(`/api/workspaces/${params.workspaceId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      action: 'accept',
+      userId: params.userId,
+      email: params.email
+    })
+  });
+  assertOk(res, 'Failed to accept invite');
+};
+
+export const inviteMemberApi = async (params: { workspaceId: string; email: string }) => {
+  const res = await fetch(`/api/workspaces/${params.workspaceId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      action: 'invite',
+      email: params.email
+    })
+  });
+  assertOk(res, 'Failed to invite member');
+};
+
+export const createWorkspaceApi = async (params: { name: string; ownerId: string }) => {
+  const res = await fetch('/api/workspaces', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      name: params.name,
+      ownerId: params.ownerId
+    })
+  });
+  assertOk(res, 'Failed to create workspace');
+  return (await res.json()) as { id: string; name?: string; ownerId?: string; members?: string[] };
+};
+
+export const deleteWorkspaceApi = async (params: { workspaceId: string; ownerId: string }) => {
+  const res = await fetch(`/api/workspaces/${params.workspaceId}`, {
+    method: 'DELETE',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ ownerId: params.ownerId })
+  });
+  assertOk(res, 'Failed to delete workspace');
+};
+
+export const fetchDocsApi = async (params: { workspaceId: string; ownerId?: string; view?: string }) => {
+  const search = new URLSearchParams();
+  search.set('workspaceId', params.workspaceId);
+  if (params.ownerId) {
+    search.set('ownerId', params.ownerId);
+  }
+  if (params.view) {
+    search.set('view', params.view);
+  }
+  const res = await fetch(`/api/documents?${search.toString()}`);
+  assertOk(res, 'Failed to fetch docs via API');
+  return (await res.json()) as DocItem[];
+};
+
+export const fetchDocumentRawApi = async (docId: string) => {
+  const res = await fetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
+  assertOk(res, 'Failed to load content');
+  return res.text();
+};
+
+export const createDocumentApi = async (payload: Record<string, unknown>) => {
+  const res = await fetch('/api/documents', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+  assertOk(res, 'Failed to create document via API');
+  return res.json() as Promise<{ id: string; [key: string]: unknown }>;
+};
+
+export const updateDocumentApi = async (docId: string, payload: Record<string, unknown>) => {
+  const res = await fetch(`/api/documents/${docId}`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+  assertOk(res, 'Failed to update document');
+};
+
+export const deleteDocumentApi = async (docId: string) => {
+  const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
+  return res.ok;
+};
+
+export const uploadFileApi = async (formData: FormData) => {
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData
+  });
+  assertOk(res, 'API Upload failed');
+  return (await res.json()) as DocItem;
+};
