@@ -3,6 +3,12 @@ import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
+// Limit uploads to 50 MB and force Node runtime (edge has smaller limits)
+export const runtime = 'nodejs';
+export const maxRequestBodySize = '50mb';
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
 export async function POST(req: NextRequest) {
     try {
         const auth = await requireAuth(req);
@@ -19,6 +25,10 @@ export async function POST(req: NextRequest) {
 
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+        }
+
+        if (file.size > MAX_FILE_SIZE) {
+            return NextResponse.json({ error: 'El archivo supera el límite de 50MB' }, { status: 413 });
         }
 
         if (workspaceId !== 'personal') {
