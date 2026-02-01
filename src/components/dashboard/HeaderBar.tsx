@@ -100,7 +100,10 @@ const HeaderBar = ({
                       <div key={ws.id} className="px-4 py-3 flex items-center justify-between hover:bg-surface-700 border-b border-surface-600/30">
                         <span className="text-sm font-medium text-surface-200 truncate max-w-[120px]">{ws.name}</span>
                         <button
-                          onClick={() => onAcceptInvite(ws)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAcceptInvite(ws);
+                          }}
                           className="text-xs bg-mandy-500 text-white px-2 py-1 rounded hover:bg-mandy-600"
                         >
                           Unirse
