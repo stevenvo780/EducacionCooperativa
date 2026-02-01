@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { AnimatePresence, m } from 'framer-motion';
+import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { Search } from 'lucide-react';
 import type { DocItem } from '@/components/dashboard/types';
 
@@ -17,8 +17,8 @@ interface QuickSearchModalProps {
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   inputRef: React.RefObject<HTMLInputElement>;
   getIcon: (doc: DocItem) => React.ReactNode;
-  modalFade: { duration: number; ease: string };
-  modalPop: { duration: number; ease: string };
+  modalFade: Transition;
+  modalPop: Transition;
 }
 
 const QuickSearchModal = ({

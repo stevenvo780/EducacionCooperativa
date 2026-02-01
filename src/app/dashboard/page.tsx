@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter } from 'next/navigation';
 import { Check, FileText, Folder, Image as ImageIcon, File as FileIcon, Key, Loader2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
-import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
 import type { DocItem, FolderItem, ViewMode, Workspace, DialogConfig, DialogResult, DeleteStatus } from '@/components/dashboard/types';
@@ -88,11 +88,11 @@ export default function DashboardPage() {
     const router = useRouter();
     const reduceMotion = useReducedMotion();
     const [, startTransition] = useTransition();
-    const modalFade = useMemo(() => ({
+    const modalFade = useMemo<Transition>(() => ({
         duration: reduceMotion ? 0.01 : 0.12,
         ease: 'easeOut'
     }), [reduceMotion]);
-    const modalPop = useMemo(() => ({
+    const modalPop = useMemo<Transition>(() => ({
         duration: reduceMotion ? 0.01 : 0.14,
         ease: 'easeOut'
     }), [reduceMotion]);
@@ -194,7 +194,6 @@ export default function DashboardPage() {
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
-    const [isDragActive, setIsDragActive] = useState(false);
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
@@ -496,7 +495,7 @@ export default function DashboardPage() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [showQuickSearch]);
+    }, [showQuickSearch, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
 
     // Filtered docs for quick search
     const quickSearchResults = useMemo(() => {
@@ -696,7 +695,7 @@ export default function DashboardPage() {
 
         setSelectedDocId(filesTabId);
         setShowMobileSidebar(false);
-    }, [currentWorkspace, user]);
+    }, [currentWorkspace, setShowMobileSidebar, user]);
 
     useEffect(() => {
         setDocModes(prev => {

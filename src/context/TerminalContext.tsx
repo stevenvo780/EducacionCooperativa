@@ -61,6 +61,13 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     // NEW: Track worker status per workspace
     const [workspaceWorkerStatuses, setWorkspaceWorkerStatuses] = useState<Map<string, WorkerStatus>>(new Map());
 
+    const debugLog = useCallback((...args: unknown[]) => {
+        if (process.env.NODE_ENV !== 'production') {
+            // eslint-disable-next-line no-console
+            console.log(...args);
+        }
+    }, []);
+
     const getWorkerStatusForWorkspace = useCallback((workspaceId: string): WorkerStatus => {
         return workspaceWorkerStatuses.get(workspaceId) || 'unknown';
     }, [workspaceWorkerStatuses]);
@@ -71,22 +78,22 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     }, [sessions]);
 
     const initialize = useCallback(async (nexusUrl: string) => {
-        console.log('[TerminalContext] initialize called with nexusUrl:', nexusUrl);
+        debugLog('[TerminalContext] initialize called with nexusUrl:', nexusUrl);
         const currentUser = getUserRef.current();
-        console.log('[TerminalContext] currentUser:', currentUser?.uid, 'controllerRef.current:', !!controllerRef.current);
+        debugLog('[TerminalContext] currentUser:', currentUser?.uid, 'controllerRef.current:', !!controllerRef.current);
         if (!currentUser || controllerRef.current) {
-            console.log('[TerminalContext] Returning early - no user or controller already exists');
+            debugLog('[TerminalContext] Returning early - no user or controller already exists');
             return;
         }
 
-        console.log('[TerminalContext] Starting initialization...');
+        debugLog('[TerminalContext] Starting initialization...');
         setStatus('checking');
         setHubConnected(false);
         setErrorMessage(null);
 
         const controller = new TerminalController(nexusUrl);
         const ok = await controller.initialize();
-        console.log('[TerminalContext] Controller initialized:', ok);
+        debugLog('[TerminalContext] Controller initialized:', ok);
         if (!ok) {
             setStatus('error');
             setErrorMessage('Failed to initialize terminal controller');
@@ -108,18 +115,18 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 currentUser.uid,
                 // Hub status callback
                 (newStatus) => {
-                    console.log('[TerminalContext] Hub status changed:', newStatus);
+                    debugLog('[TerminalContext] Hub status changed:', newStatus);
                     if (newStatus === 'hub-online') {
                         // Hub reachable; treat as online so UI does not remain stuck in "checking" state
-                        console.log('[TerminalContext] Setting hubConnected=true, status=online');
+                        debugLog('[TerminalContext] Setting hubConnected=true, status=online');
                         setHubConnected(true);
                         setStatus('online');
                     } else if (newStatus === 'hub-offline') {
-                        console.log('[TerminalContext] Setting hubConnected=false, status=offline');
+                        debugLog('[TerminalContext] Setting hubConnected=false, status=offline');
                         setHubConnected(false);
                         setStatus('offline');
                     } else if (newStatus === 'online') {
-                        console.log('[TerminalContext] Setting hubConnected=true, status=online (online event)');
+                        debugLog('[TerminalContext] Setting hubConnected=true, status=online (online event)');
                         setHubConnected(true);
                         setStatus('online');
                     } else if (newStatus === 'offline') {
@@ -194,7 +201,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             setStatus('error');
             setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
         }
-    }, []);
+    }, [debugLog]);
 
     const createSession = useCallback((workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => {
         setIsCreatingSession(true);
