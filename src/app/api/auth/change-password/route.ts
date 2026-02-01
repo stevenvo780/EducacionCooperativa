@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
 
         const userData = userDoc.data();
 
-        // Verificar contraseña actual
         const currentHash = hashPassword(currentPassword);
         if (currentHash !== userData?.passwordHash) {
             return NextResponse.json(
@@ -40,10 +39,8 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Hash de la nueva contraseña
         const newPasswordHash = hashPassword(newPassword);
 
-        // Actualizar en Firestore
         await adminDb.collection('users').doc(uid).update({
             passwordHash: newPasswordHash,
             updatedAt: new Date()

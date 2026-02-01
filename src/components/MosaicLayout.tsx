@@ -23,7 +23,6 @@ export interface DocItem {
   storagePath?: string;
   workspaceId?: string;
 
-  // File props
   mimeType?: string;
   size?: number;
   updatedAt?: any;
@@ -151,7 +150,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isFileExplorer = doc.type === 'files';
     const mode = docModes[doc.id] ?? 'preview';
 
-    // Determine icon and toolbar
     let toolbarIcon = <FileText className="w-4 h-4 text-sky-400" />;
     let toolbarControls = renderDocModeControls(doc.id, mode);
 

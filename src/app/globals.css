@@ -20,13 +20,11 @@ body {
   min-height: 100vh;
 }
 
-/* Selection styling */
 ::selection {
   background: rgba(233, 69, 96, 0.3);
   color: #fff;
 }
 
-/* Focus ring accent */
 *:focus-visible {
   outline-color: rgba(233, 69, 96, 0.6);
 }
@@ -166,7 +164,6 @@ body {
   }
 }
 
-/* Terminal container styles */
 .terminal-container {
   width: 100%;
   height: 100%;
@@ -192,7 +189,6 @@ body {
   width: 100% !important;
 }
 
-/* React Mosaic dark theme overrides */
 .mosaic-custom-dark {
   background: transparent !important;
 }
@@ -251,12 +247,10 @@ body {
   margin: -3px 0 !important;
 }
 
-/* Zero state styling */
 .mosaic-custom-dark .mosaic-zero-state {
   background: transparent !important;
 }
 
-/* Hide default mosaic window buttons if not needed */
 .mosaic-custom-dark .mosaic-default-control {
   display: none !important;
 }
