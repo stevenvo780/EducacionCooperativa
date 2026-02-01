@@ -31,6 +31,8 @@ interface TerminalContextType {
     getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
     // Subscribe to workspace worker status
     subscribeToWorkspace: (workspaceId: string) => void;
+    // Clear active session (used when switching workspaces)
+    clearActiveSession: () => void;
 }
 
 const TerminalContext = createContext<TerminalContextType | null>(null);
@@ -213,6 +215,11 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         controllerRef.current?.checkWorkerStatus(workspaceId);
     }, []);
 
+    // Clear active session when switching workspaces to prevent cross-workspace session leakage
+    const clearActiveSession = useCallback(() => {
+        setActiveSessionId(null);
+    }, []);
+
     useEffect(() => {
         return () => {
             controllerRef.current?.destroy();
@@ -236,7 +243,8 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             workspaceWorkerStatuses,
             getWorkerStatusForWorkspace,
             getSessionsForWorkspace,
-            subscribeToWorkspace
+            subscribeToWorkspace,
+            clearActiveSession
         }}>
             {children}
         </TerminalContext.Provider>
