@@ -29,7 +29,7 @@ const TabsBar = ({ openTabs, selectedDocId, onSelectTab, onCloseTab, getIcon }: 
             key={tab.id}
             onClick={() => onSelectTab(tab)}
             className={`
-              group flex items-center gap-2 px-3 py-2 text-xs font-medium cursor-pointer min-w-[120px] max-w-[200px] border-r border-surface-600/30 select-none
+              group flex items-center gap-2 px-3 py-1.5 text-xs font-medium cursor-pointer min-w-[100px] max-w-[180px] border-r border-surface-600/30 select-none
               ${selectedDocId === tab.id ? 'bg-surface-900 text-mandy-400 border-t-2 border-t-mandy-500' : 'text-surface-500 hover:bg-surface-700/50'}
             `}
           >
