@@ -42,3 +42,25 @@ export interface DeleteStatus {
   name?: string;
   error?: string;
 }
+
+export interface BoardColumn {
+  id: string;
+  name: string;
+  order: number;
+}
+
+export interface BoardCard {
+  id: string;
+  title: string;
+  description?: string;
+  columnId: string;
+  order: number;
+  ownerId?: string;
+}
+
+export interface BoardData {
+  boardId: string;
+  workspaceId: string;
+  columns: BoardColumn[];
+  cards: BoardCard[];
+}
