@@ -342,9 +342,11 @@ export default function MosaicEditor({
           <ToolbarButton icon={LinkIcon} title="Link" onClick={() => insert('[Link Title](url)')} />
           <ToolbarButton icon={ImageIcon} title="Image" onClick={() => insert('![Alt](url)')} />
        </div>
-       <div className="ml-auto flex items-center gap-2 text-xs text-slate-500 font-mono">
-          {saving ? <span className="text-blue-400 animate-pulse flex items-center gap-1"><Cloud className="w-3 h-3"/> Saving</span> : <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3"/> Saved</span>}
-       </div>
+       {!showEditorStatus && (
+         <div className="ml-auto flex items-center gap-2 text-xs text-slate-500 font-mono">
+            {saving ? <span className="text-blue-400 animate-pulse flex items-center gap-1"><Cloud className="w-3 h-3"/> Saving</span> : <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3"/> Saved</span>}
+         </div>
+       )}
        <button
          onClick={() => setShowEditorToolbar(false)}
          className="ml-1 p-1.5 rounded-md text-slate-400 hover:bg-slate-700 hover:text-slate-100"
@@ -364,7 +366,6 @@ export default function MosaicEditor({
               title={`Editor`}
               className="bg-slate-900"
               toolbarControls={[]}
-              renderPreview={() => <div className="p-2 text-white">Editor Preview</div>}
             >
             <div className="flex flex-col h-full bg-slate-950 relative">
                 {showEditorToolbar && <Toolbar />}

@@ -99,7 +99,11 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (!user) return;
-        const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3010';
+        // Production: use HTTPS domain, Development: use localhost
+        const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL ||
+            (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+                ? 'http://localhost:3010'
+                : 'https://hub.humanizar-dev.cloud');
         initialize(nexusUrl);
     }, [initialize, user]);
 
