@@ -57,7 +57,6 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import TabsBar from '@/components/dashboard/TabsBar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 
-// Fix imports for server-side
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const MosaicLayout = dynamic(() => import('@/components/MosaicLayout'), { ssr: false });
