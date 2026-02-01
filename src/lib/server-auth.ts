@@ -22,7 +22,6 @@ const getTokenFromRequest = (req: NextRequest) => {
       return token;
     }
   } catch {
-    // ignore
   }
 
   return null;
