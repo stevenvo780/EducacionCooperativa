@@ -63,8 +63,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
     const debugLog = useCallback((...args: unknown[]) => {
         if (process.env.NODE_ENV !== 'production') {
-            // eslint-disable-next-line no-console
-            console.log(...args);
+            console.debug(...args);
         }
     }, []);
 
