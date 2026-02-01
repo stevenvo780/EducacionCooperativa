@@ -308,7 +308,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     } else {
        setSelectedKeys(allKeys);
     }
-  }, [contentItems, selectedKeys]); // Added dep
+  }, [contentItems, selectedKeys]);
 
   const handleFolderSelect = (folder: FolderItem, index: number, e: React.MouseEvent) => {
     const key = `folder:${folder.path}`;

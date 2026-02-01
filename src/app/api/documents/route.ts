@@ -129,6 +129,11 @@ export async function GET(req: NextRequest) {
                 'ownerId',
                 'url',
                 'storagePath',
+                'sourceName',
+                'sourceMimeType',
+                'sourceStoragePath',
+                'sourceUrl',
+                'sourceFormat',
                 'updatedAt',
                 'createdAt',
                 'size'

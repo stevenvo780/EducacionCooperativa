@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import type { DocItem, DialogConfig, DialogResult, UploadStatus, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
-import { createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
-import { isMarkdownFile } from '@/services/dashboardDocUtils';
+import { convertFileToMarkdownApi, createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
+import { isMarkdownConvertibleFile, isMarkdownDocItem, isMarkdownFile } from '@/services/dashboardDocUtils';
 import type { User as FirebaseUser } from 'firebase/auth';
 
 interface UseDashboardUploadsParams {
@@ -36,7 +36,7 @@ export const useDashboardUploads = ({
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragCounter = useRef(0);
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+  const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
   useEffect(() => {
     const folderInput = folderInputRef.current;
@@ -193,6 +193,7 @@ export const useDashboardUploads = ({
 
         const relativeDir = options?.preservePaths ? getRelativeDir(file) : '';
         const resolvedFolder = joinPaths(baseFolder, relativeDir) || DEFAULT_FOLDER_NAME;
+        const shouldConvert = isMarkdownConvertibleFile(file) && !isMarkdownFile(file);
 
         if (isMarkdownFile(file)) {
           const content = await file.text();
@@ -227,14 +228,34 @@ export const useDashboardUploads = ({
         formData.append('folder', resolvedFolder);
 
         const newDoc = await uploadFileApi(formData);
-        createdDocs.push({ ...newDoc, folder: newDoc.folder ?? resolvedFolder });
+        const fileDoc = { ...newDoc, folder: newDoc.folder ?? resolvedFolder };
+        createdDocs.push(fileDoc);
+
+        if (shouldConvert) {
+          try {
+            const conversion = await convertFileToMarkdownApi({
+              file,
+              workspaceId: context.workspaceId || 'personal',
+              folder: resolvedFolder,
+              persistOriginal: false,
+              createDocument: true
+            });
+
+            if (conversion.createdDoc) {
+              createdDocs.push({ ...conversion.createdDoc, folder: conversion.createdDoc.folder ?? resolvedFolder });
+            }
+          } catch (conversionError) {
+            console.error('Markdown conversion failed', conversionError);
+          }
+        }
 
         setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
       }
 
       await fetchDocs();
-      if (createdDocs.length === 1) {
-        openDocument(createdDocs[0]);
+      const docToOpen = createdDocs.find(doc => isMarkdownDocItem(doc)) ?? createdDocs[0];
+      if (docToOpen) {
+        openDocument(docToOpen);
       }
       setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
       scheduleUploadStatusClear();
