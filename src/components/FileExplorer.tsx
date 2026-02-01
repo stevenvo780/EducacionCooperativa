@@ -126,6 +126,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; docId: string } | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
+  const lastSelectedIndex = useRef<number>(-1);
 
   const normalizedDocs = useMemo(() => {
     return docs.map(doc => ({ ...doc, folder: normalizeFolderPath(doc.folder) }));
@@ -229,7 +230,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   useEffect(() => {
     setSelectedKeys(new Set());
-  }, [activeFolder]);
+    lastSelectedIndex.current = -1;
+  }, [activeFolder, searchQuery]);
 
   const toggleFolder = (path: string) => {
     setExpandedFolders(prev => {
@@ -289,25 +291,85 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     setSelectedKeys(new Set([key]));
   };
 
-  const handleFolderSelect = (folder: FolderItem, e: React.MouseEvent) => {
+  const handleSelectAll = useCallback(() => {
+    const allKeys = new Set<string>();
+    contentItems.forEach(item => {
+      if (item.kind === 'folder') allKeys.add(`folder:${item.folder.path}`);
+      else allKeys.add(`doc:${item.doc.id}`);
+    });
+
+    const allVisibleSelected = contentItems.length > 0 && contentItems.every(item => {
+       const key = item.kind === 'folder' ? `folder:${item.folder.path}` : `doc:${item.doc.id}`;
+       return selectedKeys.has(key);
+    });
+
+    if (allVisibleSelected) {
+       setSelectedKeys(new Set());
+    } else {
+       setSelectedKeys(allKeys);
+    }
+  }, [contentItems, selectedKeys]); // Added dep
+
+  const handleFolderSelect = (folder: FolderItem, index: number, e: React.MouseEvent) => {
     const key = `folder:${folder.path}`;
-    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+
+    if (e.shiftKey && lastSelectedIndex.current !== -1) {
+       const start = Math.min(lastSelectedIndex.current, index);
+       const end = Math.max(lastSelectedIndex.current, index);
+       const nextKeys = new Set(selectedKeys);
+
+       for (let i = start; i <= end; i++) {
+          const item = contentItems[i];
+          if (item.kind === 'folder') nextKeys.add(`folder:${item.folder.path}`);
+          else nextKeys.add(`doc:${item.doc.id}`);
+       }
+       setSelectedKeys(nextKeys);
+       return;
+    }
+
+    if (e.metaKey || e.ctrlKey) {
       toggleSelection(key, e);
+      lastSelectedIndex.current = index;
       return;
     }
+
     setSingleSelection(key);
-    setActiveFolder(folder.path);
-    onActiveFolderChange?.(folder.path);
-    setExpandedFolders(prev => new Set(prev).add(folder.path));
+    lastSelectedIndex.current = index;
   };
 
-  const handleDocSelect = (doc: DocItem, e: React.MouseEvent) => {
+  const handleFolderDoubleClick = (folder: FolderItem) => {
+      setActiveFolder(folder.path);
+      onActiveFolderChange?.(folder.path);
+      setExpandedFolders(prev => new Set(prev).add(folder.path));
+  };
+
+  const handleDocSelect = (doc: DocItem, index: number, e: React.MouseEvent) => {
     const key = `doc:${doc.id}`;
-    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+
+    if (e.shiftKey && lastSelectedIndex.current !== -1) {
+         const start = Math.min(lastSelectedIndex.current, index);
+         const end = Math.max(lastSelectedIndex.current, index);
+         const nextKeys = new Set(selectedKeys);
+         for (let i = start; i <= end; i++) {
+            const item = contentItems[i];
+            if (item.kind === 'folder') nextKeys.add(`folder:${item.folder.path}`);
+            else nextKeys.add(`doc:${item.doc.id}`);
+         }
+         setSelectedKeys(nextKeys);
+         return;
+    }
+
+    if (e.metaKey || e.ctrlKey) {
       toggleSelection(key, e);
+      lastSelectedIndex.current = index;
       return;
     }
+
     setSingleSelection(key);
+    lastSelectedIndex.current = index;
+  };
+
+  const handleDocDoubleClick = (doc: DocItem) => {
     onSelectDoc(doc);
   };
 
@@ -350,7 +412,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       return (
         <div style={rowStyle}>
           <div
-            onClick={(e) => handleFolderSelect(folder, e)}
+            onClick={(e) => handleFolderSelect(folder, index, e)}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              handleFolderDoubleClick(folder);
+            }}
             className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
               isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
             }`}
@@ -393,7 +459,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return (
       <div style={rowStyle}>
         <div
-          onClick={(e) => handleDocSelect(doc, e)}
+          onClick={(e) => handleDocSelect(doc, index, e)}
+          onDoubleClick={(e) => handleDocDoubleClick(doc)}
           onContextMenu={(e) => handleContextMenu(e, doc.id)}
           className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
             isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
@@ -632,7 +699,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           </div>
         </aside>
         <section className="flex-1 min-h-0 flex flex-col">
-          <div className="px-4 py-3 text-xs text-surface-400 uppercase tracking-wider">Contenido</div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-xs text-surface-400 uppercase tracking-wider">Contenido</span>
+            <button
+              onClick={handleSelectAll}
+              className="text-[10px] uppercase font-semibold text-surface-500 hover:text-mandy-400 hover:bg-surface-700/50 px-2 py-1 rounded transition-colors"
+              title="Seleccionar todo / Ninguno"
+            >
+              {contentItems.length > 0 && selectedKeys.size === contentItems.length ? 'Ninguno' : 'Todos'}
+            </button>
+          </div>
           {contentItems.length === 0 ? (
             <div className="px-4 py-6 text-sm text-surface-500">
               {searchQuery ? 'No se encontraron archivos' : 'Esta carpeta está vacía.'}
