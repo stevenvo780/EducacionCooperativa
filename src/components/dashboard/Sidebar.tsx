@@ -131,12 +131,48 @@ const Sidebar = ({
     });
   };
 
+  // Render files for a specific folder
+  const renderFilesInFolder = (folderPath: string, depth: number): React.ReactNode[] => {
+    const folderDocs = docsByFolder[folderPath] ?? [];
+    const paddingLeft = 8 + depth * 12 + 16; // Extra indent for files inside folder
+
+    return folderDocs.map(doc => (
+      <div
+        key={doc.id}
+        onClick={() => openDocument(doc)}
+        draggable
+        onDragStart={(e) => handleDocDragStart(e, doc)}
+        onDragEnd={handleDocDragEnd}
+        className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
+          selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-400 hover:bg-surface-700/40'
+        }`}
+        style={{ paddingLeft }}
+      >
+        <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
+          {getIcon(doc)}
+        </div>
+        <span className="truncate flex-1">{doc.name}</span>
+        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => deleteDocument(doc, e)}
+            className="text-surface-500 hover:text-mandy-400 p-0.5"
+            title="Eliminar"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    ));
+  };
+
   const renderFolderTree = (parentPath: string, depth = 0): React.ReactNode[] => {
     const children = folderChildrenMap[parentPath] ?? [];
     return children.map(folder => {
       const isExpanded = expandedFolders.has(folder.path);
-      const hasChildren = (folderChildrenMap[folder.path] ?? []).length > 0;
-      const count = docsByFolder[folder.path]?.length ?? 0;
+      const subfolders = folderChildrenMap[folder.path] ?? [];
+      const folderFiles = docsByFolder[folder.path] ?? [];
+      const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
+      const count = folderFiles.length;
       const isActive = activeFolder === folder.path;
       const paddingLeft = 8 + depth * 12;
 
@@ -146,30 +182,33 @@ const Sidebar = ({
             onClick={(e) => {
               e.stopPropagation();
               setActiveFolder(folder.path);
-              if (hasChildren) toggleFolder(folder.path);
+              toggleFolder(folder.path);
             }}
             className={`w-full flex items-center gap-1.5 py-1 px-2 rounded text-xs transition ${
               isActive ? 'bg-mandy-500/15 text-mandy-300' : 'text-surface-300 hover:bg-surface-700/40'
             }`}
             style={{ paddingLeft }}
           >
-            {hasChildren ? (
-              <span className="w-3 h-3 flex items-center justify-center">
-                {isExpanded ? <ChevronDown className="w-3 h-3 text-surface-500" /> : <ChevronRight className="w-3 h-3 text-surface-500" />}
-              </span>
-            ) : (
-              <span className="w-3" />
-            )}
+            <span className="w-3 h-3 flex items-center justify-center">
+              {hasChildren ? (
+                isExpanded ? <ChevronDown className="w-3 h-3 text-surface-500" /> : <ChevronRight className="w-3 h-3 text-surface-500" />
+              ) : (
+                <span className="w-3" />
+              )}
+            </span>
             {isExpanded ? (
               <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
             ) : (
               <Folder className="w-3.5 h-3.5 text-amber-400" />
             )}
             <span className="truncate flex-1 text-left">{folder.name}</span>
-            <span className="text-[9px] text-surface-500">{count}</span>
+            {count > 0 && <span className="text-[9px] text-surface-500">{count}</span>}
           </button>
-          {isExpanded && hasChildren && (
-            <div>{renderFolderTree(folder.path, depth + 1)}</div>
+          {isExpanded && (
+            <div>
+              {renderFolderTree(folder.path, depth + 1)}
+              {renderFilesInFolder(folder.path, depth)}
+            </div>
           )}
         </div>
       );
@@ -289,64 +328,62 @@ const Sidebar = ({
               </button>
             </div>
 
-            {/* Folder Tree Section */}
-            {folders.length > 0 && !sidebarSearchQuery && (
-              <div className="mt-2 px-1">
-                <div className="px-2 py-1 text-[9px] font-bold text-surface-600 uppercase tracking-wider">
-                  Carpetas
+            {/* Unified Folder & Files Tree */}
+            <div className="mt-2 px-1">
+              {loadingDocs && docs.length === 0 && (
+                <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Cargando archivos...
                 </div>
+              )}
+
+              {!loadingDocs && docs.length === 0 && !sidebarSearchQuery && (
+                <div className="px-3 py-2 text-center text-xs text-surface-500">
+                  Espacio vacío
+                </div>
+              )}
+
+              {/* When searching, show flat list */}
+              {sidebarSearchQuery ? (
+                <div className="space-y-0.5">
+                  {sidebarFilteredDocs.length === 0 ? (
+                    <div className="px-3 py-2 text-center text-xs text-surface-500">
+                      Sin resultados
+                    </div>
+                  ) : (
+                    sidebarFilteredDocs.map(doc => (
+                      <div
+                        key={doc.id}
+                        onClick={() => openDocument(doc)}
+                        draggable
+                        onDragStart={(e) => handleDocDragStart(e, doc)}
+                        onDragEnd={handleDocDragEnd}
+                        className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
+                      >
+                        <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
+                          {getIcon(doc)}
+                        </div>
+                        <span className="truncate flex-1">{doc.name}</span>
+                        <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{doc.folder?.split('/').pop()}</span>
+                        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => deleteDocument(doc, e)}
+                            className="text-surface-500 hover:text-mandy-400 p-0.5"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                /* Normal folder tree view */
                 <div className="space-y-0.5">
                   {renderFolderTree('')}
                 </div>
-              </div>
-            )}
-
-            {/* Files Section */}
-            <div className="mt-2 px-1">
-              {!sidebarSearchQuery && folders.length > 0 && (
-                <div className="px-2 py-1 text-[9px] font-bold text-surface-600 uppercase tracking-wider">
-                  Archivos {activeFolder !== DEFAULT_FOLDER_NAME && `en ${activeFolder.split('/').pop()}`}
-                </div>
               )}
-              <div className="space-y-0.5">
-                {loadingDocs && docs.length === 0 && (
-                  <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Cargando archivos...
-                  </div>
-                )}
-
-                {!loadingDocs && sidebarFilteredDocs.length === 0 && (
-                  <div className="px-3 py-2 text-center text-xs text-surface-500">
-                    {sidebarSearchQuery ? 'Sin resultados' : 'Espacio vacio'}
-                  </div>
-                )}
-
-                {sidebarFilteredDocs.map(doc => (
-                  <div
-                    key={doc.id}
-                    onClick={() => openDocument(doc)}
-                    draggable
-                    onDragStart={(e) => handleDocDragStart(e, doc)}
-                    onDragEnd={handleDocDragEnd}
-                    className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
-                  >
-                    <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
-                      {getIcon(doc)}
-                    </div>
-                    <span className="truncate flex-1">{doc.name}</span>
-                    <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => deleteDocument(doc, e)}
-                        className="text-surface-500 hover:text-mandy-400 p-0.5"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>
