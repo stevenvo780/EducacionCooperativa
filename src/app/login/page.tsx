@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
 import { Mail, Lock, AlertCircle, Chrome, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
   const { signInWithGoogle, loginWithEmail, registerWithEmail, resetPassword } = useAuth();
+  const reduceMotion = useReducedMotion();
   const [isLogin, setIsLogin] = useState(true);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [email, setEmail] = useState('');
@@ -65,24 +66,25 @@ export default function LoginPage() {
   // Vista de recuperación de contraseña
   if (showResetPassword) {
     return (
-      <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
-        <div className="absolute inset-0 bg-gradient-glow opacity-40" />
+      <LazyMotion features={domAnimation}>
+        <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
+          <div className="absolute inset-0 bg-gradient-glow opacity-40" />
 
-        <div className="w-full max-w-md relative z-10">
-          <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden border border-surface-600/50">
-            <div className="p-8">
-              <button
-                onClick={() => {
-                  setShowResetPassword(false);
-                  setResetSuccess(false);
-                  setResetError(null);
-                  setResetEmail('');
-                }}
-                className="flex items-center gap-2 text-surface-400 hover:text-white transition mb-6"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Volver al inicio de sesión
-              </button>
+          <div className="w-full max-w-md relative z-10">
+            <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden border border-surface-600/50">
+              <div className="p-8">
+                <button
+                  onClick={() => {
+                    setShowResetPassword(false);
+                    setResetSuccess(false);
+                    setResetError(null);
+                    setResetEmail('');
+                  }}
+                  className="flex items-center gap-2 text-surface-400 hover:text-white transition mb-6"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Volver al inicio de sesión
+                </button>
 
               {resetSuccess ? (
                 <div className="text-center py-8">
@@ -125,15 +127,16 @@ export default function LoginPage() {
 
                     <AnimatePresence>
                       {resetError && (
-                        <motion.div
+                        <m.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: reduceMotion ? 0.01 : 0.2, ease: 'easeOut' }}
                           className="bg-mandy-500/10 text-mandy-400 text-sm p-3 rounded-lg flex items-center gap-2 border border-mandy-500/20"
                         >
                           <AlertCircle className="w-4 h-4" />
                           {resetError}
-                        </motion.div>
+                        </m.div>
                       )}
                     </AnimatePresence>
 
@@ -155,18 +158,20 @@ export default function LoginPage() {
                 </>
               )}
             </div>
+            </div>
           </div>
         </div>
-      </div>
+      </LazyMotion>
     );
   }
 
   return (
-    <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
-      <div className="absolute inset-0 bg-gradient-glow opacity-40" />
+    <LazyMotion features={domAnimation}>
+      <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
+        <div className="absolute inset-0 bg-gradient-glow opacity-40" />
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden border border-surface-600/50">
+        <div className="w-full max-w-md relative z-10">
+          <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden border border-surface-600/50">
             <div className="flex border-b border-surface-600/50">
                 <button
                     onClick={() => setIsLogin(true)}
@@ -237,15 +242,16 @@ export default function LoginPage() {
 
                     <AnimatePresence>
                         {error && (
-                            <motion.div
+                            <m.div
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: 'auto' }}
                                 exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: reduceMotion ? 0.01 : 0.2, ease: 'easeOut' }}
                                 className="bg-mandy-500/10 text-mandy-400 text-sm p-3 rounded-lg flex items-center gap-2 border border-mandy-500/20"
                             >
                                 <AlertCircle className="w-4 h-4" />
                                 {error}
-                            </motion.div>
+                            </m.div>
                         )}
                     </AnimatePresence>
 
@@ -277,8 +283,9 @@ export default function LoginPage() {
             <Link href="/" className="text-sm text-surface-500 hover:text-mandy-400 transition">
                 &larr; Volver al inicio
             </Link>
+          </div>
         </div>
       </div>
-    </div>
+    </LazyMotion>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useLayoutEffect, useRef } from 'react';
+import { FixedSizeList, type ListChildComponentProps } from 'react-window';
 import {
   Folder,
   FolderOpen,
@@ -41,6 +42,44 @@ export interface FolderItem {
   kind: 'system' | 'record' | 'virtual';
   docId?: string;
 }
+
+type ContentItem =
+  | { kind: 'folder'; folder: FolderItem }
+  | { kind: 'doc'; doc: DocItem };
+
+const CONTENT_ROW_HEIGHT = 52;
+
+const useElementSize = <T extends HTMLElement>() => {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const update = () => {
+      setSize({ width: element.clientWidth, height: element.clientHeight });
+    };
+
+    update();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setSize({ width, height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, size] as const;
+};
 
 interface FileExplorerProps {
   docs: DocItem[];
@@ -86,6 +125,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; docId: string } | null>(null);
+  const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
 
   const normalizedDocs = useMemo(() => {
     return docs.map(doc => ({ ...doc, folder: normalizeFolderPath(doc.folder) }));
@@ -138,6 +178,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     const query = searchQuery.toLowerCase();
     return activeFolderDocs.filter(doc => doc.name.toLowerCase().includes(query));
   }, [activeFolderDocs, searchQuery]);
+
+  const contentItems = useMemo<ContentItem[]>(() => {
+    const items: ContentItem[] = [];
+    filteredChildFolders.forEach(folder => items.push({ kind: 'folder', folder }));
+    filteredFolderDocs.forEach(doc => items.push({ kind: 'doc', doc }));
+    return items;
+  }, [filteredChildFolders, filteredFolderDocs]);
 
   const docMap = useMemo(() => {
     return new Map(normalizedDocs.map(doc => [doc.id, doc]));
@@ -285,6 +332,139 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     });
     selectedDocIds.forEach(docId => onDeleteDoc?.(docId));
     setSelectedKeys(new Set());
+  };
+
+  const renderContentRow = ({ index, style }: ListChildComponentProps) => {
+    const item = contentItems[index];
+    if (!item) return null;
+    const rowStyle = {
+      ...style,
+      paddingLeft: 16,
+      paddingRight: 16
+    } as React.CSSProperties;
+
+    if (item.kind === 'folder') {
+      const folder = item.folder;
+      const isSelected = selectedKeys.has(`folder:${folder.path}`);
+      const count = docsByFolder[folder.path]?.length ?? 0;
+      return (
+        <div style={rowStyle}>
+          <div
+            onClick={(e) => handleFolderSelect(folder, e)}
+            className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
+              isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => toggleSelection(`folder:${folder.path}`, e)}
+              className="accent-mandy-500"
+              title="Seleccionar carpeta"
+            />
+            <Folder className="w-4 h-4 text-surface-500" />
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-sm font-semibold truncate">{folder.name}</span>
+              <span className="text-[11px] text-surface-500 truncate">{folder.path}</span>
+            </div>
+            <span className="text-[10px] text-surface-500">{count}</span>
+            <div className="ml-auto flex items-center gap-2">
+              {onDeleteFolder && folder.kind !== 'system' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteFolder(folder);
+                  }}
+                  className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
+                  title="Eliminar carpeta"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const doc = item.doc;
+    const key = `doc:${doc.id}`;
+    const isSelected = selectedKeys.has(key);
+    return (
+      <div style={rowStyle}>
+        <div
+          onClick={(e) => handleDocSelect(doc, e)}
+          onContextMenu={(e) => handleContextMenu(e, doc.id)}
+          className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
+            isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => toggleSelection(key, e)}
+            className="accent-mandy-500"
+            title="Seleccionar archivo"
+          />
+          <div className="text-surface-500">{getFileIcon(doc)}</div>
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className="text-sm font-semibold truncate">{doc.name}</span>
+            <span className="text-[11px] text-surface-500 truncate">{doc.folder || DEFAULT_FOLDER_NAME}</span>
+          </div>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
+            {getDocBadge(doc)}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {onDuplicateDoc && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicateDoc(doc);
+                }}
+                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                title="Duplicar"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onMoveDoc && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMoveDoc(doc);
+                }}
+                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                title="Mover"
+              >
+                <FolderInput className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onDeleteDoc && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteDoc(doc.id);
+                }}
+                className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
+                title="Eliminar"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleContextMenu(e, doc.id);
+              }}
+              className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+              title="Mas opciones"
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderFolderTree = useCallback((parentPath: string, depth = 0): React.ReactNode[] => {
@@ -451,136 +631,31 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             {renderFolderTree('')}
           </div>
         </aside>
-        <section className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
+        <section className="flex-1 min-h-0 flex flex-col">
           <div className="px-4 py-3 text-xs text-surface-400 uppercase tracking-wider">Contenido</div>
-          <div className="px-4 pb-6 space-y-1">
-            {filteredChildFolders.map(folder => {
-              const isSelected = selectedKeys.has(`folder:${folder.path}`);
-              const count = docsByFolder[folder.path]?.length ?? 0;
-              return (
-                <div
-                  key={folder.path}
-                  onClick={(e) => handleFolderSelect(folder, e)}
-                  className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
-                    isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => toggleSelection(`folder:${folder.path}`, e)}
-                    className="accent-mandy-500"
-                    title="Seleccionar carpeta"
-                  />
-                  <Folder className="w-4 h-4 text-surface-500" />
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <span className="text-sm font-semibold truncate">{folder.name}</span>
-                    <span className="text-[11px] text-surface-500 truncate">{folder.path}</span>
-                  </div>
-                  <span className="text-[10px] text-surface-500">{count}</span>
-                  <div className="ml-auto flex items-center gap-2">
-                    {onDeleteFolder && folder.kind !== 'system' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteFolder(folder);
-                        }}
-                        className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
-                        title="Eliminar carpeta"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {filteredFolderDocs.map(doc => {
-              const key = `doc:${doc.id}`;
-              const isSelected = selectedKeys.has(key);
-              return (
-                <div
-                  key={doc.id}
-                  onClick={(e) => handleDocSelect(doc, e)}
-                  onContextMenu={(e) => handleContextMenu(e, doc.id)}
-                  className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
-                    isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => toggleSelection(key, e)}
-                    className="accent-mandy-500"
-                    title="Seleccionar archivo"
-                  />
-                  <div className="text-surface-500">{getFileIcon(doc)}</div>
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <span className="text-sm font-semibold truncate">{doc.name}</span>
-                    <span className="text-[11px] text-surface-500 truncate">{doc.folder || DEFAULT_FOLDER_NAME}</span>
-                  </div>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
-                    {getDocBadge(doc)}
-                  </span>
-                  <div className="ml-auto flex items-center gap-2">
-                    {onDuplicateDoc && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDuplicateDoc(doc);
-                        }}
-                        className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
-                        title="Duplicar"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {onMoveDoc && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMoveDoc(doc);
-                        }}
-                        className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
-                        title="Mover"
-                      >
-                        <FolderInput className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {onDeleteDoc && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteDoc(doc.id);
-                        }}
-                        className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleContextMenu(e, doc.id);
-                      }}
-                      className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
-                      title="Mas opciones"
-                    >
-                      <MoreVertical className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {filteredChildFolders.length === 0 && filteredFolderDocs.length === 0 && (
-              <div className="px-4 py-6 text-sm text-surface-500">
-                {searchQuery ? 'No se encontraron archivos' : 'Esta carpeta está vacía.'}
-              </div>
-            )}
-          </div>
+          {contentItems.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-surface-500">
+              {searchQuery ? 'No se encontraron archivos' : 'Esta carpeta está vacía.'}
+            </div>
+          ) : (
+            <div ref={contentListRef} className="flex-1 min-h-0">
+              <FixedSizeList
+                height={Math.max(contentListSize.height, 1)}
+                width={Math.max(contentListSize.width, 1)}
+                itemCount={contentItems.length}
+                itemSize={CONTENT_ROW_HEIGHT}
+                overscanCount={6}
+                className="scrollbar-hide"
+                itemKey={(index) => {
+                  const item = contentItems[index];
+                  if (!item) return `row-${index}`;
+                  return item.kind === 'folder' ? `folder:${item.folder.path}` : `doc:${item.doc.id}`;
+                }}
+              >
+                {renderContentRow}
+              </FixedSizeList>
+            </div>
+          )}
         </section>
       </div>
 
