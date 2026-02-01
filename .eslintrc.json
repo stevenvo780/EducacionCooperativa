@@ -3,7 +3,7 @@
     "next/core-web-vitals"
   ],
   "rules": {
-    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-console": ["error", { "allow": ["warn", "error", "debug"] }],
     "prefer-const": "error",
     "no-var": "error",
     "eqeqeq": ["error", "always"],
@@ -23,8 +23,16 @@
     "react/jsx-curly-spacing": ["error", { "when": "never", "children": true }],
     "react/self-closing-comp": ["error", { "component": true, "html": true }],
     "react-hooks/rules-of-hooks": "error",
-    "react-hooks/exhaustive-deps": "warn"
+    "react-hooks/exhaustive-deps": "error"
   },
+  "overrides": [
+    {
+      "files": ["tests/**/*", "scripts/**/*"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     "node_modules/",
     ".next/",
