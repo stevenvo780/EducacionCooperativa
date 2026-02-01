@@ -1320,13 +1320,20 @@ export default function DashboardPage() {
 
     const inviteMember = async () => {
         if (!inviteEmail || !currentWorkspace || currentWorkspace.type === 'personal') return;
+        const emailToInvite = inviteEmail.trim();
+        if (!emailToInvite) return;
         try {
-            await inviteMemberApi({ workspaceId: currentWorkspace.id, email: inviteEmail });
-            await showDialog({ type: 'info', title: 'Invitación enviada', message: inviteEmail });
+            await inviteMemberApi({ workspaceId: currentWorkspace.id, email: emailToInvite });
             setInviteEmail('');
+            setShowMembersModal(false);
+            await showDialog({
+                type: 'info',
+                title: '✉️ Invitación enviada',
+                message: `Se ha enviado una invitación a "${emailToInvite}". Cuando el usuario acepte, aparecerá como miembro del espacio.`
+            });
         } catch (e) {
             console.error('Error inviting', e);
-            await showDialog({ type: 'error', title: 'Error al invitar' });
+            await showDialog({ type: 'error', title: 'Error al invitar', message: 'No se pudo enviar la invitación. Intenta de nuevo.' });
         }
     };
 
