@@ -5,7 +5,7 @@ import { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
-import { DEFAULT_FOLDER_NAME } from '@/lib/folder-utils';
+import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import AssistantSection from '@/components/dashboard/AssistantSection';
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { WorkerStatus } from '@/lib/TerminalController';
@@ -147,15 +147,55 @@ const Sidebar = ({
     setCollapsedByUser(new Set());
   }, [currentWorkspace?.id]);
 
+  const effectiveFolders = useMemo<FolderItem[]>(() => {
+    const byPath = new Map<string, FolderItem>();
+    const derived: FolderItem[] = [];
+
+    for (const folder of folders) {
+      byPath.set(folder.path, folder);
+    }
+
+    const ensureFolder = (rawPath?: string) => {
+      const normalized = normalizeFolderPath(rawPath);
+      if (byPath.has(normalized)) return;
+
+      const parts = normalized.split('/');
+      let acc = '';
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        acc = i === 0 ? part : `${acc}/${part}`;
+        if (byPath.has(acc)) continue;
+
+        const parentPath = i === 0 ? '' : acc.slice(0, acc.lastIndexOf('/'));
+        const virtualFolder: FolderItem = {
+          id: `virtual-${acc}`,
+          name: part,
+          path: acc,
+          parentPath,
+          kind: 'virtual'
+        };
+
+        byPath.set(acc, virtualFolder);
+        derived.push(virtualFolder);
+      }
+    };
+
+    ensureFolder(DEFAULT_FOLDER_NAME);
+    docs.forEach(doc => ensureFolder(doc.folder));
+
+    return [...folders, ...derived];
+  }, [docs, folders]);
+
   const folderChildrenMap = useMemo(() => {
     const map: Record<string, FolderItem[]> = { '': [] };
-    for (const folder of folders) {
+    for (const folder of effectiveFolders) {
       const parent = folder.parentPath || '';
       if (!map[parent]) map[parent] = [];
       map[parent].push(folder);
     }
     return map;
-  }, [folders]);
+  }, [effectiveFolders]);
 
   const docsByFolder = useMemo(() => {
     const result: Record<string, DocItem[]> = {};
@@ -473,14 +513,14 @@ const Sidebar = ({
               )}
 
               {listItems.length > 0 && (
-                <div ref={listRef} className="h-full">
+                <div ref={listRef} className="h-full min-h-[200px]">
                   <VirtualizedList
                     rowCount={listItems.length}
                     rowHeight={ROW_HEIGHT}
                     overscanCount={6}
                     className="scrollbar-hide"
                     style={{
-                      height: Math.max(listSize.height, 1),
+                      height: listSize.height > 0 ? listSize.height : listItems.length * ROW_HEIGHT,
                       width: Math.max(listSize.width, 1)
                     }}
                     rowComponent={renderSidebarRow}
