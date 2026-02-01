@@ -1,8 +1,17 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, type CollectionReference, type DocumentReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 const DEFAULT_COLUMNS = ['Por hacer', 'En progreso', 'Hecho'];
+
+const resolveWorkspaceId = (workspaceId: string, uid: string) =>
+  workspaceId === 'personal' ? `personal:${uid}` : workspaceId;
+
+const canAccessWorkspace = async (workspaceId: string, uid: string) => {
+  if (!workspaceId || workspaceId === 'personal') return true;
+  return isWorkspaceMember(workspaceId, uid);
+};
 
 const ensureBoard = async (workspaceId: string) => {
   const boardRef = adminDb.collection('boards').doc(workspaceId);
@@ -64,6 +73,11 @@ const deleteCardsByColumn = async (boardRef: DocumentReference, columnId: string
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const workspaceId = searchParams.get('workspaceId');
 
@@ -71,7 +85,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 });
     }
 
-    const boardRef = await ensureBoard(workspaceId);
+    const allowed = await canAccessWorkspace(workspaceId, auth.uid);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+    const boardRef = await ensureBoard(resolvedWorkspaceId);
     const columnsRef = boardRef.collection('columns');
 
     let columnsSnap = await columnsRef.orderBy('order').get();
@@ -98,6 +118,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { workspaceId, type } = body as { workspaceId?: string; type?: string };
 
@@ -105,7 +130,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 });
     }
 
-    const boardRef = await ensureBoard(workspaceId);
+    const allowed = await canAccessWorkspace(workspaceId, auth.uid);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+    const boardRef = await ensureBoard(resolvedWorkspaceId);
 
     if (type === 'column') {
       const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -134,7 +165,7 @@ export async function POST(req: NextRequest) {
         description: typeof body.description === 'string' ? body.description : undefined,
         columnId,
         order: typeof body.order === 'number' ? body.order : Date.now(),
-        ownerId: typeof body.ownerId === 'string' ? body.ownerId : undefined,
+        ownerId: auth.uid,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
       };
@@ -153,6 +184,11 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { workspaceId, type, id, data } = body as {
       workspaceId?: string;
@@ -165,7 +201,13 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'workspaceId and id are required' }, { status: 400 });
     }
 
-    const boardRef = await ensureBoard(workspaceId);
+    const allowed = await canAccessWorkspace(workspaceId, auth.uid);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+    const boardRef = await ensureBoard(resolvedWorkspaceId);
     const updateData: Record<string, unknown> = {};
 
     if (type === 'column') {
@@ -203,6 +245,11 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { workspaceId, type, id } = body as { workspaceId?: string; type?: string; id?: string };
 
@@ -210,7 +257,13 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'workspaceId and id are required' }, { status: 400 });
     }
 
-    const boardRef = await ensureBoard(workspaceId);
+    const allowed = await canAccessWorkspace(workspaceId, auth.uid);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+    const boardRef = await ensureBoard(resolvedWorkspaceId);
 
     if (type === 'column') {
       await deleteCardsByColumn(boardRef, id);

@@ -1,9 +1,23 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+
+const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: string) => {
+    const workspaceId = typeof data?.workspaceId === 'string' ? data.workspaceId : null;
+    if (!workspaceId || workspaceId === 'personal') {
+        return data?.ownerId === uid;
+    }
+    return isWorkspaceMember(workspaceId, uid);
+};
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const { id } = params;
         const body = await req.json();
 
@@ -14,6 +28,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         }
 
         const existingData = snap.data();
+        if (!(await canAccessDoc(existingData as Record<string, unknown> | undefined, auth.uid))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
         let storagePath = existingData?.storagePath;
 
         if (body.content !== undefined && existingData?.type !== 'file') {
@@ -42,10 +59,19 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
              }
         }
 
-        const updateData: any = {
-            ...body,
+        const updateData: Record<string, unknown> = {
             updatedAt: FieldValue.serverTimestamp()
         };
+
+        if (body.content !== undefined && existingData?.type !== 'file') {
+            updateData.content = body.content;
+            updateData.lastUpdatedBy = auth.uid;
+        }
+        if (typeof body.name === 'string') updateData.name = body.name;
+        if (typeof body.type === 'string') updateData.type = body.type;
+        if (typeof body.mimeType === 'string' || body.mimeType === null) updateData.mimeType = body.mimeType ?? null;
+        if (typeof body.folder === 'string') updateData.folder = body.folder;
+        if (typeof body.size === 'number') updateData.size = body.size;
 
         if (storagePath && !existingData?.storagePath) {
             updateData.storagePath = storagePath;
@@ -62,12 +88,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const { id } = params;
         const docSnap = await adminDb.collection('documents').doc(id).get();
         if (!docSnap.exists) {
              return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
-        return NextResponse.json({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (!(await canAccessDoc(data as Record<string, unknown> | undefined, auth.uid))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        return NextResponse.json({ id: docSnap.id, ...data });
     } catch (error: any) {
         console.error('Error fetching document:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -76,6 +111,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const auth = await requireAuth(req);
+        if (!auth) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const { id } = params;
         const docRef = adminDb.collection('documents').doc(id);
         const snap = await docRef.get();
@@ -84,6 +124,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
         }
 
         const data = snap.data() as any;
+        if (!(await canAccessDoc(data as Record<string, unknown> | undefined, auth.uid))) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
         const storagePath = data?.storagePath as string | undefined;
         if (data?.type === 'file' && storagePath) {
             const existing = await adminDb.collection('documents').where('storagePath', '==', storagePath).get();

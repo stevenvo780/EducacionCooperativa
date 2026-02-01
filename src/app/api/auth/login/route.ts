@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
-import { hashPassword } from '@/lib/crypto';
+import { FieldValue } from 'firebase-admin/firestore';
+import { verifyPassword } from '@/lib/crypto';
 
 export async function POST(req: NextRequest) {
     try {
@@ -20,14 +21,23 @@ export async function POST(req: NextRequest) {
         const userDoc = snapshot.docs[0];
         const userData = userDoc.data();
 
-        const hashedPassword = hashPassword(password);
+        const verification = await verifyPassword(password, userData?.passwordHash);
 
-        if (userData.passwordHash !== hashedPassword) {
+        if (!verification.ok) {
              return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
+        if (verification.needsUpgrade && verification.newHash) {
+            await userDoc.ref.update({
+                passwordHash: verification.newHash,
+                updatedAt: FieldValue.serverTimestamp()
+            });
+        }
+
         // Generate a custom token for the user to authenticate with the Hub
-        const customToken = await adminAuth.createCustomToken(userDoc.id);
+        const customToken = await adminAuth.createCustomToken(userDoc.id, {
+            userEmail: userData.email
+        });
 
         return NextResponse.json({
             uid: userDoc.id,

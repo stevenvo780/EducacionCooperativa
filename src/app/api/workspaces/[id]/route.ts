@@ -1,12 +1,18 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/server-auth';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const { id } = params;
     const body = await req.json();
-    const { action, email, userId } = body;
+    const { action, email } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'workspace id is required' }, { status: 400 });
@@ -17,21 +23,29 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!snap.exists) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
+    const wsData = snap.data() as { ownerId?: string; pendingInvites?: string[] } | undefined;
 
     if (action === 'invite') {
       if (!email) {
         return NextResponse.json({ error: 'email is required' }, { status: 400 });
+      }
+      if (wsData?.ownerId !== auth.uid) {
+        return NextResponse.json({ error: 'Only workspace owner can invite' }, { status: 403 });
       }
       await wsRef.update({ pendingInvites: FieldValue.arrayUnion(email) });
       return NextResponse.json({ status: 'invited' });
     }
 
     if (action === 'accept') {
-      if (!email || !userId) {
-        return NextResponse.json({ error: 'email and userId are required' }, { status: 400 });
+      if (!email || !auth.email || email !== auth.email) {
+        return NextResponse.json({ error: 'email mismatch' }, { status: 400 });
+      }
+      const pending = Array.isArray(wsData?.pendingInvites) ? wsData?.pendingInvites : [];
+      if (!pending.includes(email)) {
+        return NextResponse.json({ error: 'Invite not found' }, { status: 400 });
       }
       await wsRef.update({
-        members: FieldValue.arrayUnion(userId),
+        members: FieldValue.arrayUnion(auth.uid),
         pendingInvites: FieldValue.arrayRemove(email)
       });
       return NextResponse.json({ status: 'accepted' });
@@ -46,6 +60,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const { id } = params;
     if (!id) {
       return NextResponse.json({ error: 'workspace id is required' }, { status: 400 });
@@ -62,19 +81,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Personal workspace cannot be deleted' }, { status: 400 });
     }
 
-    let requesterId: string | undefined;
-    try {
-      const body = await req.json();
-      requesterId = body?.ownerId || body?.userId;
-    } catch {
-      requesterId = undefined;
-    }
-
-    if (!requesterId) {
-      return NextResponse.json({ error: 'ownerId is required' }, { status: 400 });
-    }
-
-    if (data?.ownerId && requesterId !== data.ownerId) {
+    if (data?.ownerId && auth.uid !== data.ownerId) {
       return NextResponse.json({ error: 'Only workspace owner can delete' }, { status: 403 });
     }
 
