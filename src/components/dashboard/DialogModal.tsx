@@ -1,6 +1,6 @@
 'use client';
 
-import { AnimatePresence, m } from 'framer-motion';
+import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { X } from 'lucide-react';
 import type { DialogConfig } from '@/components/dashboard/types';
 
@@ -10,8 +10,8 @@ interface DialogModalProps {
   onDialogInputChange: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
-  modalFade: { duration: number; ease: string };
-  modalPop: { duration: number; ease: string };
+  modalFade: Transition;
+  modalPop: Transition;
 }
 
 const DialogModal = ({
