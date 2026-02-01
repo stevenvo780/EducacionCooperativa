@@ -16,7 +16,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         const existingData = snap.data();
         let storagePath = existingData?.storagePath;
 
-        // Sync content updates to Storage
         if (body.content !== undefined && existingData?.type !== 'file') {
              const bucket = adminStorage.bucket();
              if (bucket.name) {
@@ -43,7 +42,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
              }
         }
 
-        // Remove undefined fields if necessary, but JSON updates usually are explicit
         const updateData: any = {
             ...body,
             updatedAt: FieldValue.serverTimestamp()

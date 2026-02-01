@@ -26,7 +26,6 @@ import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 
-// Debounced renderer to avoid excessive markdown re-renders while typing
 const DebouncedMarkdown = React.memo(({ content }: { content: string }) => {
   const [debouncedContent, setDebouncedContent] = useState(content);
 
@@ -571,7 +570,7 @@ export default function MosaicEditor({
                 right: 0 !important;
             }
             .mosaic-tile {
-                margin: 0 !important; /* Remove gaps */
+                margin: 0 !important;
                 box-shadow: none !important;
                 border-left: 1px solid #334155; 
                 border-bottom: 1px solid #334155;
@@ -628,7 +627,6 @@ export default function MosaicEditor({
   );
 }
 
-// Helper icons
 function ChevronLeft(props: any) {
   return (
     <svg

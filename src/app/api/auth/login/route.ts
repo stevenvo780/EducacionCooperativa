@@ -26,7 +26,6 @@ export async function POST(req: NextRequest) {
              return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
-        // Return user info (exclude password)
         return NextResponse.json({
             uid: userDoc.id,
             email: userData.email,
