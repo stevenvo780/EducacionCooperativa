@@ -1,8 +1,9 @@
 'use client';
 
 import type React from 'react';
-import { Folder, FolderPlus, FolderUp, Loader2, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
-import type { DocItem, Workspace } from '@/components/dashboard/types';
+import { useState, useMemo } from 'react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
+import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME } from '@/lib/folder-utils';
 import AssistantSection from '@/components/dashboard/AssistantSection';
 import type { TerminalSession } from '@/context/TerminalContext';
@@ -24,6 +25,8 @@ interface SidebarProps {
   folderInputProps: React.InputHTMLAttributes<HTMLInputElement>;
   currentWorkspace: Workspace | null;
   activeFolder: string;
+  setActiveFolder: (folder: string) => void;
+  folders: FolderItem[];
   connectionStatus: 'checking' | 'online' | 'offline' | 'error';
   isCreatingSession: boolean;
   activeSessionId: string | null;
@@ -66,6 +69,8 @@ const Sidebar = ({
   folderInputProps,
   currentWorkspace,
   activeFolder,
+  setActiveFolder,
+  folders,
   connectionStatus,
   isCreatingSession,
   activeSessionId,
@@ -92,6 +97,85 @@ const Sidebar = ({
   quickSearchInputRef,
   getIcon
 }: SidebarProps) => {
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
+
+  // Memoized folder tree structure
+  const folderChildrenMap = useMemo(() => {
+    const map: Record<string, FolderItem[]> = { '': [] };
+    for (const folder of folders) {
+      const parent = folder.parentPath || '';
+      if (!map[parent]) map[parent] = [];
+      map[parent].push(folder);
+    }
+    return map;
+  }, [folders]);
+
+  // Count docs per folder
+  const docsByFolder = useMemo(() => {
+    const result: Record<string, DocItem[]> = {};
+    for (const doc of docs) {
+      if (doc.type === 'folder') continue;
+      const f = doc.folder || DEFAULT_FOLDER_NAME;
+      if (!result[f]) result[f] = [];
+      result[f].push(doc);
+    }
+    return result;
+  }, [docs]);
+
+  const toggleFolder = (path: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const renderFolderTree = (parentPath: string, depth = 0): React.ReactNode[] => {
+    const children = folderChildrenMap[parentPath] ?? [];
+    return children.map(folder => {
+      const isExpanded = expandedFolders.has(folder.path);
+      const hasChildren = (folderChildrenMap[folder.path] ?? []).length > 0;
+      const count = docsByFolder[folder.path]?.length ?? 0;
+      const isActive = activeFolder === folder.path;
+      const paddingLeft = 8 + depth * 12;
+
+      return (
+        <div key={folder.path}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveFolder(folder.path);
+              if (hasChildren) toggleFolder(folder.path);
+            }}
+            className={`w-full flex items-center gap-1.5 py-1 px-2 rounded text-xs transition ${
+              isActive ? 'bg-mandy-500/15 text-mandy-300' : 'text-surface-300 hover:bg-surface-700/40'
+            }`}
+            style={{ paddingLeft }}
+          >
+            {hasChildren ? (
+              <span className="w-3 h-3 flex items-center justify-center">
+                {isExpanded ? <ChevronDown className="w-3 h-3 text-surface-500" /> : <ChevronRight className="w-3 h-3 text-surface-500" />}
+              </span>
+            ) : (
+              <span className="w-3" />
+            )}
+            {isExpanded ? (
+              <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Folder className="w-3.5 h-3.5 text-amber-400" />
+            )}
+            <span className="truncate flex-1 text-left">{folder.name}</span>
+            <span className="text-[9px] text-surface-500">{count}</span>
+          </button>
+          {isExpanded && hasChildren && (
+            <div>{renderFolderTree(folder.path, depth + 1)}</div>
+          )}
+        </div>
+      );
+    });
+  };
+
   return (
     <>
       {showMobileSidebar && (
@@ -205,44 +289,64 @@ const Sidebar = ({
               </button>
             </div>
 
-            <div className="mt-1 space-y-0.5">
-              {loadingDocs && docs.length === 0 && (
-                <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Cargando archivos...
+            {/* Folder Tree Section */}
+            {folders.length > 0 && !sidebarSearchQuery && (
+              <div className="mt-2 px-1">
+                <div className="px-2 py-1 text-[9px] font-bold text-surface-600 uppercase tracking-wider">
+                  Carpetas
+                </div>
+                <div className="space-y-0.5">
+                  {renderFolderTree('')}
+                </div>
+              </div>
+            )}
+
+            {/* Files Section */}
+            <div className="mt-2 px-1">
+              {!sidebarSearchQuery && folders.length > 0 && (
+                <div className="px-2 py-1 text-[9px] font-bold text-surface-600 uppercase tracking-wider">
+                  Archivos {activeFolder !== DEFAULT_FOLDER_NAME && `en ${activeFolder.split('/').pop()}`}
                 </div>
               )}
-
-              {!loadingDocs && sidebarFilteredDocs.length === 0 && (
-                <div className="px-3 py-2 text-center text-xs text-surface-500">
-                  {sidebarSearchQuery ? 'Sin resultados' : 'Espacio vacio'}
-                </div>
-              )}
-
-              {sidebarFilteredDocs.map(doc => (
-                <div
-                  key={doc.id}
-                  onClick={() => openDocument(doc)}
-                  draggable
-                  onDragStart={(e) => handleDocDragStart(e, doc)}
-                  onDragEnd={handleDocDragEnd}
-                  className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
-                >
-                  <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
-                    {getIcon(doc)}
+              <div className="space-y-0.5">
+                {loadingDocs && docs.length === 0 && (
+                  <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Cargando archivos...
                   </div>
-                  <span className="truncate flex-1">{doc.name}</span>
-                  <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => deleteDocument(doc, e)}
-                      className="text-surface-500 hover:text-mandy-400 p-0.5"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                )}
+
+                {!loadingDocs && sidebarFilteredDocs.length === 0 && (
+                  <div className="px-3 py-2 text-center text-xs text-surface-500">
+                    {sidebarSearchQuery ? 'Sin resultados' : 'Espacio vacio'}
                   </div>
-                </div>
-              ))}
+                )}
+
+                {sidebarFilteredDocs.map(doc => (
+                  <div
+                    key={doc.id}
+                    onClick={() => openDocument(doc)}
+                    draggable
+                    onDragStart={(e) => handleDocDragStart(e, doc)}
+                    onDragEnd={handleDocDragEnd}
+                    className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${selectedDocId === doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'}`}
+                  >
+                    <div className={`${selectedDocId === doc.id ? 'text-white' : 'text-surface-500'}`}>
+                      {getIcon(doc)}
+                    </div>
+                    <span className="truncate flex-1">{doc.name}</span>
+                    <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => deleteDocument(doc, e)}
+                        className="text-surface-500 hover:text-mandy-400 p-0.5"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
