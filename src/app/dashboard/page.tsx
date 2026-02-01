@@ -10,7 +10,7 @@ import { Check, FileText, Folder, Image as ImageIcon, File as FileIcon, Key, Loa
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
-import type { DocItem, FolderItem, ViewMode, Workspace, DialogConfig, DialogResult, UploadStatus, DeleteStatus } from '@/components/dashboard/types';
+import type { DocItem, FolderItem, ViewMode, Workspace, DialogConfig, DialogResult, DeleteStatus } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
@@ -46,6 +46,8 @@ import {
     uploadFileApi
 } from '@/services/dashboardApi';
 import { areDocsEquivalent, areFoldersEquivalent, normalizeWorkspace } from '@/services/dashboardUtils';
+import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
+import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
 import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
 import StatusToasts from '@/components/dashboard/StatusToasts';
 import DialogModal from '@/components/dashboard/DialogModal';
@@ -195,7 +197,6 @@ export default function DashboardPage() {
     const [isDragActive, setIsDragActive] = useState(false);
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
-    const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
 
     // Quick Search State (Ctrl+P)
@@ -208,15 +209,11 @@ export default function DashboardPage() {
     const [newWorkspaceName, setNewWorkspaceName] = useState('');
     const [inviteEmail, setInviteEmail] = useState('');
     const [isCreating, setIsCreating] = useState(false);
-    const [, setIsUploading] = useState(false);
     const [loadingDocs, setLoadingDocs] = useState(true);
-    const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
     const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
     const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
-    const dragCounter = useRef(0);
-    const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const docsRef = useRef<DocItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
@@ -473,17 +470,7 @@ export default function DashboardPage() {
     }, [currentWorkspaceId]);
 
     useEffect(() => {
-        const folderInput = folderInputRef.current;
-        if (!folderInput) return;
-        folderInput.setAttribute('webkitdirectory', 'true');
-        folderInput.setAttribute('directory', 'true');
-    }, []);
-
-    useEffect(() => {
         return () => {
-            if (uploadStatusTimer.current) {
-                clearTimeout(uploadStatusTimer.current);
-            }
             if (deleteStatusTimer.current) {
                 clearTimeout(deleteStatusTimer.current);
             }
@@ -639,6 +626,29 @@ export default function DashboardPage() {
             dialogResolverRef.current = resolve;
         });
     }, []);
+
+    const {
+        uploadStatus,
+        isDragActive,
+        setUploadTargetFolder,
+        handleFileUpload,
+        handleFolderUpload,
+        handleDragEnter,
+        handleDragLeave,
+        handleDragOver,
+        handleDrop,
+        uploadDroppedFilesToFolder
+    } = useDashboardUploads({
+        user,
+        currentWorkspace,
+        activeFolder,
+        rootFolderPath: ROOT_FOLDER_PATH,
+        fileInputRef,
+        folderInputRef,
+        fetchDocs,
+        openDocument,
+        showDialog
+    });
 
     const resolveDialog = (result: DialogResult) => {
         dialogResolverRef.current?.(result);
@@ -950,49 +960,6 @@ export default function DashboardPage() {
         }
     };
 
-    const getUploadContext = () => {
-        if (!user) return null;
-        const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-        const isPersonal = workspaceId === PERSONAL_WORKSPACE_ID;
-        const basePath = isPersonal ? `users/${user.uid}` : `workspaces/${workspaceId}`;
-
-        return {
-            workspaceId: isPersonal ? 'personal' : workspaceId,
-            storageFolder: `${basePath}/${DEFAULT_FOLDER_NAME}`
-        };
-    };
-
-    const isMarkdownName = (name?: string) => {
-        const lower = (name ?? '').toLowerCase();
-        return lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.mdown') || lower.endsWith('.mkd');
-    };
-
-    const isMarkdownFile = (file: File) => {
-        if (file.type && file.type.toLowerCase().includes('markdown')) return true;
-        return isMarkdownName(file.name);
-    };
-
-    const isMarkdownDocItem = (doc: DocItem) => {
-        if (doc.mimeType && doc.mimeType.toLowerCase().includes('markdown')) return true;
-        return isMarkdownName(doc.name);
-    };
-
-    const getFileExtension = (name: string) => {
-        const parts = name.split('.');
-        if (parts.length < 2) return '';
-        return parts[parts.length - 1].toUpperCase();
-    };
-
-    const getDocBadge = (doc: DocItem) => {
-        if (doc.type === 'terminal') return 'TERM';
-        if (doc.type === 'file') {
-            if (isMarkdownDocItem(doc)) return 'MD';
-            const ext = getFileExtension(doc.name);
-            return ext ? (ext.length > 4 ? ext.slice(0, 4) : ext) : 'FILE';
-        }
-        return isMarkdownName(doc.name) ? 'MD' : 'DOC';
-    };
-
     const docsByFolder = useMemo(() => {
         const grouped: Record<string, DocItem[]> = {};
         docs.forEach(docItem => {
@@ -1071,281 +1038,11 @@ export default function DashboardPage() {
         }
     }, [folders, activeFolder, folderChildrenMap]);
 
-    const scheduleUploadStatusClear = () => {
-        if (uploadStatusTimer.current) {
-            clearTimeout(uploadStatusTimer.current);
-        }
-        uploadStatusTimer.current = setTimeout(() => setUploadStatus(null), 2000);
-    };
-
     const scheduleDeleteStatusClear = () => {
         if (deleteStatusTimer.current) {
             clearTimeout(deleteStatusTimer.current);
         }
         deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
-    };
-
-    const getRelativeDir = (file: File) => {
-        const raw = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? '';
-        if (!raw) return '';
-        return normalizePath(raw.split('/').slice(0, -1).join('/'));
-    };
-
-    const joinPaths = (...parts: string[]) => normalizePath(parts.filter(Boolean).join('/'));
-
-    const isSupportedFile = (file: File) => {
-        const mime = (file.type || '').toLowerCase();
-        if (mime) {
-            return (
-                mime.startsWith('text/') ||
-                mime.startsWith('image/') ||
-                mime.startsWith('video/') ||
-                mime.startsWith('audio/') ||
-                mime === 'application/pdf' ||
-                mime === 'application/json' ||
-                mime === 'application/xml'
-            );
-        }
-        const ext = (file.name.split('.').pop() || '').toLowerCase();
-        return [
-            'md', 'markdown', 'mdown', 'mkd', 'txt', 'json', 'csv', 'tsv',
-            'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'yml', 'yaml',
-            'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
-            'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'm4a'
-        ].includes(ext);
-    };
-
-    type FileSystemEntry = {
-        isFile: boolean;
-        isDirectory: boolean;
-        name: string;
-        fullPath?: string;
-        file?: (success: (file: File) => void, error?: (err: unknown) => void) => void;
-        createReader?: () => FileSystemDirectoryReader;
-    };
-
-    type FileSystemDirectoryReader = {
-        readEntries: (success: (entries: FileSystemEntry[]) => void, error?: (err: unknown) => void) => void;
-    };
-
-    const readAllEntries = async (dirEntry: FileSystemEntry) => {
-        const reader = dirEntry.createReader?.();
-        if (!reader) return [];
-        const all: FileSystemEntry[] = [];
-        while (true) {
-            const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
-                reader.readEntries(resolve, reject);
-            });
-            if (batch.length === 0) break;
-            all.push(...batch);
-        }
-        return all;
-    };
-
-    const collectFilesFromEntry = async (entry: FileSystemEntry): Promise<File[]> => {
-        if (entry.isFile && entry.file) {
-            const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
-            const rawPath = entry.fullPath ?? file.name;
-            const relativePath = rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
-            if (relativePath) {
-                Object.defineProperty(file, 'webkitRelativePath', { value: relativePath });
-            }
-            return [file];
-        }
-        if (entry.isDirectory) {
-            const entries = await readAllEntries(entry);
-            const nested = await Promise.all(entries.map(collectFilesFromEntry));
-            return nested.flat();
-        }
-        return [];
-    };
-
-    const collectDroppedFiles = async (e: React.DragEvent) => {
-        const items = Array.from(e.dataTransfer.items ?? []);
-        if (items.length === 0) {
-            return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
-        }
-        const entries = items
-            .map(item => (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry?.())
-            .filter((entry) => Boolean(entry)) as FileSystemEntry[];
-        if (entries.length === 0) {
-            return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
-        }
-        const fileGroups = await Promise.all(entries.map(collectFilesFromEntry));
-        const files = fileGroups.flat();
-        const preservePaths = entries.some(entry => entry.isDirectory) || files.some(file => !!(file as File & { webkitRelativePath?: string }).webkitRelativePath);
-        return { files, preservePaths };
-    };
-
-    const uploadFiles = async (
-        files: File[],
-        targetFolder?: string,
-        options?: { preservePaths?: boolean }
-    ) => {
-        if (!user || files.length === 0) return;
-        const supportedFiles = files.filter(isSupportedFile);
-        if (supportedFiles.length === 0) {
-            setUploadStatus({
-                total: 0,
-                currentIndex: 0,
-                currentName: '',
-                progress: 0,
-                phase: 'error',
-                error: 'No hay archivos compatibles'
-            });
-            scheduleUploadStatusClear();
-            return;
-        }
-        const baseFolder = options?.preservePaths
-            ? normalizePath(targetFolder ?? '')
-            : normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
-        const context = getUploadContext();
-        if (!context) return;
-
-        if (uploadStatusTimer.current) {
-            clearTimeout(uploadStatusTimer.current);
-        }
-        setUploadStatus({
-            total: supportedFiles.length,
-            currentIndex: 0,
-            currentName: '',
-            progress: 0,
-            phase: 'uploading'
-        });
-        setIsUploading(true);
-        try {
-            const createdDocs: DocItem[] = [];
-            for (let i = 0; i < supportedFiles.length; i += 1) {
-                const file = supportedFiles[i];
-                setUploadStatus(prev => prev ? {
-                    ...prev,
-                    currentIndex: i + 1,
-                    currentName: file.name,
-                    progress: 0,
-                    phase: 'uploading',
-                    error: undefined
-                } : prev);
-
-                const relativeDir = options?.preservePaths ? getRelativeDir(file) : '';
-                const resolvedFolder = joinPaths(baseFolder, relativeDir) || DEFAULT_FOLDER_NAME;
-
-                if (isMarkdownFile(file)) {
-                    const content = await file.text();
-
-                    const data = await createDocumentApi({
-                        name: file.name,
-                        content: content,
-                        type: 'text',
-                        mimeType: file.type || 'text/markdown',
-                        ownerId: user.uid,
-                        workspaceId: context.workspaceId,
-                        folder: resolvedFolder
-                    });
-
-                    setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
-                    createdDocs.push({
-                        id: String(data.id),
-                        name: file.name,
-                        type: 'text',
-                        mimeType: file.type || 'text/markdown',
-                        ownerId: user.uid,
-                        updatedAt: { seconds: Date.now() / 1000 },
-                        folder: resolvedFolder
-                    });
-                    continue;
-                }
-
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('ownerId', user.uid);
-                formData.append('workspaceId', context.workspaceId || 'personal');
-                formData.append('folder', resolvedFolder);
-
-                const newDoc = await uploadFileApi(formData);
-                createdDocs.push({ ...newDoc, folder: newDoc.folder ?? resolvedFolder });
-
-                setUploadStatus(prev => prev ? { ...prev, progress: 100 } : prev);
-            }
-
-            await fetchDocs();
-            if (createdDocs.length === 1) {
-                openDocument(createdDocs[0]);
-            }
-            setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
-            scheduleUploadStatusClear();
-        } catch (error) {
-            console.error('Upload failed', error);
-            setUploadStatus(prev => prev ? {
-                ...prev,
-                phase: 'error',
-                error: 'Error al subir'
-            } : prev);
-            scheduleUploadStatusClear();
-            await showDialog({ type: 'error', title: 'Error al subir archivo' });
-        } finally {
-            setIsUploading(false);
-        }
-    };
-
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files ?? []);
-        if (files.length === 0) return;
-        const targetFolder = uploadTargetFolder ?? DEFAULT_FOLDER_NAME;
-        setUploadTargetFolder(null);
-        await uploadFiles(files, targetFolder);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-
-    const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files ?? []);
-        if (files.length === 0) return;
-        const targetFolder = uploadTargetFolder ?? activeFolder ?? ROOT_FOLDER_PATH;
-        setUploadTargetFolder(null);
-        await uploadFiles(files, targetFolder, { preservePaths: true });
-        if (folderInputRef.current) folderInputRef.current.value = '';
-    };
-
-    const isFileDrag = (e: React.DragEvent) => {
-        const types = Array.from(e.dataTransfer?.types ?? []);
-        if (types.includes('Files')) return true;
-        return Array.from(e.dataTransfer?.items ?? []).some(item => item.kind === 'file');
-    };
-
-    const handleDragEnter = (e: React.DragEvent) => {
-        if (!isFileDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current += 1;
-        setIsDragActive(true);
-    };
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        if (!isDragActive) return;
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current -= 1;
-        if (dragCounter.current <= 0) {
-            dragCounter.current = 0;
-            setIsDragActive(false);
-        }
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-        if (!isFileDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = 'copy';
-    };
-
-    const handleDrop = async (e: React.DragEvent) => {
-        if (!isFileDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current = 0;
-        setIsDragActive(false);
-        const { files, preservePaths } = await collectDroppedFiles(e);
-        if (files.length === 0) return;
-        await uploadFiles(files, DEFAULT_FOLDER_NAME, { preservePaths });
     };
 
     const handleDocDragStart = (e: React.DragEvent, docItem: DocItem) => {
@@ -1417,12 +1114,9 @@ export default function DashboardPage() {
     };
 
     const handleFolderDrop = async (e: React.DragEvent, folderName: string) => {
-        const { files, preservePaths } = await collectDroppedFiles(e);
-        if (files.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
+        const didUpload = await uploadDroppedFilesToFolder(e, folderName);
+        if (didUpload) {
             setFolderDragOver(null);
-            await uploadFiles(files, folderName, { preservePaths });
             return;
         }
         const types = Array.from(e.dataTransfer.types ?? []);
