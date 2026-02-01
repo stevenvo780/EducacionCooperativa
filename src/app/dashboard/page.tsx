@@ -96,14 +96,12 @@ export default function DashboardPage() {
         ease: 'easeOut'
     }), [reduceMotion]);
 
-    // Initialize Terminal only when user is available
     useEffect(() => {
         if (!user) return;
         const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3010';
         initialize(nexusUrl);
     }, [initialize, user]);
 
-    // Workspace State
     const workspaces = useAppSelector(state => state.dashboard.workspaces);
     const invites = useAppSelector(state => state.dashboard.invites);
     const currentWorkspace = useAppSelector(state => state.dashboard.currentWorkspace);
@@ -175,7 +173,6 @@ export default function DashboardPage() {
     }, [dispatch]);
     const currentWorkspaceId = currentWorkspace?.id;
 
-    // Subscribe to current workspace worker status
     useEffect(() => {
         if (!user || !currentWorkspace) return;
         const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
@@ -184,7 +181,6 @@ export default function DashboardPage() {
         subscribeToWorkspace(workerToken);
     }, [user, currentWorkspace, subscribeToWorkspace]);
 
-    // UI State
     const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
     const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
     const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
@@ -197,12 +193,10 @@ export default function DashboardPage() {
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
 
-    // Quick Search State (Ctrl+P)
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
     const deferredDocs = useDeferredValue(docs);
 
-    // Actions State
     const [newDocName, setNewDocName] = useState('');
     const [newWorkspaceName, setNewWorkspaceName] = useState('');
     const [inviteEmail, setInviteEmail] = useState('');
@@ -375,8 +369,6 @@ export default function DashboardPage() {
         if (showLoading) setLoadingDocs(true);
         const fetchPromise = (async () => {
             try {
-                // Always filter by workspaceId for consistency
-                // Personal workspace uses 'personal' as workspaceId
                 const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? 'personal' : currentWorkspace.id;
                 const fetched = await fetchDocsApi({
                     workspaceId: wsId,
@@ -421,7 +413,6 @@ export default function DashboardPage() {
         return () => clearInterval(interval);
     }, [currentWorkspace, user, fetchDocs]);
 
-    // Reset tabs/layout when workspace changes
     useEffect(() => {
         if (!currentWorkspaceId) return;
         setOpenTabs([]);
@@ -429,11 +420,9 @@ export default function DashboardPage() {
         setSelectedDocId(null);
         setDocModes({});
         setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspaceId]: false }));
-        // Clear the active terminal session to prevent cross-workspace session leakage
         clearActiveSession();
     }, [currentWorkspaceId, clearActiveSession]);
 
-    // Ensure File Explorer tab is available in mosaic layout
     useEffect(() => {
         if (!currentWorkspace || !user) return;
         const filesTabId = `files-${currentWorkspace.id}`;
@@ -475,10 +464,8 @@ export default function DashboardPage() {
         };
     }, []);
 
-    // Keyboard shortcuts: Ctrl+P for quick file search
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Ctrl+P or Cmd+P to open quick search
             if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
                 e.preventDefault();
                 setShowQuickSearch(true);
@@ -486,7 +473,6 @@ export default function DashboardPage() {
                 setQuickSearchIndex(0);
                 setTimeout(() => quickSearchInputRef.current?.focus(), 50);
             }
-            // Escape to close quick search
             if (e.key === 'Escape' && showQuickSearch) {
                 setShowQuickSearch(false);
                 setQuickSearchQuery('');
@@ -496,7 +482,6 @@ export default function DashboardPage() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [showQuickSearch, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
 
-    // Filtered docs for quick search
     const quickSearchResults = useMemo(() => {
         const query = deferredQuickSearchQuery.trim().toLowerCase();
         if (!query) return deferredDocs.slice(0, 10);
@@ -505,7 +490,6 @@ export default function DashboardPage() {
             .slice(0, 15);
     }, [deferredDocs, deferredQuickSearchQuery]);
 
-    // Handle quick search keyboard navigation
     const handleQuickSearchKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'ArrowDown') {
             e.preventDefault();
@@ -521,7 +505,6 @@ export default function DashboardPage() {
         }
     };
 
-    // Filtered docs for sidebar search
     const sidebarFilteredDocs = useMemo(() => {
         if (!sidebarSearchQuery.trim()) return docs;
         const query = sidebarSearchQuery.toLowerCase();
@@ -532,7 +515,6 @@ export default function DashboardPage() {
         const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
         const terminalName = session?.name || 'Mi Asistente';
 
-        // If already open, just select and ensure session is active
         if (openTabs.find(t => t.id === terminalId)) {
             if (session?.id) {
                 selectSession(session.id);
@@ -570,7 +552,6 @@ export default function DashboardPage() {
             setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: true }));
         }
 
-        // Verificar si es una terminal y destruir la sesión
         setOpenTabs(prev => {
             const tabToClose = prev.find(t => t.id === docId);
             if (tabToClose?.type === 'terminal' && tabToClose.sessionId) {
@@ -1080,7 +1061,6 @@ export default function DashboardPage() {
         setDropPosition(null);
         const docToOpen = docs.find(d => d.id === docId) || openTabs.find(d => d.id === docId);
         if (docToOpen) {
-            // Insert at specific position in openTabs
             setOpenTabs(prev => {
                 const filtered = prev.filter(t => t.id !== docToOpen.id);
                 const newTabs = [...filtered];
@@ -1290,7 +1270,6 @@ export default function DashboardPage() {
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
             >
-                {/* Quick Search Modal (Ctrl+P) */}
                 <QuickSearchModal
                     open={showQuickSearch}
                     query={quickSearchQuery}
@@ -1323,7 +1302,6 @@ export default function DashboardPage() {
                     modalPop={modalPop}
                 />
 
-                {/* Top Header */}
                 <HeaderBar
                     onToggleMobileSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
                     onClearSelectedDoc={() => setSelectedDocId(null)}
@@ -1349,7 +1327,6 @@ export default function DashboardPage() {
                     onLogout={() => logout()}
                 />
 
-                {/* Main Layout (Sidebar + Content) */}
                 <div className="flex flex-1 overflow-hidden relative">
                     <Sidebar
                         sidebarWidth={sidebarWidth}
@@ -1393,10 +1370,8 @@ export default function DashboardPage() {
                         getIcon={getIcon}
                     />
 
-                    {/* Central Pane */}
                     <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
 
-                        {/* Tabs Bar */}
                         <TabsBar
                             openTabs={openTabs}
                             selectedDocId={selectedDocId}
@@ -1410,7 +1385,6 @@ export default function DashboardPage() {
                             getIcon={getIcon}
                         />
 
-                        {/* Content Area */}
                         {mosaicNode ? (
                             <div className="flex-1 min-h-0 relative">
                                 <MosaicLayout
@@ -1494,7 +1468,6 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Modals */}
                 <AnimatePresence>
                     {showNewWorkspaceModal && (
                         <m.div
@@ -1570,7 +1543,6 @@ export default function DashboardPage() {
                         </m.div>
                     )}
 
-                    {/* Modal Cambiar Contraseña */}
                     {showPasswordModal && (
                         <m.div
                             initial={{ opacity: 0 }}

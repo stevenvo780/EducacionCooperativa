@@ -3,7 +3,6 @@ import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-// Firebase client configuration
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.replace(/\\n/g, '').trim(),
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.replace(/\\n/g, '').trim(),
@@ -13,7 +12,6 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.replace(/\\n/g, '').trim()
 };
 
-// Lazy initialization to avoid SSR issues
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
@@ -22,7 +20,6 @@ let googleProvider: GoogleAuthProvider | null = null;
 
 function getFirebaseApp(): FirebaseApp {
   if (typeof window === 'undefined') {
-    // Return a dummy app during SSR - actual Firebase won't be used server-side
     return {} as FirebaseApp;
   }
 
@@ -72,7 +69,6 @@ function getGoogleProvider(): GoogleAuthProvider {
   return googleProvider;
 }
 
-// Export getters that lazily initialize
 export {
   getFirebaseAuth as auth,
   getFirebaseDb as db,

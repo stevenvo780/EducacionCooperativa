@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
             docData.url = url;
         }
 
-        // Sync text documents to Storage for Worker compatibility
         if (typeof storagePath === 'string') {
             docData.storagePath = storagePath;
         } else if (!storagePath && (!type || type === 'text' || type === 'markdown')) {
@@ -81,13 +80,9 @@ export async function GET(req: NextRequest) {
 
         let query: FirebaseFirestore.Query = adminDb.collection('documents');
 
-        // For personal workspace, we need to find docs with workspaceId='personal' OR legacy docs with just ownerId
         const isPersonalWorkspace = workspaceId === 'personal';
 
         if (isPersonalWorkspace && ownerId) {
-            // Query 1: docs with workspaceId='personal'
-            // Query 2: legacy docs with ownerId but no workspaceId or workspaceId=null
-            // For simplicity, just query by ownerId which covers both cases
             query = query.where('ownerId', '==', ownerId);
         } else if (workspaceId) {
             query = query.where('workspaceId', '==', workspaceId);

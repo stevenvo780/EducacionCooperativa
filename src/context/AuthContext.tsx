@@ -34,7 +34,6 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
-// Singleton mock user to prevent recreation on every render
 const MOCK_USER = {
     uid: '21VuZW4cdXd9jGKOgPa5YQegICw1',
     email: 'dev@test.com',
@@ -49,11 +48,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const initialized = useRef(false);
 
     useEffect(() => {
-        // Run only once
         if (initialized.current) return;
         initialized.current = true;
 
-        // DEV ONLY: Auto-login mock
         const useMock = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true';
         if (useMock && !localStorage.getItem('agora_user')) {
             setUser(MOCK_USER);
@@ -61,13 +58,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return;
         }
 
-        // Check localStorage for persisted custom auth session
         const storedUser = localStorage.getItem('agora_user');
         if (storedUser) {
             try {
                 setUser(JSON.parse(storedUser));
                 setLoading(false);
-                return; // SKIP Firebase Init if using local mock user
+                return;
             } catch (e) {
                 localStorage.removeItem('agora_user');
             }
@@ -84,15 +80,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
             return () => unsubscribe();
         } catch (e) {
-            if (!useMock) {
-                // If not mock and failed, we are in trouble.
-            }
             setLoading(false);
         }
     }, []);
 
     const signInWithGoogle = async () => {
-        // Check if Firebase is properly configured
         const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
         if (!apiKey) {
             throw new Error('Google Sign-In no está configurado. Por favor usa email/contraseña.');
@@ -163,7 +155,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const userData = await res.json();
 
-        // Auto login after registration
         const userObj = {
             uid: userData.uid,
             email: userData.email,
@@ -226,7 +217,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const firebaseAuth = getAuth();
             await signOut(firebaseAuth);
         } catch (error) {
-            // Ignore Firebase signout errors if using custom auth
         }
         setUser(null);
         localStorage.removeItem('agora_user');

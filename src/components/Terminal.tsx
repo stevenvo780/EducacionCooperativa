@@ -44,7 +44,6 @@ const Terminal: React.FC<TerminalProps> = ({
     getWorkerStatusForWorkspace
   } = useTerminal();
 
-    // Fallback to the currently active session when a specific sessionId prop is not provided
     const effectiveSessionId = sessionId || activeSessionId;
     const sessionActive = effectiveSessionId ? sessions.some(s => s.id === effectiveSessionId) : false;
 
@@ -58,14 +57,11 @@ const Terminal: React.FC<TerminalProps> = ({
       }
   }, [controller, status, nexusUrl, initialize]);
 
-  // Calculate the worker token for this workspace
   const isPersonalWorkspace = workspaceType === 'personal' || workspaceId === 'personal' || !workspaceId;
   const workerToken = user ? getWorkerToken(workspaceType, workspaceId, user.uid) : '';
 
-  // Get worker status for THIS workspace
   const workspaceWorkerStatus = getWorkerStatusForWorkspace?.(workerToken) || status;
 
-  // Subscribe to workspace updates when workspace changes
   useEffect(() => {
     if (!controller || !workerToken) return;
 
@@ -77,8 +73,6 @@ const Terminal: React.FC<TerminalProps> = ({
     };
   }, [controller, workerToken]);
 
-  // Mount THIS session's terminal to THIS container
-  // Each session now has its own xterm instance
   useEffect(() => {
       if (!effectiveSessionId || !sessionActive || !containerEl || !controller) return;
       let mounted = false;
@@ -87,7 +81,6 @@ const Terminal: React.FC<TerminalProps> = ({
           if (mounted) return;
           if (containerEl.offsetWidth > 0 && containerEl.offsetHeight > 0) {
               try {
-                  // Use the new mountSession API to mount THIS session's terminal
                   controller.mountSession(effectiveSessionId, containerEl);
                   mounted = true;
               } catch (e) {
@@ -119,17 +112,15 @@ const Terminal: React.FC<TerminalProps> = ({
     }, [effectiveSessionId, sessionActive, controller, containerEl, sessionId]);
 
   useEffect(() => {
-        if (!effectiveSessionId || !sessionActive || !controller) return;
-        const handleResize = () => controller?.fitSession(effectiveSessionId);
+      if (!effectiveSessionId || !sessionActive || !controller) return;
+      const handleResize = () => controller?.fitSession(effectiveSessionId);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
     }, [controller, effectiveSessionId, sessionActive]);
 
   const handleCreateSession = () => {
       if (!createSession) return;
-      // Use the workerToken as the workspaceId for creating sessions
       createSession(workerToken, workspaceType, workspaceName);
-      // Ensure the next render will mount the just-created session even if no explicit sessionId prop is passed
       if (controller && activeSessionId) {
           controller.setActiveSession(activeSessionId);
       }
@@ -153,8 +144,6 @@ const Terminal: React.FC<TerminalProps> = ({
   const workerOnline = workspaceWorkerStatus === 'online';
   const workerOffline = workspaceWorkerStatus === 'offline' || workspaceWorkerStatus === 'unknown';
 
-  // Si esta ventana tiene una sesión asignada, mostrar su terminal independiente
-  // Cada sesión ahora tiene su propia instancia de xterm
   if (effectiveSessionId && sessionActive) {
       return (
         <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
@@ -200,7 +189,6 @@ const Terminal: React.FC<TerminalProps> = ({
                         : 'Error de Conexión'}
             </h2>
 
-            {/* Subtítulo con más contexto */}
             {workerOffline && !showHubError && (
                 <p className="text-amber-400/80 text-sm -mt-2">
                     Este espacio de trabajo necesita un worker dedicado para funcionar
@@ -218,7 +206,6 @@ const Terminal: React.FC<TerminalProps> = ({
                     </button>
                     <p className="text-xs text-slate-500">O selecciona una sesión existente en la barra lateral.</p>
 
-                    {/* Expandable Install Guide */}
                     <div className="border-t border-slate-800 pt-4 mt-4">
                         <button
                             onClick={() => setShowInstallGuide(!showInstallGuide)}
@@ -283,7 +270,6 @@ const Terminal: React.FC<TerminalProps> = ({
                         </>
                     ) : (
                         <>
-                            {/* Header explicativo */}
                             <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
                                 <p className="text-center text-amber-400 font-medium mb-2">
                                     ¿Cómo funciona?
@@ -294,7 +280,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </p>
                             </div>
 
-                            {/* Token del workspace */}
                             <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
                                 <div className="flex justify-between items-center text-xs font-mono">
                                     <span className="text-slate-400 font-bold flex items-center gap-2">
@@ -314,7 +299,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </p>
                             </div>
 
-                            {/* ========== OPCIÓN 1: COMANDO RÁPIDO ========== */}
                             <div className="bg-emerald-500/5 border border-emerald-500/30 rounded-lg p-4">
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold">1</div>
@@ -340,7 +324,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </div>
                             </div>
 
-                            {/* ========== OPCIÓN 2: INSTALACIÓN MANUAL ========== */}
                             <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className="w-6 h-6 rounded-full bg-slate-600/50 flex items-center justify-center text-slate-300 text-xs font-bold">2</div>
@@ -348,7 +331,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </div>
 
                                 <div className="space-y-4 text-xs">
-                                    {/* Paso 1 */}
                                     <div>
                                         <p className="text-slate-500 mb-1 font-medium">Paso 1: Descargar el paquete</p>
                                         <div className="bg-black p-2 rounded border border-slate-800">
@@ -356,7 +338,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Paso 2 */}
                                     <div>
                                         <p className="text-slate-500 mb-1 font-medium">Paso 2: Instalar el paquete</p>
                                         <div className="bg-black p-2 rounded border border-slate-800">
@@ -364,7 +345,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Paso 3 */}
                                     <div>
                                         <p className="text-slate-500 mb-1 font-medium">Paso 3: Agregar worker para este workspace</p>
                                         <div className="bg-black p-2 rounded border border-slate-800 overflow-x-auto">
@@ -376,7 +356,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Comandos útiles */}
                                     <div className="border-t border-slate-700 pt-3 mt-3">
                                         <p className="text-slate-500 mb-2 font-medium">Comandos útiles:</p>
                                         <div className="bg-black p-2 rounded border border-slate-800 space-y-1">
@@ -389,7 +368,6 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </div>
                             </div>
 
-                            {/* Footer con URL del Hub */}
                             <p className="text-[10px] text-slate-600 text-center pt-2">
                                 El worker se conectará a: <code className="text-slate-500">{nexusUrl || 'http://148.230.88.162:3001'}</code>
                             </p>

@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
         }
 
-        // Check if user exists in Firestore
         const usersRef = adminDb.collection('users');
         const snapshot = await usersRef.where('email', '==', email).get();
 
@@ -25,7 +24,6 @@ export async function POST(req: NextRequest) {
 
         const hashedPassword = hashPassword(password);
 
-        // Create new user document
         const newUser = {
             email,
             passwordHash: hashedPassword,
@@ -37,7 +35,6 @@ export async function POST(req: NextRequest) {
         const userDocRef = await usersRef.add(newUser);
         const userId = userDocRef.id;
 
-        // Create default personal workspace for the user
         const workspaceData = {
             name: 'Mi Espacio',
             ownerId: userId,
