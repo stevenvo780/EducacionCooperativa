@@ -1102,7 +1102,7 @@ export default function DashboardPage() {
             const fallback = rootFolders[0]?.path || ROOT_FOLDER_PATH;
             setActiveFolderSafe(fallback);
         }
-    }, [folders, activeFolder, folderChildrenMap]);
+    }, [folders, activeFolder, folderChildrenMap, setActiveFolderSafe]);
 
     const scheduleDeleteStatusClear = () => {
         if (deleteStatusTimer.current) {
