@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
-import { TerminalController, WorkspaceWorkerStatus, WorkerStatus } from '@/lib/TerminalController';
+import { TerminalController, WorkspaceWorkerStatus, WorkerStatus, DocChangeEvent } from '@/lib/TerminalController';
 import { useAuth } from './AuthContext';
 
 export interface TerminalSession {
@@ -29,6 +29,8 @@ interface TerminalContextType {
     getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
     subscribeToWorkspace: (workspaceId: string) => void;
     clearActiveSession: () => void;
+    lastDocChange: DocChangeEvent | null;
+    onDocChangeCallback: ((cb: (event: DocChangeEvent) => void) => () => void) | null;
 }
 
 const TerminalContext = createContext<TerminalContextType | null>(null);
@@ -55,6 +57,15 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const [isCreatingSession, setIsCreatingSession] = useState(false);
 
     const [workspaceWorkerStatuses, setWorkspaceWorkerStatuses] = useState<Map<string, WorkerStatus>>(new Map());
+    const [lastDocChange, setLastDocChange] = useState<DocChangeEvent | null>(null);
+    const docChangeCallbacksRef = useRef<Set<(event: DocChangeEvent) => void>>(new Set());
+
+    const onDocChangeCallback = useCallback((cb: (event: DocChangeEvent) => void) => {
+        docChangeCallbacksRef.current.add(cb);
+        return () => {
+            docChangeCallbacksRef.current.delete(cb);
+        };
+    }, []);
 
     const debugLog = useCallback((...args: unknown[]) => {
         if (process.env.NODE_ENV !== 'production') {
@@ -135,6 +146,13 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                     if (workspaceStatus.status === 'online') {
                         setStatus('online');
                     }
+                },
+                // Callback para cambios de documentos (sync en tiempo real)
+                (docEvent: DocChangeEvent) => {
+                    debugLog('[TerminalContext] doc-change received:', docEvent);
+                    setLastDocChange(docEvent);
+                    // Notificar a todos los callbacks registrados
+                    docChangeCallbacksRef.current.forEach(cb => cb(docEvent));
                 }
             );
 
@@ -231,7 +249,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             getWorkerStatusForWorkspace,
             getSessionsForWorkspace,
             subscribeToWorkspace,
-            clearActiveSession
+            clearActiveSession,
+            lastDocChange,
+            onDocChangeCallback
         }}>
             {children}
         </TerminalContext.Provider>
