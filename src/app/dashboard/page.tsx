@@ -443,20 +443,19 @@ export default function DashboardPage() {
     // Escuchar cambios de documentos en tiempo real (sync desde workers)
     useEffect(() => {
         if (!currentWorkspace || !user || !onDocChangeCallback) return;
-        
+
         const unsubscribe = onDocChangeCallback((event) => {
             // Verificar que el evento es para el workspace actual
             const eventWorkspaceId = event.workspaceId;
-            const currentWsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID 
-                ? `personal:${user.uid}` 
+            const currentWsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID
+                ? `personal:${user.uid}`
                 : currentWorkspace.id;
-            
+
             if (eventWorkspaceId === currentWsId || eventWorkspaceId === currentWorkspace.id) {
-                console.log('[Dashboard] doc-change para workspace actual, refrescando...', event);
                 fetchDocs();
             }
         });
-        
+
         return unsubscribe;
     }, [currentWorkspace, user, onDocChangeCallback, fetchDocs]);
 
