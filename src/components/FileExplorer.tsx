@@ -17,7 +17,8 @@ import {
   MoreVertical,
   Trash2,
   Copy,
-  FolderInput
+  FolderInput,
+  Pencil
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 
@@ -94,6 +95,7 @@ interface FileExplorerProps {
   onDeleteItems?: (payload: { docIds: string[]; folderPaths: string[] }) => void;
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
+  onRenameDoc?: (doc: DocItem) => void;
   currentWorkspaceName?: string;
   currentWorkspaceId?: string;
   embedded?: boolean;
@@ -114,6 +116,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   onDeleteItems,
   onDuplicateDoc,
   onMoveDoc,
+  onRenameDoc,
   currentWorkspaceName = 'Espacio Personal',
   currentWorkspaceId,
   embedded = false,
@@ -430,6 +433,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     onMoveDoc(doc.id, target);
   };
 
+  const handleRenameDoc = (doc: DocItem) => {
+    if (!onRenameDoc) return;
+    onRenameDoc(doc);
+  };
+
   const handleDeleteSelected = () => {
     if (!hasSelection) return;
     if (onDeleteItems) {
@@ -541,6 +549,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 title="Duplicar"
               >
                 <Copy className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onRenameDoc && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRenameDoc(doc);
+                }}
+                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                title="Renombrar"
+              >
+                <Pencil className="w-3.5 h-3.5" />
               </button>
             )}
             {onMoveDoc && (
@@ -797,6 +817,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               >
                 <Copy className="w-4 h-4" />
                 Duplicar
+              </button>
+            )}
+            {onRenameDoc && (
+              <button
+                onClick={() => {
+                  const doc = docMap.get(contextMenu.docId);
+                  if (doc) handleRenameDoc(doc);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-200 hover:bg-surface-700 transition-colors"
+              >
+                <Pencil className="w-4 h-4" />
+                Renombrar
               </button>
             )}
             {onMoveDoc && (
