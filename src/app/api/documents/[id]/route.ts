@@ -128,7 +128,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
         const storagePath = data?.storagePath as string | undefined;
-        
+
         // Borrar archivo de Storage si existe (tanto para files como para documentos markdown)
         if (storagePath) {
             const existing = await adminDb.collection('documents').where('storagePath', '==', storagePath).get();
