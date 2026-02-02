@@ -57,6 +57,7 @@ interface MosaicLayoutProps {
   onDeleteItems?: (payload: { docIds: string[]; folderPaths: string[] }) => void;
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
+  onRenameDoc?: (doc: DocItem) => void;
   activeFolder?: string;
   onActiveFolderChange?: (folderPath: string) => void;
   currentWorkspaceName?: string;
@@ -84,6 +85,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onDeleteItems,
   onDuplicateDoc,
   onMoveDoc,
+  onRenameDoc,
   activeFolder,
   onActiveFolderChange,
   currentWorkspaceName,
@@ -175,6 +177,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         onDeleteItems={onDeleteItems}
                         onDuplicateDoc={onDuplicateDoc}
                         onMoveDoc={onMoveDoc}
+                        onRenameDoc={onRenameDoc}
                         activeFolder={activeFolder}
                         onActiveFolderChange={onActiveFolderChange}
                         currentWorkspaceName={currentWorkspaceName}
