@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { Briefcase, Copy, Folder, FolderInput, FolderPlus, FolderUp, Plus, Trash2, Upload, User } from 'lucide-react';
+import { Briefcase, Copy, Folder, FolderInput, FolderPlus, FolderUp, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 
 interface WorkspaceExplorerProps {
@@ -26,6 +26,7 @@ interface WorkspaceExplorerProps {
   onUploadFolder: () => void;
   onCopyWorkspaceId: (id: string) => void;
   onCopyDocument: (doc: DocItem) => void;
+  onRenameDocument: (doc: DocItem) => void;
   onMoveDocument: (doc: DocItem) => void;
   onDeleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
   getIcon: (doc: DocItem) => React.ReactNode;
@@ -57,6 +58,7 @@ const WorkspaceExplorer = ({
   onUploadFolder,
   onCopyWorkspaceId,
   onCopyDocument,
+  onRenameDocument,
   onMoveDocument,
   onDeleteDocument,
   getIcon,
@@ -191,6 +193,16 @@ const WorkspaceExplorer = ({
                     title="Duplicar"
                   >
                     <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRenameDocument(doc);
+                    }}
+                    className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                    title="Renombrar"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={(e) => {
