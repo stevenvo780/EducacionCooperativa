@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
     user: User | null;
+    userEmail: string | null;
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
     loginWithEmail: (email: string, pass: string) => Promise<void>;
@@ -23,6 +24,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
     user: null,
+    userEmail: null,
     loading: true,
     signInWithGoogle: async () => { },
     loginWithEmail: async () => { },
@@ -38,6 +40,7 @@ const allowInsecureAuth = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true'
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
+    const [userEmail, setUserEmail] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
     const initialized = useRef(false);
@@ -45,6 +48,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         if (initialized.current) return;
         initialized.current = true;
+
+        // Restaurar email guardado desde localStorage
+        const storedEmail = localStorage.getItem('agora_user_email');
+        if (storedEmail) {
+            setUserEmail(storedEmail);
+        }
 
         if (allowInsecureAuth) {
             const storedUser = localStorage.getItem('agora_user');
@@ -56,6 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                         getIdToken: async () => parsedUser.uid
                     } as unknown as User;
                     setUser(restoredUserObj);
+                    setUserEmail(parsedUser.email || storedEmail);
                     setLoading(false);
                     return;
                 } catch (e) {
@@ -69,6 +79,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
                 if (authUser) {
                     setUser(authUser);
+                    // Para Google sign-in, el email viene en el user
+                    if (authUser.email) {
+                        setUserEmail(authUser.email);
+                        localStorage.setItem('agora_user_email', authUser.email);
+                    }
                     localStorage.removeItem('agora_user');
                 }
                 setLoading(false);
@@ -105,10 +120,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const loginWithEmail = async (email: string, pass: string) => {
+        const normalizedEmail = email.toLowerCase().trim();
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: pass })
+            body: JSON.stringify({ email: normalizedEmail, password: pass })
         });
 
         if (!res.ok) {
@@ -120,7 +136,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (userData.customToken) {
             try {
-                const userCredential = await signInWithCustomToken(userData.customToken);
+                await signInWithCustomToken(userData.customToken);
+                // Guardar el email porque Firebase custom tokens no lo incluyen
+                setUserEmail(normalizedEmail);
+                localStorage.setItem('agora_user_email', normalizedEmail);
                 router.push('/dashboard');
                 return;
             } catch (tokenError) {
@@ -152,10 +171,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const registerWithEmail = async (email: string, pass: string) => {
+        const normalizedEmail = email.toLowerCase().trim();
         const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: pass })
+            body: JSON.stringify({ email: normalizedEmail, password: pass })
         });
 
         if (!res.ok) {
@@ -168,6 +188,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (userData.customToken) {
             try {
                 await signInWithCustomToken(userData.customToken);
+                // Guardar el email porque Firebase custom tokens no lo incluyen
+                setUserEmail(normalizedEmail);
+                localStorage.setItem('agora_user_email', normalizedEmail);
                 router.push('/dashboard');
                 return;
             } catch (tokenError) {
@@ -246,12 +269,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (error) {
         }
         setUser(null);
+        setUserEmail(null);
         localStorage.removeItem('agora_user');
+        localStorage.removeItem('agora_user_email');
         router.push('/');
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, changePassword, resetPassword, logout }}>
+        <AuthContext.Provider value={{ user, userEmail, loading, signInWithGoogle, loginWithEmail, registerWithEmail, changePassword, resetPassword, logout }}>
             {children}
         </AuthContext.Provider>
     );
