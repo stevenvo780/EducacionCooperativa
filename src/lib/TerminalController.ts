@@ -24,6 +24,13 @@ export interface WorkspaceWorkerStatus {
   status: WorkerStatus;
 }
 
+export interface DocChangeEvent {
+  workspaceId: string;
+  docId: string;
+  action: 'created' | 'updated' | 'deleted';
+  data?: { name?: string; parentId?: string | null };
+}
+
 export class TerminalController {
   private terminals: Map<string, TerminalInstance> = new Map();
   public socket: Socket | null = null;
@@ -34,6 +41,7 @@ export class TerminalController {
   private workspaceStatuses: Map<string, WorkerStatus> = new Map();
   private subscribedWorkspaces: Set<string> = new Set();
   private onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void;
+  private onDocChange?: (event: DocChangeEvent) => void;
 
   public get term(): any {
     if (this.activeSessionId) {
@@ -205,11 +213,13 @@ export class TerminalController {
     uid: string,
     onStatusChange?: (status: string) => void,
     onSessionEnded?: (payload: { sessionId: string; reason?: string }) => void,
-    onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void
+    onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void,
+    onDocChange?: (event: DocChangeEvent) => void
   ) {
     if (this.socket) this.socket.disconnect();
 
     this.onWorkerStatusChange = onWorkerStatusChange;
+    this.onDocChange = onDocChange;
 
     const connectStart = performance.now();
     console.log('[TerminalController] Starting socket connection to:', this.nexusUrl);
@@ -283,6 +293,12 @@ export class TerminalController {
 
     this.socket.on('error', (data: { message: string; workspaceId?: string }) => {
       console.warn('[TerminalController] Error:', data.message);
+    });
+
+    // Listener para cambios en documentos (sync en tiempo real)
+    this.socket.on('doc-change', (event: DocChangeEvent) => {
+      console.log(`[TerminalController] doc-change: ${event.action} ${event.docId} in ${event.workspaceId}`);
+      this.onDocChange?.(event);
     });
 
     this.socket.connect();
