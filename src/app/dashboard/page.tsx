@@ -69,7 +69,7 @@ const ROOT_FOLDER_PATH = '';
 const DOCS_POLL_INTERVAL_MS = 30000;
 
 export default function DashboardPage() {
-    const { user, loading, logout, changePassword } = useAuth();
+    const { user, userEmail, loading, logout, changePassword } = useAuth();
     const {
         activeSessionId,
         selectSession,
@@ -250,7 +250,7 @@ export default function DashboardPage() {
         let fetched: Workspace[] = [];
         let fetchedInvites: Workspace[] = [];
         try {
-            const data = await fetchWorkspacesApi({ ownerId: user.uid, email: user.email });
+            const data = await fetchWorkspacesApi({ ownerId: user.uid, email: userEmail || undefined });
             fetched = data.workspaces.map(normalizeWorkspace);
             fetchedInvites = data.invites.map(normalizeWorkspace);
         } catch (e) {
@@ -265,12 +265,19 @@ export default function DashboardPage() {
             ? (allWorkspaces.find(ws => ws.id === previousWorkspace.id) ?? personalSpace)
             : personalSpace;
         setCurrentWorkspace(resolvedWorkspace);
-    }, [user, setWorkspaces, setInvites, setCurrentWorkspace]);
+    }, [user, userEmail, setWorkspaces, setInvites, setCurrentWorkspace]);
 
     const acceptInvite = async (ws: Workspace) => {
-        if (!user?.email) return;
+        if (!user || !userEmail) {
+            await showDialog({
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudo obtener el email del usuario. Por favor, inicia sesión de nuevo.'
+            });
+            return;
+        }
         try {
-            await acceptInviteApi({ workspaceId: ws.id, userId: user.uid, email: user.email });
+            await acceptInviteApi({ workspaceId: ws.id, userId: user.uid, email: userEmail });
             await fetchWorkspaces();
             await showDialog({
                 type: 'info',
@@ -278,7 +285,11 @@ export default function DashboardPage() {
                 message: '¡Te has unido al espacio!'
             });
         } catch (e) {
-            console.error('Error accepting', e);
+            await showDialog({
+                type: 'error',
+                title: 'Error al unirse',
+                message: e instanceof Error ? e.message : 'Error desconocido'
+            });
         }
     };
 
