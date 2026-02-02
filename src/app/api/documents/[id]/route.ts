@@ -128,15 +128,16 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
         const storagePath = data?.storagePath as string | undefined;
-        if (data?.type === 'file' && storagePath) {
+        
+        // Borrar archivo de Storage si existe (tanto para files como para documentos markdown)
+        if (storagePath) {
             const existing = await adminDb.collection('documents').where('storagePath', '==', storagePath).get();
             const hasOtherReferences = existing.docs.some(docItem => docItem.id !== id);
             if (!hasOtherReferences) {
                 const bucket = adminStorage.bucket();
-                if (!bucket?.name) {
-                    throw new Error('Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID');
+                if (bucket?.name) {
+                    await bucket.file(storagePath).delete().catch((e) => console.warn('Storage delete failed', e));
                 }
-                await bucket.file(storagePath).delete().catch((e) => console.warn('Storage delete failed', e));
             }
         }
 
