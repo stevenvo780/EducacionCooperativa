@@ -889,6 +889,64 @@ export default function DashboardPage() {
         }
     };
 
+    const renameDocument = async (doc: DocItem, nextName: string) => {
+        if (!doc || doc.type === 'folder') {
+            await showDialog({ type: 'info', title: 'Renombrar carpeta no está soportado', message: 'Solo se pueden renombrar archivos.' });
+            return;
+        }
+
+        const trimmed = (nextName || '').trim();
+        if (!trimmed || trimmed === doc.name) return;
+
+        const normalizedFolder = normalizeFolderPath(doc.folder);
+        const duplicate = docsRef.current.some(item => (
+            item.id !== doc.id
+            && normalizeFolderPath(item.folder) === normalizedFolder
+            && (item.name || '').toLowerCase() === trimmed.toLowerCase()
+            && item.type !== 'folder'
+        ));
+
+        if (duplicate) {
+            await showDialog({
+                type: 'info',
+                title: 'Nombre en uso',
+                message: `Ya existe un archivo llamado "${trimmed}" en esta carpeta.`
+            });
+            return;
+        }
+
+        setDocs(prev => prev.map(item => item.id === doc.id ? { ...item, name: trimmed } : item));
+        setOpenTabs(prev => prev.map(item => item.id === doc.id ? { ...item, name: trimmed } : item));
+
+        try {
+            await updateDocumentApi(doc.id, { name: trimmed });
+            await fetchDocs();
+        } catch (error) {
+            setOpenTabs(prev => prev.map(item => item.id === doc.id ? { ...item, name: doc.name } : item));
+            await fetchDocs();
+            await showDialog({
+                type: 'error',
+                title: 'No se pudo renombrar',
+                message: error instanceof Error ? error.message : 'Error desconocido'
+            });
+        }
+    };
+
+    const promptRenameDocument = async (doc: DocItem) => {
+        const result = await showDialog({
+            type: 'input',
+            title: 'Renombrar archivo',
+            message: 'Ingresa el nuevo nombre para el archivo',
+            defaultValue: doc.name,
+            placeholder: 'Nuevo nombre'
+        });
+
+        if (!result.confirmed) return;
+        const nextName = (result.value ?? '').trim();
+        if (!nextName) return;
+        await renameDocument(doc, nextName);
+    };
+
     const copyDocument = async (docItem: DocItem) => {
         if (!user) return;
         if (docItem.type === 'folder') return;
@@ -1551,6 +1609,7 @@ export default function DashboardPage() {
                                             onDeleteItems={deleteItems}
                                             onDuplicateDoc={copyDocument}
                                             onMoveDoc={moveDocumentToFolder}
+                                            onRenameDoc={promptRenameDocument}
                                             activeFolder={activeFolder}
                                             onActiveFolderChange={setActiveFolderSafe}
                                             currentWorkspaceName={currentWorkspace?.name}
@@ -1593,6 +1652,7 @@ export default function DashboardPage() {
                                         onCopyDocument={copyDocument}
                                         onMoveDocument={promptMoveDocument}
                                         onDeleteDocument={deleteDocument}
+                                        onRenameDocument={promptRenameDocument}
                                         getIcon={getIcon}
                                         getDocBadge={getDocBadge}
                                         personalWorkspaceId={PERSONAL_WORKSPACE_ID}
