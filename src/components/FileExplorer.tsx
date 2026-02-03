@@ -560,7 +560,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               const types = Array.from(e.dataTransfer.types ?? []);
               const hasFolderType = types.includes(FOLDER_REORDER_TYPE);
               const hasDocType = types.includes(DOC_REORDER_TYPE);
-              
+
               if (hasDocType && onMoveDoc) {
                  e.preventDefault();
                  e.stopPropagation();
@@ -589,7 +589,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             }}
             onDrop={(e) => {
               const types = Array.from(e.dataTransfer.types ?? []);
-              
+
               if (types.includes(DOC_REORDER_TYPE) && onMoveDoc) {
                   e.preventDefault();
                   e.stopPropagation();

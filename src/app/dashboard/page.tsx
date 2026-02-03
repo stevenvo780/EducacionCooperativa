@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter } from 'next/navigation';
-import { Check, FileText, Folder, Image as ImageIcon, File as FileIcon, Key, Loader2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
+import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, Key, Loader2, Minimize2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -54,7 +54,6 @@ import StatusToasts from '@/components/dashboard/StatusToasts';
 import DialogModal from '@/components/dashboard/DialogModal';
 import DragOverlay from '@/components/dashboard/DragOverlay';
 import HeaderBar from '@/components/dashboard/HeaderBar';
-import KanbanBoard from '@/components/dashboard/KanbanBoard';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TabsBar from '@/components/dashboard/TabsBar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
@@ -191,10 +190,16 @@ export default function DashboardPage() {
     const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
     const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
     const [closedFilesTabByWorkspace, setClosedFilesTabByWorkspace] = useState<Record<string, boolean>>({});
+    const boardTabId = currentWorkspaceId ? `board-${currentWorkspaceId}` : null;
+    const isBoardOpen = boardTabId ? openTabs.some(tab => tab.id === boardTabId) : false;
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+    const [isZenMode, setIsZenMode] = useState(false);
+    const zenRestoreRef = useRef({ sidebar: false, header: false });
     const resolveActiveFolder = useCallback((path?: string) => {
         if (path === ROOT_FOLDER_PATH) return ROOT_FOLDER_PATH;
         return normalizeFolderPath(path);
@@ -203,11 +208,39 @@ export default function DashboardPage() {
     const setActiveFolderSafe = useCallback((path: string) => {
         setActiveFolder(resolveActiveFolder(path));
     }, [resolveActiveFolder]);
+    const handleToggleSidebarCollapse = useCallback(() => {
+        if (showMobileSidebar) {
+            setShowMobileSidebar(false);
+        }
+        setIsSidebarCollapsed(prev => !prev);
+    }, [showMobileSidebar, setShowMobileSidebar]);
+    const handleToggleHeaderCollapse = useCallback(() => {
+        setShowWorkspaceMenu(false);
+        setIsHeaderCollapsed(prev => !prev);
+    }, [setShowWorkspaceMenu]);
+    const enterZenMode = useCallback(() => {
+        zenRestoreRef.current = { sidebar: isSidebarCollapsed, header: isHeaderCollapsed };
+        setShowWorkspaceMenu(false);
+        setShowMobileSidebar(false);
+        setIsSidebarCollapsed(true);
+        setIsHeaderCollapsed(true);
+        setIsZenMode(true);
+    }, [isHeaderCollapsed, isSidebarCollapsed, setShowMobileSidebar, setShowWorkspaceMenu]);
+    const exitZenMode = useCallback(() => {
+        setIsSidebarCollapsed(zenRestoreRef.current.sidebar);
+        setIsHeaderCollapsed(zenRestoreRef.current.header);
+        setIsZenMode(false);
+    }, []);
+    const handleToggleZenMode = useCallback(() => {
+        if (isZenMode) {
+            exitZenMode();
+        } else {
+            enterZenMode();
+        }
+    }, [enterZenMode, exitZenMode, isZenMode]);
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
-    const [dashboardView, setDashboardView] = useState<'docs' | 'board'>('docs');
-    const isBoardView = dashboardView === 'board';
 
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
@@ -495,9 +528,15 @@ export default function DashboardPage() {
                 setActiveFolderSafe(persisted.activeFolder);
             }
             if (persisted.docModes) setDocModes(persisted.docModes);
+            setIsSidebarCollapsed(Boolean(persisted.isSidebarCollapsed));
+            setIsHeaderCollapsed(Boolean(persisted.isHeaderCollapsed));
         } else {
             setDocModes({});
+            setIsSidebarCollapsed(false);
+            setIsHeaderCollapsed(false);
         }
+        setIsZenMode(false);
+        zenRestoreRef.current = { sidebar: false, header: false };
         setOpenTabs([]);
         setMosaicNode(null);
         setSelectedDocId(null);
@@ -584,11 +623,13 @@ export default function DashboardPage() {
                 mosaicNode,
                 docModes,
                 sidebarWidth,
-                activeFolder
+                activeFolder,
+                isSidebarCollapsed,
+                isHeaderCollapsed
             });
         }, 500);
         return () => clearTimeout(timeoutId);
-    }, [currentWorkspaceId, openTabs, selectedDocId, mosaicNode, docModes, sidebarWidth, activeFolder, loadingDocs]);
+    }, [currentWorkspaceId, openTabs, selectedDocId, mosaicNode, docModes, sidebarWidth, activeFolder, isSidebarCollapsed, isHeaderCollapsed, loadingDocs]);
 
     useEffect(() => {
         if (currentWorkspaceId) {
@@ -689,6 +730,35 @@ export default function DashboardPage() {
         setShowMobileSidebar(false);
         setSelectedDocId(terminalId);
     };
+
+    const openBoard = useCallback(async () => {
+        if (!currentWorkspace || !user) return;
+        const boardId = `board-${currentWorkspace.id}`;
+        if (openTabs.find(tab => tab.id === boardId)) {
+            setSelectedDocId(boardId);
+            setShowMobileSidebar(false);
+            return;
+        }
+
+        const newBoardItem: DocItem = {
+            id: boardId,
+            name: 'Tablero',
+            type: 'board',
+            workspaceId: currentWorkspace.id,
+            ownerId: user.uid,
+            updatedAt: new Date()
+        };
+
+        setOpenTabs(prev => [...prev, newBoardItem]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(boardId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, boardId]);
+        });
+        setShowMobileSidebar(false);
+        setSelectedDocId(boardId);
+    }, [currentWorkspace, user, openTabs, setShowMobileSidebar]);
 
     const closeTabById = useCallback(async (docId: string) => {
         if (currentWorkspace && docId === `files-${currentWorkspace.id}`) {
@@ -1628,36 +1698,71 @@ export default function DashboardPage() {
                     modalPop={modalPop}
                 />
 
-                <HeaderBar
-                    onToggleMobileSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
-                    onClearSelectedDoc={() => setSelectedDocId(null)}
-                    showWorkspaceMenu={showWorkspaceMenu}
-                    setShowWorkspaceMenu={setShowWorkspaceMenu}
-                    currentWorkspace={currentWorkspace}
-                    invites={invites}
-                    workspaces={workspaces}
-                    user={user}
-                    deletingWorkspaceId={deletingWorkspaceId}
-                    personalWorkspaceId={PERSONAL_WORKSPACE_ID}
-                    isBoardView={isBoardView}
-                    onToggleBoardView={() => setDashboardView(isBoardView ? 'docs' : 'board')}
-                    onAcceptInvite={acceptInvite}
-                    onSelectWorkspace={setCurrentWorkspace}
-                    onDeleteWorkspace={deleteWorkspace}
-                    onNewWorkspace={() => setShowNewWorkspaceModal(true)}
-                    onShowMembers={() => setShowMembersModal(true)}
-                    onOpenPassword={() => {
-                        setPasswordForm({ current: '', new: '', confirm: '' });
-                        setPasswordError('');
-                        setPasswordSuccess(false);
-                        setShowPasswordModal(true);
-                    }}
-                    onLogout={() => logout()}
-                />
+                {!isHeaderCollapsed && (
+                    <HeaderBar
+                        onToggleMobileSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
+                        onClearSelectedDoc={() => setSelectedDocId(null)}
+                        isSidebarCollapsed={isSidebarCollapsed}
+                        isHeaderCollapsed={isHeaderCollapsed}
+                        isZenMode={isZenMode}
+                        onToggleSidebarCollapse={handleToggleSidebarCollapse}
+                        onToggleHeaderCollapse={handleToggleHeaderCollapse}
+                        onToggleZenMode={handleToggleZenMode}
+                        showWorkspaceMenu={showWorkspaceMenu}
+                        setShowWorkspaceMenu={setShowWorkspaceMenu}
+                        currentWorkspace={currentWorkspace}
+                        invites={invites}
+                        workspaces={workspaces}
+                        user={user}
+                        deletingWorkspaceId={deletingWorkspaceId}
+                        personalWorkspaceId={PERSONAL_WORKSPACE_ID}
+                        isBoardOpen={isBoardOpen}
+                        onOpenBoard={openBoard}
+                        onAcceptInvite={acceptInvite}
+                        onSelectWorkspace={setCurrentWorkspace}
+                        onDeleteWorkspace={deleteWorkspace}
+                        onNewWorkspace={() => setShowNewWorkspaceModal(true)}
+                        onShowMembers={() => setShowMembersModal(true)}
+                        onOpenPassword={() => {
+                            setPasswordForm({ current: '', new: '', confirm: '' });
+                            setPasswordError('');
+                            setPasswordSuccess(false);
+                            setShowPasswordModal(true);
+                        }}
+                        onLogout={() => logout()}
+                    />
+                )}
+
+                {isHeaderCollapsed && !isZenMode && (
+                    <div className="absolute top-2 left-2 z-50">
+                        <button
+                            onClick={handleToggleHeaderCollapse}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-surface-800/90 border border-surface-600/60 rounded-full text-xs text-surface-200 hover:text-white hover:border-mandy-500/40 hover:bg-surface-700/80 transition shadow-xl shadow-black/30 backdrop-blur"
+                            title="Mostrar barra superior"
+                        >
+                            <ChevronDown className="w-4 h-4" />
+                            <span className="hidden sm:inline">Mostrar barra superior</span>
+                        </button>
+                    </div>
+                )}
+
+                {isZenMode && (
+                    <div className="absolute top-2 right-2 z-50">
+                        <button
+                            onClick={handleToggleZenMode}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-surface-800/90 border border-mandy-500/40 rounded-full text-xs text-mandy-200 hover:text-white hover:border-mandy-500/70 transition shadow-xl shadow-black/30 backdrop-blur"
+                            title="Salir de modo Zen"
+                        >
+                            <Minimize2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Salir de Zen</span>
+                        </button>
+                    </div>
+                )}
 
                 <div className="flex flex-1 overflow-hidden relative">
                     <Sidebar
                         sidebarWidth={sidebarWidth}
+                        isCollapsed={isSidebarCollapsed}
                         showMobileSidebar={showMobileSidebar}
                         onCloseMobileSidebar={() => setShowMobileSidebar(false)}
                         openFilesTab={openFilesTab}

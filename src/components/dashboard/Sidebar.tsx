@@ -53,6 +53,7 @@ type SidebarListItem =
 
 interface SidebarProps {
   sidebarWidth: number;
+  isCollapsed: boolean;
   showMobileSidebar: boolean;
   onCloseMobileSidebar: () => void;
   openFilesTab: () => void;
@@ -98,6 +99,7 @@ interface SidebarProps {
 
 const Sidebar = ({
   sidebarWidth,
+  isCollapsed,
   showMobileSidebar,
   onCloseMobileSidebar,
   openFilesTab,
@@ -143,6 +145,8 @@ const Sidebar = ({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
+  const isCollapsedView = isCollapsed && !showMobileSidebar;
+  const effectiveWidth = isCollapsedView ? 0 : sidebarWidth;
 
   useEffect(() => {
     setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
@@ -427,11 +431,13 @@ const Sidebar = ({
       )}
 
       <div
-        style={{ width: sidebarWidth }}
+        style={{ width: effectiveWidth }}
         className={`
           bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 transition-transform duration-150 absolute md:relative z-40 h-full
           ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          ${isCollapsedView ? 'overflow-hidden border-r-0 pointer-events-none' : ''}
         `}
+        aria-hidden={isCollapsedView}
       >
         <div className="p-3 border-b border-surface-600/50 flex justify-between items-center bg-surface-700/30 gap-2">
           <div className="text-xs font-bold text-surface-500 uppercase tracking-wider pl-2">
