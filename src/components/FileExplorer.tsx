@@ -18,7 +18,8 @@ import {
   Trash2,
   Copy,
   FolderInput,
-  Pencil
+  Pencil,
+  GripVertical
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -159,6 +160,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; docId: string } | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
   const lastSelectedIndex = useRef<number>(-1);
 
@@ -527,6 +529,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     onReorderFolders?.({ parentPath: activeFolder, orderedPaths: reordered.map(folder => folder.path) });
   };
 
+  const getDropPosition = (e: React.DragEvent<HTMLElement>) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    return e.clientY > midpoint ? 'after' : 'before';
+  };
+
   const renderContentRow = ({ index, style }: RowComponentProps) => {
     const item = contentItems[index];
     if (!item) return null;
@@ -548,23 +556,24 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               e.stopPropagation();
               handleFolderDoubleClick(folder);
             }}
-            onDragStart={(e) => {
-              if (!canReorderFolders || !folder.docId) return;
-              e.dataTransfer.setData(FOLDER_REORDER_TYPE, folder.path);
-              e.dataTransfer.effectAllowed = 'move';
-            }}
             onDragOver={(e) => {
               const types = Array.from(e.dataTransfer.types ?? []);
               if (!canReorderFolders || !types.includes(FOLDER_REORDER_TYPE)) return;
               e.preventDefault();
               e.stopPropagation();
               setDragOverKey(`folder:${folder.path}`);
+              setDragOverPosition(getDropPosition(e));
+              e.dataTransfer.dropEffect = 'move';
             }}
-            onDragEnd={() => setDragOverKey(null)}
+            onDragEnd={() => {
+              setDragOverKey(null);
+              setDragOverPosition(null);
+            }}
             onDragLeave={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setDragOverKey(prev => (prev === `folder:${folder.path}` ? null : prev));
+              setDragOverPosition(null);
             }}
             onDrop={(e) => {
               const types = Array.from(e.dataTransfer.types ?? []);
@@ -573,16 +582,21 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               e.stopPropagation();
               const dragPath = e.dataTransfer.getData(FOLDER_REORDER_TYPE);
               if (dragPath) {
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                const placeAfter = e.clientY > rect.top + rect.height / 2;
+                const placeAfter = getDropPosition(e) === 'after';
                 reorderFolders(dragPath, folder.path, placeAfter);
               }
               setDragOverKey(null);
+              setDragOverPosition(null);
             }}
-            draggable={canReorderFolders && !!folder.docId}
-            className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
+            className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer relative ${
               isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
-            } ${dragOverKey === `folder:${folder.path}` ? 'ring-1 ring-mandy-400/60' : ''}`}
+            } ${dragOverKey === `folder:${folder.path}` ? 'ring-1 ring-mandy-400/60' : ''} ${
+              dragOverKey === `folder:${folder.path}` && dragOverPosition === 'before'
+                ? 'before:absolute before:left-3 before:right-3 before:top-0 before:h-0.5 before:bg-mandy-400'
+                : dragOverKey === `folder:${folder.path}` && dragOverPosition === 'after'
+                  ? 'after:absolute after:left-3 after:right-3 after:bottom-0 after:h-0.5 after:bg-mandy-400'
+                  : ''
+            }`}
           >
             <input
               type="checkbox"
@@ -598,6 +612,27 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
             <span className="text-[10px] text-surface-500">{count}</span>
             <div className="ml-auto flex items-center gap-2">
+              {canReorderFolders && folder.docId && (
+                <button
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.dataTransfer.setData(FOLDER_REORDER_TYPE, folder.path);
+                    e.dataTransfer.setData('text/plain', folder.path);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragEnd={(e) => {
+                    e.stopPropagation();
+                    setDragOverKey(null);
+                    setDragOverPosition(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+                  title="Reordenar carpeta"
+                >
+                  <GripVertical className="w-3.5 h-3.5" />
+                </button>
+              )}
               {onDeleteFolder && folder.kind !== 'system' && (
                 <button
                   onClick={(e) => {
@@ -625,23 +660,24 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           onClick={(e) => handleDocSelect(doc, index, e)}
           onDoubleClick={(e) => handleDocDoubleClick(doc)}
           onContextMenu={(e) => handleContextMenu(e, doc.id)}
-          onDragStart={(e) => {
-            if (!canReorderDocs) return;
-            e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
-            e.dataTransfer.effectAllowed = 'move';
-          }}
           onDragOver={(e) => {
             const types = Array.from(e.dataTransfer.types ?? []);
             if (!canReorderDocs || !types.includes(DOC_REORDER_TYPE)) return;
             e.preventDefault();
             e.stopPropagation();
             setDragOverKey(`doc:${doc.id}`);
+            setDragOverPosition(getDropPosition(e));
+            e.dataTransfer.dropEffect = 'move';
           }}
-          onDragEnd={() => setDragOverKey(null)}
+          onDragEnd={() => {
+            setDragOverKey(null);
+            setDragOverPosition(null);
+          }}
           onDragLeave={(e) => {
             e.preventDefault();
             e.stopPropagation();
             setDragOverKey(prev => (prev === `doc:${doc.id}` ? null : prev));
+            setDragOverPosition(null);
           }}
           onDrop={(e) => {
             const types = Array.from(e.dataTransfer.types ?? []);
@@ -650,16 +686,21 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             e.stopPropagation();
             const dragId = e.dataTransfer.getData(DOC_REORDER_TYPE);
             if (dragId) {
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              const placeAfter = e.clientY > rect.top + rect.height / 2;
+              const placeAfter = getDropPosition(e) === 'after';
               reorderDocs(dragId, doc.id, placeAfter);
             }
             setDragOverKey(null);
+            setDragOverPosition(null);
           }}
-          draggable={canReorderDocs}
-          className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
+          className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer relative ${
             isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
-          } ${dragOverKey === `doc:${doc.id}` ? 'ring-1 ring-mandy-400/60' : ''}`}
+          } ${dragOverKey === `doc:${doc.id}` ? 'ring-1 ring-mandy-400/60' : ''} ${
+            dragOverKey === `doc:${doc.id}` && dragOverPosition === 'before'
+              ? 'before:absolute before:left-3 before:right-3 before:top-0 before:h-0.5 before:bg-mandy-400'
+              : dragOverKey === `doc:${doc.id}` && dragOverPosition === 'after'
+                ? 'after:absolute after:left-3 after:right-3 after:bottom-0 after:h-0.5 after:bg-mandy-400'
+                : ''
+          }`}
         >
           <input
             type="checkbox"
@@ -677,6 +718,27 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             {getDocBadge(doc)}
           </span>
           <div className="ml-auto flex items-center gap-2">
+            {canReorderDocs && (
+              <button
+                draggable
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
+                  e.dataTransfer.setData('text/plain', doc.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={(e) => {
+                  e.stopPropagation();
+                  setDragOverKey(null);
+                  setDragOverPosition(null);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+                title="Reordenar archivo"
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </button>
+            )}
             {onDuplicateDoc && (
               <button
                 onClick={(e) => {
