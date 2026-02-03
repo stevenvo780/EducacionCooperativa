@@ -21,6 +21,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
+import { getUpdatedAtValue } from '@/services/dashboardUtils';
 
 export interface DocItem {
   id: string;
@@ -33,6 +34,7 @@ export interface DocItem {
   mimeType?: string;
   updatedAt?: any;
   ownerId?: string;
+  order?: number;
 }
 
 export interface FolderItem {
@@ -42,13 +44,35 @@ export interface FolderItem {
   parentPath: string;
   kind: 'system' | 'record' | 'virtual';
   docId?: string;
+  order?: number;
 }
 
 type ContentItem =
   | { kind: 'folder'; folder: FolderItem }
   | { kind: 'doc'; doc: DocItem };
 
+const compareDocs = (a: DocItem, b: DocItem) => {
+  const orderA = typeof a.order === 'number' ? a.order : null;
+  const orderB = typeof b.order === 'number' ? b.order : null;
+  if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+  if (orderA !== null && orderB === null) return -1;
+  if (orderA === null && orderB !== null) return 1;
+  const dateA = getUpdatedAtValue(a.updatedAt);
+  const dateB = getUpdatedAtValue(b.updatedAt);
+  if (dateA !== dateB) return dateB - dateA;
+  return a.name.localeCompare(b.name);
+};
+
 const CONTENT_ROW_HEIGHT = 52;
+const DOC_REORDER_TYPE = 'application/x-doc-reorder';
+const FOLDER_REORDER_TYPE = 'application/x-folder-reorder';
+
+const arrayMove = <T,>(items: T[], from: number, to: number) => {
+  const next = items.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+};
 
 const useElementSize = <T extends HTMLElement>() => {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -98,6 +122,8 @@ interface FileExplorerProps {
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
+  onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
+  onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   currentWorkspaceName?: string;
   currentWorkspaceId?: string;
   embedded?: boolean;
@@ -119,6 +145,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   onDuplicateDoc,
   onMoveDoc,
   onRenameDoc,
+  onReorderDocs,
+  onReorderFolders,
   currentWorkspaceName = 'Espacio Personal',
   currentWorkspaceId,
   embedded = false,
@@ -136,6 +164,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; docId: string } | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
   const lastSelectedIndex = useRef<number>(-1);
 
@@ -201,6 +230,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     });
     Object.values(map).forEach(list => {
       list.sort((a, b) => {
+        const orderA = typeof a.order === 'number' ? a.order : null;
+        const orderB = typeof b.order === 'number' ? b.order : null;
+        if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+        if (orderA !== null && orderB === null) return -1;
+        if (orderA === null && orderB !== null) return 1;
         const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
         const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
         if (weightDiff !== 0) return weightDiff;
@@ -215,7 +249,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   }, [folderChildrenMap, activeFolder]);
 
   const activeFolderDocs = useMemo(() => {
-    return docsByFolder[activeFolder] ?? [];
+    const list = docsByFolder[activeFolder] ?? [];
+    return list.slice().sort(compareDocs);
   }, [docsByFolder, activeFolder]);
 
   const filteredChildFolders = useMemo(() => {
@@ -236,6 +271,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     filteredFolderDocs.forEach(doc => items.push({ kind: 'doc', doc }));
     return items;
   }, [filteredChildFolders, filteredFolderDocs]);
+
+  const canReorderDocs = !!onReorderDocs && !searchQuery.trim();
+  const canReorderFolders = !!onReorderFolders && !searchQuery.trim() && filteredChildFolders.every(folder => !!folder.docId);
+
+  const docIndexMap = useMemo(() => {
+    return new Map(filteredFolderDocs.map((doc, index) => [doc.id, index]));
+  }, [filteredFolderDocs]);
+
+  const folderIndexMap = useMemo(() => {
+    return new Map(filteredChildFolders.map((folder, index) => [folder.path, index]));
+  }, [filteredChildFolders]);
 
   const docMap = useMemo(() => {
     return new Map(normalizedDocs.map(doc => [doc.id, doc]));
@@ -455,6 +501,24 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     setSelectedKeys(new Set());
   };
 
+  const reorderDocs = (dragId: string, targetId: string) => {
+    if (!canReorderDocs) return;
+    const fromIndex = docIndexMap.get(dragId);
+    const toIndex = docIndexMap.get(targetId);
+    if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) return;
+    const reordered = arrayMove(filteredFolderDocs, fromIndex, toIndex);
+    onReorderDocs?.({ folderPath: activeFolder, orderedIds: reordered.map(doc => doc.id) });
+  };
+
+  const reorderFolders = (dragPath: string, targetPath: string) => {
+    if (!canReorderFolders) return;
+    const fromIndex = folderIndexMap.get(dragPath);
+    const toIndex = folderIndexMap.get(targetPath);
+    if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) return;
+    const reordered = arrayMove(filteredChildFolders, fromIndex, toIndex);
+    onReorderFolders?.({ parentPath: activeFolder, orderedPaths: reordered.map(folder => folder.path) });
+  };
+
   const renderContentRow = ({ index, style }: RowComponentProps) => {
     const item = contentItems[index];
     if (!item) return null;
@@ -476,9 +540,37 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               e.stopPropagation();
               handleFolderDoubleClick(folder);
             }}
+            onDragStart={(e) => {
+              if (!canReorderFolders || !folder.docId) return;
+              e.dataTransfer.setData(FOLDER_REORDER_TYPE, folder.path);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={(e) => {
+              const types = Array.from(e.dataTransfer.types ?? []);
+              if (!canReorderFolders || !types.includes(FOLDER_REORDER_TYPE)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOverKey(`folder:${folder.path}`);
+            }}
+            onDragEnd={() => setDragOverKey(null)}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOverKey(prev => (prev === `folder:${folder.path}` ? null : prev));
+            }}
+            onDrop={(e) => {
+              const types = Array.from(e.dataTransfer.types ?? []);
+              if (!types.includes(FOLDER_REORDER_TYPE)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const dragPath = e.dataTransfer.getData(FOLDER_REORDER_TYPE);
+              if (dragPath) reorderFolders(dragPath, folder.path);
+              setDragOverKey(null);
+            }}
+            draggable={canReorderFolders && !!folder.docId}
             className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
               isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
-            }`}
+            } ${dragOverKey === `folder:${folder.path}` ? 'ring-1 ring-mandy-400/60' : ''}`}
           >
             <input
               type="checkbox"
@@ -521,9 +613,37 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           onClick={(e) => handleDocSelect(doc, index, e)}
           onDoubleClick={(e) => handleDocDoubleClick(doc)}
           onContextMenu={(e) => handleContextMenu(e, doc.id)}
+          onDragStart={(e) => {
+            if (!canReorderDocs) return;
+            e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
+            e.dataTransfer.effectAllowed = 'move';
+          }}
+          onDragOver={(e) => {
+            const types = Array.from(e.dataTransfer.types ?? []);
+            if (!canReorderDocs || !types.includes(DOC_REORDER_TYPE)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setDragOverKey(`doc:${doc.id}`);
+          }}
+          onDragEnd={() => setDragOverKey(null)}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragOverKey(prev => (prev === `doc:${doc.id}` ? null : prev));
+          }}
+          onDrop={(e) => {
+            const types = Array.from(e.dataTransfer.types ?? []);
+            if (!types.includes(DOC_REORDER_TYPE)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const dragId = e.dataTransfer.getData(DOC_REORDER_TYPE);
+            if (dragId) reorderDocs(dragId, doc.id);
+            setDragOverKey(null);
+          }}
+          draggable={canReorderDocs}
           className={`group flex items-center gap-3 px-3 py-2 rounded-lg border transition cursor-pointer ${
             isSelected ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-300' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'
-          }`}
+          } ${dragOverKey === `doc:${doc.id}` ? 'ring-1 ring-mandy-400/60' : ''}`}
         >
           <input
             type="checkbox"
