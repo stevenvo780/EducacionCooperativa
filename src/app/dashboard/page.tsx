@@ -5,8 +5,8 @@ import type React from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { useRouter } from 'next/navigation';
-import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, Key, Loader2, Minimize2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Key, Loader2, Minimize2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -87,6 +87,7 @@ export default function DashboardPage() {
     const [docs, setDocs] = useState<DocItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const reduceMotion = useReducedMotion();
     const [, startTransition] = useTransition();
     const modalFade = useMemo<Transition>(() => ({
@@ -177,6 +178,7 @@ export default function DashboardPage() {
         dispatch(setDeletingWorkspaceIdAction(value));
     }, [dispatch]);
     const currentWorkspaceId = currentWorkspace?.id;
+    const requestedWorkspaceId = (searchParams?.get('workspaceId') || searchParams?.get('workspace') || '').trim() || null;
 
     useEffect(() => {
         if (!user || !currentWorkspace) return;
@@ -245,6 +247,7 @@ export default function DashboardPage() {
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
     const deferredDocs = useDeferredValue(docs);
+    const deferredSidebarQuery = useDeferredValue(sidebarSearchQuery);
 
     const [newDocName, setNewDocName] = useState('');
     const [newWorkspaceName, setNewWorkspaceName] = useState('');
@@ -300,11 +303,39 @@ export default function DashboardPage() {
         setWorkspaces(allWorkspaces);
         setInvites(fetchedInvites);
         const previousWorkspace = currentWorkspaceRef.current;
-        const resolvedWorkspace = previousWorkspace
-            ? (allWorkspaces.find(ws => ws.id === previousWorkspace.id) ?? personalSpace)
-            : personalSpace;
+        const resolvedWorkspace = (() => {
+            if (requestedWorkspaceId) {
+                const match = allWorkspaces.find(ws => ws.id === requestedWorkspaceId);
+                if (match) return match;
+            }
+            if (previousWorkspace) {
+                return allWorkspaces.find(ws => ws.id === previousWorkspace.id) ?? personalSpace;
+            }
+            return personalSpace;
+        })();
         setCurrentWorkspace(resolvedWorkspace);
-    }, [user, userEmail, setWorkspaces, setInvites, setCurrentWorkspace]);
+    }, [user, userEmail, requestedWorkspaceId, setWorkspaces, setInvites, setCurrentWorkspace]);
+
+    useEffect(() => {
+        if (!requestedWorkspaceId || workspaces.length === 0) return;
+        if (currentWorkspace?.id === requestedWorkspaceId) return;
+        const match = workspaces.find(ws => ws.id === requestedWorkspaceId);
+        if (match) {
+            setCurrentWorkspace(match);
+        }
+    }, [requestedWorkspaceId, workspaces, currentWorkspace?.id, setCurrentWorkspace]);
+
+    useEffect(() => {
+        if (!currentWorkspaceId) return;
+        const currentParam = searchParams?.get('workspaceId') || '';
+        if (currentParam === currentWorkspaceId) return;
+        const params = new URLSearchParams(searchParams?.toString());
+        params.set('workspaceId', currentWorkspaceId);
+        params.delete('workspace');
+        const query = params.toString();
+        const nextUrl = query ? `/dashboard?${query}` : '/dashboard';
+        router.replace(nextUrl, { scroll: false });
+    }, [currentWorkspaceId, searchParams, router]);
 
     const acceptInvite = async (ws: Workspace) => {
         if (!user || !userEmail) {
@@ -690,10 +721,10 @@ export default function DashboardPage() {
     };
 
     const sidebarFilteredDocs = useMemo(() => {
-        if (!sidebarSearchQuery.trim()) return docs;
-        const query = sidebarSearchQuery.toLowerCase();
-        return docs.filter(d => d.name.toLowerCase().includes(query));
-    }, [docs, sidebarSearchQuery]);
+        const query = deferredSidebarQuery.trim().toLowerCase();
+        if (!query) return deferredDocs;
+        return deferredDocs.filter(d => d.name.toLowerCase().includes(query));
+    }, [deferredDocs, deferredSidebarQuery]);
 
     const openTerminal = async (session?: { id: string; name?: string }) => {
         const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
@@ -1424,7 +1455,7 @@ export default function DashboardPage() {
         if (!hasDocId || types.includes('Files')) return;
         e.preventDefault();
         e.stopPropagation();
-        setDropPosition(position);
+        setDropPosition(prev => (prev === position ? prev : position));
     };
 
     const handleDropZoneDragLeave = (e: React.DragEvent) => {
@@ -1464,12 +1495,12 @@ export default function DashboardPage() {
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (hasFiles) {
             e.preventDefault();
-            setFolderDragOver(folderName);
+            setFolderDragOver(prev => (prev === folderName ? prev : folderName));
             return;
         }
         if (!hasDocId) return;
         e.preventDefault();
-        setFolderDragOver(folderName);
+        setFolderDragOver(prev => (prev === folderName ? prev : folderName));
     };
 
     const handleFolderDragLeave = (folderName: string) => {
@@ -1641,6 +1672,7 @@ export default function DashboardPage() {
 
     const getIcon = (doc: DocItem) => {
         if (doc.type === 'terminal') return <TerminalIcon className="w-5 h-5" />;
+        if (doc.type === 'board') return <KanbanSquare className="w-5 h-5" />;
         if (doc.type === 'file') {
             if (doc.mimeType?.startsWith('image/')) return <ImageIcon className="w-5 h-5" />;
             if (isMarkdownDocItem(doc)) return <FileText className="w-5 h-5" />;
@@ -1807,113 +1839,104 @@ export default function DashboardPage() {
                     />
 
                     <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
-                        {isBoardView ? (
-                            <KanbanBoard
-                                workspaceId={currentWorkspace?.id}
-                                workspaceName={currentWorkspace?.name}
-                                ownerId={user?.uid}
-                            />
-                        ) : (
-                            <>
-                                <TabsBar
-                                    openTabs={openTabs}
-                                    selectedDocId={selectedDocId}
-                                    onSelectTab={(tab) => {
-                                        setSelectedDocId(tab.id);
-                                        if (tab.type === 'terminal' && tab.sessionId) {
-                                            selectSession(tab.sessionId);
-                                        }
-                                    }}
-                                    onCloseTab={closeTab}
-                                    getIcon={getIcon}
-                                />
+                        <TabsBar
+                            openTabs={openTabs}
+                            selectedDocId={selectedDocId}
+                            onSelectTab={(tab) => {
+                                setSelectedDocId(tab.id);
+                                if (tab.type === 'terminal' && tab.sessionId) {
+                                    selectSession(tab.sessionId);
+                                }
+                            }}
+                            onCloseTab={closeTab}
+                            getIcon={getIcon}
+                        />
 
-                                {mosaicNode ? (
-                                    <div className="flex-1 min-h-0 relative">
-                                        <MosaicLayout
-                                            value={mosaicNode}
-                                            onChange={setMosaicNode}
-                                            openTabs={openTabs}
-                                            docs={docs}
-                                            folders={folders}
-                                            docModes={docModes}
-                                            onSetDocMode={setDocMode}
-                                            onCloseTab={closeTabById}
-                                            onSelectDoc={openDocument}
-                                            onCreateFile={() => createDoc(undefined, activeFolder)}
-                                            onCreateFolder={() => createFolder()}
-                                            onUploadFile={() => {
-                                                setUploadTargetFolder(activeFolder);
-                                                fileInputRef.current?.click();
-                                            }}
-                                            onUploadFolder={() => {
-                                                setUploadTargetFolder(activeFolder);
-                                                folderInputRef.current?.click();
-                                            }}
-                                            onDeleteDoc={(docId) => {
-                                                const doc = docs.find(d => d.id === docId);
-                                                if (doc) deleteDocument(doc, { stopPropagation: () => { } } as React.MouseEvent);
-                                            }}
-                                            onDeleteFolder={deleteFolder}
-                                            onDeleteItems={deleteItems}
-                                            onDuplicateDoc={copyDocument}
-                                            onMoveDoc={moveDocumentToFolder}
-                                            onRenameDoc={promptRenameDocument}
-                                            onReorderDocs={reorderDocsInFolder}
-                                            onReorderFolders={reorderFoldersInParent}
-                                            activeFolder={activeFolder}
-                                            onActiveFolderChange={setActiveFolderSafe}
-                                            currentWorkspaceName={currentWorkspace?.name}
-                                            currentWorkspaceId={currentWorkspace?.id}
-                                            currentWorkspaceType={currentWorkspace?.type}
-                                            nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
-                                        />
-                                    </div>
-                                ) : (
-                                    <WorkspaceExplorer
-                                        currentWorkspace={currentWorkspace}
-                                        activeFolder={activeFolder}
-                                        activeFolderLabel={activeFolderLabel}
-                                        activeChildFolders={activeChildFolders}
-                                        activeFolderDocs={activeFolderDocs}
-                                        docsByFolder={docsByFolder}
-                                        folderTree={renderFolderTree(ROOT_FOLDER_PATH)}
-                                        folderDragOver={folderDragOver}
-                                        onFolderDragOver={handleFolderDragOver}
-                                        onFolderDrop={handleFolderDrop}
-                                        onFolderDragLeave={handleFolderDragLeave}
-                                        onDocDragStart={handleDocDragStart}
-                                        onDocDragEnd={handleDocDragEnd}
-                                        onActiveFolderChange={setActiveFolderSafe}
-                                        onOpenDocument={openDocument}
-                                        onCreateDoc={() => createDoc(undefined, activeFolder)}
-                                        onCreateFolder={() => createFolder()}
-                                        onUploadFile={() => {
-                                            setUploadTargetFolder(activeFolder);
-                                            fileInputRef.current?.click();
-                                        }}
-                                        onUploadFolder={() => {
-                                            setUploadTargetFolder(activeFolder);
-                                            folderInputRef.current?.click();
-                                        }}
-                                        onCopyWorkspaceId={(id) => {
-                                            navigator.clipboard.writeText(id);
-                                            showDialog({ type: 'info', title: 'ID copiado', message: id });
-                                        }}
-                                        onCopyDocument={copyDocument}
-                                        onMoveDocument={promptMoveDocument}
-                                        onDeleteDocument={deleteDocument}
-                                        onRenameDocument={promptRenameDocument}
-                                        onReorderDocs={reorderDocsInFolder}
-                                        onReorderFolders={reorderFoldersInParent}
-                                        getIcon={getIcon}
-                                        getDocBadge={getDocBadge}
-                                        personalWorkspaceId={PERSONAL_WORKSPACE_ID}
-                                        rootFolderPath={ROOT_FOLDER_PATH}
-                                        defaultFolderName={DEFAULT_FOLDER_NAME}
-                                    />
-                                )}
-                            </>
+                        {mosaicNode ? (
+                            <div className="flex-1 min-h-0 relative">
+                                <MosaicLayout
+                                    value={mosaicNode}
+                                    onChange={setMosaicNode}
+                                    openTabs={openTabs}
+                                    docs={docs}
+                                    folders={folders}
+                                    docModes={docModes}
+                                    onSetDocMode={setDocMode}
+                                    onCloseTab={closeTabById}
+                                    onSelectDoc={openDocument}
+                                    onCreateFile={() => createDoc(undefined, activeFolder)}
+                                    onCreateFolder={() => createFolder()}
+                                    onUploadFile={() => {
+                                        setUploadTargetFolder(activeFolder);
+                                        fileInputRef.current?.click();
+                                    }}
+                                    onUploadFolder={() => {
+                                        setUploadTargetFolder(activeFolder);
+                                        folderInputRef.current?.click();
+                                    }}
+                                    onDeleteDoc={(docId) => {
+                                        const doc = docs.find(d => d.id === docId);
+                                        if (doc) deleteDocument(doc, { stopPropagation: () => { } } as React.MouseEvent);
+                                    }}
+                                    onDeleteFolder={deleteFolder}
+                                    onDeleteItems={deleteItems}
+                                    onDuplicateDoc={copyDocument}
+                                    onMoveDoc={moveDocumentToFolder}
+                                    onRenameDoc={promptRenameDocument}
+                                    onReorderDocs={reorderDocsInFolder}
+                                    onReorderFolders={reorderFoldersInParent}
+                                    activeFolder={activeFolder}
+                                    onActiveFolderChange={setActiveFolderSafe}
+                                    currentWorkspaceName={currentWorkspace?.name}
+                                    currentWorkspaceId={currentWorkspace?.id}
+                                    currentWorkspaceType={currentWorkspace?.type}
+                                    currentUserId={user?.uid}
+                                    nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                                />
+                            </div>
+                        ) : (
+                            <WorkspaceExplorer
+                                currentWorkspace={currentWorkspace}
+                                activeFolder={activeFolder}
+                                activeFolderLabel={activeFolderLabel}
+                                activeChildFolders={activeChildFolders}
+                                activeFolderDocs={activeFolderDocs}
+                                docsByFolder={docsByFolder}
+                                folderTree={renderFolderTree(ROOT_FOLDER_PATH)}
+                                folderDragOver={folderDragOver}
+                                onFolderDragOver={handleFolderDragOver}
+                                onFolderDrop={handleFolderDrop}
+                                onFolderDragLeave={handleFolderDragLeave}
+                                onDocDragStart={handleDocDragStart}
+                                onDocDragEnd={handleDocDragEnd}
+                                onActiveFolderChange={setActiveFolderSafe}
+                                onOpenDocument={openDocument}
+                                onCreateDoc={() => createDoc(undefined, activeFolder)}
+                                onCreateFolder={() => createFolder()}
+                                onUploadFile={() => {
+                                    setUploadTargetFolder(activeFolder);
+                                    fileInputRef.current?.click();
+                                }}
+                                onUploadFolder={() => {
+                                    setUploadTargetFolder(activeFolder);
+                                    folderInputRef.current?.click();
+                                }}
+                                onCopyWorkspaceId={(id) => {
+                                    navigator.clipboard.writeText(id);
+                                    showDialog({ type: 'info', title: 'ID copiado', message: id });
+                                }}
+                                onCopyDocument={copyDocument}
+                                onMoveDocument={promptMoveDocument}
+                                onDeleteDocument={deleteDocument}
+                                onRenameDocument={promptRenameDocument}
+                                onReorderDocs={reorderDocsInFolder}
+                                onReorderFolders={reorderFoldersInParent}
+                                getIcon={getIcon}
+                                getDocBadge={getDocBadge}
+                                personalWorkspaceId={PERSONAL_WORKSPACE_ID}
+                                rootFolderPath={ROOT_FOLDER_PATH}
+                                defaultFolderName={DEFAULT_FOLDER_NAME}
+                            />
                         )}
                     </div>
                 </div>
