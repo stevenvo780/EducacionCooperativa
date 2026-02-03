@@ -15,6 +15,12 @@ const arrayMove = <T,>(items: T[], from: number, to: number) => {
   return next;
 };
 
+const resolveReorderIndex = (fromIndex: number, targetIndex: number, placeAfter: boolean) => {
+  let toIndex = placeAfter ? targetIndex + 1 : targetIndex;
+  if (fromIndex < toIndex) toIndex -= 1;
+  return toIndex;
+};
+
 interface WorkspaceExplorerProps {
   currentWorkspace: Workspace | null;
   activeFolder: string;
@@ -86,21 +92,25 @@ const WorkspaceExplorer = ({
   const canReorderDocs = !!onReorderDocs;
   const canReorderFolders = !!onReorderFolders && activeChildFolders.every(folder => !!folder.docId);
 
-  const reorderDocs = (dragId: string, targetId: string) => {
+  const reorderDocs = (dragId: string, targetId: string, placeAfter: boolean) => {
     if (!canReorderDocs) return;
     const fromIndex = activeFolderDocs.findIndex(doc => doc.id === dragId);
     const toIndex = activeFolderDocs.findIndex(doc => doc.id === targetId);
     if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
-    const reordered = arrayMove(activeFolderDocs, fromIndex, toIndex);
+    const resolvedIndex = resolveReorderIndex(fromIndex, toIndex, placeAfter);
+    if (resolvedIndex === fromIndex) return;
+    const reordered = arrayMove(activeFolderDocs, fromIndex, resolvedIndex);
     onReorderDocs?.({ folderPath: activeFolder, orderedIds: reordered.map(doc => doc.id) });
   };
 
-  const reorderFolders = (dragPath: string, targetPath: string) => {
+  const reorderFolders = (dragPath: string, targetPath: string, placeAfter: boolean) => {
     if (!canReorderFolders) return;
     const fromIndex = activeChildFolders.findIndex(folder => folder.path === dragPath);
     const toIndex = activeChildFolders.findIndex(folder => folder.path === targetPath);
     if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
-    const reordered = arrayMove(activeChildFolders, fromIndex, toIndex);
+    const resolvedIndex = resolveReorderIndex(fromIndex, toIndex, placeAfter);
+    if (resolvedIndex === fromIndex) return;
+    const reordered = arrayMove(activeChildFolders, fromIndex, resolvedIndex);
     onReorderFolders?.({ parentPath: activeFolder, orderedPaths: reordered.map(folder => folder.path) });
   };
 
@@ -206,7 +216,11 @@ const WorkspaceExplorer = ({
                       e.preventDefault();
                       e.stopPropagation();
                       const dragPath = e.dataTransfer.getData(FOLDER_REORDER_TYPE);
-                      if (dragPath) reorderFolders(dragPath, folder.path);
+                      if (dragPath) {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const placeAfter = e.clientY > rect.top + rect.height / 2;
+                        reorderFolders(dragPath, folder.path, placeAfter);
+                      }
                       setDragOverKey(null);
                       return;
                     }
@@ -258,7 +272,11 @@ const WorkspaceExplorer = ({
                   e.preventDefault();
                   e.stopPropagation();
                   const dragId = e.dataTransfer.getData(DOC_REORDER_TYPE);
-                  if (dragId) reorderDocs(dragId, doc.id);
+                  if (dragId) {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    const placeAfter = e.clientY > rect.top + rect.height / 2;
+                    reorderDocs(dragId, doc.id, placeAfter);
+                  }
                   setDragOverKey(null);
                 }}
                 onDragLeave={() => {

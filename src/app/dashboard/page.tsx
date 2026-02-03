@@ -402,11 +402,6 @@ export default function DashboardPage() {
         });
 
         normalizedFileDocs.sort((a, b) => {
-            const orderA = typeof a.order === 'number' ? a.order : null;
-            const orderB = typeof b.order === 'number' ? b.order : null;
-            if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-            if (orderA !== null && orderB === null) return -1;
-            if (orderA === null && orderB !== null) return 1;
             const dateA = getUpdatedAtValue(a.updatedAt);
             const dateB = getUpdatedAtValue(b.updatedAt);
             if (dateA !== dateB) return dateB - dateA;

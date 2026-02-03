@@ -51,18 +51,6 @@ type ContentItem =
   | { kind: 'folder'; folder: FolderItem }
   | { kind: 'doc'; doc: DocItem };
 
-const compareDocs = (a: DocItem, b: DocItem) => {
-  const orderA = typeof a.order === 'number' ? a.order : null;
-  const orderB = typeof b.order === 'number' ? b.order : null;
-  if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-  if (orderA !== null && orderB === null) return -1;
-  if (orderA === null && orderB !== null) return 1;
-  const dateA = getUpdatedAtValue(a.updatedAt);
-  const dateB = getUpdatedAtValue(b.updatedAt);
-  if (dateA !== dateB) return dateB - dateA;
-  return a.name.localeCompare(b.name);
-};
-
 const CONTENT_ROW_HEIGHT = 52;
 const DOC_REORDER_TYPE = 'application/x-doc-reorder';
 const FOLDER_REORDER_TYPE = 'application/x-folder-reorder';
@@ -72,6 +60,12 @@ const arrayMove = <T,>(items: T[], from: number, to: number) => {
   const [moved] = next.splice(from, 1);
   next.splice(to, 0, moved);
   return next;
+};
+
+const resolveReorderIndex = (fromIndex: number, targetIndex: number, placeAfter: boolean) => {
+  let toIndex = placeAfter ? targetIndex + 1 : targetIndex;
+  if (fromIndex < toIndex) toIndex -= 1;
+  return toIndex;
 };
 
 const useElementSize = <T extends HTMLElement>() => {
@@ -250,7 +244,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   const activeFolderDocs = useMemo(() => {
     const list = docsByFolder[activeFolder] ?? [];
-    return list.slice().sort(compareDocs);
+    return list.slice().sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : null;
+      const orderB = typeof b.order === 'number' ? b.order : null;
+      if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+      if (orderA !== null && orderB === null) return -1;
+      if (orderA === null && orderB !== null) return 1;
+      const dateA = getUpdatedAtValue(a.updatedAt);
+      const dateB = getUpdatedAtValue(b.updatedAt);
+      if (dateA !== dateB) return dateB - dateA;
+      return (a.name || '').localeCompare(b.name || '');
+    });
   }, [docsByFolder, activeFolder]);
 
   const filteredChildFolders = useMemo(() => {
@@ -501,21 +505,25 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     setSelectedKeys(new Set());
   };
 
-  const reorderDocs = (dragId: string, targetId: string) => {
+  const reorderDocs = (dragId: string, targetId: string, placeAfter: boolean) => {
     if (!canReorderDocs) return;
     const fromIndex = docIndexMap.get(dragId);
     const toIndex = docIndexMap.get(targetId);
     if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) return;
-    const reordered = arrayMove(filteredFolderDocs, fromIndex, toIndex);
+    const resolvedIndex = resolveReorderIndex(fromIndex, toIndex, placeAfter);
+    if (resolvedIndex === fromIndex) return;
+    const reordered = arrayMove(filteredFolderDocs, fromIndex, resolvedIndex);
     onReorderDocs?.({ folderPath: activeFolder, orderedIds: reordered.map(doc => doc.id) });
   };
 
-  const reorderFolders = (dragPath: string, targetPath: string) => {
+  const reorderFolders = (dragPath: string, targetPath: string, placeAfter: boolean) => {
     if (!canReorderFolders) return;
     const fromIndex = folderIndexMap.get(dragPath);
     const toIndex = folderIndexMap.get(targetPath);
     if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) return;
-    const reordered = arrayMove(filteredChildFolders, fromIndex, toIndex);
+    const resolvedIndex = resolveReorderIndex(fromIndex, toIndex, placeAfter);
+    if (resolvedIndex === fromIndex) return;
+    const reordered = arrayMove(filteredChildFolders, fromIndex, resolvedIndex);
     onReorderFolders?.({ parentPath: activeFolder, orderedPaths: reordered.map(folder => folder.path) });
   };
 
@@ -564,7 +572,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               e.preventDefault();
               e.stopPropagation();
               const dragPath = e.dataTransfer.getData(FOLDER_REORDER_TYPE);
-              if (dragPath) reorderFolders(dragPath, folder.path);
+              if (dragPath) {
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const placeAfter = e.clientY > rect.top + rect.height / 2;
+                reorderFolders(dragPath, folder.path, placeAfter);
+              }
               setDragOverKey(null);
             }}
             draggable={canReorderFolders && !!folder.docId}
@@ -637,7 +649,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             e.preventDefault();
             e.stopPropagation();
             const dragId = e.dataTransfer.getData(DOC_REORDER_TYPE);
-            if (dragId) reorderDocs(dragId, doc.id);
+            if (dragId) {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const placeAfter = e.clientY > rect.top + rect.height / 2;
+              reorderDocs(dragId, doc.id, placeAfter);
+            }
             setDragOverKey(null);
           }}
           draggable={canReorderDocs}
