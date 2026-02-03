@@ -111,10 +111,14 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 throw new Error('User does not have getIdToken method - Firebase auth required');
             }
             const actualToken = await currentUser.getIdToken();
+            
+            // Try to restore session
+            const savedSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('terminal_active_session') : null;
 
             controller.connect(
                 actualToken,
                 currentUser.uid,
+                savedSessionId,
                 (newStatus) => {
                     debugLog('[TerminalContext] Hub status changed:', newStatus);
                     if (newStatus === 'hub-online') {
@@ -164,13 +168,15 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 originalStartSession(opts);
             };
 
-            controller.socket?.on('session-created', (data: { id: string; workspaceId?: string }) => {
+            controller.socket?.on('session-created', (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => {
                 setIsCreatingSession(false);
                 setSessions(prev => {
                     if (prev.find(s => s.id === data.id)) return prev;
+                    // If restored, we might have data in payload
                     const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
-                    const workspaceType = pendingSessionMeta?.workspaceType || 'personal';
-                    const workspaceName = pendingSessionMeta?.workspaceName;
+                    const workspaceType = data.workspaceType || pendingSessionMeta?.workspaceType || 'personal';
+                    const workspaceName = data.workspaceName || pendingSessionMeta?.workspaceName;
+                    
                     const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
                     const newSession: TerminalSession = {
                         id: data.id,
@@ -183,11 +189,20 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                     return [...prev, newSession];
                 });
                 setActiveSessionId(data.id);
+                if (typeof window !== 'undefined') {
+                    window.localStorage.setItem('terminal_active_session', data.id);
+                }
             });
 
             controller.socket?.on('session-ended', (data: { sessionId: string }) => {
                 setSessions(prev => prev.filter(s => s.id !== data.sessionId));
-                setActiveSessionId(prev => prev === data.sessionId ? null : prev);
+                setActiveSessionId(prev => {
+                    if (prev === data.sessionId) {
+                        if (typeof window !== 'undefined') window.localStorage.removeItem('terminal_active_session');
+                        return null;
+                    }
+                    return prev;
+                });
                 controllerRef.current?.disposeSession(data.sessionId);
             });
 
