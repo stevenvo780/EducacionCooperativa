@@ -1348,6 +1348,8 @@ export default function DashboardPage() {
 
     const handleDropZoneDragOver = (e: React.DragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
+        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        if (isReorderDrag) return;
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (!hasDocId || types.includes('Files')) return;
         e.preventDefault();
@@ -1363,6 +1365,8 @@ export default function DashboardPage() {
 
     const handleDropZoneDrop = (e: React.DragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
+        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        if (isReorderDrag) return;
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (!hasDocId || types.includes('Files')) return;
         const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
@@ -1384,6 +1388,8 @@ export default function DashboardPage() {
 
     const handleFolderDragOver = (e: React.DragEvent, folderName: string) => {
         const types = Array.from(e.dataTransfer.types ?? []);
+        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        if (isReorderDrag) return;
         const hasFiles = types.includes('Files');
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (hasFiles) {
@@ -1409,6 +1415,8 @@ export default function DashboardPage() {
             return;
         }
         const types = Array.from(e.dataTransfer.types ?? []);
+        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        if (isReorderDrag) return;
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (!hasDocId) return;
         const docId = e.dataTransfer.getData('application/x-doc-id') || e.dataTransfer.getData('text/plain');
