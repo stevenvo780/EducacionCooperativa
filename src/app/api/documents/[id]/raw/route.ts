@@ -9,6 +9,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
+        if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+            const mockContent = 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.';
+            return new Response(mockContent, {
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+            });
+        }
+
         const { id } = params;
         const docSnap = await adminDb.collection('documents').doc(id).get();
         if (!docSnap.exists) {

@@ -94,6 +94,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
+        if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+            const mockDoc = {
+                id: params.id,
+                name: 'Documento de Prueba.md',
+                content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
+                type: 'text',
+                workspaceId: 'personal',
+                folder: 'No estructurado',
+                updatedAt: { seconds: Date.now() / 1000 },
+                createdAt: { seconds: Date.now() / 1000 },
+                ownerId: auth.uid
+            };
+            return NextResponse.json(mockDoc);
+        }
+
         const { id } = params;
         const docSnap = await adminDb.collection('documents').doc(id).get();
         if (!docSnap.exists) {

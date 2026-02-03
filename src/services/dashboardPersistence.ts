@@ -109,6 +109,14 @@ export function restoreOpenTabs(
     const doc = availableDocs.find(d => d.id === persistedTab.id);
     if (doc) {
       restoredTabs.push(doc);
+      continue;
+    }
+    if (persistedTab.type === 'board') {
+      restoredTabs.push({
+        id: persistedTab.id,
+        name: persistedTab.name || 'Tablero',
+        type: 'board'
+      });
     }
   }
 

@@ -33,7 +33,7 @@ const highlightTextInNode = (node: Node, searchTerm: string, highlights: HTMLEle
     const text = node.textContent;
     const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
     const parts = text.split(regex);
-    
+
     if (parts.length > 1) {
       const fragment = document.createDocumentFragment();
       parts.forEach(part => {
@@ -54,7 +54,7 @@ const highlightTextInNode = (node: Node, searchTerm: string, highlights: HTMLEle
     // Skip script, style, and already highlighted elements
     const tagName = (node as Element).tagName?.toLowerCase();
     if (tagName === 'script' || tagName === 'style' || tagName === 'mark') return;
-    
+
     // Process child nodes (create array first to avoid live collection issues)
     const children = Array.from(node.childNodes);
     children.forEach(child => highlightTextInNode(child, searchTerm, highlights));
@@ -74,26 +74,12 @@ const clearHighlights = (container: HTMLElement): void => {
   });
 };
 
-const DebouncedMarkdown = React.memo(({ content }: { content: string }) => {
-  const [debouncedContent, setDebouncedContent] = useState(content);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedContent(content);
-    }, 300);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [content]);
-
-  return (
-    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
-      {debouncedContent}
-    </ReactMarkdown>
-  );
-});
-DebouncedMarkdown.displayName = 'DebouncedMarkdown';
+const MarkdownPreview = React.memo(({ content }: { content: string }) => (
+  <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+    {content}
+  </ReactMarkdown>
+));
+MarkdownPreview.displayName = 'MarkdownPreview';
 
 type ViewId = 'editor' | 'preview' | string;
 type ViewMode = 'edit' | 'split' | 'preview';
@@ -163,6 +149,7 @@ export default function MosaicEditor({
 }: EditorProps) {
   const resolvedViewMode = viewMode ?? 'preview';
   const [content, setContent] = useState(initialContent);
+  const [debouncedContent, setDebouncedContent] = useState(initialContent);
   const [saving, setSaving] = useState(false);
   const [showEditorToolbar, setShowEditorToolbar] = useState(true);
   const [showEditorStatus, setShowEditorStatus] = useState(true);
@@ -191,6 +178,21 @@ export default function MosaicEditor({
   const pendingLocalChangeRef = useRef(false);
   const lastRawKeyRef = useRef<string | null>(null);
   const rawLoadInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (!pendingLocalChangeRef.current) {
+      setDebouncedContent(prev => (prev === content ? prev : content));
+      return;
+    }
+
+    const handler = setTimeout(() => {
+      setDebouncedContent(prev => (prev === content ? prev : content));
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [content]);
 
   useEffect(() => {
     contentRef.current = content;
@@ -397,12 +399,12 @@ export default function MosaicEditor({
 
     const performHighlight = () => {
         if (!previewRef.current) return;
-        
+
         const highlights: HTMLElement[] = [];
         highlightTextInNode(previewRef.current, searchTerm, highlights);
         highlightsRef.current = highlights;
         setTotalMatches(highlights.length);
-        
+
         // Reset to first match if we have results
         if (highlights.length > 0) {
             setCurrentMatch(0);
@@ -411,7 +413,7 @@ export default function MosaicEditor({
 
     const timeout = setTimeout(performHighlight, 300);
     return () => clearTimeout(timeout);
-  }, [searchTerm, content]);
+  }, [searchTerm, debouncedContent]);
 
   // Navigate to current match when it changes
   useEffect(() => {
@@ -428,6 +430,17 @@ export default function MosaicEditor({
     });
   }, [currentMatch, totalMatches]);
 
+  // Navigation function - must be defined before the effect that uses it
+  const navigateSearch = useCallback((direction: 'next' | 'prev') => {
+      if (totalMatches === 0) return;
+      setCurrentMatch(prev => {
+        let next = direction === 'next' ? prev + 1 : prev - 1;
+        if (next >= totalMatches) next = 0;
+        if (next < 0) next = totalMatches - 1;
+        return next;
+      });
+  }, [totalMatches]);
+
   // Expose navigation functions via ref for parent components
   useEffect(() => {
     if (searchNavRef) {
@@ -439,7 +452,7 @@ export default function MosaicEditor({
     return () => {
       if (searchNavRef) searchNavRef.current = null;
     };
-  }, [searchNavRef, totalMatches]);
+  }, [searchNavRef, totalMatches, navigateSearch]);
 
   // Notify parent of search state changes
   useEffect(() => {
@@ -447,14 +460,6 @@ export default function MosaicEditor({
       onSearchStateChange({ currentMatch, totalMatches });
     }
   }, [currentMatch, totalMatches, onSearchStateChange]);
-
-  const navigateSearch = (direction: 'next' | 'prev') => {
-      if (totalMatches === 0) return;
-      let next = direction === 'next' ? currentMatch + 1 : currentMatch - 1;
-      if (next >= totalMatches) next = 0;
-      if (next < 0) next = totalMatches - 1;
-      setCurrentMatch(next);
-  };
 
   const insert = (template: string) => {
       const next = content + template;
@@ -599,7 +604,7 @@ export default function MosaicEditor({
                 <div className="flex flex-col h-full bg-slate-900 overflow-hidden relative" ref={previewRef}>
                     <div className="flex-1 overflow-auto p-8 custom-scrollbar relative">
                         <article className="markdown-preview">
-                            <DebouncedMarkdown content={content} />
+                            <MarkdownPreview content={debouncedContent} />
                         </article>
                     </div>
                 </div>
@@ -750,7 +755,7 @@ export default function MosaicEditor({
 
         <style jsx global>{`
             .mosaic-custom-dark {
-                background: #0f172a; 
+                background: #0f172a;
             }
             .mosaic-root {
                 top: 0 !important;
@@ -761,7 +766,7 @@ export default function MosaicEditor({
             .mosaic-tile {
                 margin: 0 !important;
                 box-shadow: none !important;
-                border-left: 1px solid #334155; 
+                border-left: 1px solid #334155;
                 border-bottom: 1px solid #334155;
             }
             .mosaic-tile:first-child {
@@ -799,7 +804,7 @@ export default function MosaicEditor({
             }
             .mosaic-split {
                 background: #1e293b !important;
-                width: 1px !important; 
+                width: 1px !important;
                 height: 1px !important;
                 z-index: 10 !important;
             }

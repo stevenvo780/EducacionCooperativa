@@ -10,6 +10,49 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         return new Response('No autorizado', { status: 401 });
     }
 
+    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+                const send = (payload: unknown) => {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+                };
+
+                const keepAlive = setInterval(() => {
+                    controller.enqueue(encoder.encode(': keep-alive\n\n'));
+                }, 15000);
+
+                send({
+                    type: 'snapshot',
+                    data: {
+                        id: params.id,
+                        name: 'Documento de Prueba.md',
+                        content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
+                        type: 'text',
+                        workspaceId: 'personal',
+                        folder: 'No estructurado',
+                        updatedAt: { seconds: Date.now() / 1000 },
+                        createdAt: { seconds: Date.now() / 1000 },
+                        ownerId: auth.uid
+                    }
+                });
+
+                req.signal.addEventListener('abort', () => {
+                    clearInterval(keepAlive);
+                    controller.close();
+                });
+            }
+        });
+
+        return new Response(stream, {
+            headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache, no-transform',
+                'Connection': 'keep-alive'
+            }
+        });
+    }
+
     const { id } = params;
     const encoder = new TextEncoder();
 
