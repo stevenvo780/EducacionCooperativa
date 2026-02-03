@@ -211,6 +211,7 @@ export class TerminalController {
   public connect(
     token: string,
     uid: string,
+    sessionId: string | null,
     onStatusChange?: (status: string) => void,
     onSessionEnded?: (payload: { sessionId: string; reason?: string }) => void,
     onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void,
@@ -225,7 +226,7 @@ export class TerminalController {
     console.log('[TerminalController] Starting socket connection to:', this.nexusUrl);
 
     this.socket = io(this.nexusUrl, {
-      auth: { type: 'client', token, uid },
+      auth: { type: 'client', token, uid, sessionId },
       transports: ['websocket'],
       autoConnect: false,
       timeout: 10000,

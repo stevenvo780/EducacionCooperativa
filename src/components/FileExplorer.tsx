@@ -558,7 +558,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             }}
             onDragOver={(e) => {
               const types = Array.from(e.dataTransfer.types ?? []);
-              if (!canReorderFolders || !types.includes(FOLDER_REORDER_TYPE)) return;
+              const hasFolderType = types.includes(FOLDER_REORDER_TYPE);
+              const hasDocType = types.includes(DOC_REORDER_TYPE);
+              
+              if (hasDocType && onMoveDoc) {
+                 e.preventDefault();
+                 e.stopPropagation();
+                 setDragOverKey(`folder:${folder.path}`);
+                 setDragOverPosition(null); // Inside
+                 e.dataTransfer.dropEffect = 'move';
+                 return;
+              }
+
+              if (!canReorderFolders || !hasFolderType) return;
               e.preventDefault();
               e.stopPropagation();
               setDragOverKey(`folder:${folder.path}`);
@@ -577,6 +589,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             }}
             onDrop={(e) => {
               const types = Array.from(e.dataTransfer.types ?? []);
+              
+              if (types.includes(DOC_REORDER_TYPE) && onMoveDoc) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const dragId = e.dataTransfer.getData(DOC_REORDER_TYPE);
+                  if (dragId) {
+                      onMoveDoc(dragId, folder.path);
+                  }
+                  setDragOverKey(null);
+                  setDragOverPosition(null);
+                  return;
+              }
+
               if (!types.includes(FOLDER_REORDER_TYPE)) return;
               e.preventDefault();
               e.stopPropagation();
