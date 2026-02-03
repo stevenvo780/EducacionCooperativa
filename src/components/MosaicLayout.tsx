@@ -115,6 +115,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const fileExplorerDocs = useMemo(() => {
       return docs.filter(d => d.type !== 'terminal' && d.type !== 'files' && d.type !== 'board');
   }, [docs]);
+  const tabById = useMemo(() => new Map(openTabs.map(tab => [tab.id, tab])), [openTabs]);
+  const docById = useMemo(() => new Map(docs.map(doc => [doc.id, doc])), [docs]);
 
   const handleSearchChange = useCallback((docId: string, value: string) => {
     setDocSearchTerms(prev => ({ ...prev, [docId]: value }));
@@ -230,7 +232,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [onSetDocMode, onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
 
   const renderTile = useCallback((id: string, path: MosaicPath) => {
-    const doc = openTabs.find(t => t.id === id) || docs.find(d => d.id === id);
+    const doc = tabById.get(id) || docById.get(id);
     if (!doc) return <div className="p-4 text-surface-400">Documento no encontrado: {id}</div>;
 
     const isTerminal = doc.type === 'terminal';
@@ -257,7 +259,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       />
                   ) : isFileExplorer ? (
                       <FileExplorer
-                        docs={fileExplorerDocs}
+                        docs={fileExplorerDocs as any}
                         folders={folders}
                         onSelectDoc={onSelectDoc}
                         onCreateFile={onCreateFile}
@@ -285,10 +287,10 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         ownerId={doc.ownerId ?? currentUserId}
                       />
                   ) : (
-                      <Editor 
-                        roomId={doc.id} 
-                        embedded 
-                        viewMode={mode} 
+                      <Editor
+                        roomId={doc.id}
+                        embedded
+                        viewMode={mode}
                         externalSearchTerm={searchTerm}
                         onSearchStateChange={(state) => handleSearchStateChange(doc.id, state)}
                         searchNavRef={getSearchNavRef(doc.id)}
@@ -298,7 +300,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    openTabs, docs, docModes, nexusUrl, renderToolbarControls, docSearchTerms,
+    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
     onSelectDoc, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc,

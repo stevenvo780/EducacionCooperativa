@@ -5,6 +5,23 @@ import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 const DEFAULT_COLUMNS = ['Por hacer', 'En progreso', 'Hecho'];
 
+// Simple in-memory mock board for insecure/dev mode to avoid hitting Firestore
+const mockBoards = new Map<string, { columns: any[]; cards: any[]; seq: number }>();
+
+const getMockBoard = (workspaceId: string) => {
+  if (!mockBoards.has(workspaceId)) {
+    const baseColumns = DEFAULT_COLUMNS.map((name, index) => ({
+      id: `mock-col-${index + 1}`,
+      name,
+      order: (index + 1) * 1000,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }));
+    mockBoards.set(workspaceId, { columns: baseColumns, cards: [], seq: 1 });
+  }
+  return mockBoards.get(workspaceId)!;
+};
+
 const resolveWorkspaceId = (workspaceId: string, uid: string) =>
   workspaceId === 'personal' ? `personal:${uid}` : workspaceId;
 
@@ -90,6 +107,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+      const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+      const mock = getMockBoard(resolvedWorkspaceId);
+      return NextResponse.json({
+        boardId: `${resolvedWorkspaceId}-mock`,
+        workspaceId,
+        columns: mock.columns,
+        cards: mock.cards
+      });
+    }
+
     const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
     const boardRef = await ensureBoard(resolvedWorkspaceId);
     const columnsRef = boardRef.collection('columns');
@@ -133,6 +161,46 @@ export async function POST(req: NextRequest) {
     const allowed = await canAccessWorkspace(workspaceId, auth.uid);
     if (!allowed) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+      const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+      const mock = getMockBoard(resolvedWorkspaceId);
+
+      if (type === 'column') {
+        const name = typeof body.name === 'string' ? body.name.trim() : '';
+        const column = {
+          id: `mock-col-${++mock.seq}`,
+          name: name || 'Sin titulo',
+          order: typeof body.order === 'number' ? body.order : Date.now(),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        mock.columns.push(column);
+        return NextResponse.json(column);
+      }
+
+      if (type === 'card') {
+        const title = typeof body.title === 'string' ? body.title.trim() : '';
+        const columnId = typeof body.columnId === 'string' ? body.columnId.trim() : '';
+        if (!columnId) {
+          return NextResponse.json({ error: 'columnId is required' }, { status: 400 });
+        }
+        const card = {
+          id: `mock-card-${++mock.seq}`,
+          title: title || 'Nueva tarjeta',
+          description: typeof body.description === 'string' ? body.description : undefined,
+          columnId,
+          order: typeof body.order === 'number' ? body.order : Date.now(),
+          ownerId: auth.uid,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        mock.cards.push(card);
+        return NextResponse.json(card);
+      }
+
+      return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
     }
 
     const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
@@ -206,6 +274,33 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+      const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+      const mock = getMockBoard(resolvedWorkspaceId);
+
+      if (type === 'column') {
+        const column = mock.columns.find(c => c.id === id);
+        if (!column) return NextResponse.json({ error: 'Column not found' }, { status: 404 });
+        if (typeof data?.name === 'string') column.name = data.name.trim();
+        if (typeof data?.order === 'number') column.order = data.order;
+        column.updatedAt = Date.now();
+        return NextResponse.json({ status: 'updated' });
+      }
+
+      if (type === 'card') {
+        const card = mock.cards.find(c => c.id === id);
+        if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+        if (typeof data?.title === 'string') card.title = data.title.trim();
+        if (typeof data?.description === 'string') card.description = data.description;
+        if (typeof data?.columnId === 'string') card.columnId = data.columnId.trim();
+        if (typeof data?.order === 'number') card.order = data.order;
+        card.updatedAt = Date.now();
+        return NextResponse.json({ status: 'updated' });
+      }
+
+      return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
+    }
+
     const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
     const boardRef = await ensureBoard(resolvedWorkspaceId);
     const updateData: Record<string, unknown> = {};
@@ -260,6 +355,24 @@ export async function DELETE(req: NextRequest) {
     const allowed = await canAccessWorkspace(workspaceId, auth.uid);
     if (!allowed) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+      const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
+      const mock = getMockBoard(resolvedWorkspaceId);
+
+      if (type === 'column') {
+        mock.columns = mock.columns.filter(c => c.id !== id);
+        mock.cards = mock.cards.filter(c => c.columnId !== id);
+        return NextResponse.json({ status: 'deleted' });
+      }
+
+      if (type === 'card') {
+        mock.cards = mock.cards.filter(c => c.id !== id);
+        return NextResponse.json({ status: 'deleted' });
+      }
+
+      return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
     }
 
     const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);

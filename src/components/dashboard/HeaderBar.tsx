@@ -21,8 +21,8 @@ interface HeaderBarProps {
   user: FirebaseUser | null;
   deletingWorkspaceId: string | null;
   personalWorkspaceId: string;
-  isBoardView: boolean;
-  onToggleBoardView: () => void;
+  isBoardOpen: boolean;
+  onOpenBoard: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
   onDeleteWorkspace: (ws: Workspace) => void;
@@ -49,8 +49,8 @@ const HeaderBar = ({
   user,
   deletingWorkspaceId,
   personalWorkspaceId,
-  isBoardView,
-  onToggleBoardView,
+  isBoardOpen,
+  onOpenBoard,
   onAcceptInvite,
   onSelectWorkspace,
   onDeleteWorkspace,
@@ -248,16 +248,16 @@ const HeaderBar = ({
           <span className="hidden md:inline">{isZenMode ? 'Salir Zen' : 'Zen'}</span>
         </button>
         <button
-          onClick={onToggleBoardView}
+          onClick={onOpenBoard}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition ${
-            isBoardView
+            isBoardOpen
               ? 'bg-mandy-500/15 text-mandy-300 border-mandy-500/40'
               : 'bg-surface-700 text-surface-300 border-surface-600/60 hover:text-white hover:border-mandy-500/40'
           }`}
-          title={isBoardView ? 'Volver a documentos' : 'Ir al tablero'}
+          title={isBoardOpen ? 'Ir al tablero' : 'Abrir tablero'}
         >
           <KanbanSquare className="w-4 h-4" />
-          <span className="hidden md:inline">{isBoardView ? 'Documentos' : 'Tablero'}</span>
+          <span className="hidden md:inline">Tablero</span>
         </button>
         <button
           onClick={onOpenPassword}
