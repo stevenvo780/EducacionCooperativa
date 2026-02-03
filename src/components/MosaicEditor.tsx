@@ -17,7 +17,7 @@ import {
   Bold, Italic, Heading as HeadingIcon, Link as LinkIcon, Code,
   Quote, List, ListOrdered, Table, Image as ImageIcon,
   Sigma, Columns, Maximize2, Minimize2, Check, Cloud,
-  Type, LayoutGrid
+  Type, LayoutGrid, Search, ArrowUp, ArrowDown, X
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -27,7 +27,45 @@ import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, withAuthToken } from '@/services/apiClient';
 
-const DebouncedMarkdown = React.memo(({ content }: { content: string }) => {
+const highlightPlugin = (searchTerm: string) => {
+  return (tree: any) => {
+    if (!searchTerm) return;
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+
+    const visit = (node: any) => {
+       if (!node.children) return;
+       const newChildren: any[] = [];
+       for (const child of node.children) {
+          if (child.type === 'text' && child.value) {
+              const parts = child.value.split(regex);
+              if (parts.length > 1) {
+                  parts.forEach((part: string) => {
+                      if (regex.test(part)) {
+                          newChildren.push({
+                              type: 'element',
+                              tagName: 'mark',
+                              properties: { className: ['search-highlight', 'bg-yellow-500/50', 'text-white', 'rounded-sm', 'px-0.5'] },
+                              children: [{ type: 'text', value: part }]
+                          });
+                      } else if (part) {
+                          newChildren.push({ type: 'text', value: part });
+                      }
+                  });
+              } else {
+                  newChildren.push(child);
+              }
+          } else {
+              if (child.children) visit(child);
+              newChildren.push(child);
+          }
+       }
+       node.children = newChildren;
+    };
+    visit(tree);
+  };
+};
+
+const DebouncedMarkdown = React.memo(({ content, searchTerm }: { content: string, searchTerm?: string }) => {
   const [debouncedContent, setDebouncedContent] = useState(content);
 
   useEffect(() => {
@@ -40,8 +78,16 @@ const DebouncedMarkdown = React.memo(({ content }: { content: string }) => {
     };
   }, [content]);
 
+  const rehypePlugins = useMemo(() => {
+      const p: any[] = [rehypeKatex];
+      if (searchTerm) {
+          p.push(highlightPlugin(searchTerm));
+      }
+      return p;
+  }, [searchTerm]);
+
   return (
-    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={rehypePlugins}>
       {debouncedContent}
     </ReactMarkdown>
   );
@@ -114,6 +160,13 @@ export default function MosaicEditor({
   const [fileMime, setFileMime] = useState('');
 
   const [layout, setLayout] = useState<MosaicNode<ViewId> | null>(() => getLayoutForMode(resolvedViewMode));
+
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [currentMatch, setCurrentMatch] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const { user } = useAuth();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -311,6 +364,47 @@ export default function MosaicEditor({
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
+  // Search logic
+  useEffect(() => {
+    if (!showSearch || !searchTerm || !previewRef.current) {
+        setTotalMatches(0);
+        return;
+    }
+
+    const updateMatches = () => {
+        const matches = previewRef.current?.querySelectorAll('.search-highlight');
+        setTotalMatches(matches?.length || 0);
+
+        // If we have matches, highlight the current one
+        if (matches && matches.length > 0) {
+            const index = currentMatch >= matches.length ? 0 : currentMatch;
+            if (index !== currentMatch) setCurrentMatch(index);
+
+            matches.forEach((m, i) => {
+                if (i === index) {
+                    m.classList.add('bg-blue-600', 'text-white', 'ring-2', 'ring-white');
+                    m.classList.remove('bg-yellow-500/50');
+                    m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    m.classList.remove('bg-blue-600', 'ring-2', 'ring-white');
+                    m.classList.add('bg-yellow-500/50');
+                }
+            });
+        }
+    };
+
+    const timeout = setTimeout(updateMatches, 400);
+    return () => clearTimeout(timeout);
+  }, [searchTerm, showSearch, content, currentMatch]);
+
+  const navigateSearch = (direction: 'next' | 'prev') => {
+      if (totalMatches === 0) return;
+      let next = direction === 'next' ? currentMatch + 1 : currentMatch - 1;
+      if (next >= totalMatches) next = 0;
+      if (next < 0) next = totalMatches - 1;
+      setCurrentMatch(next);
+  };
+
   const insert = (template: string) => {
       const next = content + template;
       handleContentChange(next);
@@ -449,12 +543,48 @@ export default function MosaicEditor({
                 createNode={() => 'new'}
                 title="Markdown Preview"
                 className="bg-slate-900"
-                toolbarControls={[]}
+                toolbarControls={[
+                    <button
+                        key="search"
+                        onClick={(e) => { e.stopPropagation(); setShowSearch(!showSearch); }}
+                        className={`p-1 rounded transition-colors ${showSearch ? 'text-blue-400' : 'text-slate-400 hover:text-white'}`}
+                        title="Buscar"
+                    >
+                        <Search className="w-4 h-4" />
+                    </button>
+                ]}
               >
-                <div className="h-full overflow-auto p-8 bg-slate-900 custom-scrollbar">
-                    <article className="markdown-preview">
-                        <DebouncedMarkdown content={content} />
-                    </article>
+                <div className="flex flex-col h-full bg-slate-900 overflow-hidden relative" ref={previewRef}>
+                    {showSearch && (
+                        <div className="absolute top-2 right-4 z-20 flex items-center gap-1 bg-slate-800 border border-slate-700 p-1 rounded shadow-xl">
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Buscar..."
+                                className="bg-transparent border-none text-xs text-white placeholder-slate-500 focus:outline-none w-32 px-1"
+                                autoFocus
+                            />
+                            <div className="h-3 w-px bg-slate-700 mx-1"/>
+                            <span className="text-[10px] text-slate-500 font-mono w-12 text-center">
+                                {totalMatches > 0 ? `${currentMatch + 1}/${totalMatches}` : '0/0'}
+                            </span>
+                            <button onClick={() => navigateSearch('prev')} className="p-0.5 hover:bg-slate-700 rounded text-slate-400">
+                                <ArrowUp className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => navigateSearch('next')} className="p-0.5 hover:bg-slate-700 rounded text-slate-400">
+                                <ArrowDown className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => { setShowSearch(false); setSearchTerm(''); }} className="p-0.5 hover:bg-slate-700 rounded text-slate-400 ml-1">
+                                <X className="w-3 h-3" />
+                            </button>
+                        </div>
+                    )}
+                    <div className="flex-1 overflow-auto p-8 custom-scrollbar relative">
+                        <article className="markdown-preview">
+                            <DebouncedMarkdown content={content} searchTerm={searchTerm} />
+                        </article>
+                    </div>
                 </div>
               </MosaicWindow>
           );
