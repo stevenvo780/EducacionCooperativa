@@ -111,7 +111,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 throw new Error('User does not have getIdToken method - Firebase auth required');
             }
             const actualToken = await currentUser.getIdToken();
-            
+
             // Try to restore session
             const savedSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('terminal_active_session') : null;
 
@@ -176,7 +176,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                     const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
                     const workspaceType = data.workspaceType || pendingSessionMeta?.workspaceType || 'personal';
                     const workspaceName = data.workspaceName || pendingSessionMeta?.workspaceName;
-                    
+
                     const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
                     const newSession: TerminalSession = {
                         id: data.id,

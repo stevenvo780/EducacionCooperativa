@@ -27,45 +27,54 @@ import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, withAuthToken } from '@/services/apiClient';
 
-const highlightPlugin = (searchTerm: string) => {
-  return (tree: any) => {
-    if (!searchTerm) return;
+// Helper function to highlight text in DOM nodes
+const highlightTextInNode = (node: Node, searchTerm: string, highlights: HTMLElement[]): void => {
+  if (node.nodeType === Node.TEXT_NODE && node.textContent) {
+    const text = node.textContent;
     const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-
-    const visit = (node: any) => {
-       if (!node.children) return;
-       const newChildren: any[] = [];
-       for (const child of node.children) {
-          if (child.type === 'text' && child.value) {
-              const parts = child.value.split(regex);
-              if (parts.length > 1) {
-                  parts.forEach((part: string) => {
-                      if (regex.test(part)) {
-                          newChildren.push({
-                              type: 'element',
-                              tagName: 'mark',
-                              properties: { className: ['search-highlight', 'bg-yellow-500/50', 'text-white', 'rounded-sm', 'px-0.5'] },
-                              children: [{ type: 'text', value: part }]
-                          });
-                      } else if (part) {
-                          newChildren.push({ type: 'text', value: part });
-                      }
-                  });
-              } else {
-                  newChildren.push(child);
-              }
-          } else {
-              if (child.children) visit(child);
-              newChildren.push(child);
-          }
-       }
-       node.children = newChildren;
-    };
-    visit(tree);
-  };
+    const parts = text.split(regex);
+    
+    if (parts.length > 1) {
+      const fragment = document.createDocumentFragment();
+      parts.forEach(part => {
+        if (regex.test(part)) {
+          const mark = document.createElement('mark');
+          mark.className = 'search-highlight bg-yellow-400/60 text-inherit rounded px-0.5';
+          mark.textContent = part;
+          highlights.push(mark);
+          fragment.appendChild(mark);
+          regex.lastIndex = 0; // Reset regex state
+        } else if (part) {
+          fragment.appendChild(document.createTextNode(part));
+        }
+      });
+      node.parentNode?.replaceChild(fragment, node);
+    }
+  } else if (node.nodeType === Node.ELEMENT_NODE) {
+    // Skip script, style, and already highlighted elements
+    const tagName = (node as Element).tagName?.toLowerCase();
+    if (tagName === 'script' || tagName === 'style' || tagName === 'mark') return;
+    
+    // Process child nodes (create array first to avoid live collection issues)
+    const children = Array.from(node.childNodes);
+    children.forEach(child => highlightTextInNode(child, searchTerm, highlights));
+  }
 };
 
-const DebouncedMarkdown = React.memo(({ content, searchTerm }: { content: string, searchTerm?: string }) => {
+// Helper to clear highlights
+const clearHighlights = (container: HTMLElement): void => {
+  const marks = container.querySelectorAll('mark.search-highlight');
+  marks.forEach(mark => {
+    const parent = mark.parentNode;
+    if (parent) {
+      const text = document.createTextNode(mark.textContent || '');
+      parent.replaceChild(text, mark);
+      parent.normalize(); // Merge adjacent text nodes
+    }
+  });
+};
+
+const DebouncedMarkdown = React.memo(({ content }: { content: string }) => {
   const [debouncedContent, setDebouncedContent] = useState(content);
 
   useEffect(() => {
@@ -78,16 +87,8 @@ const DebouncedMarkdown = React.memo(({ content, searchTerm }: { content: string
     };
   }, [content]);
 
-  const rehypePlugins = useMemo(() => {
-      const p: any[] = [rehypeKatex];
-      if (searchTerm) {
-          p.push(highlightPlugin(searchTerm));
-      }
-      return p;
-  }, [searchTerm]);
-
   return (
-    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={rehypePlugins}>
+    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
       {debouncedContent}
     </ReactMarkdown>
   );
@@ -97,12 +98,20 @@ DebouncedMarkdown.displayName = 'DebouncedMarkdown';
 type ViewId = 'editor' | 'preview' | string;
 type ViewMode = 'edit' | 'split' | 'preview';
 
+interface SearchState {
+  currentMatch: number;
+  totalMatches: number;
+}
+
 interface EditorProps {
   initialContent?: string;
   roomId: string;
   onClose?: () => void;
   embedded?: boolean;
   viewMode?: ViewMode;
+  externalSearchTerm?: string;
+  onSearchStateChange?: (state: SearchState) => void;
+  searchNavRef?: React.MutableRefObject<{ next: () => void; prev: () => void } | null>;
 }
 
 const ToolbarButton = ({ onClick, icon: Icon, title, active = false }: any) => (
@@ -147,7 +156,10 @@ export default function MosaicEditor({
   roomId,
   onClose,
   embedded = false,
-  viewMode
+  viewMode,
+  externalSearchTerm,
+  onSearchStateChange,
+  searchNavRef
 }: EditorProps) {
   const resolvedViewMode = viewMode ?? 'preview';
   const [content, setContent] = useState(initialContent);
@@ -158,15 +170,18 @@ export default function MosaicEditor({
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
+  const [docName, setDocName] = useState('');
 
   const [layout, setLayout] = useState<MosaicNode<ViewId> | null>(() => getLayoutForMode(resolvedViewMode));
 
-  // Search state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
+  // Search state - use external if provided (embedded mode), otherwise internal
+  const [internalSearchTerm, setInternalSearchTerm] = useState('');
+  const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearchTerm;
+  const setSearchTerm = setInternalSearchTerm;
   const [currentMatch, setCurrentMatch] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const previewRef = useRef<HTMLDivElement>(null);
+  const highlightsRef = useRef<HTMLElement[]>([]);
 
   const { user } = useAuth();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -231,6 +246,7 @@ export default function MosaicEditor({
         setFileUrl(url);
         setFileName(name || 'Archivo');
         setFileMime(mimeType);
+        setDocName(name || 'Archivo');
         setContent('');
         hasLoadedRef.current = true;
         return;
@@ -240,6 +256,7 @@ export default function MosaicEditor({
     setFileUrl(null);
     setFileName('');
     setFileMime(mimeType);
+    setDocName(name || 'Documento');
 
     const incoming = typeof data.content === 'string' ? data.content : null;
     if (incoming !== null) {
@@ -281,20 +298,6 @@ export default function MosaicEditor({
     setUsePolling(false);
     loadDoc();
   }, [roomId, loadDoc]);
-
-  // Keyboard shortcut for search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-            if (resolvedViewMode !== 'edit') {
-                e.preventDefault();
-                setShowSearch(prev => !prev);
-            }
-        }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [resolvedViewMode]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -378,38 +381,72 @@ export default function MosaicEditor({
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
-  // Search logic
+  // Search logic - perform DOM-based highlighting
   useEffect(() => {
-    if (!showSearch || !searchTerm || !previewRef.current) {
+    if (!previewRef.current) return;
+
+    // Clear previous highlights first
+    clearHighlights(previewRef.current);
+    highlightsRef.current = [];
+
+    if (!searchTerm || searchTerm.length < 2) {
         setTotalMatches(0);
+        setCurrentMatch(0);
         return;
     }
 
-    const updateMatches = () => {
-        const matches = previewRef.current?.querySelectorAll('.search-highlight');
-        setTotalMatches(matches?.length || 0);
-
-        // If we have matches, highlight the current one
-        if (matches && matches.length > 0) {
-            const index = currentMatch >= matches.length ? 0 : currentMatch;
-            if (index !== currentMatch) setCurrentMatch(index);
-
-            matches.forEach((m, i) => {
-                if (i === index) {
-                    m.classList.add('bg-blue-600', 'text-white', 'ring-2', 'ring-white');
-                    m.classList.remove('bg-yellow-500/50');
-                    m.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } else {
-                    m.classList.remove('bg-blue-600', 'ring-2', 'ring-white');
-                    m.classList.add('bg-yellow-500/50');
-                }
-            });
+    const performHighlight = () => {
+        if (!previewRef.current) return;
+        
+        const highlights: HTMLElement[] = [];
+        highlightTextInNode(previewRef.current, searchTerm, highlights);
+        highlightsRef.current = highlights;
+        setTotalMatches(highlights.length);
+        
+        // Reset to first match if we have results
+        if (highlights.length > 0) {
+            setCurrentMatch(0);
         }
     };
 
-    const timeout = setTimeout(updateMatches, 400);
+    const timeout = setTimeout(performHighlight, 300);
     return () => clearTimeout(timeout);
-  }, [searchTerm, showSearch, content, currentMatch]);
+  }, [searchTerm, content]);
+
+  // Navigate to current match when it changes
+  useEffect(() => {
+    const highlights = highlightsRef.current;
+    if (highlights.length === 0) return;
+
+    highlights.forEach((mark, i) => {
+        if (i === currentMatch) {
+            mark.className = 'search-highlight bg-orange-500 text-white rounded px-0.5 ring-2 ring-orange-300';
+            mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            mark.className = 'search-highlight bg-yellow-400/60 text-inherit rounded px-0.5';
+        }
+    });
+  }, [currentMatch, totalMatches]);
+
+  // Expose navigation functions via ref for parent components
+  useEffect(() => {
+    if (searchNavRef) {
+      searchNavRef.current = {
+        next: () => navigateSearch('next'),
+        prev: () => navigateSearch('prev')
+      };
+    }
+    return () => {
+      if (searchNavRef) searchNavRef.current = null;
+    };
+  }, [searchNavRef, totalMatches]);
+
+  // Notify parent of search state changes
+  useEffect(() => {
+    if (onSearchStateChange) {
+      onSearchStateChange({ currentMatch, totalMatches });
+    }
+  }, [currentMatch, totalMatches, onSearchStateChange]);
 
   const navigateSearch = (direction: 'next' | 'prev') => {
       if (totalMatches === 0) return;
@@ -557,46 +594,12 @@ export default function MosaicEditor({
                 createNode={() => 'new'}
                 title="Markdown Preview"
                 className="bg-slate-900"
-                toolbarControls={[
-                    <button
-                        key="search"
-                        onClick={(e) => { e.stopPropagation(); setShowSearch(!showSearch); }}
-                        className={`p-1 rounded transition-colors ${showSearch ? 'text-blue-400' : 'text-slate-400 hover:text-white'}`}
-                        title="Buscar"
-                    >
-                        <Search className="w-4 h-4" />
-                    </button>
-                ]}
+                toolbarControls={[]}
               >
                 <div className="flex flex-col h-full bg-slate-900 overflow-hidden relative" ref={previewRef}>
-                    {showSearch && (
-                        <div className="absolute top-2 right-4 z-20 flex items-center gap-1 bg-slate-800 border border-slate-700 p-1 rounded shadow-xl">
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                placeholder="Buscar..."
-                                className="bg-transparent border-none text-xs text-white placeholder-slate-500 focus:outline-none w-32 px-1"
-                                autoFocus
-                            />
-                            <div className="h-3 w-px bg-slate-700 mx-1"/>
-                            <span className="text-[10px] text-slate-500 font-mono w-12 text-center">
-                                {totalMatches > 0 ? `${currentMatch + 1}/${totalMatches}` : '0/0'}
-                            </span>
-                            <button onClick={() => navigateSearch('prev')} className="p-0.5 hover:bg-slate-700 rounded text-slate-400">
-                                <ArrowUp className="w-3 h-3" />
-                            </button>
-                            <button onClick={() => navigateSearch('next')} className="p-0.5 hover:bg-slate-700 rounded text-slate-400">
-                                <ArrowDown className="w-3 h-3" />
-                            </button>
-                            <button onClick={() => { setShowSearch(false); setSearchTerm(''); }} className="p-0.5 hover:bg-slate-700 rounded text-slate-400 ml-1">
-                                <X className="w-3 h-3" />
-                            </button>
-                        </div>
-                    )}
                     <div className="flex-1 overflow-auto p-8 custom-scrollbar relative">
                         <article className="markdown-preview">
-                            <DebouncedMarkdown content={content} searchTerm={searchTerm} />
+                            <DebouncedMarkdown content={content} />
                         </article>
                     </div>
                 </div>
@@ -679,17 +682,47 @@ export default function MosaicEditor({
     <div className={clsx('flex flex-col h-full bg-slate-950 text-slate-300 relative', embedded && 'editor-embedded')}>
         {!embedded && (
           <div className="h-10 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-3">
-               <div className="flex items-center gap-3">
+               <div className="flex items-center gap-3 min-w-0 flex-1">
                    {onClose && (
-                      <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider">
+                      <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider shrink-0">
                           <ChevronLeft className="w-4 h-4" /> Exit
                       </button>
                    )}
-                   <div className="h-4 w-px bg-slate-700" />
-                   <span className="text-xs font-medium text-slate-500">Workspace</span>
+                   <div className="h-4 w-px bg-slate-700 shrink-0" />
+                   <span className="text-xs font-medium text-slate-400 truncate max-w-[200px]" title={docName}>{docName || 'Documento'}</span>
                </div>
 
-               <div className="flex items-center gap-2">
+               {/* Search Input */}
+               <div className="flex items-center gap-2 mx-4">
+                   <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 px-2 py-1 rounded">
+                       <Search className="w-3.5 h-3.5 text-slate-500" />
+                       <input
+                           type="text"
+                           value={searchTerm}
+                           onChange={(e) => setSearchTerm(e.target.value)}
+                           placeholder="Buscar en documento..."
+                           className="bg-transparent border-none text-xs text-white placeholder-slate-500 focus:outline-none w-40"
+                       />
+                       {searchTerm && (
+                           <>
+                               <span className="text-[10px] text-slate-500 font-mono px-1">
+                                   {totalMatches > 0 ? `${currentMatch + 1}/${totalMatches}` : '0/0'}
+                               </span>
+                               <button onClick={() => navigateSearch('prev')} className="p-0.5 hover:bg-slate-700 rounded text-slate-400" title="Anterior">
+                                   <ArrowUp className="w-3 h-3" />
+                               </button>
+                               <button onClick={() => navigateSearch('next')} className="p-0.5 hover:bg-slate-700 rounded text-slate-400" title="Siguiente">
+                                   <ArrowDown className="w-3 h-3" />
+                               </button>
+                               <button onClick={() => setSearchTerm('')} className="p-0.5 hover:bg-slate-700 rounded text-slate-400" title="Limpiar">
+                                   <X className="w-3 h-3" />
+                               </button>
+                           </>
+                       )}
+                   </div>
+               </div>
+
+               <div className="flex items-center gap-2 shrink-0">
                    <button
                      onClick={() => setLayout({ direction: 'row', first: 'editor', second: 'preview', splitPercentage: 50 })}
                      className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-400"

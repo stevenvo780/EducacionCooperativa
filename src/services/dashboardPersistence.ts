@@ -21,6 +21,8 @@ interface PersistedState {
   docModes: Record<string, ViewMode>;
   sidebarWidth: number;
   activeFolder: string;
+  isSidebarCollapsed?: boolean;
+  isHeaderCollapsed?: boolean;
 }
 
 function getStorageKey(workspaceId: string): string {
@@ -36,6 +38,8 @@ export function saveDashboardState(
     docModes: Record<string, ViewMode>;
     sidebarWidth: number;
     activeFolder: string;
+    isSidebarCollapsed?: boolean;
+    isHeaderCollapsed?: boolean;
   }
 ): void {
   if (!workspaceId || typeof window === 'undefined') return;
@@ -59,7 +63,9 @@ export function saveDashboardState(
       mosaicNode: state.mosaicNode,
       docModes: state.docModes,
       sidebarWidth: state.sidebarWidth,
-      activeFolder: state.activeFolder
+      activeFolder: state.activeFolder,
+      isSidebarCollapsed: state.isSidebarCollapsed,
+      isHeaderCollapsed: state.isHeaderCollapsed
     };
 
     localStorage.setItem(getStorageKey(workspaceId), JSON.stringify(persistedState));
