@@ -890,40 +890,81 @@ export default function DashboardPage() {
     };
 
     const renameDocument = async (doc: DocItem, nextName: string) => {
-        if (!doc || doc.type === 'folder') {
-            await showDialog({ type: 'info', title: 'Renombrar carpeta no está soportado', message: 'Solo se pueden renombrar archivos.' });
-            return;
-        }
-
         const trimmed = (nextName || '').trim();
         if (!trimmed || trimmed === doc.name) return;
 
-        const normalizedFolder = normalizeFolderPath(doc.folder);
+        const parentPath = normalizeFolderPath(doc.folder);
+
         const duplicate = docsRef.current.some(item => (
             item.id !== doc.id
-            && normalizeFolderPath(item.folder) === normalizedFolder
+            && normalizeFolderPath(item.folder) === parentPath
             && (item.name || '').toLowerCase() === trimmed.toLowerCase()
-            && item.type !== 'folder'
+            && item.type === doc.type
         ));
 
         if (duplicate) {
             await showDialog({
                 type: 'info',
                 title: 'Nombre en uso',
-                message: `Ya existe un archivo llamado "${trimmed}" en esta carpeta.`
+                message: `Ya existe un elemento llamado "${trimmed}" en esta ubicación.`
             });
             return;
         }
 
-        setDocs(prev => prev.map(item => item.id === doc.id ? { ...item, name: trimmed } : item));
+        // Calculate paths for folder rename
+        let oldFullPath = '';
+        let newFullPath = '';
+        let childrenToUpdate: DocItem[] = [];
+
+        if (doc.type === 'folder') {
+            oldFullPath = parentPath === DEFAULT_FOLDER_NAME ? doc.name : `${parentPath}/${doc.name}`;
+            newFullPath = parentPath === DEFAULT_FOLDER_NAME ? trimmed : `${parentPath}/${trimmed}`;
+
+            childrenToUpdate = docsRef.current.filter(d => {
+                const f = normalizeFolderPath(d.folder);
+                return f === oldFullPath || f.startsWith(oldFullPath + '/');
+            });
+        }
+
+        // Optimistic update
+        setDocs(prev => prev.map(item => {
+            if (item.id === doc.id) {
+                return { ...item, name: trimmed };
+            }
+            if (doc.type === 'folder' && childrenToUpdate.some(c => c.id === item.id)) {
+                const oldFolder = normalizeFolderPath(item.folder);
+                let newFolder = oldFolder;
+                if (oldFolder === oldFullPath) {
+                    newFolder = newFullPath;
+                } else if (oldFolder.startsWith(oldFullPath + '/')) {
+                    newFolder = newFullPath + oldFolder.substring(oldFullPath.length);
+                }
+                return { ...item, folder: newFolder };
+            }
+            return item;
+        }));
+
         setOpenTabs(prev => prev.map(item => item.id === doc.id ? { ...item, name: trimmed } : item));
 
         try {
             await updateDocumentApi(doc.id, { name: trimmed });
+
+            if (doc.type === 'folder' && childrenToUpdate.length > 0) {
+                 await Promise.all(childrenToUpdate.map(child => {
+                    const oldFolder = normalizeFolderPath(child.folder);
+                    let newFolder = oldFolder;
+                    if (oldFolder === oldFullPath) {
+                        newFolder = newFullPath;
+                    } else if (oldFolder.startsWith(oldFullPath + '/')) {
+                        newFolder = newFullPath + oldFolder.substring(oldFullPath.length);
+                    }
+                    return updateDocumentApi(child.id, { folder: newFolder });
+                }));
+            }
+
             await fetchDocs();
         } catch (error) {
-            setOpenTabs(prev => prev.map(item => item.id === doc.id ? { ...item, name: doc.name } : item));
-            await fetchDocs();
+            await fetchDocs(); // Revert by fetching
             await showDialog({
                 type: 'error',
                 title: 'No se pudo renombrar',

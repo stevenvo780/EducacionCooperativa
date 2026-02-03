@@ -51,32 +51,34 @@ type ContentItem =
 const CONTENT_ROW_HEIGHT = 52;
 
 const useElementSize = <T extends HTMLElement>() => {
-  const ref = useRef<T | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const observerRef = useRef<ResizeObserver | null>(null);
 
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-
-    const update = () => {
-      setSize({ width: element.clientWidth, height: element.clientHeight });
-    };
-
-    update();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', update);
-      return () => window.removeEventListener('resize', update);
+  const ref = useCallback((node: T | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
     }
 
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
-      setSize({ width, height });
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
+    if (node !== null) {
+      const updateSize = () => {
+          const rect = node.getBoundingClientRect();
+          setSize({ width: rect.width, height: rect.height });
+      };
+
+      updateSize();
+
+      if (typeof ResizeObserver !== 'undefined') {
+        observerRef.current = new ResizeObserver((entries) => {
+          const entry = entries[0];
+          if (entry) {
+             const { width, height } = entry.contentRect;
+             setSize({ width, height });
+          }
+        });
+        observerRef.current.observe(node);
+      }
+    }
   }, []);
 
   return [ref, size] as const;
@@ -614,7 +616,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
       return (
         <div key={folder.path}>
-          <button
+          <div
             onClick={(e) => {
               e.stopPropagation();
               setActiveFolder(folder.path);
@@ -623,7 +625,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 toggleFolder(folder.path);
               }
             }}
-            className={`w-full flex items-center gap-2 py-1.5 px-2 rounded transition border ${
+            className={`group w-full flex items-center gap-2 py-1.5 px-2 rounded transition border cursor-pointer relative ${
               isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'
             }`}
             style={{ paddingLeft }}
@@ -634,7 +636,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   e.stopPropagation();
                   toggleFolder(folder.path);
                 }}
-                className="flex items-center justify-center w-4 h-4"
+                className="flex items-center justify-center w-4 h-4 shrink-0"
               >
                 {isExpanded ? (
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -643,23 +645,37 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 )}
               </span>
             ) : (
-              <span className="w-4" />
+              <span className="w-4 shrink-0" />
             )}
             {isExpanded ? (
-              <FolderOpen className="w-4 h-4 text-amber-400" />
+              <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
             ) : (
-              <Folder className="w-4 h-4 text-amber-400" />
+              <Folder className="w-4 h-4 text-amber-400 shrink-0" />
             )}
-            <span className="text-sm truncate flex-1">{folder.name}</span>
-            <span className="text-[10px] text-surface-500">{count}</span>
-          </button>
+            <span className="text-sm truncate flex-1 md:pr-6">{folder.name}</span>
+            <span className="text-[10px] text-surface-500 shrink-0">{count}</span>
+
+            {onRenameDoc && folder.docId && (
+                <div
+                   onClick={(e) => {
+                       e.stopPropagation();
+                       const doc = docMap.get(folder.docId!);
+                       if (doc) onRenameDoc(doc);
+                   }}
+                   className="absolute right-2 p-1 rounded bg-surface-800 text-surface-400 hover:text-white hover:bg-surface-700 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
+                   title="Renombrar carpeta"
+                >
+                   <Pencil className="w-3 h-3" />
+                </div>
+            )}
+          </div>
           {isExpanded && hasChildren && (
             <div>{renderFolderTree(folder.path, depth + 1)}</div>
           )}
         </div>
       );
     });
-  }, [folderChildrenMap, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange]);
+  }, [folderChildrenMap, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange, docMap, onRenameDoc]);
 
   return (
     <div className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
