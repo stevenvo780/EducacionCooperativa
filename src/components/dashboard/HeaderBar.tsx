@@ -1,12 +1,18 @@
 'use client';
 
-import { Briefcase, Check, ChevronDown, Copy, KanbanSquare, Key, Loader2, LogOut, Menu, Plus, Trash2, User, Users } from 'lucide-react';
+import { Briefcase, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KanbanSquare, Key, Loader2, LogOut, Maximize2, Menu, Minimize2, Plus, Trash2, User, Users } from 'lucide-react';
 import type { Workspace } from '@/components/dashboard/types';
 import type { User as FirebaseUser } from 'firebase/auth';
 
 interface HeaderBarProps {
   onToggleMobileSidebar: () => void;
   onClearSelectedDoc: () => void;
+  isSidebarCollapsed: boolean;
+  isHeaderCollapsed: boolean;
+  isZenMode: boolean;
+  onToggleSidebarCollapse: () => void;
+  onToggleHeaderCollapse: () => void;
+  onToggleZenMode: () => void;
   showWorkspaceMenu: boolean;
   setShowWorkspaceMenu: (value: boolean) => void;
   currentWorkspace: Workspace | null;
@@ -29,6 +35,12 @@ interface HeaderBarProps {
 const HeaderBar = ({
   onToggleMobileSidebar,
   onClearSelectedDoc,
+  isSidebarCollapsed,
+  isHeaderCollapsed,
+  isZenMode,
+  onToggleSidebarCollapse,
+  onToggleHeaderCollapse,
+  onToggleZenMode,
   showWorkspaceMenu,
   setShowWorkspaceMenu,
   currentWorkspace,
@@ -199,6 +211,42 @@ const HeaderBar = ({
           <User className="w-4 h-4" />
           <span className="truncate max-w-[150px] hidden md:inline">{user?.email}</span>
         </div>
+        <div className="hidden md:flex items-center gap-1">
+          <button
+            onClick={onToggleSidebarCollapse}
+            className={`p-2 rounded-full transition ${
+              isSidebarCollapsed
+                ? 'bg-mandy-500/15 text-mandy-300'
+                : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
+            }`}
+            title={isSidebarCollapsed ? 'Mostrar barra lateral' : 'Ocultar barra lateral'}
+          >
+            {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={onToggleHeaderCollapse}
+            className={`p-2 rounded-full transition ${
+              isHeaderCollapsed
+                ? 'bg-mandy-500/15 text-mandy-300'
+                : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
+            }`}
+            title={isHeaderCollapsed ? 'Mostrar barra superior' : 'Ocultar barra superior'}
+          >
+            {isHeaderCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+        </div>
+        <button
+          onClick={onToggleZenMode}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition ${
+            isZenMode
+              ? 'bg-mandy-500/15 text-mandy-300 border-mandy-500/40'
+              : 'bg-surface-700 text-surface-300 border-surface-600/60 hover:text-white hover:border-mandy-500/40'
+          }`}
+          title={isZenMode ? 'Salir de modo Zen' : 'Modo Zen (pantalla completa)'}
+        >
+          {isZenMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          <span className="hidden md:inline">{isZenMode ? 'Salir Zen' : 'Zen'}</span>
+        </button>
         <button
           onClick={onToggleBoardView}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition ${
