@@ -26,7 +26,7 @@ test('Search functionality', async ({ page }) => {
   
   // Let's try to locate the "New Text File" button.
   // In `Sidebar.tsx` (inferred), usually a button.
-  // Or we can try to find an existing file editor. 
+  // Or we can try to find an existing file editor.
   // If "MI ASISTENTE" is visible, maybe there's a file explorer.
   
   // Let's try to click "Create File" button if it exists.
@@ -73,7 +73,7 @@ test('Search functionality', async ({ page }) => {
   // If not visible, we fail.
   
   // Type some text
-  const textToType = "Este es un texto de prueba para la busqueda. Busqueda debe resaltar.";
+  const textToType = 'Este es un texto de prueba para la busqueda. Busqueda debe resaltar.';
   await editor.fill(textToType);
   
   // 4. Test Search
