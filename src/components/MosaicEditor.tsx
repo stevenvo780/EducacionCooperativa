@@ -282,6 +282,20 @@ export default function MosaicEditor({
     loadDoc();
   }, [roomId, loadDoc]);
 
+  // Keyboard shortcut for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+            if (resolvedViewMode !== 'edit') {
+                e.preventDefault();
+                setShowSearch(prev => !prev);
+            }
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [resolvedViewMode]);
+
   useEffect(() => {
     if (!roomId) return;
     let source: EventSource | null = null;
