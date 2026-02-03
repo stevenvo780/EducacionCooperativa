@@ -6,6 +6,7 @@ import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Pencil, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
+import { getUpdatedAtValue } from '@/services/dashboardUtils';
 import AssistantSection from '@/components/dashboard/AssistantSection';
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { WorkerStatus } from '@/lib/TerminalController';
@@ -195,6 +196,16 @@ const Sidebar = ({
       if (!map[parent]) map[parent] = [];
       map[parent].push(folder);
     }
+    Object.values(map).forEach(list => {
+      list.sort((a, b) => {
+        const orderA = typeof a.order === 'number' ? a.order : null;
+        const orderB = typeof b.order === 'number' ? b.order : null;
+        if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+        if (orderA !== null && orderB === null) return -1;
+        if (orderA === null && orderB !== null) return 1;
+        return a.name.localeCompare(b.name);
+      });
+    });
     return map;
   }, [effectiveFolders]);
 
@@ -206,6 +217,19 @@ const Sidebar = ({
       if (!result[f]) result[f] = [];
       result[f].push(doc);
     }
+    Object.values(result).forEach(list => {
+      list.sort((a, b) => {
+        const orderA = typeof a.order === 'number' ? a.order : null;
+        const orderB = typeof b.order === 'number' ? b.order : null;
+        if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+        if (orderA !== null && orderB === null) return -1;
+        if (orderA === null && orderB !== null) return 1;
+        const dateA = getUpdatedAtValue(a.updatedAt);
+        const dateB = getUpdatedAtValue(b.updatedAt);
+        if (dateA !== dateB) return dateB - dateA;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    });
     return result;
   }, [docs]);
 
