@@ -60,6 +60,8 @@ interface MosaicLayoutProps {
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
+  onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
+  onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   activeFolder?: string;
   onActiveFolderChange?: (folderPath: string) => void;
   currentWorkspaceName?: string;
@@ -88,6 +90,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onDuplicateDoc,
   onMoveDoc,
   onRenameDoc,
+  onReorderDocs,
+  onReorderFolders,
   activeFolder,
   onActiveFolderChange,
   currentWorkspaceName,
@@ -180,6 +184,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         onDuplicateDoc={onDuplicateDoc}
                         onMoveDoc={onMoveDoc}
                         onRenameDoc={onRenameDoc}
+                        onReorderDocs={onReorderDocs}
+                        onReorderFolders={onReorderFolders}
                         activeFolder={activeFolder}
                         onActiveFolderChange={onActiveFolderChange}
                         currentWorkspaceName={currentWorkspaceName}
@@ -197,6 +203,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, folders,
     onSelectDoc, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc,
+    onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs
   ]);
 
