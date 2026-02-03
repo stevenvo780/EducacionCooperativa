@@ -1,8 +1,19 @@
 'use client';
 
 import type React from 'react';
+import { useState } from 'react';
 import { Briefcase, Copy, Folder, FolderInput, FolderPlus, FolderUp, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
+
+const DOC_REORDER_TYPE = 'application/x-doc-reorder';
+const FOLDER_REORDER_TYPE = 'application/x-folder-reorder';
+
+const arrayMove = <T,>(items: T[], from: number, to: number) => {
+  const next = items.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+};
 
 interface WorkspaceExplorerProps {
   currentWorkspace: Workspace | null;
@@ -28,6 +39,8 @@ interface WorkspaceExplorerProps {
   onCopyDocument: (doc: DocItem) => void;
   onRenameDocument: (doc: DocItem) => void;
   onMoveDocument: (doc: DocItem) => void;
+  onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
+  onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   onDeleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
   getIcon: (doc: DocItem) => React.ReactNode;
   getDocBadge: (doc: DocItem) => string;
@@ -60,6 +73,8 @@ const WorkspaceExplorer = ({
   onCopyDocument,
   onRenameDocument,
   onMoveDocument,
+  onReorderDocs,
+  onReorderFolders,
   onDeleteDocument,
   getIcon,
   getDocBadge,
@@ -67,6 +82,28 @@ const WorkspaceExplorer = ({
   rootFolderPath,
   defaultFolderName
 }: WorkspaceExplorerProps) => {
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const canReorderDocs = !!onReorderDocs;
+  const canReorderFolders = !!onReorderFolders && activeChildFolders.every(folder => !!folder.docId);
+
+  const reorderDocs = (dragId: string, targetId: string) => {
+    if (!canReorderDocs) return;
+    const fromIndex = activeFolderDocs.findIndex(doc => doc.id === dragId);
+    const toIndex = activeFolderDocs.findIndex(doc => doc.id === targetId);
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+    const reordered = arrayMove(activeFolderDocs, fromIndex, toIndex);
+    onReorderDocs?.({ folderPath: activeFolder, orderedIds: reordered.map(doc => doc.id) });
+  };
+
+  const reorderFolders = (dragPath: string, targetPath: string) => {
+    if (!canReorderFolders) return;
+    const fromIndex = activeChildFolders.findIndex(folder => folder.path === dragPath);
+    const toIndex = activeChildFolders.findIndex(folder => folder.path === targetPath);
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+    const reordered = arrayMove(activeChildFolders, fromIndex, toIndex);
+    onReorderFolders?.({ parentPath: activeFolder, orderedPaths: reordered.map(folder => folder.path) });
+  };
+
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-surface-900">
       <div className="px-6 py-4 border-b border-surface-700/60 flex flex-wrap items-center justify-between gap-3">
@@ -148,10 +185,40 @@ const WorkspaceExplorer = ({
                 <div
                   key={folder.path}
                   onClick={() => onActiveFolderChange(folder.path)}
-                  onDragOver={(e) => onFolderDragOver(e, folder.path)}
-                  onDrop={(e) => onFolderDrop(e, folder.path)}
-                  onDragLeave={() => onFolderDragLeave(folder.path)}
-                  className={`group flex items-center gap-3 px-4 py-3 rounded-lg border transition cursor-pointer ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'}`}
+                  onDragStart={(e) => {
+                    if (!canReorderFolders || !folder.docId) return;
+                    e.dataTransfer.setData(FOLDER_REORDER_TYPE, folder.path);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    const types = Array.from(e.dataTransfer.types ?? []);
+                    if (types.includes(FOLDER_REORDER_TYPE) && canReorderFolders) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragOverKey(`folder:${folder.path}`);
+                      return;
+                    }
+                    onFolderDragOver(e, folder.path);
+                  }}
+                  onDrop={(e) => {
+                    const types = Array.from(e.dataTransfer.types ?? []);
+                    if (types.includes(FOLDER_REORDER_TYPE) && canReorderFolders) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const dragPath = e.dataTransfer.getData(FOLDER_REORDER_TYPE);
+                      if (dragPath) reorderFolders(dragPath, folder.path);
+                      setDragOverKey(null);
+                      return;
+                    }
+                    onFolderDrop(e, folder.path);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverKey === `folder:${folder.path}`) setDragOverKey(null);
+                    onFolderDragLeave(folder.path);
+                  }}
+                  onDragEnd={() => setDragOverKey(null)}
+                  draggable={canReorderFolders && !!folder.docId}
+                  className={`group flex items-center gap-3 px-4 py-3 rounded-lg border transition cursor-pointer ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10' : 'border-surface-800/80 bg-surface-800/30 hover:bg-surface-800/60 hover:border-surface-600/80'} ${dragOverKey === `folder:${folder.path}` ? 'ring-1 ring-mandy-400/60' : ''}`}
                 >
                   <Folder className="w-4 h-4 text-surface-500" />
                   <div className="flex flex-col min-w-0 flex-1">
@@ -171,9 +238,37 @@ const WorkspaceExplorer = ({
                 key={doc.id}
                 onClick={() => onOpenDocument(doc)}
                 draggable
-                onDragStart={(e) => onDocDragStart(e, doc)}
-                onDragEnd={onDocDragEnd}
-                className="group flex items-center gap-3 px-4 py-3 rounded-lg border border-surface-800/80 bg-surface-800/40 hover:bg-surface-800/70 hover:border-surface-600/80 transition cursor-pointer"
+                onDragStart={(e) => {
+                  if (canReorderDocs) {
+                    e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }
+                  onDocDragStart(e, doc);
+                }}
+                onDragOver={(e) => {
+                  const types = Array.from(e.dataTransfer.types ?? []);
+                  if (!canReorderDocs || !types.includes(DOC_REORDER_TYPE)) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragOverKey(`doc:${doc.id}`);
+                }}
+                onDrop={(e) => {
+                  const types = Array.from(e.dataTransfer.types ?? []);
+                  if (!canReorderDocs || !types.includes(DOC_REORDER_TYPE)) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const dragId = e.dataTransfer.getData(DOC_REORDER_TYPE);
+                  if (dragId) reorderDocs(dragId, doc.id);
+                  setDragOverKey(null);
+                }}
+                onDragLeave={() => {
+                  if (dragOverKey === `doc:${doc.id}`) setDragOverKey(null);
+                }}
+                onDragEnd={() => {
+                  setDragOverKey(null);
+                  onDocDragEnd();
+                }}
+                className={`group flex items-center gap-3 px-4 py-3 rounded-lg border border-surface-800/80 bg-surface-800/40 hover:bg-surface-800/70 hover:border-surface-600/80 transition cursor-pointer ${dragOverKey === `doc:${doc.id}` ? 'ring-1 ring-mandy-400/60' : ''}`}
               >
                 <div className="text-surface-500">{getIcon(doc)}</div>
                 <div className="flex flex-col min-w-0 flex-1">

@@ -3,7 +3,7 @@
 import type React from 'react';
 import { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Pencil, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import AssistantSection from '@/components/dashboard/AssistantSection';
@@ -89,6 +89,7 @@ interface SidebarProps {
   handleDocDragStart: (e: React.DragEvent, doc: DocItem) => void;
   handleDocDragEnd: () => void;
   deleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
+  onRenameDocument: (doc: DocItem) => void;
   setShowQuickSearch: (value: boolean) => void;
   quickSearchInputRef: React.RefObject<HTMLInputElement>;
   getIcon: (doc: DocItem) => React.ReactNode;
@@ -133,6 +134,7 @@ const Sidebar = ({
   handleDocDragStart,
   handleDocDragEnd,
   deleteDocument,
+  onRenameDocument,
   setShowQuickSearch,
   quickSearchInputRef,
   getIcon
@@ -289,6 +291,16 @@ const Sidebar = ({
             <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{item.doc.folder?.split('/').pop()}</span>
             <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRenameDocument(item.doc);
+                }}
+                className="text-surface-500 hover:text-surface-300 p-0.5"
+                title="Renombrar"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+              <button
                 onClick={(e) => deleteDocument(item.doc, e)}
                 className="text-surface-500 hover:text-mandy-400 p-0.5"
                 title="Eliminar"
@@ -361,6 +373,16 @@ const Sidebar = ({
           </div>
           <span className="truncate flex-1">{item.doc.name}</span>
           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRenameDocument(item.doc);
+              }}
+              className="text-surface-500 hover:text-surface-300 p-0.5"
+              title="Renombrar"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
             <button
               onClick={(e) => deleteDocument(item.doc, e)}
               className="text-surface-500 hover:text-mandy-400 p-0.5"

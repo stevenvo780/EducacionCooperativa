@@ -34,6 +34,7 @@ export const areDocsEquivalent = (prev: DocItem[], next: DocItem[]) => {
     if ((a.workspaceId || '') !== (b.workspaceId || '')) return false;
     if ((a.ownerId || '') !== (b.ownerId || '')) return false;
     if ((a.size || 0) !== (b.size || 0)) return false;
+    if ((a.order ?? null) !== (b.order ?? null)) return false;
     if (getUpdatedAtValue(a.updatedAt) !== getUpdatedAtValue(b.updatedAt)) return false;
   }
   return true;
@@ -50,6 +51,7 @@ export const areFoldersEquivalent = (prev: FolderItem[], next: FolderItem[]) => 
     if (a.parentPath !== b.parentPath) return false;
     if (a.kind !== b.kind) return false;
     if ((a.docId || '') !== (b.docId || '')) return false;
+    if ((a.order ?? null) !== (b.order ?? null)) return false;
   }
   return true;
 };
