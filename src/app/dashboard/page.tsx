@@ -45,7 +45,7 @@ import {
     updateDocumentApi,
     uploadFileApi
 } from '@/services/dashboardApi';
-import { areDocsEquivalent, areFoldersEquivalent, normalizeWorkspace } from '@/services/dashboardUtils';
+import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue, normalizeWorkspace } from '@/services/dashboardUtils';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
 import { saveDashboardState, loadDashboardState, restoreOpenTabs, validateMosaicNode } from '@/services/dashboardPersistence';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
@@ -224,6 +224,7 @@ export default function DashboardPage() {
     const folderInputRef = useRef<HTMLInputElement>(null);
     const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const docsRef = useRef<DocItem[]>([]);
+    const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
     const fetchInFlightRef = useRef<Promise<void> | null>(null);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
@@ -232,6 +233,10 @@ export default function DashboardPage() {
     useEffect(() => {
         docsRef.current = docs;
     }, [docs]);
+
+    useEffect(() => {
+        foldersRef.current = folders;
+    }, [folders]);
 
     useEffect(() => {
         currentWorkspaceRef.current = currentWorkspace;
@@ -318,7 +323,7 @@ export default function DashboardPage() {
         });
 
         const folderMap = new Map<string, FolderItem>();
-        const ensureNode = (path: string, kind: FolderItem['kind'], docId?: string) => {
+        const ensureNode = (path: string, kind: FolderItem['kind'], docId?: string, order?: number) => {
             const normalized = normalizePath(path);
             if (!normalized) return;
             const existing = folderMap.get(normalized);
@@ -332,7 +337,8 @@ export default function DashboardPage() {
                     path: normalized,
                     parentPath,
                     kind,
-                    docId
+                    docId,
+                    order: typeof order === 'number' ? order : undefined
                 });
                 return;
             }
@@ -344,6 +350,9 @@ export default function DashboardPage() {
             }
             if (docId && !next.docId) {
                 next.docId = docId;
+            }
+            if (typeof order === 'number' && typeof next.order !== 'number') {
+                next.order = order;
             }
             folderMap.set(normalized, next);
         };
@@ -366,7 +375,7 @@ export default function DashboardPage() {
             const name = (folderDoc.name || 'Carpeta').trim() || 'Carpeta';
             const fullPath = parentPath ? `${parentPath}/${name}` : name;
             ensureAncestors(parentPath);
-            ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record', folderDoc.id);
+            ensureNode(fullPath, fullPath === DEFAULT_FOLDER_NAME ? 'system' : 'record', folderDoc.id, typeof folderDoc.order === 'number' ? folderDoc.order : undefined);
         });
 
         normalizedFileDocs.forEach(docItem => {
@@ -377,10 +386,31 @@ export default function DashboardPage() {
 
         const folderList = Array.from(folderMap.values());
 
+        folderList.sort((a, b) => {
+            if (a.parentPath !== b.parentPath) {
+                return a.parentPath.localeCompare(b.parentPath);
+            }
+            const orderA = typeof a.order === 'number' ? a.order : null;
+            const orderB = typeof b.order === 'number' ? b.order : null;
+            if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+            if (orderA !== null && orderB === null) return -1;
+            if (orderA === null && orderB !== null) return 1;
+            const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
+            const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
+            if (weightDiff !== 0) return weightDiff;
+            return a.name.localeCompare(b.name);
+        });
+
         normalizedFileDocs.sort((a, b) => {
-            const dateA = a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : new Date(a.updatedAt).getTime();
-            const dateB = b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : new Date(b.updatedAt).getTime();
-            return (dateB || 0) - (dateA || 0);
+            const orderA = typeof a.order === 'number' ? a.order : null;
+            const orderB = typeof b.order === 'number' ? b.order : null;
+            if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+            if (orderA !== null && orderB === null) return -1;
+            if (orderA === null && orderB !== null) return 1;
+            const dateA = getUpdatedAtValue(a.updatedAt);
+            const dateB = getUpdatedAtValue(b.updatedAt);
+            if (dateA !== dateB) return dateB - dateA;
+            return (a.name || '').localeCompare(b.name || '');
         });
 
         startTransition(() => {
@@ -988,6 +1018,57 @@ export default function DashboardPage() {
         await renameDocument(doc, nextName);
     };
 
+    const reorderDocsInFolder = useCallback(async (payload: { folderPath: string; orderedIds: string[] }) => {
+        if (!payload.orderedIds.length) return;
+        const orderUpdates = payload.orderedIds.map((id, index) => ({ id, order: (index + 1) * 1000 }));
+        const updates = orderUpdates.filter(update => {
+            const existing = docsRef.current.find(doc => doc.id === update.id);
+            return existing?.order !== update.order;
+        });
+        if (updates.length === 0) return;
+
+        const orderMap = new Map(updates.map(update => [update.id, update.order]));
+        setDocs(prev => prev.map(doc => {
+            const nextOrder = orderMap.get(doc.id);
+            return typeof nextOrder === 'number' ? { ...doc, order: nextOrder } : doc;
+        }));
+
+        try {
+            await Promise.all(updates.map(update => updateDocumentApi(update.id, { order: update.order })));
+            await fetchDocs();
+        } catch (error) {
+            console.error('Error reordering docs', error);
+            await fetchDocs();
+        }
+    }, [fetchDocs]);
+
+    const reorderFoldersInParent = useCallback(async (payload: { parentPath: string; orderedPaths: string[] }) => {
+        if (!payload.orderedPaths.length) return;
+        const folderMap = new Map(foldersRef.current.map(folder => [folder.path, folder]));
+        const orderUpdates = payload.orderedPaths.map((path, index) => {
+            const folder = folderMap.get(path);
+            if (!folder?.docId) return null;
+            return { path, docId: folder.docId, order: (index + 1) * 1000, currentOrder: folder.order };
+        }).filter(Boolean) as Array<{ path: string; docId: string; order: number; currentOrder?: number }>;
+
+        const updates = orderUpdates.filter(update => update.currentOrder !== update.order);
+        if (updates.length === 0) return;
+
+        const orderMap = new Map(orderUpdates.map(update => [update.path, update.order]));
+        setFolders(prev => prev.map(folder => {
+            const nextOrder = orderMap.get(folder.path);
+            return typeof nextOrder === 'number' ? { ...folder, order: nextOrder } : folder;
+        }));
+
+        try {
+            await Promise.all(updates.map(update => updateDocumentApi(update.docId, { order: update.order })));
+            await fetchDocs();
+        } catch (error) {
+            console.error('Error reordering folders', error);
+            await fetchDocs();
+        }
+    }, [fetchDocs]);
+
     const copyDocument = async (docItem: DocItem) => {
         if (!user) return;
         if (docItem.type === 'folder') return;
@@ -1163,6 +1244,19 @@ export default function DashboardPage() {
             if (!grouped[folderName]) grouped[folderName] = [];
             grouped[folderName].push(docItem);
         });
+        Object.values(grouped).forEach(list => {
+            list.sort((a, b) => {
+                const orderA = typeof a.order === 'number' ? a.order : null;
+                const orderB = typeof b.order === 'number' ? b.order : null;
+                if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+                if (orderA !== null && orderB === null) return -1;
+                if (orderA === null && orderB !== null) return 1;
+                const dateA = getUpdatedAtValue(a.updatedAt);
+                const dateB = getUpdatedAtValue(b.updatedAt);
+                if (dateA !== dateB) return dateB - dateA;
+                return (a.name || '').localeCompare(b.name || '');
+            });
+        });
         return grouped;
     }, [docs]);
 
@@ -1179,6 +1273,11 @@ export default function DashboardPage() {
         });
         Object.values(map).forEach(list => {
             list.sort((a, b) => {
+                const orderA = typeof a.order === 'number' ? a.order : null;
+                const orderB = typeof b.order === 'number' ? b.order : null;
+                if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
+                if (orderA !== null && orderB === null) return -1;
+                if (orderA === null && orderB !== null) return 1;
                 const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
                 const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
                 if (weightDiff !== 0) return weightDiff;
@@ -1593,6 +1692,7 @@ export default function DashboardPage() {
                         handleDocDragStart={handleDocDragStart}
                         handleDocDragEnd={handleDocDragEnd}
                         deleteDocument={deleteDocument}
+                        onRenameDocument={promptRenameDocument}
                         setShowQuickSearch={setShowQuickSearch}
                         quickSearchInputRef={quickSearchInputRef}
                         getIcon={getIcon}
@@ -1651,6 +1751,8 @@ export default function DashboardPage() {
                                             onDuplicateDoc={copyDocument}
                                             onMoveDoc={moveDocumentToFolder}
                                             onRenameDoc={promptRenameDocument}
+                                            onReorderDocs={reorderDocsInFolder}
+                                            onReorderFolders={reorderFoldersInParent}
                                             activeFolder={activeFolder}
                                             onActiveFolderChange={setActiveFolderSafe}
                                             currentWorkspaceName={currentWorkspace?.name}
@@ -1694,6 +1796,8 @@ export default function DashboardPage() {
                                         onMoveDocument={promptMoveDocument}
                                         onDeleteDocument={deleteDocument}
                                         onRenameDocument={promptRenameDocument}
+                                        onReorderDocs={reorderDocsInFolder}
+                                        onReorderFolders={reorderFoldersInParent}
                                         getIcon={getIcon}
                                         getDocBadge={getDocBadge}
                                         personalWorkspaceId={PERSONAL_WORKSPACE_ID}
