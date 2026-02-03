@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { name, content, type, workspaceId, folder, mimeType, url, storagePath } = body;
+        const { name, content, type, workspaceId, folder, mimeType, url, storagePath, order } = body;
         const normalizedFolder = typeof folder === 'string' ? folder : 'No estructurado';
         const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : 'personal';
         const ownerId = auth.uid;
@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
         };
+        if (typeof order === 'number') {
+            docData.order = order;
+        }
 
         const allowedPrefix = resolvedWorkspaceId === 'personal'
             ? `users/${ownerId}/`
@@ -127,6 +130,7 @@ export async function GET(req: NextRequest) {
                 'folder',
                 'workspaceId',
                 'ownerId',
+                'order',
                 'url',
                 'storagePath',
                 'sourceName',

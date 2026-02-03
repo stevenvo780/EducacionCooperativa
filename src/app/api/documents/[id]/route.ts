@@ -72,6 +72,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         if (typeof body.mimeType === 'string' || body.mimeType === null) updateData.mimeType = body.mimeType ?? null;
         if (typeof body.folder === 'string') updateData.folder = body.folder;
         if (typeof body.size === 'number') updateData.size = body.size;
+        if (typeof body.order === 'number') updateData.order = body.order;
 
         if (storagePath && !existingData?.storagePath) {
             updateData.storagePath = storagePath;
