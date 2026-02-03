@@ -22,6 +22,7 @@ export interface DocItem {
   folder?: string;
   storagePath?: string;
   workspaceId?: string;
+  order?: number;
 
   mimeType?: string;
   size?: number;
@@ -36,6 +37,7 @@ export interface FolderItem {
   parentPath: string;
   kind: 'system' | 'record' | 'virtual';
   docId?: string;
+  order?: number;
 }
 
 interface MosaicLayoutProps {
