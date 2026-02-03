@@ -34,6 +34,7 @@ export const getFileExtension = (name: string) => {
 
 export const getDocBadge = (doc: DocItem) => {
   if (doc.type === 'terminal') return 'TERM';
+  if (doc.type === 'board') return 'TAB';
   if (doc.type === 'file') {
     if (isMarkdownDocItem(doc)) return 'MD';
     const ext = getFileExtension(doc.name);

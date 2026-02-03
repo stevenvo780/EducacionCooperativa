@@ -29,7 +29,18 @@ const getTokenFromRequest = (req: NextRequest) => {
 
 export const requireAuth = async (req: NextRequest): Promise<AuthContext | null> => {
   const token = getTokenFromRequest(req);
+
+  // In insecure mode allow requests without a token so local mocks work in E2E/dev flows
+  if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true' && !token) {
+    return { uid: 'test-user-123', email: 'test@example.com' };
+  }
+
   if (!token) return null;
+
+  if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+     // Mock auth for testing
+     return { uid: token, email: 'test@example.com' };
+  }
 
   try {
     const decoded = await adminAuth.verifyIdToken(token);
