@@ -189,7 +189,7 @@ const WorkspaceExplorer = ({
                       e.stopPropagation();
                       onCopyDocument(doc);
                     }}
-                    className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                    className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
                     title="Duplicar"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -199,7 +199,7 @@ const WorkspaceExplorer = ({
                       e.stopPropagation();
                       onRenameDocument(doc);
                     }}
-                    className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                    className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
                     title="Renombrar"
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -209,14 +209,14 @@ const WorkspaceExplorer = ({
                       e.stopPropagation();
                       onMoveDocument(doc);
                     }}
-                    className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100"
+                    className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
                     title="Mover"
                   >
                     <FolderInput className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={(e) => onDeleteDocument(doc, e)}
-                    className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
+                    className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition"
                     title="Eliminar"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
