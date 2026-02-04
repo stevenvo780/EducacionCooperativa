@@ -96,6 +96,10 @@ interface SidebarProps {
   setShowQuickSearch: (value: boolean) => void;
   quickSearchInputRef: React.RefObject<HTMLInputElement>;
   getIcon: (doc: DocItem) => React.ReactNode;
+  folderDragOver: string | null;
+  onFolderDragOver: (e: React.DragEvent, path: string) => void;
+  onFolderDrop: (e: React.DragEvent, path: string) => void;
+  onFolderDragLeave: (path: string) => void;
 }
 
 const Sidebar = ({
@@ -142,7 +146,11 @@ const Sidebar = ({
   onRenameDocument,
   setShowQuickSearch,
   quickSearchInputRef,
-  getIcon
+  getIcon,
+  folderDragOver,
+  onFolderDragOver,
+  onFolderDrop,
+  onFolderDragLeave
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
@@ -350,6 +358,7 @@ const Sidebar = ({
         ? !isUserCollapsed
         : expandedFolders.has(item.folder.path);
       const isActive = activeFolder === item.folder.path;
+      const isDragOver = folderDragOver === item.folder.path;
       const count = docsByFolder[item.folder.path]?.length ?? 0;
       const paddingLeft = 8 + item.depth * 12;
 
@@ -361,9 +370,12 @@ const Sidebar = ({
               setActiveFolder(item.folder.path);
               toggleFolder(item.folder.path);
             }}
-            className={`w-full flex items-center gap-1.5 py-1 px-2 rounded text-xs transition ${
+            onDragOver={(e) => onFolderDragOver(e, item.folder.path)}
+            onDrop={(e) => onFolderDrop(e, item.folder.path)}
+            onDragLeave={() => onFolderDragLeave(item.folder.path)}
+            className={`w-full flex items-center gap-1.5 py-1 px-2 rounded text-xs transition relative ${
               isActive ? 'bg-mandy-500/15 text-mandy-300' : 'text-surface-300 hover:bg-surface-700/40'
-            }`}
+            } ${isDragOver ? 'ring-2 ring-mandy-500 bg-mandy-500/20' : ''}`}
             style={{ paddingLeft }}
           >
             <span className="w-3 h-3 flex items-center justify-center">
