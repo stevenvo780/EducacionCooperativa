@@ -13,6 +13,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { useAuth } from '@/context/AuthContext';
+import { useTerminal } from '@/context/TerminalContext';
 import {
   Bold, Italic, Heading as HeadingIcon, Link as LinkIcon, Code,
   Quote, List, ListOrdered, Table, Image as ImageIcon,
@@ -171,6 +172,7 @@ export default function MosaicEditor({
   const highlightsRef = useRef<HTMLElement[]>([]);
 
   const { user } = useAuth();
+  const { onDocChangeCallback } = useTerminal();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
   const [usePolling, setUsePolling] = useState(false);
@@ -300,6 +302,21 @@ export default function MosaicEditor({
     setUsePolling(false);
     loadDoc();
   }, [roomId, loadDoc]);
+
+  // Listen for real-time document changes
+  useEffect(() => {
+    if (!onDocChangeCallback || !roomId) return;
+    return onDocChangeCallback((event) => {
+        // If the document created/updated is the one we are viewing, reload it
+        if (event.docId === roomId && (event.action === 'updated' || event.action === 'created')) {
+             // Only reload if not currently saving (to avoid overwriting own changes if race condition?)
+             // Actually loadDoc() handles 'lastUpdatedBy' check somewhat in applyDocData
+             loadDoc();
+        }
+    });
+  }, [onDocChangeCallback, roomId, loadDoc]);
+
+  // Polling fallback if needed (though onDocChangeCallback should handle it)
 
   useEffect(() => {
     if (!roomId) return;
