@@ -181,6 +181,8 @@ function DashboardContent() {
     const requestedWorkspaceId = (searchParams?.get('workspaceId') || searchParams?.get('workspace') || '').trim() || null;
     const urlSyncInProgressRef = useRef(false);
     const lastSubscribedWorkspaceRef = useRef<string | null>(null);
+    const requestedWorkspaceIdRef = useRef(requestedWorkspaceId);
+    requestedWorkspaceIdRef.current = requestedWorkspaceId;
 
     useEffect(() => {
         if (!user || !currentWorkspace) return;
@@ -308,9 +310,11 @@ function DashboardContent() {
         setWorkspaces(allWorkspaces);
         setInvites(fetchedInvites);
         const previousWorkspace = currentWorkspaceRef.current;
+        // Usar ref para evitar dependencia de requestedWorkspaceId
+        const reqWorkspaceId = requestedWorkspaceIdRef.current;
         const resolvedWorkspace = (() => {
-            if (requestedWorkspaceId) {
-                const match = allWorkspaces.find(ws => ws.id === requestedWorkspaceId);
+            if (reqWorkspaceId) {
+                const match = allWorkspaces.find(ws => ws.id === reqWorkspaceId);
                 if (match) return match;
             }
             if (previousWorkspace) {
@@ -318,11 +322,14 @@ function DashboardContent() {
             }
             return personalSpace;
         })();
-        setCurrentWorkspace(resolvedWorkspace);
-    }, [user, userEmail, requestedWorkspaceId, setWorkspaces, setInvites, setCurrentWorkspace]);
+        // Solo actualizar si realmente cambió el workspace
+        if (previousWorkspace?.id !== resolvedWorkspace.id) {
+            setCurrentWorkspace(resolvedWorkspace);
+        }
+    }, [user, userEmail, setWorkspaces, setInvites, setCurrentWorkspace]);
 
+    // Efecto para sincronizar URL → Estado (navegación externa)
     useEffect(() => {
-        // Si la URL se está actualizando internamente, no reaccionar
         if (urlSyncInProgressRef.current) return;
         if (!requestedWorkspaceId || workspaces.length === 0) return;
         if (currentWorkspace?.id === requestedWorkspaceId) return;
@@ -332,11 +339,18 @@ function DashboardContent() {
         }
     }, [requestedWorkspaceId, workspaces, currentWorkspace?.id, setCurrentWorkspace]);
 
+    // Efecto para sincronizar Estado → URL (cambio interno de workspace)
+    // Usamos un efecto separado y controlado para evitar loops
+    const prevWorkspaceIdRef = useRef<string | null>(null);
     useEffect(() => {
         if (!currentWorkspaceId) return;
+        // Solo actualizar URL si el workspace realmente cambió desde la última vez
+        if (prevWorkspaceIdRef.current === currentWorkspaceId) return;
+        prevWorkspaceIdRef.current = currentWorkspaceId;
+
         const currentParam = searchParams?.get('workspaceId') || '';
         if (currentParam === currentWorkspaceId) return;
-        // Marcar que estamos sincronizando la URL internamente
+
         urlSyncInProgressRef.current = true;
         const params = new URLSearchParams(searchParams?.toString());
         params.set('workspaceId', currentWorkspaceId);
@@ -344,10 +358,10 @@ function DashboardContent() {
         const query = params.toString();
         const nextUrl = query ? `/dashboard?${query}` : '/dashboard';
         router.replace(nextUrl, { scroll: false });
-        // Desbloquear después de un frame para permitir que el efecto anterior se estabilice
-        requestAnimationFrame(() => {
+        // Desbloquear después de que Next.js procese el cambio
+        setTimeout(() => {
             urlSyncInProgressRef.current = false;
-        });
+        }, 100);
     }, [currentWorkspaceId, searchParams, router]);
 
     const acceptInvite = async (ws: Workspace) => {
