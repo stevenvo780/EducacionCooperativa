@@ -55,6 +55,18 @@ export const inviteMemberApi = async (params: { workspaceId: string; email: stri
   assertOk(res, 'Failed to invite member');
 };
 
+export const removeMemberApi = async (params: { workspaceId: string; userId: string }) => {
+  const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      action: 'remove_member',
+      userId: params.userId
+    })
+  });
+  assertOk(res, 'Failed to remove member');
+};
+
 export const createWorkspaceApi = async (params: { name: string; ownerId: string }) => {
   const res = await authFetch('/api/workspaces', {
     method: 'POST',

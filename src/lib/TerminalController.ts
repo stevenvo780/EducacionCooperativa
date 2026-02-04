@@ -201,9 +201,25 @@ export class TerminalController {
       instance.mounted = true;
     }
 
+    // Mejora: Intentar ajustar dimensiones y refrescar inmediatamente
+    // Esto ayuda a evitar artefactos visuales cuando se restaura una sesión con historial
+    requestAnimationFrame(() => {
+        try {
+            fitAddon.fit();
+            term.refresh(0, term.rows - 1);
+        } catch (e) {
+            // Ignorar errores de fit si el contenedor aún no está listo
+        }
+    });
+
     setTimeout(() => {
-      fitAddon.fit();
-      term.focus();
+      try {
+        fitAddon.fit();
+        term.focus();
+        term.refresh(0, term.rows - 1);
+      } catch (e) {
+        console.warn('[TerminalController] Error finalizing mount:', e);
+      }
     }, 100);
 
     if (instance.resizeObserver) {
@@ -400,6 +416,9 @@ export class TerminalController {
     try {
       instance.fitAddon.fit();
       const { cols, rows } = instance.term;
+      // Forzar repintado para corregir artefactos
+      instance.term.refresh(0, rows - 1);
+
       if (this.socket?.connected && cols > 0 && rows > 0) {
         this.socket.emit('resize', { sessionId, cols, rows });
       }
