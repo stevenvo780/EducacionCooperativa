@@ -86,6 +86,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ status: 'accepted' });
     }
 
+    if (action === 'remove_member') {
+        const { userId } = body;
+        if (!userId) {
+            return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+        }
+        if (wsData?.ownerId !== auth.uid) {
+            return NextResponse.json({ error: 'Only workspace owner can remove members' }, { status: 403 });
+        }
+        if (userId === wsData.ownerId) {
+            return NextResponse.json({ error: 'Cannot remove workspace owner' }, { status: 400 });
+        }
+        await wsRef.update({
+            members: FieldValue.arrayRemove(userId)
+        });
+        return NextResponse.json({ status: 'removed' });
+    }
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
     console.error('Error updating workspace:', error);
