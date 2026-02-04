@@ -1,7 +1,39 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
-import { FieldValue, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldValue, type CollectionReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/server-auth';
+import { isAdminUser, requireAuth } from '@/lib/server-auth';
+
+const deleteCollectionInBatches = async (collectionRef: CollectionReference, batchLimit = 400) => {
+  let lastDoc: QueryDocumentSnapshot | null = null;
+
+  while (true) {
+    let query = collectionRef.orderBy('__name__').limit(batchLimit);
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const snapshot = await query.get();
+    if (snapshot.empty) break;
+
+    const batch = adminDb.batch();
+    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    if (snapshot.size < batchLimit) break;
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+  }
+};
+
+const deleteBoardData = async (workspaceId: string) => {
+  const boardRef = adminDb.collection('boards').doc(workspaceId);
+  const snap = await boardRef.get();
+  if (!snap.exists) return false;
+
+  await deleteCollectionInBatches(boardRef.collection('columns'));
+  await deleteCollectionInBatches(boardRef.collection('cards'));
+  await boardRef.delete();
+  return true;
+};
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -84,8 +116,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Personal workspace cannot be deleted' }, { status: 400 });
     }
 
-    if (data?.ownerId && auth.uid !== data.ownerId) {
-      return NextResponse.json({ error: 'Only workspace owner can delete' }, { status: 403 });
+    const isAdmin = await isAdminUser(auth.uid);
+    if (data?.ownerId && auth.uid !== data.ownerId && !isAdmin) {
+      return NextResponse.json({ error: 'Only workspace owner or admin can delete' }, { status: 403 });
     }
 
     const batchLimit = 400;
@@ -118,6 +151,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       if (docsSnap.size < batchLimit) break;
     }
 
+    let boardDeleted = false;
+    try {
+      boardDeleted = await deleteBoardData(id);
+    } catch (err) {
+      console.warn('Board cleanup failed for workspace', id, err);
+    }
+
     let storageDeleted = false;
     const bucket = adminStorage.bucket();
     if (bucket?.name) {
@@ -134,7 +174,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({
       status: 'deleted',
       documentsDeleted: deletedDocs,
-      storageDeleted
+      storageDeleted,
+      boardDeleted
     });
   } catch (error: any) {
     console.error('Error deleting workspace:', error);

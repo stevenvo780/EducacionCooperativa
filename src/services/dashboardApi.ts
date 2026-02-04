@@ -9,6 +9,12 @@ const assertOk = (res: Response, fallbackMessage: string) => {
   }
 };
 
+export const fetchCurrentUserApi = async () => {
+  const res = await authFetch('/api/users/me');
+  assertOk(res, 'Failed to fetch current user');
+  return (await res.json()) as { uid: string; email?: string | null; role?: string };
+};
+
 export const fetchWorkspacesApi = async (params: { ownerId: string; email?: string | null }) => {
   const search = new URLSearchParams();
   search.set('ownerId', params.ownerId);
