@@ -14,7 +14,6 @@ import {
   FolderPlus,
   Plus,
   Search,
-  MoreVertical,
   Trash2,
   Copy,
   FolderInput,
@@ -812,16 +811,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleContextMenu(e, doc.id);
-              }}
-              className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
-              title="Mas opciones"
-            >
-              <MoreVertical className="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
       </div>
