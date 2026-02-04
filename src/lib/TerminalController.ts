@@ -215,7 +215,8 @@ export class TerminalController {
     onStatusChange?: (status: string) => void,
     onSessionEnded?: (payload: { sessionId: string; reason?: string }) => void,
     onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void,
-    onDocChange?: (event: DocChangeEvent) => void
+    onDocChange?: (event: DocChangeEvent) => void,
+    onSessionCreated?: (payload: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => void
   ) {
     if (this.socket) this.socket.disconnect();
 
@@ -267,13 +268,14 @@ export class TerminalController {
       }
     });
 
-    this.socket.on('session-created', (data: { id: string; workspaceId?: string }) => {
+    this.socket.on('session-created', (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => {
       this.activeSessionId = data.id;
       const instance = this.getTerminalInstance(data.id);
       if (instance) {
         instance.term.clear();
         instance.term.writeln('\x1b[32m✔ Sesion iniciada\x1b[0m');
       }
+      onSessionCreated?.(data);
     });
 
     this.socket.on('session-ended', (payload: { sessionId: string; reason?: string }) => {
@@ -326,6 +328,12 @@ export class TerminalController {
   public checkWorkerStatus(workspaceId: string) {
     if (this.socket?.connected) {
       this.socket.emit('workspace:check-worker', { workspaceId });
+    }
+  }
+
+  public restoreSession(sessionId: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('restore-session', { sessionId });
     }
   }
 

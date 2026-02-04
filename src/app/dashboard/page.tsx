@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue, useTransition } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue, useTransition, Suspense } from 'react';
 import type React from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -67,7 +67,7 @@ const PERSONAL_WORKSPACE_ID = 'personal';
 const ROOT_FOLDER_PATH = '';
 const DOCS_POLL_INTERVAL_MS = 30000;
 
-export default function DashboardPage() {
+function DashboardContent() {
     const { user, userEmail, loading, logout, changePassword } = useAuth();
     const {
         activeSessionId,
@@ -2171,5 +2171,13 @@ export default function DashboardPage() {
                 </AnimatePresence>
             </div>
         </LazyMotion>
+    );
+}
+
+export default function DashboardPage() {
+    return (
+        <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400" /></div>}>
+            <DashboardContent />
+        </Suspense>
     );
 }
