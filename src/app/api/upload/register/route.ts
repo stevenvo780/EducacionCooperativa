@@ -29,10 +29,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'storagePath and fileName required' }, { status: 400 });
         }
 
-        if (workspaceId !== 'personal') {
+        // Validate storagePath prefix ownership
+        if (workspaceId === 'personal') {
+          if (!storagePath.startsWith(`users/${auth.uid}/`)) {
+            return NextResponse.json({ error: 'Access denied: Invalid storage path' }, { status: 403 });
+          }
+        } else {
             const member = await isWorkspaceMember(workspaceId, auth.uid);
             if (!member) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+            if (!storagePath.startsWith(`workspaces/${workspaceId}/`)) {
+               return NextResponse.json({ error: 'Access denied: Invalid storage path' }, { status: 403 });
             }
         }
 
@@ -48,10 +56,9 @@ export async function POST(req: NextRequest) {
         // Generate permanent signed URL
         const [url] = await fileRef.getSignedUrl({
             action: 'read',
-            expires: '03-01-2500'
+            expires: Date.now() + 15 * 60 * 1000 // 15 mins (Fixed from permanent)
         });
 
-        // Create document in Firestore
         const docRef = await adminDb.collection('documents').add({
             name: originalName || fileName,
             type: 'file',

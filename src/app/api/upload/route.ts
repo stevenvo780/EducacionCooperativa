@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
         const [url] = await fileRef.getSignedUrl({
             action: 'read',
-            expires: '03-01-2500'
+            expires: Date.now() + 15 * 60 * 1000 // 15 minutes
         });
 
         const docRef = await adminDb.collection('documents').add({
