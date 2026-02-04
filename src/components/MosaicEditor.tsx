@@ -790,13 +790,8 @@ export default function MosaicEditor({
                 right: 0 !important;
             }
             .mosaic-tile {
-                margin: 0 !important;
+                margin: 3px !important;
                 box-shadow: none !important;
-                border-left: 1px solid #334155;
-                border-bottom: 1px solid #334155;
-            }
-            .mosaic-tile:first-child {
-                border-left: none;
             }
             .mosaic-window {
                 box-shadow: none !important;
@@ -829,14 +824,21 @@ export default function MosaicEditor({
                 color: #f8fafc !important;
             }
             .mosaic-split {
-                background: #1e293b !important;
-                width: 1px !important;
-                height: 1px !important;
-                z-index: 10 !important;
+                background: transparent !important;
+                z-index: 2 !important;
+            }
+            .mosaic-split.-row {
+                width: 6px !important;
+                margin-left: -3px !important;
+                cursor: col-resize !important;
+            }
+            .mosaic-split.-column {
+                height: 6px !important;
+                margin-top: -3px !important;
+                cursor: row-resize !important;
             }
             .mosaic-split:hover {
-                background: #3b82f6 !important;
-                box-shadow: 0 0 0 1px #3b82f6 !important;
+                background: rgba(233, 69, 96, 0.4) !important;
             }
             .cm-editor { height: 100%; font-family: 'Fira Code', monospace; }
             .editor-embedded .mosaic-window-toolbar {

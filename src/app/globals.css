@@ -198,7 +198,7 @@ body {
 }
 
 .mosaic-custom-dark .mosaic-tile {
-  margin: 2px !important;
+  margin: 3px !important;
 }
 
 .mosaic-custom-dark .mosaic-window {
@@ -228,22 +228,28 @@ body {
   display: none !important;
 }
 
+/* Resize handles - visibles y consistentes con mosaic original */
 .mosaic-custom-dark .mosaic-split {
   background: transparent !important;
+  z-index: 2 !important;
 }
 
 .mosaic-custom-dark .mosaic-split:hover {
-  background: rgba(233, 69, 96, 0.3) !important;
+  background: rgba(233, 69, 96, 0.4) !important;
 }
 
+/* Row split (vertical divider) */
 .mosaic-custom-dark .mosaic-split.-row {
   width: 6px !important;
-  margin: 0 -3px !important;
+  margin-left: -3px !important;
+  cursor: col-resize !important;
 }
 
+/* Column split (horizontal divider) */
 .mosaic-custom-dark .mosaic-split.-column {
   height: 6px !important;
-  margin: -3px 0 !important;
+  margin-top: -3px !important;
+  cursor: row-resize !important;
 }
 
 .mosaic-custom-dark .mosaic-zero-state {

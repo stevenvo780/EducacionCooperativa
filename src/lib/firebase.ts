@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
+import { getDatabase, Database } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.replace(/\\n/g, '').trim(),
@@ -9,13 +10,15 @@ const firebaseConfig = {
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.replace(/\\n/g, '').trim(),
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.replace(/\\n/g, '').trim(),
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.replace(/\\n/g, '').trim(),
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.replace(/\\n/g, '').trim()
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.replace(/\\n/g, '').trim(),
+  databaseURL: `https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.replace(/\\n/g, '').trim()}-default-rtdb.firebaseio.com`
 };
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 let storage: FirebaseStorage | null = null;
+let rtdb: Database | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
 function getFirebaseApp(): FirebaseApp {
@@ -59,6 +62,16 @@ function getFirebaseStorage(): FirebaseStorage {
   return storage;
 }
 
+function getFirebaseRTDB(): Database {
+  if (typeof window === 'undefined') {
+    return {} as Database;
+  }
+  if (!rtdb) {
+    rtdb = getDatabase(getFirebaseApp());
+  }
+  return rtdb;
+}
+
 function getGoogleProvider(): GoogleAuthProvider {
   if (typeof window === 'undefined') {
     return {} as GoogleAuthProvider;
@@ -78,6 +91,7 @@ export {
   getFirebaseAuth as auth,
   getFirebaseDb as db,
   getFirebaseStorage as storage,
+  getFirebaseRTDB as rtdb,
   getGoogleProvider as googleProvider,
   signInWithCustomTokenWrapper as signInWithCustomToken
 };
