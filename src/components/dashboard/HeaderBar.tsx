@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Briefcase, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KanbanSquare, Key, Loader2, LogOut, Maximize2, Menu, Minimize2, Plus, Trash2, User, Users } from 'lucide-react';
 import type { Workspace } from '@/components/dashboard/types';
 import type { User as FirebaseUser } from 'firebase/auth';
@@ -61,6 +62,8 @@ const HeaderBar = ({
   onOpenPassword,
   onLogout
 }: HeaderBarProps) => {
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  
   return (
     <header className="h-14 bg-surface-800 border-b border-surface-600/50 flex items-center justify-between px-4 shrink-0 z-50 relative">
       <div className="flex items-center gap-4">
@@ -208,11 +211,7 @@ const HeaderBar = ({
         )}
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-sm text-surface-400 bg-surface-700 px-3 py-1.5 rounded-full">
-          <User className="w-4 h-4" />
-          <span className="truncate max-w-[150px] hidden md:inline">{user?.email}</span>
-        </div>
+      <div className="flex items-center gap-2">
         <div className="hidden md:flex items-center gap-1">
           <button
             onClick={onToggleSidebarCollapse}
@@ -221,7 +220,7 @@ const HeaderBar = ({
                 ? 'bg-mandy-500/15 text-mandy-300'
                 : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
             }`}
-            title={isSidebarCollapsed ? 'Mostrar barra lateral' : 'Ocultar barra lateral'}
+            title={isSidebarCollapsed ? 'Mostrar archivos' : 'Ocultar archivos'}
           >
             {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
@@ -239,42 +238,71 @@ const HeaderBar = ({
         </div>
         <button
           onClick={onToggleZenMode}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition ${
+          className={`p-2 rounded-full transition ${
             isZenMode
-              ? 'bg-mandy-500/15 text-mandy-300 border-mandy-500/40'
-              : 'bg-surface-700 text-surface-300 border-surface-600/60 hover:text-white hover:border-mandy-500/40'
+              ? 'bg-mandy-500/15 text-mandy-300'
+              : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
-          title={isZenMode ? 'Salir de modo Zen' : 'Modo Zen (pantalla completa)'}
+          title={isZenMode ? 'Salir de modo Zen' : 'Modo Zen'}
         >
           {isZenMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          <span className="hidden md:inline">{isZenMode ? 'Salir Zen' : 'Zen'}</span>
         </button>
         <button
           onClick={onOpenBoard}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition ${
+          className={`p-2 rounded-full transition ${
             isBoardOpen
-              ? 'bg-mandy-500/15 text-mandy-300 border-mandy-500/40'
-              : 'bg-surface-700 text-surface-300 border-surface-600/60 hover:text-white hover:border-mandy-500/40'
+              ? 'bg-mandy-500/15 text-mandy-300'
+              : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
-          title={isBoardOpen ? 'Ir al tablero' : 'Abrir tablero'}
+          title="Tablero"
         >
           <KanbanSquare className="w-4 h-4" />
-          <span className="hidden md:inline">Tablero</span>
         </button>
-        <button
-          onClick={onOpenPassword}
-          className="p-2 text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
-          title="Cambiar Contrasena"
-        >
-          <Key className="w-5 h-5" />
-        </button>
-        <button
-          onClick={onLogout}
-          className="p-2 text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
-          title="Cerrar Sesion"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
+        
+        {/* User menu */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="p-2 text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
+            title={user?.email || 'Usuario'}
+          >
+            <User className="w-5 h-5" />
+          </button>
+          
+          {showUserMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowUserMenu(false)} />
+              <div className="absolute top-full right-0 mt-2 w-56 bg-surface-800 border border-surface-600/50 shadow-xl shadow-black/40 rounded-xl z-20 overflow-hidden">
+                <div className="px-4 py-3 border-b border-surface-600/50">
+                  <p className="text-xs text-surface-500">Conectado como</p>
+                  <p className="text-sm text-surface-200 truncate">{user?.email}</p>
+                </div>
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      onOpenPassword();
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <Key className="w-4 h-4" />
+                    Cambiar contraseña
+                  </button>
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-surface-700 transition"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Cerrar sesión
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );
