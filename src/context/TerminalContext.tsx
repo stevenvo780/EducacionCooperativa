@@ -361,6 +361,25 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 controllerRef.current?.disposeSession(data.sessionId);
             };
 
+            controller.setWorkspaceSessionsHandler((data) => {
+                const { workspaceId, sessions: serverSessions } = data;
+                debugLog('[TerminalContext] Received workspace sessions update:', data);
+
+                setSessions(prev => {
+                    const otherWorkspaces = prev.filter(s => s.workspaceId !== workspaceId);
+                    
+                    const newSessions = serverSessions.map(s => ({
+                        id: s.id,
+                        workspaceId: s.workspaceId,
+                        workspaceName: s.workspaceName,
+                        workspaceType: (s.workspaceType as 'personal' | 'shared') || 'shared',
+                        name: s.workspaceName || `Terminal ${s.id.substring(0, 4)}`
+                    }));
+                    
+                    return [...otherWorkspaces, ...newSessions];
+                });
+            });
+
             controller.connect(
                 actualToken,
                 currentUser.uid,
