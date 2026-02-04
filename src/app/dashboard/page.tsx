@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal, type TerminalSession } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Key, Loader2, Minimize2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
+import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Key, Loader2, Minimize2, Shield, Terminal as TerminalIcon, Trash2, Users, X } from 'lucide-react';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -43,6 +43,7 @@ import {
     fetchDocumentRawApi,
     fetchWorkspacesApi,
     inviteMemberApi,
+    removeMemberApi,
     updateDocumentApi,
     uploadFileApi
 } from '@/services/dashboardApi';
@@ -1757,6 +1758,34 @@ function DashboardContent() {
         }
     };
 
+    const removeMember = async (userId: string) => {
+        if (!currentWorkspace || currentWorkspace.type === 'personal') return;
+        
+        try {
+            const confirmResult = await showDialog({
+                type: 'confirm',
+                title: 'Eliminar miembro',
+                message: '¿Estás seguro de que quieres eliminar a este miembro del espacio de trabajo?',
+                confirmLabel: 'Eliminar',
+                cancelLabel: 'Cancelar',
+                danger: true
+            });
+            if (!confirmResult.confirmed) return;
+
+            await removeMemberApi({ workspaceId: currentWorkspace.id, userId });
+            
+            // Update local state
+            const updatedMembers = currentWorkspace.members.filter(m => m !== userId);
+            const updatedWorkspace = { ...currentWorkspace, members: updatedMembers };
+            setCurrentWorkspace(updatedWorkspace);
+            
+            await showDialog({ type: 'info', title: 'Miembro eliminado', message: 'El usuario ha sido eliminado del espacio de trabajo.' });
+        } catch (e) {
+            console.error('Error removing member', e);
+            await showDialog({ type: 'error', title: 'Error', message: 'No se pudo eliminar al miembro.' });
+        }
+    };
+
     const getIcon = (doc: DocItem) => {
         if (doc.type === 'terminal') return <TerminalIcon className="w-5 h-5" />;
         if (doc.type === 'board') return <KanbanSquare className="w-5 h-5" />;
@@ -2098,7 +2127,18 @@ function DashboardContent() {
                                                     <span className="text-surface-300 font-mono text-xs">{uid.substring(0, 8)}...</span>
                                                     {uid === currentWorkspace.ownerId && <span className="bg-accent-purple/20 text-accent-purple-light text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
                                                 </div>
-                                                <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
+                                                <div className="flex items-center gap-2">
+                                                    <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
+                                                    {user && currentWorkspace.ownerId === user.uid && uid !== user.uid && (
+                                                        <button 
+                                                            onClick={() => removeMember(uid)}
+                                                            className="p-1 hover:bg-surface-600 text-surface-400 hover:text-red-400 rounded transition-colors"
+                                                            title="Eliminar miembro"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
