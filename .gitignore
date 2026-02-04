@@ -81,3 +81,8 @@ crendenciales-prod.md
 .env*
 archivos-pruebas
 desplieges-prod/*
+
+# Hub environment variables
+services/hub/packaging/hub.env
+.env.local
+.env.production.local

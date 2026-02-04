@@ -3,8 +3,34 @@ import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { verifyPassword } from '@/lib/crypto';
 
+// In-memory rate limiter (simple implementation)
+const rateLimit = new Map<string, { count: number; expires: number }>();
+const LIMIT_WINDOW = 60 * 1000; // 1 minute
+const MAX_ATTEMPTS = 5;
+
+const checkRateLimit = (ip: string) => {
+    const record = rateLimit.get(ip);
+    if (record) {
+        if (Date.now() > record.expires) {
+            rateLimit.delete(ip);
+        } else if (record.count >= MAX_ATTEMPTS) {
+            return false;
+        } else {
+            record.count++;
+            return true;
+        }
+    }
+    rateLimit.set(ip, { count: 1, expires: Date.now() + LIMIT_WINDOW });
+    return true;
+};
+
 export async function POST(req: NextRequest) {
     try {
+        const ip = req.headers.get('x-forwarded-for') || 'unknown';
+        if (!checkRateLimit(ip)) {
+            return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+        }
+
         const { email, password } = await req.json();
 
         if (!email || !password) {

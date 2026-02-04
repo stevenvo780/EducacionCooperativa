@@ -10,6 +10,7 @@ interface PersistedTabState {
   type?: string;
   folder?: string;
   mimeType?: string;
+  sessionId?: string;
 }
 
 interface PersistedState {
@@ -46,13 +47,14 @@ export function saveDashboardState(
 
   try {
     const persistedTabs: PersistedTabState[] = state.openTabs
-      .filter(tab => tab.type !== 'terminal' && tab.type !== 'files')
+      .filter(tab => tab.type !== 'files')
       .map(tab => ({
         id: tab.id,
         name: tab.name,
         type: tab.type,
         folder: tab.folder,
-        mimeType: tab.mimeType
+        mimeType: tab.mimeType,
+        sessionId: tab.sessionId
       }));
 
     const persistedState: PersistedState = {
@@ -116,6 +118,15 @@ export function restoreOpenTabs(
         id: persistedTab.id,
         name: persistedTab.name || 'Tablero',
         type: 'board'
+      });
+    }
+
+    if (persistedTab.type === 'terminal') {
+      restoredTabs.push({
+        id: persistedTab.id,
+        name: persistedTab.name || 'Terminal',
+        type: 'terminal',
+        sessionId: persistedTab.sessionId
       });
     }
   }
