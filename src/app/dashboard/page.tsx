@@ -58,6 +58,7 @@ import DragOverlay from '@/components/dashboard/DragOverlay';
 import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
+import { useSyncEvents } from '@/hooks/useSyncEvents';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -66,7 +67,6 @@ const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: f
 
 const PERSONAL_WORKSPACE_ID = 'personal';
 const ROOT_FOLDER_PATH = '';
-const DOCS_POLL_INTERVAL_MS = 30000;
 
 function DashboardContent() {
     const { user, userEmail, loading, logout, changePassword } = useAuth();
@@ -568,14 +568,18 @@ function DashboardContent() {
         }
     }, [currentWorkspace, user, fetchDocs]);
 
-    useEffect(() => {
-        if (!currentWorkspace || !user) return;
-        const interval = setInterval(() => {
-            if (typeof document !== 'undefined' && document.hidden) return;
-            fetchDocs();
-        }, DOCS_POLL_INTERVAL_MS);
-        return () => clearInterval(interval);
-    }, [currentWorkspace, user, fetchDocs]);
+    // Sync en tiempo real usando RTDB en lugar de polling
+    const handleSyncEvent = useCallback((_event: { type: string; path: string }) => {
+        fetchDocs();
+    }, [fetchDocs]);
+
+    const { publishEvent } = useSyncEvents({
+        workspaceId: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? null : currentWorkspace?.id || null,
+        userId: user?.uid || null,
+        workspaceType: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? 'personal' : 'shared',
+        onEvent: handleSyncEvent,
+        enabled: !!currentWorkspace && !!user
+    });
 
     useEffect(() => {
         if (!currentWorkspace || !user || !onDocChangeCallback) return;
