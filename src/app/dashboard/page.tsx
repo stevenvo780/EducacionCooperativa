@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue, us
 import type React from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useTerminal } from '@/context/TerminalContext';
+import { useTerminal, type TerminalSession } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Key, Loader2, Minimize2, Shield, Terminal as TerminalIcon, Users, X } from 'lucide-react';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
@@ -75,6 +75,7 @@ function DashboardContent() {
         selectSession,
         createSession,
         destroySession,
+        renameSession,
         status: connectionStatus,
         initialize,
         isCreatingSession,
@@ -1157,6 +1158,25 @@ function DashboardContent() {
         await renameDocument(doc, nextName);
     };
 
+    const promptRenameTerminalSession = useCallback(async (session: TerminalSession) => {
+        const result = await showDialog({
+            type: 'input',
+            title: 'Renombrar sesion',
+            message: 'Ingresa el nuevo nombre para la sesion',
+            defaultValue: session.name ?? '',
+            placeholder: 'Nombre de sesion'
+        });
+
+        if (!result.confirmed) return;
+        const nextName = (result.value ?? '').trim();
+        if (!nextName || nextName === (session.name ?? '').trim()) return;
+
+        renameSession(session.id, nextName);
+        setOpenTabs(prev => prev.map(tab => (
+            tab.type === 'terminal' && tab.sessionId === session.id ? { ...tab, name: nextName } : tab
+        )));
+    }, [renameSession, showDialog]);
+
     const reorderDocsInFolder = useCallback(async (payload: { folderPath: string; orderedIds: string[] }) => {
         if (!payload.orderedIds.length) return;
         const orderUpdates = payload.orderedIds.map((id, index) => ({ id, order: (index + 1) * 1000 }));
@@ -1886,6 +1906,7 @@ function DashboardContent() {
                         createSession={createSession}
                         selectSession={selectSession}
                         destroySession={destroySession}
+                        onRenameSession={promptRenameTerminalSession}
                         openTerminal={openTerminal}
                         openTabs={openTabs}
                         closeTabById={closeTabById}
