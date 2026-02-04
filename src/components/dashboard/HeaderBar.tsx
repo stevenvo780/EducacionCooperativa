@@ -21,6 +21,7 @@ interface HeaderBarProps {
   user: FirebaseUser | null;
   deletingWorkspaceId: string | null;
   personalWorkspaceId: string;
+  isAdmin: boolean;
   isBoardOpen: boolean;
   onOpenBoard: () => void;
   onAcceptInvite: (ws: Workspace) => void;
@@ -49,6 +50,7 @@ const HeaderBar = ({
   user,
   deletingWorkspaceId,
   personalWorkspaceId,
+  isAdmin,
   isBoardOpen,
   onOpenBoard,
   onAcceptInvite,
@@ -158,7 +160,7 @@ const HeaderBar = ({
                           <Copy className="w-3 h-3" />
                         </button>
                       )}
-                      {user && ws.type === 'shared' && ws.ownerId === user.uid && ws.id !== personalWorkspaceId && (
+                      {user && ws.type === 'shared' && ws.id !== personalWorkspaceId && (ws.ownerId === user.uid || isAdmin) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

@@ -59,3 +59,25 @@ export const isWorkspaceMember = async (workspaceId: string, uid: string): Promi
   const members = Array.isArray(data?.members) ? data?.members : [];
   return members.includes(uid);
 };
+
+export const getUserRole = async (uid: string): Promise<string | null> => {
+  if (!uid) return null;
+  try {
+    const snap = await adminDb.collection('users').doc(uid).get();
+    if (!snap.exists) return null;
+    const data = snap.data() as { role?: string } | undefined;
+    if (typeof data?.role === 'string' && data.role.trim()) {
+      return data.role.trim();
+    }
+  } catch (error) {
+    console.warn('Failed to load user role:', error);
+  }
+  return null;
+};
+
+export const isAdminUser = async (uid: string): Promise<boolean> => {
+  const role = await getUserRole(uid);
+  if (!role) return false;
+  const normalized = role.toLowerCase();
+  return normalized === 'admin' || normalized === 'superadmin';
+};
