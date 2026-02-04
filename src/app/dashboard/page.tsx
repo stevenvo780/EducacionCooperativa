@@ -1760,7 +1760,7 @@ function DashboardContent() {
 
     const removeMember = async (userId: string) => {
         if (!currentWorkspace || currentWorkspace.type === 'personal') return;
-        
+
         try {
             const confirmResult = await showDialog({
                 type: 'confirm',
@@ -1773,12 +1773,12 @@ function DashboardContent() {
             if (!confirmResult.confirmed) return;
 
             await removeMemberApi({ workspaceId: currentWorkspace.id, userId });
-            
+
             // Update local state
             const updatedMembers = currentWorkspace.members.filter(m => m !== userId);
             const updatedWorkspace = { ...currentWorkspace, members: updatedMembers };
             setCurrentWorkspace(updatedWorkspace);
-            
+
             await showDialog({ type: 'info', title: 'Miembro eliminado', message: 'El usuario ha sido eliminado del espacio de trabajo.' });
         } catch (e) {
             console.error('Error removing member', e);
@@ -1954,6 +1954,10 @@ function DashboardContent() {
                         setShowQuickSearch={setShowQuickSearch}
                         quickSearchInputRef={quickSearchInputRef}
                         getIcon={getIcon}
+                        folderDragOver={folderDragOver}
+                        onFolderDragOver={handleFolderDragOver}
+                        onFolderDrop={handleFolderDrop}
+                        onFolderDragLeave={handleFolderDragLeave}
                     />
 
                     <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
@@ -2130,7 +2134,7 @@ function DashboardContent() {
                                                 <div className="flex items-center gap-2">
                                                     <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
                                                     {user && currentWorkspace.ownerId === user.uid && uid !== user.uid && (
-                                                        <button 
+                                                        <button
                                                             onClick={() => removeMember(uid)}
                                                             className="p-1 hover:bg-surface-600 text-surface-400 hover:text-red-400 rounded transition-colors"
                                                             title="Eliminar miembro"
