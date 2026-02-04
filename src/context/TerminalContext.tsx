@@ -33,6 +33,113 @@ interface TerminalContextType {
     onDocChangeCallback: ((cb: (event: DocChangeEvent) => void) => () => void) | null;
 }
 
+const TERMINAL_SESSIONS_VERSION = 1;
+const TERMINAL_SESSIONS_KEY_PREFIX = 'terminal_sessions';
+const TERMINAL_ACTIVE_SESSION_KEY_PREFIX = 'terminal_active_session';
+
+interface PersistedTerminalState {
+    version: number;
+    sessions: TerminalSession[];
+}
+
+function getSessionsStorageKey(uid: string): string {
+    return `${TERMINAL_SESSIONS_KEY_PREFIX}_${uid}`;
+}
+
+function getActiveStorageKey(uid: string): string {
+    return `${TERMINAL_ACTIVE_SESSION_KEY_PREFIX}_${uid}`;
+}
+
+function isValidSession(value: unknown): value is TerminalSession {
+    if (!value || typeof value !== 'object') return false;
+    const session = value as TerminalSession;
+    return typeof session.id === 'string'
+        && typeof session.workspaceId === 'string'
+        && (session.workspaceType === 'personal' || session.workspaceType === 'shared');
+}
+
+function normalizeSessions(input: unknown): TerminalSession[] {
+    if (!Array.isArray(input)) return [];
+    const unique = new Map<string, TerminalSession>();
+    for (const item of input) {
+        if (!isValidSession(item)) continue;
+        if (!unique.has(item.id)) {
+            unique.set(item.id, item);
+        }
+    }
+    return Array.from(unique.values());
+}
+
+function loadPersistedSessions(uid: string): TerminalSession[] {
+    if (!uid || typeof window === 'undefined') return [];
+    try {
+        const stored = window.localStorage.getItem(getSessionsStorageKey(uid));
+        if (!stored) return [];
+        const parsed: PersistedTerminalState | TerminalSession[] = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+            return normalizeSessions(parsed);
+        }
+        if (!parsed || parsed.version !== TERMINAL_SESSIONS_VERSION) return [];
+        return normalizeSessions(parsed.sessions);
+    } catch (error) {
+        console.warn('Failed to load terminal sessions:', error);
+        return [];
+    }
+}
+
+function savePersistedSessions(uid: string, sessionsToSave: TerminalSession[]): void {
+    if (!uid || typeof window === 'undefined') return;
+    try {
+        if (!sessionsToSave.length) {
+            window.localStorage.removeItem(getSessionsStorageKey(uid));
+            return;
+        }
+        const payload: PersistedTerminalState = {
+            version: TERMINAL_SESSIONS_VERSION,
+            sessions: sessionsToSave
+        };
+        window.localStorage.setItem(getSessionsStorageKey(uid), JSON.stringify(payload));
+    } catch (error) {
+        console.warn('Failed to persist terminal sessions:', error);
+    }
+}
+
+function loadPersistedActiveSession(uid: string): string | null {
+    if (!uid || typeof window === 'undefined') return null;
+    try {
+        const stored = window.localStorage.getItem(getActiveStorageKey(uid));
+        if (stored) return stored;
+        const legacy = window.localStorage.getItem(TERMINAL_ACTIVE_SESSION_KEY_PREFIX);
+        if (legacy) {
+            window.localStorage.setItem(getActiveStorageKey(uid), legacy);
+            window.localStorage.removeItem(TERMINAL_ACTIVE_SESSION_KEY_PREFIX);
+            return legacy;
+        }
+    } catch (error) {
+        console.warn('Failed to load active terminal session:', error);
+    }
+    return null;
+}
+
+function savePersistedActiveSession(uid: string, sessionId: string): void {
+    if (!uid || typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(getActiveStorageKey(uid), sessionId);
+    } catch (error) {
+        console.warn('Failed to persist active terminal session:', error);
+    }
+}
+
+function clearPersistedActiveSession(uid: string): void {
+    if (!uid || typeof window === 'undefined') return;
+    try {
+        window.localStorage.removeItem(getActiveStorageKey(uid));
+        window.localStorage.removeItem(TERMINAL_ACTIVE_SESSION_KEY_PREFIX);
+    } catch (error) {
+        console.warn('Failed to clear active terminal session:', error);
+    }
+}
+
 const TerminalContext = createContext<TerminalContextType | null>(null);
 
 export const useTerminal = () => {
@@ -59,6 +166,10 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const [workspaceWorkerStatuses, setWorkspaceWorkerStatuses] = useState<Map<string, WorkerStatus>>(new Map());
     const [lastDocChange, setLastDocChange] = useState<DocChangeEvent | null>(null);
     const docChangeCallbacksRef = useRef<Set<(event: DocChangeEvent) => void>>(new Set());
+    const sessionsLoadedRef = useRef(false);
+    const persistedSessionsRef = useRef<Map<string, TerminalSession>>(new Map());
+    const restoringSessionIdsRef = useRef<Set<string>>(new Set());
+    const savedActiveSessionIdRef = useRef<string | null>(null);
 
     const onDocChangeCallback = useCallback((cb: (event: DocChangeEvent) => void) => {
         docChangeCallbacksRef.current.add(cb);
@@ -80,6 +191,64 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const getSessionsForWorkspace = useCallback((workspaceId: string): TerminalSession[] => {
         return sessions.filter(s => s.workspaceId === workspaceId);
     }, [sessions]);
+
+    const restorePersistedSessions = useCallback(() => {
+        const controller = controllerRef.current;
+        if (!controller || !controller.socket?.connected) return;
+
+        const sessionIds = new Set<string>();
+        persistedSessionsRef.current.forEach((_value, sessionId) => {
+            sessionIds.add(sessionId);
+        });
+        if (savedActiveSessionIdRef.current) {
+            sessionIds.add(savedActiveSessionIdRef.current);
+        }
+
+        if (sessionIds.size === 0) return;
+        restoringSessionIdsRef.current = new Set(sessionIds);
+        sessionIds.forEach(sessionId => controller.restoreSession(sessionId));
+    }, []);
+
+    useEffect(() => {
+        sessionsLoadedRef.current = false;
+        persistedSessionsRef.current = new Map();
+        restoringSessionIdsRef.current = new Set();
+        savedActiveSessionIdRef.current = null;
+
+        if (!user?.uid) {
+            setSessions([]);
+            setActiveSessionId(null);
+            return;
+        }
+
+        const restoredSessions = loadPersistedSessions(user.uid);
+        const restoredActive = loadPersistedActiveSession(user.uid);
+        const restoredMap = new Map<string, TerminalSession>();
+        restoredSessions.forEach(session => {
+            restoredMap.set(session.id, session);
+        });
+
+        persistedSessionsRef.current = restoredMap;
+        savedActiveSessionIdRef.current = restoredActive;
+        restoringSessionIdsRef.current = new Set([
+            ...restoredMap.keys(),
+            ...(restoredActive ? [restoredActive] : [])
+        ]);
+
+        setSessions(Array.from(restoredMap.values()));
+        setActiveSessionId(restoredActive ?? null);
+
+        sessionsLoadedRef.current = true;
+        if (controllerRef.current?.socket?.connected) {
+            restorePersistedSessions();
+        }
+    }, [user?.uid, restorePersistedSessions]);
+
+    useEffect(() => {
+        if (!sessionsLoadedRef.current || !user?.uid) return;
+        persistedSessionsRef.current = new Map(sessions.map(session => [session.id, session]));
+        savePersistedSessions(user.uid, sessions);
+    }, [sessions, user?.uid]);
 
     const initialize = useCallback(async (nexusUrl: string) => {
         debugLog('[TerminalContext] initialize called with nexusUrl:', nexusUrl);
@@ -113,7 +282,84 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             const actualToken = await currentUser.getIdToken();
 
             // Try to restore session
-            const savedSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('terminal_active_session') : null;
+            const savedSessionId = loadPersistedActiveSession(currentUser.uid);
+            savedActiveSessionIdRef.current = savedSessionId;
+            if (savedSessionId) {
+                restoringSessionIdsRef.current.add(savedSessionId);
+            }
+
+            let pendingSessionMeta: { workspaceId: string; workspaceType: 'personal' | 'shared'; workspaceName?: string } | null = null;
+
+            const handleSessionCreated = (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => {
+                const isRestored = restoringSessionIdsRef.current.has(data.id);
+                if (!isRestored) {
+                    setIsCreatingSession(false);
+                }
+                restoringSessionIdsRef.current.delete(data.id);
+
+                setSessions(prev => {
+                    const existing = prev.find(s => s.id === data.id);
+                    const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
+                    const workspaceType = data.workspaceType || pendingSessionMeta?.workspaceType || 'personal';
+                    const workspaceName = data.workspaceName || pendingSessionMeta?.workspaceName;
+                    const persisted = persistedSessionsRef.current.get(data.id);
+                    const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
+                    const fallbackName = persisted?.name || `Terminal ${existingCount + 1}`;
+
+                    if (existing) {
+                        const nextSession = {
+                            ...existing,
+                            workspaceId,
+                            workspaceType,
+                            workspaceName,
+                            name: existing.name || persisted?.name || fallbackName
+                        };
+                        if (
+                            existing.workspaceId === nextSession.workspaceId
+                            && existing.workspaceType === nextSession.workspaceType
+                            && existing.workspaceName === nextSession.workspaceName
+                            && existing.name === nextSession.name
+                        ) {
+                            return prev;
+                        }
+                        return prev.map(s => s.id === data.id ? nextSession : s);
+                    }
+
+                    const newSession: TerminalSession = {
+                        id: data.id,
+                        name: persisted?.name || fallbackName,
+                        workspaceId,
+                        workspaceType,
+                        workspaceName
+                    };
+                    return [...prev, newSession];
+                });
+
+                if (!isRestored) {
+                    pendingSessionMeta = null;
+                }
+
+                const shouldActivate = !isRestored || data.id === savedActiveSessionIdRef.current;
+                if (shouldActivate) {
+                    setActiveSessionId(data.id);
+                    savePersistedActiveSession(currentUser.uid, data.id);
+                    savedActiveSessionIdRef.current = data.id;
+                }
+            };
+
+            const handleSessionEnded = (data: { sessionId: string }) => {
+                setSessions(prev => prev.filter(s => s.id !== data.sessionId));
+                setActiveSessionId(prev => {
+                    if (prev === data.sessionId) {
+                        clearPersistedActiveSession(currentUser.uid);
+                        savedActiveSessionIdRef.current = null;
+                        return null;
+                    }
+                    return prev;
+                });
+                restoringSessionIdsRef.current.delete(data.sessionId);
+                controllerRef.current?.disposeSession(data.sessionId);
+            };
 
             controller.connect(
                 actualToken,
@@ -125,6 +371,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                         debugLog('[TerminalContext] Setting hubConnected=true, status=online');
                         setHubConnected(true);
                         setStatus('online');
+                        restorePersistedSessions();
                     } else if (newStatus === 'hub-offline') {
                         debugLog('[TerminalContext] Setting hubConnected=false, status=offline');
                         setHubConnected(false);
@@ -139,8 +386,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                         setStatus('error');
                     }
                 },
-                (_payload) => {
-                },
+                handleSessionEnded,
                 (workspaceStatus: WorkspaceWorkerStatus) => {
                     setWorkspaceWorkerStatuses(prev => {
                         const newMap = new Map(prev);
@@ -157,54 +403,15 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                     setLastDocChange(docEvent);
                     // Notificar a todos los callbacks registrados
                     docChangeCallbacksRef.current.forEach(cb => cb(docEvent));
-                }
+                },
+                handleSessionCreated
             );
-
-            let pendingSessionMeta: { workspaceId: string; workspaceType: 'personal' | 'shared'; workspaceName?: string } | null = null;
 
             const originalStartSession = controller.startSession.bind(controller);
             controller.startSession = (opts: { workspaceId: string; workspaceName?: string; workspaceType: 'personal' | 'shared' }) => {
                 pendingSessionMeta = { workspaceId: opts.workspaceId, workspaceType: opts.workspaceType, workspaceName: opts.workspaceName };
                 originalStartSession(opts);
             };
-
-            controller.socket?.on('session-created', (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => {
-                setIsCreatingSession(false);
-                setSessions(prev => {
-                    if (prev.find(s => s.id === data.id)) return prev;
-                    // If restored, we might have data in payload
-                    const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
-                    const workspaceType = data.workspaceType || pendingSessionMeta?.workspaceType || 'personal';
-                    const workspaceName = data.workspaceName || pendingSessionMeta?.workspaceName;
-
-                    const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
-                    const newSession: TerminalSession = {
-                        id: data.id,
-                        name: `Terminal ${existingCount + 1}`,
-                        workspaceId,
-                        workspaceType,
-                        workspaceName
-                    };
-                    pendingSessionMeta = null;
-                    return [...prev, newSession];
-                });
-                setActiveSessionId(data.id);
-                if (typeof window !== 'undefined') {
-                    window.localStorage.setItem('terminal_active_session', data.id);
-                }
-            });
-
-            controller.socket?.on('session-ended', (data: { sessionId: string }) => {
-                setSessions(prev => prev.filter(s => s.id !== data.sessionId));
-                setActiveSessionId(prev => {
-                    if (prev === data.sessionId) {
-                        if (typeof window !== 'undefined') window.localStorage.removeItem('terminal_active_session');
-                        return null;
-                    }
-                    return prev;
-                });
-                controllerRef.current?.disposeSession(data.sessionId);
-            });
 
             controller.socket?.on('connect_error', (err: Error) => {
                 setErrorMessage(err.message);
@@ -215,7 +422,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             setStatus('error');
             setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
         }
-    }, [debugLog]);
+    }, [debugLog, restorePersistedSessions]);
 
     const createSession = useCallback((workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => {
         setIsCreatingSession(true);
@@ -225,7 +432,11 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const selectSession = useCallback((sessionId: string) => {
         setActiveSessionId(sessionId);
         controllerRef.current?.setActiveSession(sessionId);
-    }, []);
+        if (user?.uid) {
+            savePersistedActiveSession(user.uid, sessionId);
+            savedActiveSessionIdRef.current = sessionId;
+        }
+    }, [user?.uid]);
 
     const destroySession = useCallback((sessionId: string) => {
         controllerRef.current?.killSession(sessionId);
