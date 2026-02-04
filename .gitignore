@@ -68,6 +68,7 @@ build/
 # Worker workspace
 services/worker/workspace/*
 !services/worker/workspace/.gitkeep
+workers-data/
 
 # Packaging/build artifacts
 *.deb
@@ -76,14 +77,16 @@ services/worker/workspace/*
 *.tsbuildinfo
 terminal-error.png
 nohup.out
-crendenciales-prod.md
 .next_blocked_by_root
+archivos-pruebas
+
+# Credentials (NEVER commit)
+desplieges-prod/crendenciales-prod.md
+services/hub/packaging/hub.env
+services/worker/packaging/worker.env
+services/worker/packaging/serviceAccountKey.json
+
 # Environment files
 .env*
-archivos-pruebas
-desplieges-prod/*
-
-# Hub environment variables
-services/hub/packaging/hub.env
 .env.local
 .env.production.local
