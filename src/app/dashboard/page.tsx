@@ -36,6 +36,7 @@ import {
     acceptInviteApi,
     createDocumentApi,
     createWorkspaceApi,
+    fetchCurrentUserApi,
     deleteDocumentApi,
     deleteWorkspaceApi,
     fetchDocsApi,
@@ -47,7 +48,7 @@ import {
 } from '@/services/dashboardApi';
 import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue, normalizeWorkspace } from '@/services/dashboardUtils';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
-import { saveDashboardState, loadDashboardState, restoreOpenTabs, validateMosaicNode } from '@/services/dashboardPersistence';
+import { saveDashboardState, loadDashboardState, restoreOpenTabs, validateMosaicNode, clearDashboardState } from '@/services/dashboardPersistence';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
 import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
 import StatusToasts from '@/components/dashboard/StatusToasts';
@@ -86,6 +87,7 @@ function DashboardContent() {
     const dispatch = useAppDispatch();
     const [docs, setDocs] = useState<DocItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
+    const [isAdmin, setIsAdmin] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
     const reduceMotion = useReducedMotion();
@@ -107,6 +109,32 @@ function DashboardContent() {
                 : 'https://hub.humanizar-dev.cloud');
         initialize(nexusUrl);
     }, [initialize, user]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadRole = async () => {
+            if (!user) {
+                setIsAdmin(false);
+                return;
+            }
+            try {
+                const data = await fetchCurrentUserApi();
+                if (cancelled) return;
+                const role = typeof data.role === 'string' ? data.role.toLowerCase().trim() : '';
+                setIsAdmin(role === 'admin' || role === 'superadmin');
+            } catch (error) {
+                if (!cancelled) {
+                    setIsAdmin(false);
+                }
+            }
+        };
+
+        loadRole();
+        return () => {
+            cancelled = true;
+        };
+    }, [user]);
 
     const workspaces = useAppSelector(state => state.dashboard.workspaces);
     const invites = useAppSelector(state => state.dashboard.invites);
@@ -1276,8 +1304,9 @@ function DashboardContent() {
             await showDialog({ type: 'info', title: 'No se puede eliminar', message: 'El espacio personal no se puede borrar.' });
             return;
         }
-        if (workspace.ownerId && workspace.ownerId !== user.uid) {
-            await showDialog({ type: 'error', title: 'Sin permisos', message: 'Solo el administrador puede eliminar este espacio.' });
+        const isOwner = !workspace.ownerId || workspace.ownerId === user.uid;
+        if (!isOwner && !isAdmin) {
+            await showDialog({ type: 'error', title: 'Sin permisos', message: 'Solo el administrador o el propietario pueden eliminar este espacio.' });
             return;
         }
 
@@ -1285,7 +1314,7 @@ function DashboardContent() {
         const confirmResult = await showDialog({
             type: 'input',
             title: 'Eliminar espacio de trabajo',
-            message: `Escribe "${workspace.name}" para confirmar. Esta acción eliminará documentos y archivos asociados.`,
+            message: `Escribe "${workspace.name}" para confirmar. Esta acción eliminará documentos, archivos, tablero, miembros e invitaciones asociadas.`,
             placeholder: workspace.name,
             confirmLabel: 'Eliminar',
             cancelLabel: 'Cancelar',
@@ -1301,6 +1330,29 @@ function DashboardContent() {
         try {
             setDeletingWorkspaceId(workspace.id);
             await deleteWorkspaceApi({ workspaceId: workspace.id, ownerId: user.uid });
+            clearDashboardState(workspace.id);
+            setClosedFilesTabByWorkspace(prev => {
+                if (!prev[workspace.id]) return prev;
+                const next = { ...prev };
+                delete next[workspace.id];
+                return next;
+            });
+            if (currentWorkspace?.id === workspace.id) {
+                const personalSpace: Workspace = {
+                    id: PERSONAL_WORKSPACE_ID,
+                    name: 'Espacio Personal',
+                    ownerId: user.uid,
+                    members: [user.uid],
+                    type: 'personal'
+                };
+                setCurrentWorkspace(personalSpace);
+                setDocs([]);
+                setFolders([]);
+                setOpenTabs([]);
+                setMosaicNode(null);
+                setSelectedDocId(null);
+                setActiveFolderSafe(ROOT_FOLDER_PATH);
+            }
             await fetchWorkspaces();
             setShowMembersModal(false);
             await showDialog({ type: 'info', title: 'Espacio eliminado', message: workspace.name });
@@ -1763,6 +1815,7 @@ function DashboardContent() {
                         user={user}
                         deletingWorkspaceId={deletingWorkspaceId}
                         personalWorkspaceId={PERSONAL_WORKSPACE_ID}
+                        isAdmin={isAdmin}
                         isBoardOpen={isBoardOpen}
                         onOpenBoard={openBoard}
                         onAcceptInvite={acceptInvite}
