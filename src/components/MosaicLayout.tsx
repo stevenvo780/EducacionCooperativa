@@ -124,7 +124,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     try {
         const leaves = getLeaves(value);
         const validLeaves = leaves.filter(id => tabById.has(id) || docById.has(id));
-        
         if (validLeaves.length !== leaves.length) {
              if (validLeaves.length === 0) {
                  onChange(null);
@@ -134,7 +133,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         }
     } catch (e) {
         // Fallback or ignore if tree calc fails
-        console.error("Mosaic cleanup error", e);
+        console.error('Mosaic cleanup error', e);
     }
   }, [value, tabById, docById, onChange]);
 
