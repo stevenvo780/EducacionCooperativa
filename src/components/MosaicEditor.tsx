@@ -26,7 +26,7 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
-import { authFetch, withAuthToken } from '@/services/apiClient';
+import { authFetch, withAuthToken, getAuthToken } from '@/services/apiClient';
 
 // Helper function to highlight text in DOM nodes
 const highlightTextInNode = (node: Node, searchTerm: string, highlights: HTMLElement[]): void => {
@@ -326,19 +326,19 @@ export default function MosaicEditor({
     const init = async () => {
         const token = await getAuthToken();
         if (cancelled) return;
-        
+
         try {
             const res = await fetch(`/api/documents/${roomId}/stream`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
                 signal: controller.signal
             });
-            
+
             if (!res.ok) throw new Error('Stream connection failed');
             if (!res.body) throw new Error('No body');
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
-            
+
             while (!cancelled) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -366,7 +366,7 @@ export default function MosaicEditor({
     };
 
     init();
-    
+
     return () => {
         cancelled = true;
         controller.abort();

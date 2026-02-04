@@ -1,6 +1,6 @@
 import { auth as getAuth } from '@/lib/firebase';
 
-const getAuthToken = async () => {
+export const getAuthToken = async () => {
   if (typeof window === 'undefined') return null;
 
   try {
