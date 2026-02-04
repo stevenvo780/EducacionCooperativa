@@ -57,7 +57,6 @@ import DialogModal from '@/components/dashboard/DialogModal';
 import DragOverlay from '@/components/dashboard/DragOverlay';
 import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
-import TabsBar from '@/components/dashboard/TabsBar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -882,11 +881,6 @@ function DashboardContent() {
         });
         setShowMobileSidebar(false);
         setSelectedDocId(doc.id);
-    };
-
-    const closeTab = (docId: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        closeTabById(docId);
     };
 
     const showDialog = useCallback((config: DialogConfig) => {
@@ -1896,14 +1890,14 @@ function DashboardContent() {
                 )}
 
                 {isZenMode && (
-                    <div className="absolute top-2 right-2 z-50">
+                    <div className="absolute bottom-3 right-3 z-50">
                         <button
                             onClick={handleToggleZenMode}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-surface-800/90 border border-mandy-500/40 rounded-full text-xs text-mandy-200 hover:text-white hover:border-mandy-500/70 transition shadow-xl shadow-black/30 backdrop-blur"
+                            className="flex items-center justify-center w-10 h-10 bg-surface-800/90 border border-mandy-500/40 rounded-full text-mandy-200 hover:text-white hover:border-mandy-500/70 transition shadow-xl shadow-black/30 backdrop-blur"
                             title="Salir de modo Zen"
+                            aria-label="Salir de modo Zen"
                         >
                             <Minimize2 className="w-4 h-4" />
-                            <span className="hidden sm:inline">Salir de Zen</span>
                         </button>
                     </div>
                 )}
@@ -1961,19 +1955,6 @@ function DashboardContent() {
                     />
 
                     <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
-                        <TabsBar
-                            openTabs={openTabs}
-                            selectedDocId={selectedDocId}
-                            onSelectTab={(tab) => {
-                                setSelectedDocId(tab.id);
-                                if (tab.type === 'terminal' && tab.sessionId) {
-                                    selectSession(tab.sessionId);
-                                }
-                            }}
-                            onCloseTab={closeTab}
-                            getIcon={getIcon}
-                        />
-
                         {mosaicNode ? (
                             <div className="flex-1 min-h-0 relative">
                                 <MosaicLayout
