@@ -31,6 +31,14 @@ export interface DocChangeEvent {
   data?: { name?: string; parentId?: string | null };
 }
 
+export interface WorkspaceSession {
+  id: string;
+  workspaceId: string;
+  workspaceName?: string;
+  workspaceType?: string;
+  ownerUid?: string;
+}
+
 export class TerminalController {
   private terminals: Map<string, TerminalInstance> = new Map();
   public socket: Socket | null = null;
@@ -42,6 +50,7 @@ export class TerminalController {
   private subscribedWorkspaces: Set<string> = new Set();
   private onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void;
   private onDocChange?: (event: DocChangeEvent) => void;
+  private onWorkspaceSessionsChange?: (data: { workspaceId: string, sessions: WorkspaceSession[] }) => void;
 
   public get term(): any {
     if (this.activeSessionId) {
@@ -208,6 +217,10 @@ export class TerminalController {
     return true;
   }
 
+  public setWorkspaceSessionsHandler(handler: (data: { workspaceId: string, sessions: WorkspaceSession[] }) => void) {
+    this.onWorkspaceSessionsChange = handler;
+  }
+
   public connect(
     token: string,
     uid: string,
@@ -302,6 +315,10 @@ export class TerminalController {
     this.socket.on('doc-change', (event: DocChangeEvent) => {
       console.log(`[TerminalController] doc-change: ${event.action} ${event.docId} in ${event.workspaceId}`);
       this.onDocChange?.(event);
+    });
+
+    this.socket.on('workspace-sessions', (data: { workspaceId: string, sessions: WorkspaceSession[] }) => {
+      this.onWorkspaceSessionsChange?.(data);
     });
 
     this.socket.connect();

@@ -407,6 +407,25 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 handleSessionCreated
             );
 
+            controller.setWorkspaceSessionsHandler(({ workspaceId, sessions: remoteSessions }) => {
+                setSessions(prev => {
+                    const otherWorkspaceSessions = prev.filter(s => s.workspaceId !== workspaceId);
+                    
+                    const newSessions = remoteSessions.map(rs => {
+                        const existing = prev.find(p => p.id === rs.id);
+                        return {
+                            id: rs.id,
+                            workspaceId: rs.workspaceId,
+                            workspaceType: (rs.workspaceType as 'personal' | 'shared') || 'personal',
+                            workspaceName: rs.workspaceName,
+                            name: existing?.name || `Terminal ${rs.id.slice(0, 4)}`
+                        };
+                    });
+
+                    return [...otherWorkspaceSessions, ...newSessions];
+                });
+            });
+
             const originalStartSession = controller.startSession.bind(controller);
             controller.startSession = (opts: { workspaceId: string; workspaceName?: string; workspaceType: 'personal' | 'shared' }) => {
                 pendingSessionMeta = { workspaceId: opts.workspaceId, workspaceType: opts.workspaceType, workspaceName: opts.workspaceName };
