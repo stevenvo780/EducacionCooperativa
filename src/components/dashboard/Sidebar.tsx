@@ -77,6 +77,7 @@ interface SidebarProps {
   createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
   selectSession: (sessionId: string) => void;
   destroySession: (sessionId: string) => void;
+  onRenameSession: (session: TerminalSession) => void;
   openTerminal: (session?: { id: string; name: string }) => void;
   openTabs: DocItem[];
   closeTabById: (tabId: string) => void;
@@ -123,6 +124,7 @@ const Sidebar = ({
   createSession,
   selectSession,
   destroySession,
+  onRenameSession,
   openTerminal,
   openTabs,
   closeTabById,
@@ -495,6 +497,7 @@ const Sidebar = ({
             createSession={createSession}
             selectSession={selectSession}
             destroySession={destroySession}
+            onRenameSession={onRenameSession}
             openTerminal={openTerminal}
             openTabs={openTabs}
             closeTabById={closeTabById}

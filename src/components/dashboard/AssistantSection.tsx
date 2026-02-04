@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import { AlertCircle, Plus, Settings, Terminal as TerminalIcon, X, Loader2 } from 'lucide-react';
+import { AlertCircle, Plus, Settings, Terminal as TerminalIcon, X, Loader2, Pencil } from 'lucide-react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { WorkerStatus } from '@/lib/TerminalController';
@@ -18,6 +18,7 @@ interface AssistantSectionProps {
   createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
   selectSession: (sessionId: string) => void;
   destroySession: (sessionId: string) => void;
+  onRenameSession: (session: TerminalSession) => void;
   openTerminal: (session?: { id: string; name: string }) => void;
   openTabs: DocItem[];
   closeTabById: (tabId: string) => void;
@@ -34,6 +35,7 @@ const AssistantSection = memo(function AssistantSection({
   createSession,
   selectSession,
   destroySession,
+  onRenameSession,
   openTerminal,
   openTabs,
   closeTabById
@@ -130,6 +132,16 @@ const AssistantSection = memo(function AssistantSection({
               <TerminalIcon className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate flex-1 text-left">{sess.name || 'Terminal'}</span>
               {activeSessionId === sess.id && <div className="w-1.5 h-1.5 rounded-full bg-mandy-500 shrink-0" />}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRenameSession(sess);
+              }}
+              className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-600/20 hover:text-surface-200 transition-[opacity,background-color,color] duration-150"
+              title="Renombrar sesion"
+            >
+              <Pencil className="w-3 h-3" />
             </button>
             <button
               onClick={(e) => {
