@@ -266,6 +266,13 @@ const Sidebar = ({
 
   const isSearchMode = sidebarSearchQuery.trim().length > 0;
 
+  // Filtrar docs localmente para evitar desfase con useDeferredValue
+  const actualFilteredDocs = useMemo(() => {
+    const query = sidebarSearchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return docs.filter(d => d.name.toLowerCase().includes(query));
+  }, [docs, sidebarSearchQuery]);
+
   const treeItems = useMemo<SidebarListItem[]>(() => {
     const items: SidebarListItem[] = [];
 
@@ -298,10 +305,10 @@ const Sidebar = ({
 
   const listItems = useMemo<SidebarListItem[]>(() => {
     if (isSearchMode) {
-      return sidebarFilteredDocs.map(doc => ({ kind: 'search', doc }));
+      return actualFilteredDocs.map(doc => ({ kind: 'search', doc }));
     }
     return treeItems;
-  }, [isSearchMode, sidebarFilteredDocs, treeItems]);
+  }, [isSearchMode, actualFilteredDocs, treeItems]);
 
   const renderSidebarRow = ({ index, style, ariaAttributes }: RowComponentProps) => {
     const item = listItems[index];
@@ -454,9 +461,6 @@ const Sidebar = ({
         aria-hidden={isCollapsedView}
       >
         <div className="p-3 border-b border-surface-600/50 flex justify-between items-center bg-surface-700/30 gap-2">
-          <div className="text-xs font-bold text-surface-500 uppercase tracking-wider pl-2">
-            Navegador
-          </div>
           <div className="flex gap-0.5">
             <button onClick={() => openFilesTab()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Abrir Explorador">
               <Folder className="w-4 h-4" />
@@ -568,7 +572,7 @@ const Sidebar = ({
                 </div>
               )}
 
-              {isSearchMode && sidebarFilteredDocs.length === 0 && (
+              {isSearchMode && actualFilteredDocs.length === 0 && (
                 <div className="px-3 py-2 text-center text-xs text-surface-500">
                   Sin resultados
                 </div>
@@ -595,7 +599,7 @@ const Sidebar = ({
         </div>
 
         <div className="p-3 border-t border-surface-600/50 bg-surface-800 text-xs text-surface-500 flex justify-between items-center">
-          <span>{sidebarSearchQuery ? `${sidebarFilteredDocs.length} de ${docs.length}` : `${docs.length} archivos`}</span>
+          <span>{sidebarSearchQuery ? `${actualFilteredDocs.length} de ${docs.length}` : `${docs.length} archivos`}</span>
           <div className="flex gap-2">
             <Settings className="w-4 h-4 hover:text-surface-300 cursor-pointer" />
           </div>

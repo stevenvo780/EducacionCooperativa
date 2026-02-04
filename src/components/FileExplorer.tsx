@@ -261,14 +261,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const filteredChildFolders = useMemo(() => {
     if (!searchQuery.trim()) return activeChildFolders;
     const query = searchQuery.toLowerCase();
-    return activeChildFolders.filter(folder => folder.name.toLowerCase().includes(query));
-  }, [activeChildFolders, searchQuery]);
+    // Cuando hay búsqueda, buscar en TODAS las carpetas
+    return effectiveFolders.filter(folder => folder.name.toLowerCase().includes(query));
+  }, [activeChildFolders, effectiveFolders, searchQuery]);
 
   const filteredFolderDocs = useMemo(() => {
     if (!searchQuery.trim()) return activeFolderDocs;
     const query = searchQuery.toLowerCase();
-    return activeFolderDocs.filter(doc => doc.name.toLowerCase().includes(query));
-  }, [activeFolderDocs, searchQuery]);
+    // Cuando hay búsqueda, buscar en TODOS los documentos
+    return normalizedDocs.filter(doc => doc.name.toLowerCase().includes(query));
+  }, [activeFolderDocs, normalizedDocs, searchQuery]);
 
   const contentItems = useMemo<ContentItem[]>(() => {
     const items: ContentItem[] = [];

@@ -1,0 +1,124 @@
+'use client';
+
+import { useEffect, useRef, useCallback } from 'react';
+import { rtdb } from '@/lib/firebase';
+import { ref, onChildAdded, off, push, serverTimestamp } from 'firebase/database';
+
+export interface SyncEvent {
+  type: 'created' | 'updated' | 'deleted' | 'refresh';
+  path: string;
+  folder?: string;
+  docId?: string;
+  timestamp: number;
+  source: 'worker' | 'frontend';
+}
+
+interface UseSyncEventsOptions {
+  workspaceId: string | null;
+  userId: string | null;
+  workspaceType: 'personal' | 'shared';
+  onEvent?: (event: SyncEvent) => void;
+  enabled?: boolean;
+}
+
+/**
+ * Hook para escuchar eventos de sincronización en tiempo real desde RTDB
+ */
+export function useSyncEvents({
+  workspaceId,
+  userId,
+  workspaceType,
+  onEvent,
+  enabled = true
+}: UseSyncEventsOptions) {
+  const startTimeRef = useRef<number>(Date.now());
+  const listenerRef = useRef<(() => void) | null>(null);
+
+  // Construir path de RTDB según el tipo de workspace
+  const getSyncPath = useCallback(() => {
+    if (workspaceType === 'personal' && userId) {
+      return `sync-events/personal_${userId}`;
+    }
+    if (workspaceId) {
+      return `sync-events/${workspaceId}`;
+    }
+    return null;
+  }, [workspaceId, userId, workspaceType]);
+
+  // Publicar evento desde el frontend
+  const publishEvent = useCallback(async (
+    type: SyncEvent['type'],
+    path: string,
+    docId?: string,
+    folder?: string
+  ) => {
+    const syncPath = getSyncPath();
+    if (!syncPath) return;
+
+    try {
+      const database = rtdb();
+      const eventsRef = ref(database, syncPath);
+      await push(eventsRef, {
+        type,
+        path,
+        folder: folder || 'No estructurado',
+        docId: docId || null,
+        timestamp: Date.now(),
+        source: 'frontend'
+      });
+    } catch (err) {
+      console.warn('Error publicando evento a RTDB:', err);
+    }
+  }, [getSyncPath]);
+
+  // Solicitar refresh al worker
+  const requestRefresh = useCallback(() => {
+    publishEvent('refresh', '', undefined, undefined);
+  }, [publishEvent]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const syncPath = getSyncPath();
+    if (!syncPath) return;
+
+    const database = rtdb();
+    const eventsRef = ref(database, syncPath);
+    const startTime = startTimeRef.current;
+
+    // Listener para nuevos eventos
+    const handleChildAdded = onChildAdded(eventsRef, (snapshot) => {
+      const event = snapshot.val() as SyncEvent | null;
+      if (!event) return;
+
+      // Ignorar eventos anteriores al inicio del listener
+      if (event.timestamp < startTime) return;
+
+      // Ignorar eventos propios del frontend
+      if (event.source === 'frontend') return;
+
+      // Notificar al callback
+      if (onEvent) {
+        onEvent(event);
+      }
+    });
+
+    listenerRef.current = () => {
+      off(eventsRef, 'child_added', handleChildAdded as any);
+    };
+
+    return () => {
+      if (listenerRef.current) {
+        listenerRef.current();
+        listenerRef.current = null;
+      }
+    };
+  }, [enabled, getSyncPath, onEvent]);
+
+  return {
+    publishEvent,
+    requestRefresh
+  };
+}
+
+export default useSyncEvents;

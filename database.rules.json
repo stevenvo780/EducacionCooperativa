@@ -1,0 +1,19 @@
+{
+  "rules": {
+    "sync-events": {
+      "$workspaceId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$eventId": {
+          ".validate": "newData.hasChildren(['type', 'path', 'timestamp'])"
+        }
+      }
+    },
+    "presence": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $userId"
+      }
+    }
+  }
+}
