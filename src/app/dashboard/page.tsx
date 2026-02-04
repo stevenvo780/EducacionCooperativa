@@ -179,12 +179,17 @@ function DashboardContent() {
     }, [dispatch]);
     const currentWorkspaceId = currentWorkspace?.id;
     const requestedWorkspaceId = (searchParams?.get('workspaceId') || searchParams?.get('workspace') || '').trim() || null;
+    const urlSyncInProgressRef = useRef(false);
+    const lastSubscribedWorkspaceRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!user || !currentWorkspace) return;
         const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
             ? `personal:${user.uid}`
             : currentWorkspace.id;
+        // Evitar re-suscripción si ya estamos suscritos al mismo workspace
+        if (lastSubscribedWorkspaceRef.current === workerToken) return;
+        lastSubscribedWorkspaceRef.current = workerToken;
         subscribeToWorkspace(workerToken);
     }, [user, currentWorkspace, subscribeToWorkspace]);
 
@@ -317,6 +322,8 @@ function DashboardContent() {
     }, [user, userEmail, requestedWorkspaceId, setWorkspaces, setInvites, setCurrentWorkspace]);
 
     useEffect(() => {
+        // Si la URL se está actualizando internamente, no reaccionar
+        if (urlSyncInProgressRef.current) return;
         if (!requestedWorkspaceId || workspaces.length === 0) return;
         if (currentWorkspace?.id === requestedWorkspaceId) return;
         const match = workspaces.find(ws => ws.id === requestedWorkspaceId);
@@ -329,12 +336,18 @@ function DashboardContent() {
         if (!currentWorkspaceId) return;
         const currentParam = searchParams?.get('workspaceId') || '';
         if (currentParam === currentWorkspaceId) return;
+        // Marcar que estamos sincronizando la URL internamente
+        urlSyncInProgressRef.current = true;
         const params = new URLSearchParams(searchParams?.toString());
         params.set('workspaceId', currentWorkspaceId);
         params.delete('workspace');
         const query = params.toString();
         const nextUrl = query ? `/dashboard?${query}` : '/dashboard';
         router.replace(nextUrl, { scroll: false });
+        // Desbloquear después de un frame para permitir que el efecto anterior se estabilice
+        requestAnimationFrame(() => {
+            urlSyncInProgressRef.current = false;
+        });
     }, [currentWorkspaceId, searchParams, router]);
 
     const acceptInvite = async (ws: Workspace) => {
