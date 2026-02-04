@@ -23,6 +23,7 @@ interface TerminalContextType {
     createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
     selectSession: (sessionId: string) => void;
     destroySession: (sessionId: string) => void;
+    renameSession: (sessionId: string, name: string) => void;
     errorMessage: string | null;
     workspaceWorkerStatuses: Map<string, WorkerStatus>;
     getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
@@ -461,6 +462,14 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         controllerRef.current?.killSession(sessionId);
     }, []);
 
+    const renameSession = useCallback((sessionId: string, name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        setSessions(prev => prev.map(session => (
+            session.id === sessionId ? { ...session, name: trimmed } : session
+        )));
+    }, []);
+
     const subscribeToWorkspace = useCallback((workspaceId: string) => {
         controllerRef.current?.subscribeToWorkspace(workspaceId);
         controllerRef.current?.checkWorkerStatus(workspaceId);
@@ -489,6 +498,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             createSession,
             selectSession,
             destroySession,
+            renameSession,
             errorMessage,
             workspaceWorkerStatuses,
             getWorkerStatusForWorkspace,
