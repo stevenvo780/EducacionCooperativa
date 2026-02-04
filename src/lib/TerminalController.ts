@@ -300,6 +300,10 @@ export class TerminalController {
       onSessionEnded?.(payload);
     });
 
+    this.socket.on('workspace-sessions', (data: { workspaceId: string, sessions: WorkspaceSession[] }) => {
+      this.onWorkspaceSessionsChange?.(data);
+    });
+
     this.socket.on('output', (data: { sessionId: string; data: string }) => {
       const instance = this.terminals.get(data.sessionId);
       if (instance && data.data) {
