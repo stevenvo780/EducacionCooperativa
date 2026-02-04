@@ -24,13 +24,13 @@ service firebase.storage {
     function isAllowedTextContentType() {
       return request.resource != null &&
              request.resource.contentType != null && (
-               request.resource.contentType.matches('^text/.*') ||
-               request.resource.contentType.matches('^application/(json|xml|yaml|x-yaml|toml)$')
+               request.resource.contentType.matches('text/.*') ||
+               request.resource.contentType.matches('application/(json|xml|yaml|x-yaml|toml)')
              );
     }
 
     function isBlockedScriptExtension(path) {
-      return path.matches('.*\\.(js|jsx|ts|tsx|mjs|cjs|sh|bash|zsh|ps1|bat|cmd|py|rb|php|pl|go|java|kt|cs|swift|rs|scala|lua|r|sql)$');
+      return path.matches('.*[.](js|jsx|ts|tsx|mjs|cjs|sh|bash|zsh|ps1|bat|cmd|py|rb|php|pl|go|java|kt|cs|swift|rs|scala|lua|r|sql)');
     }
 
     function isAllowedTextFile(path) {
@@ -50,9 +50,9 @@ service firebase.storage {
       // Members can access workspace files
       // Note: We can't check Firestore from Storage rules directly,
       // so we rely on the sync-agent having the correct workspaceId
-      allow read: if isWorkspaceAuthorized(workspaceId);
-      allow create, update: if isWorkspaceAuthorized(workspaceId) && isAllowedTextFile(filePath);
-      allow delete: if isWorkspaceAuthorized(workspaceId);
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isAllowedTextContentType();
+      allow delete: if isAuthenticated();
     }
   }
 }
