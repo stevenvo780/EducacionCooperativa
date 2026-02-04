@@ -135,6 +135,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         // Fallback or ignore if tree calc fails
         console.error('Mosaic cleanup error', e);
     }
+    // Cleanup ensures grid integrity
   }, [value, tabById, docById, onChange]);
 
   const handleSearchChange = useCallback((docId: string, value: string) => {
