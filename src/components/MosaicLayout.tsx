@@ -107,7 +107,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   currentUserId,
   nexusUrl
 }) => {
-  // Search state per document
   const [docSearchTerms, setDocSearchTerms] = useState<Record<string, string>>({});
   const [docSearchStates, setDocSearchStates] = useState<Record<string, SearchState>>({});
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
@@ -118,7 +117,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const tabById = useMemo(() => new Map(openTabs.map(tab => [tab.id, tab])), [openTabs]);
   const docById = useMemo(() => new Map(docs.map(doc => [doc.id, doc])), [docs]);
 
-  // Clean up nodes that exist in mosaic tree but not in openTabs
   useEffect(() => {
     if (!value) return;
     try {
@@ -132,10 +130,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
              }
         }
     } catch (e) {
-        // Fallback or ignore if tree calc fails
         console.error('Mosaic cleanup error', e);
     }
-    // Cleanup ensures grid integrity
   }, [value, tabById, docById, onChange]);
 
   const handleSearchChange = useCallback((docId: string, value: string) => {
@@ -147,7 +143,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, []);
 
   const getSearchNavRef = useCallback((docId: string) => {
-    // Create a ref-like object for the specific docId
     const refObj = {
       get current() {
         return searchNavRefs.current[docId] || null;
@@ -168,7 +163,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       <div className="flex items-center gap-1">
         {isTextDoc && (
           <>
-            {/* Search input with navigation */}
             <div className="relative flex items-center gap-1">
               <div className="relative flex items-center">
                 <Search className="absolute left-1.5 w-3 h-3 text-surface-500 pointer-events-none" />
@@ -189,7 +183,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                   </button>
                 )}
               </div>
-              {/* Match count and navigation */}
               {searchTerm && searchState.totalMatches > 0 && (
                 <>
                   <span className="text-xs text-surface-400 min-w-[3rem] text-center">
