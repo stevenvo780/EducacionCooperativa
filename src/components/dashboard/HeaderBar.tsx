@@ -63,7 +63,7 @@ const HeaderBar = ({
   onLogout
 }: HeaderBarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
-  
+
   return (
     <header className="h-14 bg-surface-800 border-b border-surface-600/50 flex items-center justify-between px-4 shrink-0 z-50 relative">
       <div className="flex items-center gap-4">
@@ -258,7 +258,7 @@ const HeaderBar = ({
         >
           <KanbanSquare className="w-4 h-4" />
         </button>
-        
+
         {/* User menu */}
         <div className="relative">
           <button
@@ -268,7 +268,7 @@ const HeaderBar = ({
           >
             <User className="w-5 h-5" />
           </button>
-          
+
           {showUserMenu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowUserMenu(false)} />
