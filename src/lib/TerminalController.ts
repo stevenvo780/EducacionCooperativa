@@ -315,7 +315,6 @@ export class TerminalController {
       console.warn('[TerminalController] Error:', data.message);
     });
 
-    // Listener para cambios en documentos (sync en tiempo real)
     this.socket.on('doc-change', (event: DocChangeEvent) => {
       console.log(`[TerminalController] doc-change: ${event.action} ${event.docId} in ${event.workspaceId}`);
       this.onDocChange?.(event);

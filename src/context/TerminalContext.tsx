@@ -281,7 +281,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             }
             const actualToken = await currentUser.getIdToken();
 
-            // Try to restore session
             const savedSessionId = loadPersistedActiveSession(currentUser.uid);
             savedActiveSessionIdRef.current = savedSessionId;
             if (savedSessionId) {
@@ -419,11 +418,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                         setStatus('online');
                     }
                 },
-                // Callback para cambios de documentos (sync en tiempo real)
                 (docEvent: DocChangeEvent) => {
                     debugLog('[TerminalContext] doc-change received:', docEvent);
                     setLastDocChange(docEvent);
-                    // Notificar a todos los callbacks registrados
                     docChangeCallbacksRef.current.forEach(cb => cb(docEvent));
                 },
                 handleSessionCreated
