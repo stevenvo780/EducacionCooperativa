@@ -7,7 +7,7 @@ const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT ? process.env.FIR
 let serviceAccount;
 
 try {
-  if (serviceAccountStr) {
+  if (serviceAccountStr && serviceAccountStr !== '{}' && serviceAccountStr.includes('private_key')) {
     serviceAccount = JSON.parse(serviceAccountStr);
   }
 } catch (e) {
