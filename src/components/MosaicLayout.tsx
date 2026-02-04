@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useCallback, useMemo, useState, useRef } from 'react';
-import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath } from 'react-mosaic-component';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
 import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -117,6 +117,26 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [docs]);
   const tabById = useMemo(() => new Map(openTabs.map(tab => [tab.id, tab])), [openTabs]);
   const docById = useMemo(() => new Map(docs.map(doc => [doc.id, doc])), [docs]);
+
+  // Clean up nodes that exist in mosaic tree but not in openTabs
+  useEffect(() => {
+    if (!value) return;
+    try {
+        const leaves = getLeaves(value);
+        const validLeaves = leaves.filter(id => tabById.has(id) || docById.has(id));
+        
+        if (validLeaves.length !== leaves.length) {
+             if (validLeaves.length === 0) {
+                 onChange(null);
+             } else {
+                 onChange(createBalancedTreeFromLeaves(validLeaves));
+             }
+        }
+    } catch (e) {
+        // Fallback or ignore if tree calc fails
+        console.error("Mosaic cleanup error", e);
+    }
+  }, [value, tabById, docById, onChange]);
 
   const handleSearchChange = useCallback((docId: string, value: string) => {
     setDocSearchTerms(prev => ({ ...prev, [docId]: value }));
