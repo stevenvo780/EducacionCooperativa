@@ -38,6 +38,7 @@ ENV/
 
 # Firebase
 serviceAccountKey.json
+.firebaserc
 
 # OS
 .DS_Store
