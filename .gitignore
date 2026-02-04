@@ -80,3 +80,4 @@ crendenciales-prod.md
 # Environment files
 .env*
 archivos-pruebas
+desplieges-prod/*
