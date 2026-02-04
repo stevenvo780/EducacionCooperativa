@@ -1,0 +1,110 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper: check if user is a sync-agent via custom claims
+    function isSyncAgent() {
+      return request.auth != null && 
+             request.auth.token.role == 'sync-agent';
+    }
+    
+    // Helper: get the workspaceId from sync-agent claims
+    function getSyncAgentWorkspaceId() {
+      return request.auth.token.workspaceId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Workspaces collection
+    match /workspaces/{workspaceId} {
+      allow read: if request.auth != null && 
+                     request.auth.uid in resource.data.members;
+      allow read: if isSyncAgent() && getSyncAgentWorkspaceId() == workspaceId;
+      allow write: if request.auth != null && 
+                      resource.data.ownerId == request.auth.uid;
+      allow create: if request.auth != null;
+    }
+    
+    // Documents collection
+    match /documents/{docId} {
+      // Helper to check if this is a personal workspace (workspaceId starts with "personal:")
+      function isPersonalWorkspace(wsId) {
+        return wsId != null && wsId.matches('^personal:.*');
+      }
+      
+      // Personal documents: owner access (read/update/delete existing)
+      allow read, update, delete: if request.auth != null && 
+                            resource.data.ownerId == request.auth.uid;
+      
+      // Personal documents: create new documents where user is the owner
+      allow create: if request.auth != null && 
+                       request.resource.data.ownerId == request.auth.uid;
+      
+      // Shared workspace documents: member access via workspace lookup (only for real shared workspaces)
+      allow read, update, delete: if request.auth != null && 
+                            resource.data.workspaceId != null &&
+                            !isPersonalWorkspace(resource.data.workspaceId) &&
+                            exists(/databases/$(database)/documents/workspaces/$(resource.data.workspaceId)) &&
+                            request.auth.uid in get(/databases/$(database)/documents/workspaces/$(resource.data.workspaceId)).data.members;
+      
+      // Shared workspace documents: create for members
+      allow create: if request.auth != null && 
+                       request.resource.data.workspaceId != null &&
+                       !isPersonalWorkspace(request.resource.data.workspaceId) &&
+                       exists(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId)) &&
+                       request.auth.uid in get(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId)).data.members;
+      
+      // Sync-agent: allow list/read if query constrains to their workspaceId
+      allow list: if isSyncAgent();
+      
+      // Sync-agent: allow read/write on individual docs in their workspace
+      allow read, write: if isSyncAgent() && 
+                            resource.data.workspaceId == getSyncAgentWorkspaceId();
+      
+      // Sync-agent: allow create for their workspace
+      allow create: if isSyncAgent() && 
+                       request.resource.data.workspaceId == getSyncAgentWorkspaceId();
+    }
+    
+    // Folders collection
+    match /folders/{folderId} {
+      // Helper to check if this is a personal workspace
+      function isPersonalWorkspaceFolder(wsId) {
+        return wsId != null && wsId.matches('^personal:.*');
+      }
+      
+      // Personal folders: owner access (read/update/delete existing)
+      allow read, update, delete: if request.auth != null && 
+                            resource.data.ownerId == request.auth.uid;
+      
+      // Personal folders: create new folders where user is the owner
+      allow create: if request.auth != null && 
+                       request.resource.data.ownerId == request.auth.uid;
+      
+      // Shared workspace folders: member access
+      allow read, update, delete: if request.auth != null && 
+                            resource.data.workspaceId != null &&
+                            !isPersonalWorkspaceFolder(resource.data.workspaceId) &&
+                            exists(/databases/$(database)/documents/workspaces/$(resource.data.workspaceId)) &&
+                            request.auth.uid in get(/databases/$(database)/documents/workspaces/$(resource.data.workspaceId)).data.members;
+      
+      // Shared workspace folders: create for members
+      allow create: if request.auth != null && 
+                       request.resource.data.workspaceId != null &&
+                       !isPersonalWorkspaceFolder(request.resource.data.workspaceId) &&
+                       exists(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId)) &&
+                       request.auth.uid in get(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId)).data.members;
+      
+      // Sync-agent access
+      allow list: if isSyncAgent();
+      allow read, update, delete: if isSyncAgent() && 
+                            resource.data.workspaceId == getSyncAgentWorkspaceId();
+      allow create: if isSyncAgent() && 
+                       request.resource.data.workspaceId == getSyncAgentWorkspaceId();
+    }
+  }
+}
