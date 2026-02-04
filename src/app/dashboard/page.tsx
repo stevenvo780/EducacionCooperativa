@@ -189,7 +189,6 @@ function DashboardContent() {
         const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
             ? `personal:${user.uid}`
             : currentWorkspace.id;
-        // Evitar re-suscripción si ya estamos suscritos al mismo workspace
         if (lastSubscribedWorkspaceRef.current === workerToken) return;
         lastSubscribedWorkspaceRef.current = workerToken;
         subscribeToWorkspace(workerToken);
@@ -310,7 +309,6 @@ function DashboardContent() {
         setWorkspaces(allWorkspaces);
         setInvites(fetchedInvites);
         const previousWorkspace = currentWorkspaceRef.current;
-        // Usar ref para evitar dependencia de requestedWorkspaceId
         const reqWorkspaceId = requestedWorkspaceIdRef.current;
         const resolvedWorkspace = (() => {
             if (reqWorkspaceId) {
@@ -322,13 +320,11 @@ function DashboardContent() {
             }
             return personalSpace;
         })();
-        // Solo actualizar si realmente cambió el workspace
         if (previousWorkspace?.id !== resolvedWorkspace.id) {
             setCurrentWorkspace(resolvedWorkspace);
         }
     }, [user, userEmail, setWorkspaces, setInvites, setCurrentWorkspace]);
 
-    // Efecto para sincronizar URL → Estado (navegación externa)
     useEffect(() => {
         if (urlSyncInProgressRef.current) return;
         if (!requestedWorkspaceId || workspaces.length === 0) return;
@@ -339,12 +335,9 @@ function DashboardContent() {
         }
     }, [requestedWorkspaceId, workspaces, currentWorkspace?.id, setCurrentWorkspace]);
 
-    // Efecto para sincronizar Estado → URL (cambio interno de workspace)
-    // Usamos un efecto separado y controlado para evitar loops
     const prevWorkspaceIdRef = useRef<string | null>(null);
     useEffect(() => {
         if (!currentWorkspaceId) return;
-        // Solo actualizar URL si el workspace realmente cambió desde la última vez
         if (prevWorkspaceIdRef.current === currentWorkspaceId) return;
         prevWorkspaceIdRef.current = currentWorkspaceId;
 
@@ -358,7 +351,6 @@ function DashboardContent() {
         const query = params.toString();
         const nextUrl = query ? `/dashboard?${query}` : '/dashboard';
         router.replace(nextUrl, { scroll: false });
-        // Desbloquear después de que Next.js procese el cambio
         setTimeout(() => {
             urlSyncInProgressRef.current = false;
         }, 100);
@@ -556,12 +548,10 @@ function DashboardContent() {
         return () => clearInterval(interval);
     }, [currentWorkspace, user, fetchDocs]);
 
-    // Escuchar cambios de documentos en tiempo real (sync desde workers)
     useEffect(() => {
         if (!currentWorkspace || !user || !onDocChangeCallback) return;
 
         const unsubscribe = onDocChangeCallback((event) => {
-            // Verificar que el evento es para el workspace actual
             const eventWorkspaceId = event.workspaceId;
             const currentWsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID
                 ? `personal:${user.uid}`
@@ -1064,7 +1054,6 @@ function DashboardContent() {
             return;
         }
 
-        // Calculate paths for folder rename
         let oldFullPath = '';
         let newFullPath = '';
         let childrenToUpdate: DocItem[] = [];
@@ -1079,7 +1068,6 @@ function DashboardContent() {
             });
         }
 
-        // Optimistic update
         setDocs(prev => prev.map(item => {
             if (item.id === doc.id) {
                 return { ...item, name: trimmed };
@@ -1117,7 +1105,7 @@ function DashboardContent() {
 
             await fetchDocs();
         } catch (error) {
-            await fetchDocs(); // Revert by fetching
+            await fetchDocs();
             await showDialog({
                 type: 'error',
                 title: 'No se pudo renombrar',
