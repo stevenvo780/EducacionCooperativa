@@ -126,7 +126,7 @@ const Terminal: React.FC<TerminalProps> = ({
       }
   };
 
-  const downloadPath = '/downloads/edu-worker_1.0.4_amd64.deb';
+  const downloadPath = '/downloads/edu-worker_1.0.5_amd64.deb';
   const downloadUrl = typeof window !== 'undefined' ? `${window.location.origin}${downloadPath}` : downloadPath;
 
   if (!user) return <div className="h-full flex items-center justify-center text-slate-500">Log in required</div>;
