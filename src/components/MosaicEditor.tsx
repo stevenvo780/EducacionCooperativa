@@ -320,49 +320,58 @@ export default function MosaicEditor({
 
   useEffect(() => {
     if (!roomId) return;
-    let source: EventSource | null = null;
+    const controller = new AbortController();
     let cancelled = false;
 
     const init = async () => {
-        const url = await withAuthToken(`/api/documents/${roomId}/stream`);
+        const token = await getAuthToken();
         if (cancelled) return;
-        source = new EventSource(url);
+        
+        try {
+            const res = await fetch(`/api/documents/${roomId}/stream`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                signal: controller.signal
+            });
+            
+            if (!res.ok) throw new Error('Stream connection failed');
+            if (!res.body) throw new Error('No body');
 
-        source.onmessage = (event) => {
-            try {
-                const payload = JSON.parse(event.data);
-                if (payload?.type === 'snapshot') {
-                    applyDocData(payload.data);
-                } else if (payload?.type === 'deleted') {
-                    resetDocState();
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            
+            while (!cancelled) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data?.type === 'snapshot') {
+                                applyDocData(data.data);
+                            } else if (data?.type === 'deleted') {
+                                resetDocState();
+                            }
+                        } catch (e) {}
+                    }
                 }
-            } catch (e) {
-                console.error('Error parsing live update:', e);
             }
-        };
-
-        source.onerror = () => {
-            source?.close();
-            setUsePolling(true);
-        };
+        } catch (e: any) {
+            if (e.name !== 'AbortError' && !cancelled) {
+                console.error('Stream error, falling back to polling:', e);
+                setUsePolling(true);
+            }
+        }
     };
 
     init();
-
+    
     return () => {
         cancelled = true;
-        source?.close();
+        controller.abort();
     };
-  }, [roomId, applyDocData, resetDocState]);
-
-  useEffect(() => {
-    if (!usePolling) return;
-    const interval = setInterval(() => {
-        if (typeof document !== 'undefined' && document.hidden) return;
-        loadDoc();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [usePolling, loadDoc]);
+  }, [roomId, loadDoc, applyDocData, resetDocState]);
 
   const handleContentChange = useCallback((val: string) => {
     setContent(val);
