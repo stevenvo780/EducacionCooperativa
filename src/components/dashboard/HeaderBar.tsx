@@ -20,6 +20,7 @@ interface HeaderBarProps {
   invites: Workspace[];
   workspaces: Workspace[];
   user: FirebaseUser | null;
+  isOnline: boolean;
   deletingWorkspaceId: string | null;
   personalWorkspaceId: string;
   isAdmin: boolean;
@@ -49,6 +50,7 @@ const HeaderBar = ({
   invites,
   workspaces,
   user,
+  isOnline,
   deletingWorkspaceId,
   personalWorkspaceId,
   isAdmin,
@@ -212,6 +214,17 @@ const HeaderBar = ({
       </div>
 
       <div className="flex items-center gap-2">
+        <div
+          className={`hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide border ${
+            isOnline
+              ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
+              : 'border-red-500/40 text-red-300 bg-red-500/10'
+          }`}
+          title={isOnline ? 'Conectado' : 'Sin conexión'}
+        >
+          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
+          <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
+        </div>
         <div className="hidden md:flex items-center gap-1">
           <button
             onClick={onToggleSidebarCollapse}

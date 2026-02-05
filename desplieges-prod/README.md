@@ -61,6 +61,28 @@ vercel --prod
 
 ---
 
+## Credenciales y Sync (Worker ↔ Storage)
+
+- Worker: `/etc/edu-worker/worker.env`
+  - `WORKER_SECRET` debe coincidir con el del Hub.
+  - `FIREBASE_CONFIG` debe ser JSON válido e incluir `projectId`, `storageBucket` y `databaseURL`.
+- Hub: `/etc/edu-hub/hub.env`
+  - Debe tener credenciales de Firebase Admin:
+    - `GOOGLE_APPLICATION_CREDENTIALS=/etc/edu-hub/serviceAccountKey.json` o
+    - `FIREBASE_SERVICE_ACCOUNT='{"type":"service_account",...}'`
+  - `FIREBASE_PROJECT_ID` debe corresponder al proyecto del Storage/RTDB.
+
+Verificación rápida:
+```bash
+# Hub debe emitir "Sent custom token" en logs
+ssh hub-prod 'sudo journalctl -u edu-hub -n 200 --no-pager | tail -n 50'
+
+# Worker debe mostrar "✅ Listener de RTDB activo"
+ssh worker-prod 'edu-worker-manager logs WORKSPACE_ID -f'
+```
+
+---
+
 ## Comandos Útiles
 
 ### Workers
@@ -68,8 +90,17 @@ vercel --prod
 # Estado de todos los workers
 ssh worker-prod 'edu-worker-manager status'
 
+# Listar IDs (para borrar/manipular)
+ssh worker-prod 'edu-worker-manager ids'
+
+# El status muestra WORKSPACE_ID para borrar o manipular
+ssh worker-prod 'sudo edu-worker-manager remove WORKSPACE_ID'
+
 # Actualizar todos (pull + restart)
 ssh worker-prod 'sudo edu-worker-manager update all'
+
+# Forzar resync (sin pull)
+ssh worker-prod 'sudo edu-worker-manager resync all'
 
 # Agregar workspace
 ssh worker-prod 'sudo edu-worker-manager add WORKSPACE_ID --name "Nombre"'
