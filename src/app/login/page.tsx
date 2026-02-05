@@ -188,6 +188,10 @@ export default function LoginPage() {
 
             <div className="p-8">
                 <div className="mb-6 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <span className="bg-gradient-mandy text-white p-2 rounded-lg text-lg font-bold">A</span>
+                      <span className="text-xl font-bold text-white">Agora</span>
+                    </div>
                     <h2 className="text-2xl font-bold text-white">
                         {isLogin ? 'Bienvenido de nuevo' : 'Crea tu cuenta'}
                     </h2>
