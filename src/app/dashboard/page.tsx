@@ -640,6 +640,8 @@ function DashboardContent() {
                 : currentWorkspace.id;
 
             if (eventWorkspaceId === currentWsId || eventWorkspaceId === currentWorkspace.id) {
+                // Actualizar timestamp para evitar polling redundante
+                lastSyncEventRef.current = Date.now();
                 fetchDocs();
             }
         });
