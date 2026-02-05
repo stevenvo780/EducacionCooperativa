@@ -2,6 +2,8 @@ import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { normalizeFolderPath } from '@/lib/folder-utils';
+import { buildStoragePath, buildStoragePrefix, ensureMarkdownFileName, sanitizeFileName, getStorageBaseName } from '@/lib/storage-path';
 
 const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: string) => {
     const workspaceId = typeof data?.workspaceId === 'string' ? data.workspaceId : null;
@@ -31,32 +33,99 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         if (!(await canAccessDoc(existingData as Record<string, unknown> | undefined, auth.uid))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
-        let storagePath = existingData?.storagePath;
+        const existingWorkspaceId = typeof existingData?.workspaceId === 'string' ? existingData.workspaceId : 'personal';
+        const existingOwnerId = typeof existingData?.ownerId === 'string' ? existingData.ownerId : auth.uid;
+        const existingFolder = typeof existingData?.folder === 'string' ? existingData.folder : undefined;
+        const existingStoragePath = typeof existingData?.storagePath === 'string' ? existingData.storagePath : undefined;
+        const isFileDoc = existingData?.type === 'file';
+
+        const normalizedFolder = typeof body.folder === 'string'
+            ? normalizeFolderPath(body.folder)
+            : normalizeFolderPath(existingFolder);
+        const nextName = typeof body.name === 'string' ? body.name : (existingData?.name as string | undefined);
+        const nextFileName = isFileDoc
+            ? sanitizeFileName(nextName || 'archivo')
+            : ensureMarkdownFileName(nextName || 'Sin titulo');
+
+        let storagePath = existingStoragePath;
+        let targetStoragePath = storagePath;
+        if (storagePath) {
+            const baseName = typeof body.name === 'string' ? nextFileName : getStorageBaseName(storagePath);
+            const prefix = buildStoragePrefix(existingWorkspaceId, existingOwnerId);
+            targetStoragePath = `${prefix}/${normalizedFolder}/${baseName}`;
+        } else if (body.content !== undefined && !isFileDoc) {
+            targetStoragePath = buildStoragePath({
+                workspaceId: existingWorkspaceId,
+                ownerId: existingOwnerId,
+                folder: normalizedFolder,
+                fileName: nextFileName
+            });
+        }
+
+        const moveStorageObject = async (fromPath: string, toPath: string) => {
+            const bucket = adminStorage.bucket();
+            if (!bucket?.name) {
+                throw new Error('Storage bucket not configured');
+            }
+            const sourceRef = bucket.file(fromPath);
+            const targetRef = bucket.file(toPath);
+            const [sourceExists] = await sourceRef.exists();
+            const [targetExists] = await targetRef.exists();
+
+            if (!sourceExists && targetExists) {
+                return { moved: true, usedTarget: true };
+            }
+            if (!sourceExists && !targetExists) {
+                return { moved: false, missing: true };
+            }
+            if (targetExists) {
+                const [srcMeta] = await sourceRef.getMetadata();
+                const [dstMeta] = await targetRef.getMetadata();
+                const hasHash = Boolean(srcMeta.md5Hash && dstMeta.md5Hash);
+                if (hasHash && srcMeta.md5Hash !== dstMeta.md5Hash) {
+                    return { moved: false, conflict: true };
+                }
+                const hasSize = Boolean(srcMeta.size && dstMeta.size);
+                if (!hasHash && hasSize && srcMeta.size !== dstMeta.size) {
+                    return { moved: false, conflict: true };
+                }
+                await sourceRef.delete().catch(() => {});
+                return { moved: true, deduped: true };
+            }
+
+            await sourceRef.copy(targetRef);
+            const [afterExists] = await targetRef.exists();
+            if (!afterExists) {
+                return { moved: false, missing: true };
+            }
+            await sourceRef.delete().catch(() => {});
+            return { moved: true };
+        };
+
+        if (storagePath && targetStoragePath && storagePath !== targetStoragePath) {
+            const moveResult = await moveStorageObject(storagePath, targetStoragePath);
+            if (moveResult.conflict) {
+                return NextResponse.json({ error: 'Storage target already exists' }, { status: 409 });
+            }
+            if (moveResult.moved) {
+                storagePath = targetStoragePath;
+            }
+        } else if (!storagePath && targetStoragePath) {
+            storagePath = targetStoragePath;
+        }
 
         if (body.content !== undefined && existingData?.type !== 'file') {
-             const bucket = adminStorage.bucket();
-             if (bucket.name) {
-                 if (!storagePath) {
-                     const ownerId = existingData?.ownerId || 'unknown';
-                     const safeName = (existingData?.name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
-                     const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
-                     const wsId = existingData?.workspaceId;
-
-                     storagePath = `users/${ownerId}/${fname}`;
-                     if (wsId && wsId !== 'personal') {
-                         storagePath = `workspaces/${wsId}/${fname}`;
-                     }
-                 }
-
-                 try {
-                     await bucket.file(storagePath).save(body.content, {
+            const bucket = adminStorage.bucket();
+            if (bucket.name && storagePath) {
+                try {
+                    await bucket.file(storagePath).save(body.content, {
                         contentType: 'text/markdown',
-                        metadata: { ownerId: existingData?.ownerId }
-                     });
-                 } catch (e) {
-                     console.warn('Failed to update storage backing:', e);
-                 }
-             }
+                        metadata: { ownerId: existingOwnerId }
+                    });
+                } catch (e) {
+                    console.warn('Failed to update storage backing:', e);
+                }
+            }
         }
 
         const updateData: Record<string, unknown> = {
@@ -70,12 +139,27 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         if (typeof body.name === 'string') updateData.name = body.name;
         if (typeof body.type === 'string') updateData.type = body.type;
         if (typeof body.mimeType === 'string' || body.mimeType === null) updateData.mimeType = body.mimeType ?? null;
-        if (typeof body.folder === 'string') updateData.folder = body.folder;
+        if (typeof body.folder === 'string') updateData.folder = normalizeFolderPath(body.folder);
         if (typeof body.size === 'number') updateData.size = body.size;
         if (typeof body.order === 'number') updateData.order = body.order;
 
-        if (storagePath && !existingData?.storagePath) {
+        if (storagePath && storagePath !== existingData?.storagePath) {
             updateData.storagePath = storagePath;
+        }
+
+        if (storagePath && isFileDoc && storagePath !== existingData?.storagePath) {
+            try {
+                const bucket = adminStorage.bucket();
+                if (bucket?.name) {
+                    const [url] = await bucket.file(storagePath).getSignedUrl({
+                        action: 'read',
+                        expires: Date.now() + 15 * 60 * 1000
+                    });
+                    updateData.url = url;
+                }
+            } catch (e) {
+                console.warn('Failed to refresh file URL:', e);
+            }
         }
 
         await docRef.update(updateData);

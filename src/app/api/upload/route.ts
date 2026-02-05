@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { normalizeFolderPath } from '@/lib/folder-utils';
+import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
 
 // Limit uploads to 50 MB and force Node runtime (edge has smaller limits)
 export const runtime = 'nodejs';
@@ -20,7 +22,7 @@ export async function POST(req: NextRequest) {
         const ownerId = auth.uid;
         const workspaceId = (formData.get('workspaceId') as string) || 'personal';
         const folderField = formData.get('folder');
-        const folder = typeof folderField === 'string' ? folderField : 'No estructurado';
+        const folder = normalizeFolderPath(typeof folderField === 'string' ? folderField : undefined);
 
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -39,12 +41,13 @@ export async function POST(req: NextRequest) {
 
         const buffer = Buffer.from(await file.arrayBuffer());
 
-        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        let filename = `users/${ownerId}/${safeName}`;
-
-        if (workspaceId && workspaceId !== 'personal') {
-             filename = `workspaces/${workspaceId}/${safeName}`;
-        }
+        const safeName = sanitizeFileName(file.name);
+        const filename = buildStoragePath({
+            workspaceId,
+            ownerId,
+            folder,
+            fileName: safeName
+        });
 
         const bucket = adminStorage.bucket();
         if (!bucket?.name) {

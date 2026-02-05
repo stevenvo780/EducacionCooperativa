@@ -2,6 +2,8 @@ import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { normalizeFolderPath } from '@/lib/folder-utils';
+import { buildStoragePath, ensureMarkdownFileName } from '@/lib/storage-path';
 
 export async function POST(req: NextRequest) {
     try {
@@ -17,7 +19,7 @@ export async function POST(req: NextRequest) {
 
         const body = await req.json();
         const { name, content, type, workspaceId, folder, mimeType, url, storagePath, order } = body;
-        const normalizedFolder = typeof folder === 'string' ? folder : 'No estructurado';
+        const normalizedFolder = normalizeFolderPath(typeof folder === 'string' ? folder : undefined);
         const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : 'personal';
         const ownerId = auth.uid;
 
@@ -60,13 +62,13 @@ export async function POST(req: NextRequest) {
              try {
                  const bucket = adminStorage.bucket();
                  if (bucket.name) {
-                     const safeName = (name || 'Sin titulo').replace(/[^a-zA-Z0-9.-]/g, '_');
-                     const fname = safeName.endsWith('.md') ? safeName : `${safeName}.md`;
-
-                     let path = `users/${ownerId}/${fname}`;
-                     if (resolvedWorkspaceId && resolvedWorkspaceId !== 'personal') {
-                         path = `workspaces/${resolvedWorkspaceId}/${fname}`;
-                     }
+                     const fname = ensureMarkdownFileName(name || 'Sin titulo');
+                     const path = buildStoragePath({
+                        workspaceId: resolvedWorkspaceId,
+                        ownerId,
+                        folder: normalizedFolder,
+                        fileName: fname
+                     });
 
                      await bucket.file(path).save(content ?? '', {
                         contentType: 'text/markdown',
@@ -179,7 +181,11 @@ export async function GET(req: NextRequest) {
             return { id: doc.id, ...data };
         });
 
-        return NextResponse.json(docs);
+        return NextResponse.json(docs, {
+            headers: {
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+            }
+        });
     } catch (error: any) {
         console.error('Error listing documents:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });

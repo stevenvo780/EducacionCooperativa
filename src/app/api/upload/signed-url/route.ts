@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { normalizeFolderPath } from '@/lib/folder-utils';
+import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
 
 export const runtime = 'nodejs';
 
@@ -30,10 +32,14 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const storagePath = workspaceId === 'personal'
-            ? `users/${auth.uid}/${safeName}`
-            : `workspaces/${workspaceId}/${safeName}`;
+        const safeName = sanitizeFileName(fileName);
+        const normalizedFolder = normalizeFolderPath(folder);
+        const storagePath = buildStoragePath({
+            workspaceId,
+            ownerId: auth.uid,
+            folder: normalizedFolder,
+            fileName: safeName
+        });
 
         const bucket = adminStorage.bucket();
         if (!bucket?.name) {
@@ -57,7 +63,7 @@ export async function POST(req: NextRequest) {
             originalName: fileName,
             mimeType,
             workspaceId,
-            folder,
+            folder: normalizedFolder,
             ownerId: auth.uid
         });
 

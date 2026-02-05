@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { rtdb } from '@/lib/firebase';
-import { ref, onChildAdded, off, push, serverTimestamp } from 'firebase/database';
+import { ref, onChildAdded, off, push, query, limitToLast } from 'firebase/database';
 
 export interface SyncEvent {
   type: 'created' | 'updated' | 'deleted' | 'refresh';
@@ -31,7 +31,6 @@ export function useSyncEvents({
   onEvent,
   enabled = true
 }: UseSyncEventsOptions) {
-  const startTimeRef = useRef<number>(Date.now());
   const listenerRef = useRef<(() => void) | null>(null);
 
   // Construir path de RTDB según el tipo de workspace
@@ -83,16 +82,12 @@ export function useSyncEvents({
     if (!syncPath) return;
 
     const database = rtdb();
-    const eventsRef = ref(database, syncPath);
-    const startTime = startTimeRef.current;
+    const eventsRef = query(ref(database, syncPath), limitToLast(1));
 
     // Listener para nuevos eventos
-    const handleChildAdded = onChildAdded(eventsRef, (snapshot) => {
+    const unsubscribe = onChildAdded(eventsRef, (snapshot) => {
       const event = snapshot.val() as SyncEvent | null;
       if (!event) return;
-
-      // Ignorar eventos anteriores al inicio del listener
-      if (event.timestamp < startTime) return;
 
       // Ignorar eventos propios del frontend
       if (event.source === 'frontend') return;
@@ -104,7 +99,11 @@ export function useSyncEvents({
     });
 
     listenerRef.current = () => {
-      off(eventsRef, 'child_added', handleChildAdded as any);
+      try {
+        unsubscribe();
+      } catch {
+        off(eventsRef, 'child_added');
+      }
     };
 
     return () => {

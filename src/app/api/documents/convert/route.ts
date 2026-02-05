@@ -4,6 +4,7 @@ import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { requireAuth, isWorkspaceMember } from '@/lib/server-auth';
 import { bufferToMarkdown, canConvertToMarkdown } from '@/lib/markdownConversion';
 import { normalizeFolderPath } from '@/lib/folder-utils';
+import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
 
 export const runtime = 'nodejs';
 
@@ -64,9 +65,13 @@ export async function POST(req: NextRequest) {
       if (!bucket?.name) {
         throw new Error('Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET or FIREBASE_PROJECT_ID');
       }
-      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const prefix = workspaceId === 'personal' ? `users/${ownerId}` : `workspaces/${workspaceId}`;
-      sourceStoragePath = `${prefix}/${safeName}`;
+      const safeName = sanitizeFileName(file.name);
+      sourceStoragePath = buildStoragePath({
+        workspaceId,
+        ownerId,
+        folder,
+        fileName: safeName
+      });
       const fileRef = bucket.file(sourceStoragePath);
       await fileRef.save(buffer, {
         contentType: file.type || 'application/octet-stream',

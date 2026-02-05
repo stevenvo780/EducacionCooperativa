@@ -10,6 +10,8 @@ import {
   File as FileIcon,
   ChevronRight,
   ChevronDown,
+  Cloud,
+  CloudOff,
   Upload,
   FolderPlus,
   Plus,
@@ -375,6 +377,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return doc.name.toLowerCase().endsWith('.md') ? 'MD' : 'DOC';
   };
 
+  const isDocUploaded = (doc: DocItem) => {
+    if (doc.type === 'file') {
+      return Boolean(doc.storagePath || doc.url);
+    }
+    if (doc.type === 'text' || doc.type === undefined) {
+      return Boolean(doc.storagePath);
+    }
+    return true;
+  };
+
   const handleContextMenu = (e: React.MouseEvent, docId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -680,6 +692,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     const doc = item.doc;
     const key = `doc:${doc.id}`;
     const isSelected = selectedKeys.has(key);
+    const uploaded = isDocUploaded(doc);
+    const SyncIcon = uploaded ? Cloud : CloudOff;
+    const syncLabel = uploaded ? 'Subido' : 'Pendiente';
+    const syncTitle = uploaded ? 'Contenido subido' : 'Pendiente de subir';
     return (
       <div style={rowStyle}>
         <div
@@ -742,6 +758,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           </div>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
             {getDocBadge(doc)}
+          </span>
+          <span
+            className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+              uploaded
+                ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
+                : 'border-amber-500/40 text-amber-300 bg-amber-500/10'
+            }`}
+            title={syncTitle}
+          >
+            <SyncIcon className="w-3 h-3" />
+            <span>{syncLabel}</span>
           </span>
           <div className="ml-auto flex items-center gap-2">
             {canReorderDocs && (
