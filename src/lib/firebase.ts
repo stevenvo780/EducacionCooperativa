@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { getFirestore, Firestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getDatabase, Database } from 'firebase/database';
 
@@ -48,6 +48,9 @@ function getFirebaseDb(): Firestore {
   }
   if (!db) {
     db = getFirestore(getFirebaseApp());
+    enableMultiTabIndexedDbPersistence(db).catch((err) => {
+      console.warn('Firebase persistence failed:', err);
+    });
   }
   return db;
 }
