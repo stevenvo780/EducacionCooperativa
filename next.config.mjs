@@ -20,7 +20,10 @@ const nextConfig = {
   swcMinify: false,
   transpilePackages: ['react-mosaic-component', 'firebase', 'undici'],
   experimental: {
-    serverComponentsExternalPackages: ['firebase-admin'] 
+    serverComponentsExternalPackages: ['firebase-admin'],
+    serverActions: {
+      bodySizeLimit: '50mb'
+    }
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
