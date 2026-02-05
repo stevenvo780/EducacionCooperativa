@@ -74,8 +74,8 @@ const HeaderBar = ({
           <Menu className="w-5 h-5" />
         </button>
         <div onClick={onClearSelectedDoc} className="font-bold flex items-center gap-2 text-white cursor-pointer">
-          <span className="bg-gradient-mandy text-white p-1 rounded-md text-xs">St</span>
-          <span className="hidden sm:inline">Studio</span>
+          <span className="bg-gradient-mandy text-white p-1.5 rounded-md text-sm font-bold">A</span>
+          <span className="hidden sm:inline">Agora</span>
         </div>
 
         <div className="relative">
