@@ -22,6 +22,20 @@
       "headers": {
         "x-vercel-proxy-request-body-size": "52428800"
       }
+    },
+    {
+      "src": "/api/documents",
+      "methods": ["POST"],
+      "headers": {
+        "x-vercel-proxy-request-body-size": "52428800"
+      }
+    },
+    {
+      "src": "/api/documents/(.*)",
+      "methods": ["PUT", "PATCH"],
+      "headers": {
+        "x-vercel-proxy-request-body-size": "52428800"
+      }
     }
   ]
 }
