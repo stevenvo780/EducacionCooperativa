@@ -4,6 +4,7 @@
       "$workspaceId": {
         ".read": "auth != null",
         ".write": "auth != null",
+        ".indexOn": ["timestamp"],
         "$eventId": {
           ".validate": "newData.hasChildren(['type', 'path', 'timestamp'])"
         }
