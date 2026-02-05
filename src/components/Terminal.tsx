@@ -252,6 +252,7 @@ const Terminal: React.FC<TerminalProps> = ({
                                     <p className="text-slate-400">$ sudo edu-worker-manager list           <span className="text-slate-600"># Ver todos los workers</span></p>
                                     <p className="text-slate-400">$ sudo edu-worker-manager status         <span className="text-slate-600"># Estado de cada worker</span></p>
                                     <p className="text-slate-400">$ sudo edu-worker-manager logs {workerToken.slice(0,8)}...  <span className="text-slate-600"># Ver logs</span></p>
+                                    <p className="text-slate-400">$ sudo edu-worker-manager resync all      <span className="text-slate-600"># Forzar resync</span></p>
                                 </div>
 
                                 <p className="text-[10px] text-slate-600 text-center">
@@ -363,6 +364,7 @@ const Terminal: React.FC<TerminalProps> = ({
                                             <p><code className="text-slate-400">sudo edu-worker-manager status</code> <span className="text-slate-600 ml-2"># Estado</span></p>
                                             <p><code className="text-slate-400">sudo edu-worker-manager logs {workerToken.slice(0,12)}...</code> <span className="text-slate-600 ml-2"># Logs</span></p>
                                             <p><code className="text-slate-400">sudo edu-worker-manager remove {workerToken.slice(0,12)}...</code> <span className="text-slate-600 ml-2"># Eliminar</span></p>
+                                            <p><code className="text-slate-400">sudo edu-worker-manager resync all</code> <span className="text-slate-600 ml-2"># Forzar resync</span></p>
                                         </div>
                                     </div>
                                 </div>

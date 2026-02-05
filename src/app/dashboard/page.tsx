@@ -45,7 +45,8 @@ import {
     inviteMemberApi,
     removeMemberApi,
     updateDocumentApi,
-    uploadFileApi
+    uploadFileApi,
+    fetchUserProfilesApi
 } from '@/services/dashboardApi';
 import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue, normalizeWorkspace } from '@/services/dashboardUtils';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
@@ -59,6 +60,7 @@ import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import { useSyncEvents } from '@/hooks/useSyncEvents';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -89,6 +91,7 @@ function DashboardContent() {
     const [docs, setDocs] = useState<DocItem[]>([]);
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [memberProfiles, setMemberProfiles] = useState<Record<string, { email?: string | null; displayName?: string | null }>>({});
     const router = useRouter();
     const searchParams = useSearchParams();
     const reduceMotion = useReducedMotion();
@@ -101,6 +104,7 @@ function DashboardContent() {
         duration: reduceMotion ? 0.01 : 0.1,
         ease: 'easeOut'
     }), [reduceMotion]);
+    const isOnline = useOnlineStatus();
 
     useEffect(() => {
         if (!user) return;
@@ -154,6 +158,37 @@ function DashboardContent() {
     const sidebarSearchQuery = useAppSelector(state => state.dashboard.sidebarSearchQuery);
     const showMobileSidebar = useAppSelector(state => state.dashboard.showMobileSidebar);
     const deletingWorkspaceId = useAppSelector(state => state.dashboard.deletingWorkspaceId);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!showMembersModal || !currentWorkspace) return;
+        const memberIds = Array.isArray(currentWorkspace.members) ? currentWorkspace.members : [];
+        if (memberIds.length === 0) {
+            setMemberProfiles({});
+            return;
+        }
+        const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? 'personal' : currentWorkspace.id;
+        fetchUserProfilesApi({ workspaceId: wsId, userIds: memberIds })
+            .then((data) => {
+                if (cancelled) return;
+                const next: Record<string, { email?: string | null; displayName?: string | null }> = {};
+                data.users.forEach((profile) => {
+                    next[profile.uid] = {
+                        email: profile.email ?? null,
+                        displayName: profile.displayName ?? null
+                    };
+                });
+                setMemberProfiles(next);
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    console.error('Error fetching member profiles', err);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [showMembersModal, currentWorkspace]);
 
     const setWorkspaces = useCallback((value: Workspace[]) => {
         dispatch(setWorkspacesAction(value));
@@ -298,6 +333,7 @@ function DashboardContent() {
     const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
     const fetchInFlightRef = useRef<Promise<void> | null>(null);
+    const lastSyncEventRef = useRef<number>(0);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
     const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
 
@@ -570,6 +606,7 @@ function DashboardContent() {
 
     // Sync en tiempo real usando RTDB en lugar de polling
     const handleSyncEvent = useCallback((_event: { type: string; path: string }) => {
+        lastSyncEventRef.current = Date.now();
         fetchDocs();
     }, [fetchDocs]);
 
@@ -580,6 +617,18 @@ function DashboardContent() {
         onEvent: handleSyncEvent,
         enabled: !!currentWorkspace && !!user
     });
+
+    // Fallback: refresco cada 30s si no llega evento RTDB
+    useEffect(() => {
+        if (!currentWorkspace || !user) return;
+        const intervalId = setInterval(() => {
+            const now = Date.now();
+            if (now - lastSyncEventRef.current >= 30000) {
+                fetchDocs();
+            }
+        }, 30000);
+        return () => clearInterval(intervalId);
+    }, [currentWorkspace, user, fetchDocs]);
 
     useEffect(() => {
         if (!currentWorkspace || !user || !onDocChangeCallback) return;
@@ -1860,6 +1909,7 @@ function DashboardContent() {
                         invites={invites}
                         workspaces={workspaces}
                         user={user}
+                        isOnline={isOnline}
                         deletingWorkspaceId={deletingWorkspaceId}
                         personalWorkspaceId={PERSONAL_WORKSPACE_ID}
                         isAdmin={isAdmin}
@@ -2107,29 +2157,39 @@ function DashboardContent() {
                                 <div className="space-y-3">
                                     <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Miembros ({currentWorkspace.members.length})</label>
                                     <div className="max-h-48 overflow-y-auto scrollbar-hide pr-2 space-y-2">
-                                        {currentWorkspace.members.map((uid) => (
-                                            <div key={uid} className="flex items-center justify-between p-2 bg-surface-700 rounded-lg text-sm">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 bg-mandy-500/15 text-mandy-400 rounded-full flex items-center justify-center text-xs font-bold">
-                                                        U
+                                        {currentWorkspace.members.map((uid) => {
+                                            const profile = memberProfiles[uid];
+                                            const email = profile?.email || (uid === user?.uid ? user?.email : null);
+                                            const label = email || profile?.displayName || `UID: ${uid.substring(0, 8)}...`;
+                                            return (
+                                                <div key={uid} className="flex items-center justify-between p-2 bg-surface-700 rounded-lg text-sm">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <div className="w-8 h-8 bg-mandy-500/15 text-mandy-400 rounded-full flex items-center justify-center text-xs font-bold">
+                                                            U
+                                                        </div>
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-surface-200 text-sm truncate" title={email || uid}>{label}</span>
+                                                            {!email && profile?.displayName && (
+                                                                <span className="text-[10px] text-surface-500 font-mono truncate">{uid.substring(0, 8)}...</span>
+                                                            )}
+                                                        </div>
+                                                        {uid === currentWorkspace.ownerId && <span className="bg-accent-purple/20 text-accent-purple-light text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
                                                     </div>
-                                                    <span className="text-surface-300 font-mono text-xs">{uid.substring(0, 8)}...</span>
-                                                    {uid === currentWorkspace.ownerId && <span className="bg-accent-purple/20 text-accent-purple-light text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
+                                                    <div className="flex items-center gap-2">
+                                                        <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
+                                                        {user && currentWorkspace.ownerId === user.uid && uid !== user.uid && (
+                                                            <button
+                                                                onClick={() => removeMember(uid)}
+                                                                className="p-1 hover:bg-surface-600 text-surface-400 hover:text-red-400 rounded transition-colors"
+                                                                title="Eliminar miembro"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
-                                                    {user && currentWorkspace.ownerId === user.uid && uid !== user.uid && (
-                                                        <button
-                                                            onClick={() => removeMember(uid)}
-                                                            className="p-1 hover:bg-surface-600 text-surface-400 hover:text-red-400 rounded transition-colors"
-                                                            title="Eliminar miembro"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>

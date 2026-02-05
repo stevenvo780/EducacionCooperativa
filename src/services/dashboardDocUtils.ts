@@ -42,3 +42,13 @@ export const getDocBadge = (doc: DocItem) => {
   }
   return isMarkdownName(doc.name) ? 'MD' : 'DOC';
 };
+
+export const isDocUploaded = (doc: DocItem) => {
+  if (doc.type === 'file') {
+    return Boolean(doc.storagePath || doc.url);
+  }
+  if (doc.type === 'text' || doc.type === undefined) {
+    return Boolean(doc.storagePath);
+  }
+  return true;
+};
