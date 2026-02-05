@@ -5,8 +5,11 @@ import StoreProvider from '@/components/StoreProvider';
 import { TerminalProvider } from '@/context/TerminalContext';
 
 export const metadata: Metadata = {
-  title: 'AgoraSync',
-  description: 'Collaborative Learning Platform'
+  title: 'Agora',
+  description: 'Collaborative Learning Platform',
+  icons: {
+    icon: '/favicon.svg'
+  }
 };
 
 export default function RootLayout({
