@@ -90,3 +90,12 @@ services/worker/packaging/serviceAccountKey.json
 .env*
 .env.local
 .env.production.local
+# Next.js
+.next/
+out/
+
+# PWA
+public/sw.js
+public/workbox-*.js
+public/worker-*.js
+

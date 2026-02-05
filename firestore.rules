@@ -106,5 +106,29 @@ service cloud.firestore {
       allow create: if isSyncAgent() && 
                        request.resource.data.workspaceId == getSyncAgentWorkspaceId();
     }
+
+    // Boards collection and subcollections
+    match /boards/{boardId} {
+      // Helper: determine if user can access this board
+      function canAccessBoard() {
+        // 1. Personal board: boardId == 'personal:' + uid
+        // 2. Workspace board: boardId == workspaceId AND user is member
+        return (boardId == 'personal:' + request.auth.uid) ||
+               (exists(/databases/$(database)/documents/workspaces/$(boardId)) &&
+                request.auth.uid in get(/databases/$(database)/documents/workspaces/$(boardId)).data.members);
+      }
+
+      allow read: if request.auth != null && canAccessBoard();
+      // Only allow creation/write if needed, usually board doc is auto-created or managed
+      allow create, update: if request.auth != null && canAccessBoard();
+
+      match /columns/{columnId} {
+        allow read, write: if request.auth != null && canAccessBoard();
+      }
+      
+      match /cards/{cardId} {
+        allow read, write: if request.auth != null && canAccessBoard();
+      }
+    }
   }
 }
