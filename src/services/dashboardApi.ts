@@ -98,7 +98,7 @@ export const fetchDocsApi = async (params: { workspaceId: string; ownerId?: stri
   if (params.view) {
     search.set('view', params.view);
   }
-  const res = await authFetch(`/api/documents?${search.toString()}`);
+  const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
   assertOk(res, 'Failed to fetch docs via API');
   return (await res.json()) as DocItem[];
 };
@@ -107,6 +107,16 @@ export const fetchDocumentRawApi = async (docId: string) => {
   const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
   assertOk(res, 'Failed to load content');
   return res.text();
+};
+
+export const fetchUserProfilesApi = async (params: { workspaceId: string; userIds: string[] }) => {
+  const res = await authFetch('/api/users/lookup', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(params)
+  });
+  assertOk(res, 'Failed to fetch user profiles');
+  return (await res.json()) as { users: { uid: string; email?: string | null; displayName?: string | null }[] };
 };
 
 export const createDocumentApi = async (payload: Record<string, unknown>) => {

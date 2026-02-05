@@ -1,8 +1,17 @@
 import withPWAInit from 'next-pwa';
+import runtimeCaching from 'next-pwa/cache.js';
 
 const withPWA = withPWAInit({
   dest: 'public',
   disable: process.env.NODE_ENV === 'development',
+  runtimeCaching: [
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/documents'),
+      handler: 'NetworkOnly',
+      method: 'GET'
+    },
+    ...runtimeCaching
+  ]
 });
 
 /** @type {import('next').NextConfig} */

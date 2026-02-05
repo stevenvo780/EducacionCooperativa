@@ -3,8 +3,9 @@
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { Briefcase, Copy, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
+import { Briefcase, Cloud, CloudOff, Copy, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
+import { isDocUploaded } from '@/services/dashboardDocUtils';
 
 const DOC_REORDER_TYPE = 'application/x-doc-reorder';
 const FOLDER_REORDER_TYPE = 'application/x-folder-reorder';
@@ -270,6 +271,10 @@ const WorkspaceExplorer = ({
     }
 
     const doc = item.doc;
+    const uploaded = isDocUploaded(doc);
+    const SyncIcon = uploaded ? Cloud : CloudOff;
+    const syncLabel = uploaded ? 'Subido' : 'Pendiente';
+    const syncTitle = uploaded ? 'Contenido subido' : 'Pendiente de subir';
     return (
       <div style={style}>
         <div
@@ -322,6 +327,17 @@ const WorkspaceExplorer = ({
           </div>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
             {getDocBadge(doc)}
+          </span>
+          <span
+            className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+              uploaded
+                ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
+                : 'border-amber-500/40 text-amber-300 bg-amber-500/10'
+            }`}
+            title={syncTitle}
+          >
+            <SyncIcon className="w-3 h-3" />
+            <span>{syncLabel}</span>
           </span>
           {canReorderDocs && (
             <button
