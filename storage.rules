@@ -41,7 +41,8 @@ service firebase.storage {
     match /users/{userId}/{filePath=**} {
       // User can access their own files
       allow read: if isUserOrAgent(userId);
-      allow create, update: if isUserOrAgent(userId) && isAllowedTextFile(filePath);
+      allow create, update: if isUserOrAgent(userId) && isAllowedTextFile(filePath)
+                               && request.resource.size < 50 * 1024 * 1024;
       allow delete: if isUserOrAgent(userId);
     }
     
@@ -51,7 +52,8 @@ service firebase.storage {
       // Note: We can't check Firestore from Storage rules directly,
       // so we rely on the sync-agent having the correct workspaceId
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && isAllowedTextContentType();
+      allow create, update: if isAuthenticated() && isAllowedTextContentType()
+                               && request.resource.size < 50 * 1024 * 1024;
       allow delete: if isAuthenticated();
     }
   }
