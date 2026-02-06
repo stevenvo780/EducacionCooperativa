@@ -45,8 +45,11 @@ const Terminal: React.FC<TerminalProps> = ({
     getWorkerStatusForWorkspace
   } = useTerminal();
 
-    // If the tab's sessionId is stale (e.g. restore-failed), fall back to activeSessionId
-    const effectiveSessionId = (sessionId && sessions.some(s => s.id === sessionId)) ? sessionId : activeSessionId;
+    // Only fall back to activeSessionId if this tab originally HAD a sessionId that became stale.
+    // Tabs without sessionId (terminal-main) should NOT auto-attach to any session.
+    const effectiveSessionId = sessionId
+        ? (sessions.some(s => s.id === sessionId) ? sessionId : activeSessionId)
+        : null;
     const sessionActive = effectiveSessionId ? sessions.some(s => s.id === effectiveSessionId) : false;
 
   const setContainerRef = useCallback((node: HTMLDivElement | null) => {

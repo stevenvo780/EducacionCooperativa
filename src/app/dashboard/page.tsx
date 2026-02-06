@@ -74,6 +74,7 @@ function DashboardContent() {
     const { user, userEmail, loading, logout, changePassword } = useAuth();
     const {
         activeSessionId,
+        sessions: terminalSessions,
         selectSession,
         createSession,
         destroySession,
@@ -855,10 +856,48 @@ function DashboardContent() {
         const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
         const terminalName = session?.name || 'Mi Asistente';
 
-        if (openTabs.find(t => t.id === terminalId)) {
-            if (session?.id) {
+        if (session?.id) {
+            // Check if any existing tab already has this sessionId (prevent duplicates by session)
+            const existingTab = openTabs.find(t => t.type === 'terminal' && t.sessionId === session.id);
+            if (existingTab) {
                 selectSession(session.id);
+                setSelectedDocId(existingTab.id);
+                setShowMobileSidebar(false);
+                return;
             }
+
+            // If terminal-main exists (lobby tab), replace it with the session-specific tab
+            const mainTab = openTabs.find(t => t.id === 'terminal-main');
+            if (mainTab) {
+                selectSession(session.id);
+                setOpenTabs(prev => prev.map(t =>
+                    t.id === 'terminal-main'
+                        ? { ...t, id: terminalId, name: terminalName, sessionId: session.id }
+                        : t
+                ));
+                // Update mosaic node IDs
+                const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+                setMosaicNode(current => {
+                    const leaves = getLeaves(current).map(l => l === 'terminal-main' ? terminalId : l);
+                    return createBalancedTreeFromLeaves(leaves);
+                });
+                setSelectedDocId(terminalId);
+                setShowMobileSidebar(false);
+                return;
+            }
+        } else {
+            // Opening without a session — if there's already a terminal tab open, focus it instead
+            const anyTerminal = openTabs.find(t => t.type === 'terminal');
+            if (anyTerminal) {
+                setSelectedDocId(anyTerminal.id);
+                setShowMobileSidebar(false);
+                return;
+            }
+        }
+
+        // Tab already open with this exact ID
+        if (openTabs.find(t => t.id === terminalId)) {
+            if (session?.id) selectSession(session.id);
             setSelectedDocId(terminalId);
             setShowMobileSidebar(false);
             return;
@@ -886,6 +925,33 @@ function DashboardContent() {
         setShowMobileSidebar(false);
         setSelectedDocId(terminalId);
     };
+
+    // Auto-replace terminal-main with the session-specific tab when a new session is created from it
+    useEffect(() => {
+        if (!activeSessionId) return;
+        const mainTab = openTabs.find(t => t.id === 'terminal-main' && t.type === 'terminal');
+        if (!mainTab) return;
+        // terminal-main is open and a session just became active → replace it
+        const session = terminalSessions.find(s => s.id === activeSessionId);
+        const terminalId = `terminal-${activeSessionId}`;
+        const terminalName = session?.name || `Terminal ${activeSessionId.slice(-4)}`;
+        // Don't replace if a tab for this session already exists
+        if (openTabs.find(t => t.id === terminalId)) return;
+        setOpenTabs(prev => prev.map(t =>
+            t.id === 'terminal-main'
+                ? { ...t, id: terminalId, name: terminalName, sessionId: activeSessionId }
+                : t
+        ));
+        setMosaicNode(current => {
+            if (!current) return current;
+            const replaceMosaicId = (node: MosaicNode<string>): MosaicNode<string> => {
+                if (typeof node === 'string') return node === 'terminal-main' ? terminalId : node;
+                return { ...node, first: replaceMosaicId(node.first), second: replaceMosaicId(node.second) };
+            };
+            return replaceMosaicId(current);
+        });
+        setSelectedDocId(terminalId);
+    }, [activeSessionId, terminalSessions, openTabs]);
 
     const openBoard = useCallback(async () => {
         if (!currentWorkspace || !user) return;
