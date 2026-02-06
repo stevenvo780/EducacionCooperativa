@@ -86,9 +86,9 @@ export function useSyncEvents({
     if (!syncPath) return;
 
     const database = rtdb();
-    // Usar orderByChild + startAt(now) para SOLO recibir eventos nuevos
-    // y evitar re-procesar eventos antiguos cuando el listener se monta
-    const nowTs = Date.now();
+    // Usar orderByChild + startAt(now - margen) para SOLO recibir eventos nuevos
+    // Margen de 5s para tolerar clock skew entre worker y cliente
+    const nowTs = Date.now() - 5000;
     const eventsRef = query(
       ref(database, syncPath),
       orderByChild('timestamp'),
