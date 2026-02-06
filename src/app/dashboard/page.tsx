@@ -2173,7 +2173,6 @@ function DashboardContent() {
                                     currentWorkspaceType={currentWorkspace?.type}
                                     currentUserId={user?.uid}
                                     nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
-                                    onRequestNewTerminal={handleRequestNewTerminal}
                                 />
                             </div>
                         ) : (
