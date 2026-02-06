@@ -164,11 +164,11 @@ export default function DocsPage() {
             <h4 className="font-bold text-white mt-5">Instalación rápida (una línea)</h4>
             <CopyBlock
               label="Descargar e instalar"
-              code={`curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.9_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb`}
+              code={`curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb`}
             />
 
             <h4 className="font-bold text-white mt-5">Instalación paso a paso</h4>
-            <CopyBlock label="1. Descargar el paquete" code="curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.9_amd64.deb -o /tmp/edu-worker.deb" />
+            <CopyBlock label="1. Descargar el paquete" code="curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb" />
             <CopyBlock label="2. Instalar" code="sudo apt install -y /tmp/edu-worker.deb" />
             <CopyBlock label="3. Agregar un workspace" code={`sudo edu-worker-manager add <workspace-id> --name "Mi Espacio"`} />
             <CopyBlock label="4. Verificar" code="sudo edu-worker-manager status" />
@@ -458,7 +458,7 @@ sudo edu-worker-manager add AbC123dEf --name "Proyecto Filosofía"`} />
 
           <Section id="updates" icon={RefreshCw} title="Actualización">
             <h4 className="font-bold text-white">Actualizar el paquete .deb</h4>
-            <CopyBlock code={`curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.9_amd64.deb -o /tmp/edu-worker.deb
+            <CopyBlock code={`curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb
 sudo apt install -y /tmp/edu-worker.deb`} />
             <p className="text-surface-400 text-xs mt-1">Esto actualiza <code>edu-worker-manager</code> y los scripts. No toca los contenedores activos.</p>
 
@@ -471,7 +471,7 @@ sudo apt install -y /tmp/edu-worker.deb`} />
 
             <h4 className="font-bold text-white mt-5">Actualización completa</h4>
             <CopyBlock code={`# 1. Actualizar el paquete
-curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.9_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb
+curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb
 
 # 2. Actualizar la imagen Docker y reiniciar
 sudo edu-worker-manager update all
