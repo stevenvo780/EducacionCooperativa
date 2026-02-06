@@ -64,17 +64,25 @@ const AssistantSection = memo(function AssistantSection({
         >
           MI ASISTENTE
         </button>
+      </div>
+
+      {/* Botón grande y visible para crear nueva terminal */}
+      <div className="px-2 pb-1">
         <button
           disabled={!isWorkerOnline || isCreatingSession}
           onClick={handleCreateSession}
-          className={`p-1 rounded transition-colors ${
+          className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${
             isWorkerOnline && !isCreatingSession
-              ? 'hover:bg-surface-700 text-surface-500 hover:text-mandy-400'
-              : 'text-surface-700 cursor-not-allowed'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 hover:border-emerald-400/50 hover:text-emerald-300 hover:shadow-lg hover:shadow-emerald-500/10'
+              : 'bg-surface-800/50 border border-surface-700/50 text-surface-600 cursor-not-allowed'
           }`}
-          title={isWorkerOnline ? (isCreatingSession ? 'Creando...' : 'Nueva Sesion') : 'Worker no conectado para este espacio'}
+          title={isWorkerOnline ? (isCreatingSession ? 'Creando...' : 'Crear nueva terminal') : 'Worker no conectado'}
         >
-          {connectionStatus === 'checking' || isCreatingSession ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+          {connectionStatus === 'checking' || isCreatingSession
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Plus className="w-4 h-4" />
+          }
+          <span>{isCreatingSession ? 'Creando...' : '+ Terminal'}</span>
         </button>
       </div>
 
