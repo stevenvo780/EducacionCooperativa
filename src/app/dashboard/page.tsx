@@ -974,7 +974,7 @@ function DashboardContent() {
             selectSession(activeSessionId);
             setSelectedDocId(terminalId);
         }
-    }, [activeSessionId, terminalSessions, openTabs]);
+    }, [activeSessionId, terminalSessions, openTabs, selectSession, user?.uid]);
 
     const handleRequestNewTerminal = useCallback(() => {
         if (!currentWorkspace || !user) return;
