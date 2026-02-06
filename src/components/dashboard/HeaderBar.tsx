@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Briefcase, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KanbanSquare, Key, Loader2, LogOut, Maximize2, Menu, Minimize2, Plus, Trash2, User, Users } from 'lucide-react';
+import { BookOpen, Briefcase, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KanbanSquare, Key, Loader2, LogOut, Maximize2, Menu, Minimize2, Plus, Trash2, User, Users } from 'lucide-react';
 import type { Workspace } from '@/components/dashboard/types';
 import type { User as FirebaseUser } from 'firebase/auth';
 
@@ -291,6 +291,16 @@ const HeaderBar = ({
                   <p className="text-sm text-surface-200 truncate">{user?.email}</p>
                 </div>
                 <div className="py-1">
+                  <a
+                    href="/docs"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setShowUserMenu(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Documentación
+                  </a>
                   <button
                     onClick={() => {
                       onOpenPassword();
