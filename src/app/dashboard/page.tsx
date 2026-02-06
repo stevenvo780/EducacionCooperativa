@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue, useTransition, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue, Suspense } from 'react';
 import type React from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -96,7 +96,6 @@ function DashboardContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const reduceMotion = useReducedMotion();
-    const [, startTransition] = useTransition();
     const modalFade = useMemo<Transition>(() => ({
         duration: reduceMotion ? 0.01 : 0.08,
         ease: 'easeOut'
@@ -559,21 +558,37 @@ function DashboardContent() {
             return (a.name || '').localeCompare(b.name || '');
         });
 
-        startTransition(() => {
-            setDocs(prev => (areDocsEquivalent(prev, normalizedFileDocs) ? prev : normalizedFileDocs));
-            setFolders(prev => (areFoldersEquivalent(prev, folderList) ? prev : folderList));
+        setDocs(prev => {
+            const changed = !areDocsEquivalent(prev, normalizedFileDocs);
+            if (changed && process.env.NODE_ENV !== 'production') {
+                console.debug('[Sync] docs updated:', prev.length, '->', normalizedFileDocs.length);
+            }
+            return changed ? normalizedFileDocs : prev;
         });
-    }, [currentWorkspace, startTransition]);
+        setFolders(prev => {
+            const changed = !areFoldersEquivalent(prev, folderList);
+            if (changed && process.env.NODE_ENV !== 'production') {
+                console.debug('[Sync] folders updated:', prev.length, '->', folderList.length);
+            }
+            return changed ? folderList : prev;
+        });
+    }, [currentWorkspace]);
 
     const fetchDocs = useCallback(async (options?: { showLoading?: boolean }) => {
         if (!user || !currentWorkspace) return;
         if (fetchInFlightRef.current) {
             // Un fetch ya está en vuelo: agendar trailing refetch
             pendingRefetchRef.current = true;
+            if (process.env.NODE_ENV !== 'production') {
+                console.debug('[Sync] fetchDocs skipped (in-flight), trailing refetch queued');
+            }
             return fetchInFlightRef.current;
         }
         const showLoading = options?.showLoading ?? docsRef.current.length === 0;
         if (showLoading) setLoadingDocs(true);
+        if (process.env.NODE_ENV !== 'production') {
+            console.debug('[Sync] fetchDocs starting API call…');
+        }
         const fetchPromise = (async () => {
             try {
                 const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? 'personal' : currentWorkspace.id;
@@ -583,6 +598,9 @@ function DashboardContent() {
                     view: 'metadata'
                 });
 
+                if (process.env.NODE_ENV !== 'production') {
+                    console.debug('[Sync] fetchDocs got', fetched.length, 'docs from API');
+                }
                 applyDocsSnapshot(fetched);
             } catch (error) {
                 console.error('Error fetching docs', error);
@@ -622,12 +640,18 @@ function DashboardContent() {
         if (syncFetchTimerRef.current) clearTimeout(syncFetchTimerRef.current);
         syncFetchTimerRef.current = setTimeout(() => {
             syncFetchTimerRef.current = null;
+            if (process.env.NODE_ENV !== 'production') {
+                console.debug('[Sync] debounced fetch triggered');
+            }
             fetchDocs();
-        }, 1200);
+        }, 600);
     }, [fetchDocs]);
 
     // Sync en tiempo real usando RTDB en lugar de polling
-    const handleSyncEvent = useCallback((_event: { type: string; path: string }) => {
+    const handleSyncEvent = useCallback((event: { type: string; path: string }) => {
+        if (process.env.NODE_ENV !== 'production') {
+            console.debug('[Sync] RTDB event received:', event.type, event.path);
+        }
         scheduleSyncFetch();
     }, [scheduleSyncFetch]);
 
@@ -639,15 +663,18 @@ function DashboardContent() {
         enabled: !!currentWorkspace && !!user
     });
 
-    // Fallback: refresco cada 30s si no llega evento RTDB
+    // Fallback: refresco cada 15s si no llega evento RTDB
     useEffect(() => {
         if (!currentWorkspace || !user) return;
         const intervalId = setInterval(() => {
             const now = Date.now();
-            if (now - lastSyncEventRef.current >= 30000) {
+            if (now - lastSyncEventRef.current >= 15000) {
+                if (process.env.NODE_ENV !== 'production') {
+                    console.debug('[Sync] fallback polling triggered (no RTDB event in 15s)');
+                }
                 fetchDocs();
             }
-        }, 30000);
+        }, 15000);
         return () => {
             clearInterval(intervalId);
             if (syncFetchTimerRef.current) {
