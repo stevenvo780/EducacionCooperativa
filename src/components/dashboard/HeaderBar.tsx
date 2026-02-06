@@ -1,8 +1,38 @@
 'use client';
 
-import { useState } from 'react';
-import { BookOpen, Briefcase, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KanbanSquare, Key, Loader2, LogOut, Maximize2, Menu, Minimize2, Plus, Trash2, User, Users } from 'lucide-react';
-import type { Workspace } from '@/components/dashboard/types';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  AlertCircle,
+  BookOpen,
+  Briefcase,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Copy,
+  FolderPlus,
+  FolderUp,
+  KanbanSquare,
+  Key,
+  Loader2,
+  LogOut,
+  Maximize2,
+  Menu,
+  Minimize2,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Terminal as TerminalIcon,
+  Trash2,
+  Upload,
+  User,
+  Users,
+  X
+} from 'lucide-react';
+import type { DocItem, Workspace } from '@/components/dashboard/types';
+import type { TerminalSession } from '@/context/TerminalContext';
+import type { WorkerStatus } from '@/lib/TerminalController';
 import type { User as FirebaseUser } from 'firebase/auth';
 
 interface HeaderBarProps {
@@ -33,6 +63,30 @@ interface HeaderBarProps {
   onShowMembers: () => void;
   onOpenPassword: () => void;
   onLogout: () => void;
+  /* Terminal / session props */
+  connectionStatus: 'checking' | 'online' | 'offline' | 'error';
+  isCreatingSession: boolean;
+  activeSessionId: string | null;
+  getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
+  getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
+  createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
+  selectSession: (sessionId: string) => void;
+  destroySession: (sessionId: string) => void;
+  onRenameSession: (session: TerminalSession) => void;
+  openTerminal: (session?: { id: string; name: string }) => void;
+  openTabs: DocItem[];
+  closeTabById: (tabId: string) => void;
+  /* File action props */
+  createDoc: (e?: React.FormEvent, folderName?: string) => void;
+  createFolder: () => void;
+  activeFolder: string;
+  setUploadTargetFolder: (folder: string) => void;
+  fileInputRef: React.RefObject<HTMLInputElement>;
+  folderInputRef: React.RefObject<HTMLInputElement>;
+  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleFolderUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  folderInputProps: React.InputHTMLAttributes<HTMLInputElement>;
+  defaultFolderName: string;
 }
 
 const HeaderBar = ({
@@ -62,46 +116,102 @@ const HeaderBar = ({
   onNewWorkspace,
   onShowMembers,
   onOpenPassword,
-  onLogout
+  onLogout,
+  connectionStatus,
+  isCreatingSession,
+  activeSessionId,
+  getWorkerStatusForWorkspace,
+  getSessionsForWorkspace,
+  createSession,
+  selectSession,
+  destroySession,
+  onRenameSession,
+  openTerminal,
+  openTabs,
+  closeTabById,
+  createDoc,
+  createFolder,
+  activeFolder,
+  setUploadTargetFolder,
+  fileInputRef,
+  folderInputRef,
+  handleFileUpload,
+  handleFolderUpload,
+  folderInputProps,
+  defaultFolderName
 }: HeaderBarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  /* ── Terminal helpers ── */
+  const workerToken = currentWorkspace && user
+    ? (currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
+        ? `personal:${user.uid}`
+        : currentWorkspace.id)
+    : '';
+
+  const workerStatus = workerToken ? getWorkerStatusForWorkspace(workerToken) : ('unknown' as WorkerStatus);
+  const isWorkerOnline = workerStatus === 'online';
+  const workspaceSessions = workerToken ? getSessionsForWorkspace(workerToken) : [];
+
+  const handleCreateSession = useCallback(() => {
+    if (!currentWorkspace || !user || !workerToken) return;
+    createSession(workerToken, currentWorkspace.type, `Terminal ${workspaceSessions.length + 1}`);
+  }, [currentWorkspace, user, workerToken, createSession, workspaceSessions.length]);
+
+  const statusDot = isWorkerOnline
+    ? 'bg-emerald-400'
+    : connectionStatus === 'checking'
+      ? 'bg-amber-400 animate-pulse'
+      : 'bg-red-400';
+
+  // Close menus on outside click
+  useEffect(() => {
+    if (!menuOpenId && !showUploadMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+        setShowUploadMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpenId, showUploadMenu]);
 
   return (
-    <header className="h-14 bg-surface-800 border-b border-surface-600/50 flex items-center justify-between px-4 shrink-0 z-50 relative">
-      <div className="flex items-center gap-4">
+    <header className="h-11 bg-surface-800 border-b border-surface-600/50 flex items-center px-3 shrink-0 z-50 relative gap-2">
+      {/* ── Left: Logo + Workspace ── */}
+      <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={onToggleMobileSidebar}
-          className="md:hidden p-1.5 text-surface-400 hover:bg-surface-700 rounded"
+          className="md:hidden p-1 text-surface-400 hover:bg-surface-700 rounded"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="w-4 h-4" />
         </button>
-        <div onClick={onClearSelectedDoc} className="font-bold flex items-center gap-2 text-white cursor-pointer">
-          <span className="bg-gradient-mandy text-white p-1.5 rounded-md text-sm font-bold">A</span>
-          <span className="hidden sm:inline">Agora</span>
+        <div onClick={onClearSelectedDoc} className="font-bold flex items-center gap-1.5 text-white cursor-pointer">
+          <span className="bg-gradient-mandy text-white p-1 rounded-md text-xs font-bold">A</span>
+          <span className="hidden lg:inline text-sm">Agora</span>
         </div>
 
         <div className="relative">
           <button
             onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-surface-700 rounded-lg transition border border-transparent hover:border-surface-600"
+            className="flex items-center gap-1.5 px-2 py-1 hover:bg-surface-700 rounded-lg transition border border-transparent hover:border-surface-600"
             title={currentWorkspace?.id && currentWorkspace.id !== personalWorkspaceId ? `ID: ${currentWorkspace.id}` : undefined}
           >
             {currentWorkspace?.type === 'personal' ? (
-              <User className="w-4 h-4 text-surface-400" />
+              <User className="w-3.5 h-3.5 text-surface-400" />
             ) : (
-              <Briefcase className="w-4 h-4 text-mandy-400" />
+              <Briefcase className="w-3.5 h-3.5 text-mandy-400" />
             )}
-            <div className="flex flex-col items-start">
-              <span className="font-medium text-sm max-w-[120px] truncate text-surface-200">{currentWorkspace?.name || 'Seleccionar'}</span>
-              {currentWorkspace?.id && currentWorkspace.id !== personalWorkspaceId && (
-                <span className="text-[9px] text-surface-500 font-mono truncate max-w-[120px]">{currentWorkspace.id.slice(0, 8)}...</span>
-              )}
-            </div>
+            <span className="font-medium text-xs max-w-[100px] truncate text-surface-200">{currentWorkspace?.name || 'Seleccionar'}</span>
             <ChevronDown className="w-3 h-3 text-surface-500" />
             {invites.length > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+              <span className="absolute -top-1 -right-1 flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mandy-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-mandy-500" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-mandy-500" />
               </span>
             )}
           </button>
@@ -205,81 +315,248 @@ const HeaderBar = ({
         {currentWorkspace?.members && (
           <button
             onClick={onShowMembers}
-            className="items-center gap-1.5 text-xs font-medium text-surface-500 hover:text-surface-200 px-2 py-1 rounded hover:bg-surface-700 transition hidden sm:flex"
+            className="items-center gap-1 text-[10px] font-medium text-surface-500 hover:text-surface-200 px-1.5 py-0.5 rounded hover:bg-surface-700 transition hidden sm:flex"
           >
-            <Users className="w-3.5 h-3.5" />
+            <Users className="w-3 h-3" />
             {currentWorkspace.members.length}
           </button>
         )}
+
+        <div className="w-px h-5 bg-surface-600/40 ml-1" />
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* ── Center: Terminal tabs + File actions ── */}
+      <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+        {/* Worker status dot */}
+        <div className="flex items-center gap-1 shrink-0 pr-1" title={isWorkerOnline ? 'Worker listo' : connectionStatus === 'checking' ? 'Conectando…' : 'Sin worker'}>
+          <div className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+          <TerminalIcon className="w-3 h-3 text-surface-500" />
+        </div>
+
+        {/* Terminal session tabs */}
+        {connectionStatus === 'checking' && (
+          <span className="flex items-center gap-1 text-[10px] text-surface-500 italic px-1 whitespace-nowrap shrink-0">
+            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            Conectando…
+          </span>
+        )}
+
+        {isCreatingSession && (
+          <span className="flex items-center gap-1 text-[10px] text-mandy-400 px-1 whitespace-nowrap shrink-0">
+            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            Creando…
+          </span>
+        )}
+
+        {!isWorkerOnline && connectionStatus !== 'checking' && (
+          <button
+            onClick={() => openTerminal()}
+            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-amber-500/10 border border-amber-500/20 rounded text-amber-400 hover:bg-amber-500/20 transition whitespace-nowrap shrink-0"
+          >
+            <AlertCircle className="w-2.5 h-2.5" />
+            Sin worker
+          </button>
+        )}
+
+        {workspaceSessions.length === 0 && isWorkerOnline && !isCreatingSession && connectionStatus !== 'checking' && (
+          <span className="text-[10px] text-surface-500 italic whitespace-nowrap px-1 shrink-0">Sin sesiones</span>
+        )}
+
+        {workspaceSessions.map(sess => {
+          const isActive = activeSessionId === sess.id;
+          return (
+            <div key={sess.id} className="relative flex items-center shrink-0" ref={menuOpenId === sess.id ? menuRef : undefined}>
+              <button
+                onClick={() => {
+                  selectSession(sess.id);
+                  openTerminal({ id: sess.id, name: sess.name || 'Terminal' });
+                }}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] whitespace-nowrap transition-colors ${
+                  isActive
+                    ? 'bg-mandy-500/20 text-mandy-300 font-medium border border-mandy-500/30'
+                    : 'text-surface-400 hover:bg-surface-700/60 hover:text-surface-200 border border-transparent'
+                }`}
+              >
+                <TerminalIcon className="w-2.5 h-2.5 shrink-0" />
+                <span className="max-w-[80px] truncate">{sess.name || 'Terminal'}</span>
+                {isActive && <div className="w-1 h-1 rounded-full bg-mandy-500 shrink-0" />}
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpenId(prev => prev === sess.id ? null : sess.id);
+                }}
+                className="p-0.5 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
+                title="Opciones"
+              >
+                <MoreVertical className="w-2.5 h-2.5" />
+              </button>
+
+              {menuOpenId === sess.id && (
+                <div className="absolute top-full left-0 mt-1 w-36 bg-surface-800 border border-surface-600/50 rounded-lg shadow-xl shadow-black/40 z-50 overflow-hidden">
+                  <button
+                    onClick={() => {
+                      onRenameSession(sess);
+                      setMenuOpenId(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Renombrar
+                  </button>
+                  <button
+                    onClick={() => {
+                      destroySession(sess.id);
+                      const terminalTab = openTabs.find(t => t.type === 'terminal' && t.sessionId === sess.id);
+                      if (terminalTab) closeTabById(terminalTab.id);
+                      setMenuOpenId(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-surface-700 transition"
+                  >
+                    <X className="w-3 h-3" />
+                    Cerrar sesión
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* New terminal button */}
+        <button
+          disabled={!isWorkerOnline || isCreatingSession}
+          onClick={handleCreateSession}
+          className={`p-1 rounded transition shrink-0 ${
+            isWorkerOnline && !isCreatingSession
+              ? 'text-emerald-400 hover:bg-emerald-500/15 hover:text-emerald-300'
+              : 'text-surface-600 cursor-not-allowed'
+          }`}
+          title={isWorkerOnline ? (isCreatingSession ? 'Creando…' : 'Nueva terminal') : 'Worker no conectado'}
+        >
+          {isCreatingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
+        </button>
+
+        <div className="w-px h-4 bg-surface-600/40 mx-0.5 shrink-0" />
+
+        {/* File action buttons */}
+        <button
+          onClick={() => createDoc(undefined, activeFolder)}
+          className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition shrink-0"
+          title="Nuevo Archivo"
+        >
+          <Plus className="w-3 h-3" />
+        </button>
+        <button
+          onClick={() => createFolder()}
+          className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition shrink-0"
+          title="Nueva Carpeta"
+        >
+          <FolderPlus className="w-3 h-3" />
+        </button>
+        <div className="relative shrink-0" ref={showUploadMenu ? menuRef : undefined}>
+          <button
+            onClick={() => setShowUploadMenu(prev => !prev)}
+            className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition"
+            title="Subir"
+          >
+            <Upload className="w-3 h-3" />
+          </button>
+          {showUploadMenu && (
+            <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-600 rounded-lg shadow-xl p-1 z-50 flex flex-col gap-1 min-w-[120px]">
+              <button
+                onClick={() => {
+                  setUploadTargetFolder(defaultFolderName);
+                  fileInputRef.current?.click();
+                  setShowUploadMenu(false);
+                }}
+                className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"
+              >
+                <Upload className="w-3 h-3" /> Archivos
+              </button>
+              <button
+                onClick={() => {
+                  setUploadTargetFolder(defaultFolderName);
+                  folderInputRef.current?.click();
+                  setShowUploadMenu(false);
+                }}
+                className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"
+              >
+                <FolderUp className="w-3 h-3" /> Carpeta
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Right: Status + Controls ── */}
+      <div className="flex items-center gap-1 shrink-0">
         <div
-          className={`hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide border ${
+          className={`hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold tracking-wide border ${
             isOnline
               ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
               : 'border-red-500/40 text-red-300 bg-red-500/10'
           }`}
           title={isOnline ? 'Conectado' : 'Sin conexión'}
         >
-          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
-          <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
+          <span>{isOnline ? 'Online' : 'Offline'}</span>
         </div>
-        <div className="hidden md:flex items-center gap-1">
+        <div className="hidden md:flex items-center">
           <button
             onClick={onToggleSidebarCollapse}
-            className={`p-2 rounded-full transition ${
+            className={`p-1.5 rounded-full transition ${
               isSidebarCollapsed
                 ? 'bg-mandy-500/15 text-mandy-300'
                 : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
             }`}
             title={isSidebarCollapsed ? 'Mostrar archivos' : 'Ocultar archivos'}
           >
-            {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
           </button>
           <button
             onClick={onToggleHeaderCollapse}
-            className={`p-2 rounded-full transition ${
+            className={`p-1.5 rounded-full transition ${
               isHeaderCollapsed
                 ? 'bg-mandy-500/15 text-mandy-300'
                 : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
             }`}
             title={isHeaderCollapsed ? 'Mostrar barra superior' : 'Ocultar barra superior'}
           >
-            {isHeaderCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            {isHeaderCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
         </div>
         <button
           onClick={onToggleZenMode}
-          className={`p-2 rounded-full transition ${
+          className={`p-1.5 rounded-full transition ${
             isZenMode
               ? 'bg-mandy-500/15 text-mandy-300'
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
           title={isZenMode ? 'Salir de modo Zen' : 'Modo Zen'}
         >
-          {isZenMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
         </button>
         <button
           onClick={onOpenBoard}
-          className={`p-2 rounded-full transition ${
+          className={`p-1.5 rounded-full transition ${
             isBoardOpen
               ? 'bg-mandy-500/15 text-mandy-300'
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
           title="Tablero"
         >
-          <KanbanSquare className="w-4 h-4" />
+          <KanbanSquare className="w-3.5 h-3.5" />
         </button>
 
         {/* User menu */}
         <div className="relative">
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="p-2 text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
+            className="p-1.5 text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
             title={user?.email || 'Usuario'}
           >
-            <User className="w-5 h-5" />
+            <User className="w-4 h-4" />
           </button>
 
           {showUserMenu && (
@@ -327,6 +604,10 @@ const HeaderBar = ({
           )}
         </div>
       </div>
+
+      {/* Hidden file inputs */}
+      <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
+      <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
     </header>
   );
 };
