@@ -21,6 +21,7 @@ interface TerminalContextType {
     isCreatingSession: boolean;
     initialize: (nexusUrl: string) => Promise<void>;
     createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
+    joinSession: (sessionId: string) => void;
     selectSession: (sessionId: string) => void;
     destroySession: (sessionId: string) => void;
     renameSession: (sessionId: string, name: string) => void;
@@ -383,6 +384,58 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 });
             });
 
+            // Handle restore-failed: don't delete from localStorage, allow retry on next connect
+            controller.setRestoreFailedHandler((payload) => {
+                debugLog('[TerminalContext] restore-failed:', payload);
+                const { sessionId, reason } = payload;
+                if (reason === 'session-not-found') {
+                    // Hub was restarted or session expired — remove from local state
+                    // but only after a grace period (the session truly doesn't exist anymore)
+                    setSessions(prev => prev.filter(s => s.id !== sessionId));
+                    setActiveSessionId(prev => {
+                        if (prev === sessionId) {
+                            clearPersistedActiveSession(currentUser.uid);
+                            savedActiveSessionIdRef.current = null;
+                            return null;
+                        }
+                        return prev;
+                    });
+                    restoringSessionIdsRef.current.delete(sessionId);
+                    controllerRef.current?.disposeSession(sessionId);
+                }
+                // For 'unauthorized' reason, keep the session in state but don't destroy
+                // The user might regain access later
+            });
+
+            // Handle session-joined: when user joins a shared session they don't own
+            controller.setSessionJoinedHandler((payload) => {
+                debugLog('[TerminalContext] session-joined:', payload);
+                const { id: sessionId, workspaceId, workspaceName, workspaceType, isOwner } = payload;
+
+                setSessions(prev => {
+                    const existing = prev.find(s => s.id === sessionId);
+                    if (existing) return prev;
+
+                    const newSession: TerminalSession = {
+                        id: sessionId,
+                        name: workspaceName || `Terminal ${sessionId.substring(0, 4)}`,
+                        workspaceId,
+                        workspaceType: (workspaceType as 'personal' | 'shared') || 'shared',
+                        workspaceName
+                    };
+                    return [...prev, newSession];
+                });
+
+                setActiveSessionId(sessionId);
+                if (!isOwner) {
+                    // Don't persist joined sessions as "owned" — they're view-only references
+                    debugLog('[TerminalContext] Joined shared session as viewer:', sessionId);
+                } else {
+                    savePersistedActiveSession(currentUser.uid, sessionId);
+                    savedActiveSessionIdRef.current = sessionId;
+                }
+            });
+
             controller.connect(
                 actualToken,
                 currentUser.uid,
@@ -449,6 +502,10 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         controllerRef.current?.startSession({ workspaceId, workspaceName, workspaceType });
     }, []);
 
+    const joinSession = useCallback((sessionId: string) => {
+        controllerRef.current?.joinSession(sessionId);
+    }, []);
+
     const selectSession = useCallback((sessionId: string) => {
         setActiveSessionId(sessionId);
         controllerRef.current?.setActiveSession(sessionId);
@@ -456,6 +513,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             savePersistedActiveSession(user.uid, sessionId);
             savedActiveSessionIdRef.current = sessionId;
         }
+        // Always join the session room on the hub to ensure we receive output
+        // This is essential for shared workspace sessions and for reconnection scenarios
+        controllerRef.current?.joinSession(sessionId);
     }, [user?.uid]);
 
     const destroySession = useCallback((sessionId: string) => {
@@ -496,6 +556,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             isCreatingSession,
             initialize,
             createSession,
+            joinSession,
             selectSession,
             destroySession,
             renameSession,

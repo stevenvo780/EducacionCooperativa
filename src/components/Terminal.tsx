@@ -40,11 +40,13 @@ const Terminal: React.FC<TerminalProps> = ({
     initialize,
         activeSessionId,
     createSession,
+    joinSession,
     selectSession,
     getWorkerStatusForWorkspace
   } = useTerminal();
 
-    const effectiveSessionId = sessionId || activeSessionId;
+    // If the tab's sessionId is stale (e.g. restore-failed), fall back to activeSessionId
+    const effectiveSessionId = (sessionId && sessions.some(s => s.id === sessionId)) ? sessionId : activeSessionId;
     const sessionActive = effectiveSessionId ? sessions.some(s => s.id === effectiveSessionId) : false;
 
   const setContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -121,9 +123,6 @@ const Terminal: React.FC<TerminalProps> = ({
   const handleCreateSession = () => {
       if (!createSession) return;
       createSession(workerToken, workspaceType, workspaceName);
-      if (controller && activeSessionId) {
-          controller.setActiveSession(activeSessionId);
-      }
   };
 
   const downloadPath = '/downloads/edu-worker_1.0.8_amd64.deb';
@@ -202,9 +201,35 @@ const Terminal: React.FC<TerminalProps> = ({
                         onClick={handleCreateSession}
                         className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-sm flex items-center gap-2 mx-auto transition-[background-color,color,box-shadow] shadow-lg hover:shadow-emerald-900/20"
                     >
-                        <TerminalIcon className="w-5 h-5" /> Iniciar Sesión Default
+                        <TerminalIcon className="w-5 h-5" /> Iniciar Terminal
                     </button>
                     <p className="text-xs text-slate-500">O selecciona una sesión existente en la barra lateral.</p>
+
+                    {/* Show active sessions in this workspace for joining */}
+                    {sessions.filter(s => s.workspaceId === workerToken).length > 0 && (
+                        <div className="border-t border-slate-800 pt-4 mt-2">
+                            <p className="text-xs text-slate-500 mb-2 flex items-center gap-1.5 justify-center">
+                                <Monitor className="w-3.5 h-3.5" />
+                                Sesiones activas en este espacio:
+                            </p>
+                            <div className="space-y-1.5 max-w-sm mx-auto">
+                                {sessions.filter(s => s.workspaceId === workerToken).map(sess => (
+                                    <button
+                                        key={sess.id}
+                                        onClick={() => {
+                                            joinSession(sess.id);
+                                            selectSession(sess.id);
+                                        }}
+                                        className="w-full px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-indigo-300 hover:bg-indigo-500/20 flex items-center gap-2 text-xs transition-colors"
+                                    >
+                                        <TerminalIcon className="w-3.5 h-3.5 shrink-0" />
+                                        <span className="truncate flex-1 text-left">{sess.name || `Sesión ${sess.id.slice(-4)}`}</span>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="border-t border-slate-800 pt-4 mt-4">
                         <button

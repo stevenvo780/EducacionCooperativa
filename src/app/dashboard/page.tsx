@@ -333,6 +333,8 @@ function DashboardContent() {
     const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
     const fetchInFlightRef = useRef<Promise<void> | null>(null);
+    const pendingRefetchRef = useRef(false);
+    const syncFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSyncEventRef = useRef<number>(0);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
     const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
@@ -564,7 +566,11 @@ function DashboardContent() {
 
     const fetchDocs = useCallback(async (options?: { showLoading?: boolean }) => {
         if (!user || !currentWorkspace) return;
-        if (fetchInFlightRef.current) return fetchInFlightRef.current;
+        if (fetchInFlightRef.current) {
+            // Un fetch ya está en vuelo: agendar trailing refetch
+            pendingRefetchRef.current = true;
+            return fetchInFlightRef.current;
+        }
         const showLoading = options?.showLoading ?? docsRef.current.length === 0;
         if (showLoading) setLoadingDocs(true);
         const fetchPromise = (async () => {
@@ -588,6 +594,11 @@ function DashboardContent() {
         } finally {
             fetchInFlightRef.current = null;
             if (showLoading) setLoadingDocs(false);
+            // Trailing refetch: si llegaron eventos durante el fetch, re-pedir datos frescos
+            if (pendingRefetchRef.current) {
+                pendingRefetchRef.current = false;
+                setTimeout(() => fetchDocs(), 800);
+            }
         }
     }, [user, currentWorkspace, applyDocsSnapshot]);
 
@@ -604,11 +615,20 @@ function DashboardContent() {
         }
     }, [currentWorkspace, user, fetchDocs]);
 
+    // Debounced sync fetch: consolida eventos rápidos y da tiempo a Firestore para propagar
+    const scheduleSyncFetch = useCallback(() => {
+        lastSyncEventRef.current = Date.now();
+        if (syncFetchTimerRef.current) clearTimeout(syncFetchTimerRef.current);
+        syncFetchTimerRef.current = setTimeout(() => {
+            syncFetchTimerRef.current = null;
+            fetchDocs();
+        }, 1200);
+    }, [fetchDocs]);
+
     // Sync en tiempo real usando RTDB en lugar de polling
     const handleSyncEvent = useCallback((_event: { type: string; path: string }) => {
-        lastSyncEventRef.current = Date.now();
-        fetchDocs();
-    }, [fetchDocs]);
+        scheduleSyncFetch();
+    }, [scheduleSyncFetch]);
 
     const { publishEvent } = useSyncEvents({
         workspaceId: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? null : currentWorkspace?.id || null,
@@ -627,7 +647,13 @@ function DashboardContent() {
                 fetchDocs();
             }
         }, 30000);
-        return () => clearInterval(intervalId);
+        return () => {
+            clearInterval(intervalId);
+            if (syncFetchTimerRef.current) {
+                clearTimeout(syncFetchTimerRef.current);
+                syncFetchTimerRef.current = null;
+            }
+        };
     }, [currentWorkspace, user, fetchDocs]);
 
     useEffect(() => {
@@ -640,14 +666,12 @@ function DashboardContent() {
                 : currentWorkspace.id;
 
             if (eventWorkspaceId === currentWsId || eventWorkspaceId === currentWorkspace.id) {
-                // Actualizar timestamp para evitar polling redundante
-                lastSyncEventRef.current = Date.now();
-                fetchDocs();
+                scheduleSyncFetch();
             }
         });
 
         return unsubscribe;
-    }, [currentWorkspace, user, onDocChangeCallback, fetchDocs]);
+    }, [currentWorkspace, user, onDocChangeCallback, scheduleSyncFetch]);
 
     const [stateRestoredForWorkspace, setStateRestoredForWorkspace] = useState<string | null>(null);
 
