@@ -92,7 +92,7 @@ export default function DocsPage() {
             <h1 className="text-lg font-bold text-white">Documentación — Edu Worker</h1>
           </div>
           <div className="flex-1" />
-          <span className="text-xs bg-mandy-500/20 text-mandy-400 px-2 py-0.5 rounded-full border border-mandy-500/30 font-mono">v1.0.9</span>
+          <span className="text-xs bg-mandy-500/20 text-mandy-400 px-2 py-0.5 rounded-full border border-mandy-500/30 font-mono">v1.0.10</span>
         </div>
       </header>
 
@@ -482,7 +482,7 @@ sudo edu-worker-manager status`} />
 
           {/* Footer */}
           <div className="mt-12 pt-6 border-t border-surface-700/40 text-center text-xs text-surface-500">
-            <p>Edu Worker v1.0.9 — Agora Collaborative Learning Platform</p>
+            <p>Edu Worker v1.0.10 — Agora Collaborative Learning Platform</p>
             <p className="mt-1">
               <a href="https://github.com/stevenvo780/EducacionCooperativa" target="_blank" rel="noopener noreferrer" className="text-mandy-400 hover:text-mandy-300 transition inline-flex items-center gap-1">
                 GitHub <ExternalLink className="w-3 h-3" />
