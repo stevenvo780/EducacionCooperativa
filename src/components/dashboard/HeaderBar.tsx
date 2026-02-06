@@ -397,7 +397,7 @@ const HeaderBar = ({
               </button>
 
               {menuOpenId === sess.id && (
-                <div className="fixed z-[999] w-40 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden" style={{ top: menuRef.current ? menuRef.current.getBoundingClientRect().bottom + 4 : 0, left: menuRef.current ? menuRef.current.getBoundingClientRect().left : 0 }}>
+                <div className="absolute right-0 top-full mt-1 z-[999] w-40 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
                   <button
                     onClick={() => {
                       onRenameSession(sess);
