@@ -75,6 +75,7 @@ interface MosaicLayoutProps {
   currentWorkspaceType?: 'personal' | 'shared';
   currentUserId?: string;
   nexusUrl: string;
+  onRequestNewTerminal?: () => void;
 }
 
 const MosaicLayout: React.FC<MosaicLayoutProps> = ({
@@ -105,7 +106,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   currentWorkspaceId,
   currentWorkspaceType,
   currentUserId,
-  nexusUrl
+  nexusUrl,
+  onRequestNewTerminal
 }) => {
   const [docSearchTerms, setDocSearchTerms] = useState<Record<string, string>>({});
   const [docSearchStates, setDocSearchStates] = useState<Record<string, SearchState>>({});
@@ -269,6 +271,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         workspaceName={currentWorkspaceName}
                         workspaceType={currentWorkspaceType}
                         sessionId={doc.sessionId}
+                        onRequestNewTerminal={onRequestNewTerminal}
                       />
                   ) : isFileExplorer ? (
                       <FileExplorer

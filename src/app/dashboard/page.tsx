@@ -926,32 +926,64 @@ function DashboardContent() {
         setSelectedDocId(terminalId);
     };
 
-    // Auto-replace terminal-main with the session-specific tab when a new session is created from it
+    // Auto-replace terminal-main with the session-specific tab, or open a new tab if created from an existing terminal
     useEffect(() => {
         if (!activeSessionId) return;
-        const mainTab = openTabs.find(t => t.id === 'terminal-main' && t.type === 'terminal');
-        if (!mainTab) return;
-        // terminal-main is open and a session just became active → replace it
         const session = terminalSessions.find(s => s.id === activeSessionId);
         const terminalId = `terminal-${activeSessionId}`;
         const terminalName = session?.name || `Terminal ${activeSessionId.slice(-4)}`;
-        // Don't replace if a tab for this session already exists
+
+        // Don't do anything if a tab for this session already exists
         if (openTabs.find(t => t.id === terminalId)) return;
-        setOpenTabs(prev => prev.map(t =>
-            t.id === 'terminal-main'
-                ? { ...t, id: terminalId, name: terminalName, sessionId: activeSessionId }
-                : t
-        ));
-        setMosaicNode(current => {
-            if (!current) return current;
-            const replaceMosaicId = (node: MosaicNode<string>): MosaicNode<string> => {
-                if (typeof node === 'string') return node === 'terminal-main' ? terminalId : node;
-                return { ...node, first: replaceMosaicId(node.first), second: replaceMosaicId(node.second) };
+
+        const mainTab = openTabs.find(t => t.id === 'terminal-main' && t.type === 'terminal');
+        if (mainTab) {
+            // terminal-main is open → replace it with the session-specific tab
+            setOpenTabs(prev => prev.map(t =>
+                t.id === 'terminal-main'
+                    ? { ...t, id: terminalId, name: terminalName, sessionId: activeSessionId }
+                    : t
+            ));
+            setMosaicNode(current => {
+                if (!current) return current;
+                const replaceMosaicId = (node: MosaicNode<string>): MosaicNode<string> => {
+                    if (typeof node === 'string') return node === 'terminal-main' ? terminalId : node;
+                    return { ...node, first: replaceMosaicId(node.first), second: replaceMosaicId(node.second) };
+                };
+                return replaceMosaicId(current);
+            });
+            setSelectedDocId(terminalId);
+        } else {
+            // No terminal-main → session was created from an existing terminal → open as new tab
+            const newTerminalItem: DocItem = {
+                id: terminalId,
+                name: terminalName,
+                type: 'terminal',
+                sessionId: activeSessionId,
+                updatedAt: new Date(),
+                ownerId: user?.uid || 'system'
             };
-            return replaceMosaicId(current);
-        });
-        setSelectedDocId(terminalId);
+            setOpenTabs(prev => [...prev, newTerminalItem]);
+            import('react-mosaic-component').then(({ getLeaves, createBalancedTreeFromLeaves }) => {
+                setMosaicNode(current => {
+                    const leaves = getLeaves(current);
+                    if (leaves.includes(terminalId)) return current;
+                    return createBalancedTreeFromLeaves([...leaves, terminalId]);
+                });
+            });
+            selectSession(activeSessionId);
+            setSelectedDocId(terminalId);
+        }
     }, [activeSessionId, terminalSessions, openTabs]);
+
+    const handleRequestNewTerminal = useCallback(() => {
+        if (!currentWorkspace || !user) return;
+        const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
+            ? `personal:${user.uid}`
+            : currentWorkspace.id;
+        const workspaceSessions = getSessionsForWorkspace(workerToken);
+        createSession(workerToken, currentWorkspace.type, `Terminal ${workspaceSessions.length + 1}`);
+    }, [currentWorkspace, user, createSession, getSessionsForWorkspace]);
 
     const openBoard = useCallback(async () => {
         if (!currentWorkspace || !user) return;
@@ -2141,6 +2173,7 @@ function DashboardContent() {
                                     currentWorkspaceType={currentWorkspace?.type}
                                     currentUserId={user?.uid}
                                     nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                                    onRequestNewTerminal={handleRequestNewTerminal}
                                 />
                             </div>
                         ) : (
