@@ -322,7 +322,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
-    handleSearchStateChange, getSearchNavRef
+    handleSearchStateChange, getSearchNavRef, onRequestNewTerminal
   ]);
 
   return (
