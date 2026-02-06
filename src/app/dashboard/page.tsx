@@ -2051,6 +2051,28 @@ function DashboardContent() {
                             setShowPasswordModal(true);
                         }}
                         onLogout={() => logout()}
+                        connectionStatus={connectionStatus}
+                        isCreatingSession={isCreatingSession}
+                        activeSessionId={activeSessionId}
+                        getWorkerStatusForWorkspace={getWorkerStatusForWorkspace}
+                        getSessionsForWorkspace={getSessionsForWorkspace}
+                        createSession={createSession}
+                        selectSession={selectSession}
+                        destroySession={destroySession}
+                        onRenameSession={promptRenameTerminalSession}
+                        openTerminal={openTerminal}
+                        openTabs={openTabs}
+                        closeTabById={closeTabById}
+                        createDoc={createDoc}
+                        createFolder={createFolder}
+                        activeFolder={activeFolder}
+                        setUploadTargetFolder={setUploadTargetFolder}
+                        fileInputRef={fileInputRef}
+                        folderInputRef={folderInputRef}
+                        handleFileUpload={handleFileUpload}
+                        handleFolderUpload={handleFolderUpload}
+                        folderInputProps={folderInputProps}
+                        defaultFolderName={DEFAULT_FOLDER_NAME}
                     />
                 )}
 
@@ -2086,32 +2108,10 @@ function DashboardContent() {
                         isCollapsed={isSidebarCollapsed}
                         showMobileSidebar={showMobileSidebar}
                         onCloseMobileSidebar={() => setShowMobileSidebar(false)}
-                        openFilesTab={openFilesTab}
-                        createDoc={createDoc}
-                        createFolder={createFolder}
-                        setUploadTargetFolder={setUploadTargetFolder}
-                        fileInputRef={fileInputRef}
-                        folderInputRef={folderInputRef}
-                        handleFileUpload={handleFileUpload}
-                        handleFolderUpload={handleFolderUpload}
-                        folderInputProps={folderInputProps}
                         currentWorkspace={currentWorkspace}
                         activeFolder={activeFolder}
                         setActiveFolder={setActiveFolderSafe}
                         folders={folders}
-                        connectionStatus={connectionStatus}
-                        isCreatingSession={isCreatingSession}
-                        activeSessionId={activeSessionId}
-                        getWorkerStatusForWorkspace={getWorkerStatusForWorkspace}
-                        getSessionsForWorkspace={getSessionsForWorkspace}
-                        createSession={createSession}
-                        selectSession={selectSession}
-                        destroySession={destroySession}
-                        onRenameSession={promptRenameTerminalSession}
-                        openTerminal={openTerminal}
-                        openTabs={openTabs}
-                        closeTabById={closeTabById}
-                        user={user}
                         loadingDocs={loadingDocs}
                         docs={docs}
                         sidebarSearchQuery={sidebarSearchQuery}
@@ -2123,8 +2123,6 @@ function DashboardContent() {
                         handleDocDragEnd={handleDocDragEnd}
                         deleteDocument={deleteDocument}
                         onRenameDocument={promptRenameDocument}
-                        setShowQuickSearch={setShowQuickSearch}
-                        quickSearchInputRef={quickSearchInputRef}
                         getIcon={getIcon}
                         folderDragOver={folderDragOver}
                         onFolderDragOver={handleFolderDragOver}

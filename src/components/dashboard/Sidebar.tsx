@@ -3,14 +3,10 @@
 import type React from 'react';
 import { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Pencil, Plus, Search, Settings, Trash2, Upload, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, Loader2, Pencil, Search, Settings, Trash2, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
-import AssistantSection from '@/components/dashboard/AssistantSection';
-import type { TerminalSession } from '@/context/TerminalContext';
-import type { WorkerStatus } from '@/lib/TerminalController';
-import type { User as FirebaseUser } from 'firebase/auth';
 
 const ROW_HEIGHT = 28;
 
@@ -56,32 +52,10 @@ interface SidebarProps {
   isCollapsed: boolean;
   showMobileSidebar: boolean;
   onCloseMobileSidebar: () => void;
-  openFilesTab: () => void;
-  createDoc: (e?: React.FormEvent, folderName?: string) => void;
-  createFolder: () => void;
-  setUploadTargetFolder: (folder: string) => void;
-  fileInputRef: React.RefObject<HTMLInputElement>;
-  folderInputRef: React.RefObject<HTMLInputElement>;
-  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleFolderUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  folderInputProps: React.InputHTMLAttributes<HTMLInputElement>;
   currentWorkspace: Workspace | null;
   activeFolder: string;
   setActiveFolder: (folder: string) => void;
   folders: FolderItem[];
-  connectionStatus: 'checking' | 'online' | 'offline' | 'error';
-  isCreatingSession: boolean;
-  activeSessionId: string | null;
-  getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
-  getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
-  createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
-  selectSession: (sessionId: string) => void;
-  destroySession: (sessionId: string) => void;
-  onRenameSession: (session: TerminalSession) => void;
-  openTerminal: (session?: { id: string; name: string }) => void;
-  openTabs: DocItem[];
-  closeTabById: (tabId: string) => void;
-  user: FirebaseUser | null;
   loadingDocs: boolean;
   docs: DocItem[];
   sidebarSearchQuery: string;
@@ -93,8 +67,6 @@ interface SidebarProps {
   handleDocDragEnd: () => void;
   deleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
   onRenameDocument: (doc: DocItem) => void;
-  setShowQuickSearch: (value: boolean) => void;
-  quickSearchInputRef: React.RefObject<HTMLInputElement>;
   getIcon: (doc: DocItem) => React.ReactNode;
   folderDragOver: string | null;
   onFolderDragOver: (e: React.DragEvent, path: string) => void;
@@ -107,45 +79,20 @@ const Sidebar = ({
   isCollapsed,
   showMobileSidebar,
   onCloseMobileSidebar,
-  openFilesTab,
-  createDoc,
-  createFolder,
-  setUploadTargetFolder,
-  fileInputRef,
-  folderInputRef,
-  handleFileUpload,
-  handleFolderUpload,
-  folderInputProps,
   currentWorkspace,
   activeFolder,
   setActiveFolder,
   folders,
-  connectionStatus,
-  isCreatingSession,
-  activeSessionId,
-  getWorkerStatusForWorkspace,
-  getSessionsForWorkspace,
-  createSession,
-  selectSession,
-  destroySession,
-  onRenameSession,
-  openTerminal,
-  openTabs,
-  closeTabById,
-  user,
   loadingDocs,
   docs,
   sidebarSearchQuery,
   setSidebarSearchQuery,
-  sidebarFilteredDocs,
   selectedDocId,
   openDocument,
   handleDocDragStart,
   handleDocDragEnd,
   deleteDocument,
   onRenameDocument,
-  setShowQuickSearch,
-  quickSearchInputRef,
   getIcon,
   folderDragOver,
   onFolderDragOver,
@@ -460,67 +407,9 @@ const Sidebar = ({
         `}
         aria-hidden={isCollapsedView}
       >
-        <div className="p-3 border-b border-surface-600/50 flex justify-between items-center bg-surface-700/30 gap-2">
-          <div className="flex gap-0.5">
-            <button onClick={() => openFilesTab()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Abrir Explorador">
-              <Folder className="w-4 h-4" />
-            </button>
-            <button onClick={() => createDoc(undefined, activeFolder)} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nuevo Archivo">
-              <Plus className="w-4 h-4" />
-            </button>
-            <button onClick={() => createFolder()} className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Nueva Carpeta">
-              <FolderPlus className="w-4 h-4" />
-            </button>
-            <div className="relative group/up">
-              <button className="p-1.5 hover:bg-surface-700 rounded text-surface-500 hover:text-mandy-400 transition" title="Subir">
-                <Upload className="w-4 h-4" />
-              </button>
-              <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-600 rounded-lg shadow-xl p-1 hidden group-hover/up:flex flex-col gap-1 z-50">
-                <button
-                  onClick={() => {
-                    setUploadTargetFolder(DEFAULT_FOLDER_NAME);
-                    fileInputRef.current?.click();
-                  }}
-                  className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"
-                >
-                  <Upload className="w-3 h-3" /> Archivos
-                </button>
-                <button
-                  onClick={() => {
-                    setUploadTargetFolder(DEFAULT_FOLDER_NAME);
-                    folderInputRef.current?.click();
-                  }}
-                  className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"
-                >
-                  <FolderUp className="w-3 h-3" /> Carpeta
-                </button>
-              </div>
-            </div>
-          </div>
-          <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
-          <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
-        </div>
-
-        <div className="flex-1 overflow-hidden p-2 flex flex-col gap-4">
-          <AssistantSection
-            currentWorkspace={currentWorkspace}
-            user={user}
-            connectionStatus={connectionStatus}
-            isCreatingSession={isCreatingSession}
-            activeSessionId={activeSessionId}
-            getWorkerStatusForWorkspace={getWorkerStatusForWorkspace}
-            getSessionsForWorkspace={getSessionsForWorkspace}
-            createSession={createSession}
-            selectSession={selectSession}
-            destroySession={destroySession}
-            onRenameSession={onRenameSession}
-            openTerminal={openTerminal}
-            openTabs={openTabs}
-            closeTabById={closeTabById}
-          />
-
+        <div className="flex-1 overflow-hidden p-2 flex flex-col">
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="px-2 py-1 flex items-center justify-between">
+            <div className="px-2 py-1.5 flex items-center justify-between">
               <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
                 ARCHIVOS: {currentWorkspace?.name}
                 {loadingDocs && <Loader2 className="w-3 h-3 animate-spin text-surface-500" />}
@@ -546,16 +435,6 @@ const Sidebar = ({
                   </button>
                 )}
               </div>
-              <button
-                onClick={() => {
-                  setShowQuickSearch(true);
-                  setTimeout(() => quickSearchInputRef.current?.focus(), 50);
-                }}
-                className="w-full mt-1 px-2 py-1 text-[10px] text-surface-500 hover:text-surface-300 flex items-center gap-1 justify-center hover:bg-surface-800 rounded transition"
-              >
-                <kbd className="px-1 py-0.5 bg-surface-700 rounded text-[9px]">Ctrl+P</kbd>
-                <span>Busqueda rapida</span>
-              </button>
             </div>
 
             <div className="mt-2 px-1 flex-1 min-h-0">
