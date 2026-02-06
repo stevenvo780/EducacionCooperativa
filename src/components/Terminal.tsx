@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TerminalProps {
   nexusUrl: string;
@@ -11,7 +11,6 @@ interface TerminalProps {
   workspaceName?: string;
   workspaceType?: 'personal' | 'shared';
   sessionId?: string;
-  onRequestNewTerminal?: () => void;
 }
 
 function getWorkerToken(workspaceType: 'personal' | 'shared', workspaceId: string | undefined, userId: string): string {
@@ -26,8 +25,7 @@ const Terminal: React.FC<TerminalProps> = ({
     workspaceId,
     workspaceName,
     workspaceType = 'personal',
-    sessionId,
-    onRequestNewTerminal
+    sessionId
 }) => {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -151,22 +149,12 @@ const Terminal: React.FC<TerminalProps> = ({
   if (effectiveSessionId && sessionActive) {
       return (
         <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
-            <div className="absolute top-4 right-4 z-10 flex gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                {onRequestNewTerminal && (
-                    <button
-                        onClick={onRequestNewTerminal}
-                        className="pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-mandy-500/20 border-mandy-500/30 text-mandy-400 hover:bg-mandy-500/30 hover:border-mandy-400/50 hover:text-mandy-300 transition-all cursor-pointer shadow-lg hover:shadow-mandy-500/20"
-                        title="Abrir nueva terminal en otra pestaña"
-                    >
-                        <Plus className="w-3 h-3" />
-                        NUEVA TERMINAL
-                    </button>
-                )}
-                <div className="pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+            <div className="absolute top-4 right-4 z-10 flex gap-2 pointer-events-none opacity-40 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     ONLINE
                 </div>
-                <div className="pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-indigo-500/10 border-indigo-500/20 text-indigo-400">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-indigo-500/10 border-indigo-500/20 text-indigo-400">
                     <Monitor className="w-3 h-3" />
                     SESIÓN {effectiveSessionId.slice(-4)}
                 </div>
@@ -219,14 +207,6 @@ const Terminal: React.FC<TerminalProps> = ({
                         <span className="absolute inset-0 rounded-xl bg-emerald-400/20 animate-ping opacity-30 group-hover/btn:opacity-0 transition-opacity" />
                         <TerminalIcon className="w-6 h-6" /> Iniciar Terminal
                     </button>
-                    {onRequestNewTerminal && (
-                        <button
-                            onClick={onRequestNewTerminal}
-                            className="px-5 py-2 bg-mandy-500/10 hover:bg-mandy-500/20 border border-mandy-500/30 hover:border-mandy-400/50 text-mandy-400 hover:text-mandy-300 rounded-lg font-semibold text-xs flex items-center gap-2 mx-auto transition-all"
-                        >
-                            <Plus className="w-4 h-4" /> Abrir otra terminal en nueva pestaña
-                        </button>
-                    )}
                     <p className="text-xs text-slate-500">O selecciona una sesión existente en la barra lateral.</p>
 
                     {/* Show active sessions in this workspace for joining */}
