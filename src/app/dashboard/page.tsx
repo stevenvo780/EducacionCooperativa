@@ -2073,6 +2073,7 @@ function DashboardContent() {
                         handleFolderUpload={handleFolderUpload}
                         folderInputProps={folderInputProps}
                         defaultFolderName={DEFAULT_FOLDER_NAME}
+                        openFilesTab={openFilesTab}
                     />
                 )}
 
