@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ChevronUp,
   Copy,
+  FolderOpen,
   FolderPlus,
   FolderUp,
   KanbanSquare,
@@ -87,6 +88,7 @@ interface HeaderBarProps {
   handleFolderUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   folderInputProps: React.InputHTMLAttributes<HTMLInputElement>;
   defaultFolderName: string;
+  openFilesTab: () => void;
 }
 
 const HeaderBar = ({
@@ -138,7 +140,8 @@ const HeaderBar = ({
   handleFileUpload,
   handleFolderUpload,
   folderInputProps,
-  defaultFolderName
+  defaultFolderName,
+  openFilesTab
 }: HeaderBarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -326,7 +329,7 @@ const HeaderBar = ({
       </div>
 
       {/* ── Center: Terminal tabs + File actions ── */}
-      <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+      <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
         {/* Worker status dot */}
         <div className="flex items-center gap-1 shrink-0 pr-1" title={isWorkerOnline ? 'Worker listo' : connectionStatus === 'checking' ? 'Conectando…' : 'Sin worker'}>
           <div className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
@@ -365,21 +368,21 @@ const HeaderBar = ({
         {workspaceSessions.map(sess => {
           const isActive = activeSessionId === sess.id;
           return (
-            <div key={sess.id} className="relative flex items-center shrink-0" ref={menuOpenId === sess.id ? menuRef : undefined}>
+            <div key={sess.id} className="relative flex items-center gap-0.5 shrink-0" ref={menuOpenId === sess.id ? menuRef : undefined}>
               <button
                 onClick={() => {
                   selectSession(sess.id);
                   openTerminal({ id: sess.id, name: sess.name || 'Terminal' });
                 }}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs whitespace-nowrap transition-colors ${
                   isActive
                     ? 'bg-mandy-500/20 text-mandy-300 font-medium border border-mandy-500/30'
                     : 'text-surface-400 hover:bg-surface-700/60 hover:text-surface-200 border border-transparent'
                 }`}
               >
-                <TerminalIcon className="w-2.5 h-2.5 shrink-0" />
-                <span className="max-w-[80px] truncate">{sess.name || 'Terminal'}</span>
-                {isActive && <div className="w-1 h-1 rounded-full bg-mandy-500 shrink-0" />}
+                <TerminalIcon className="w-3 h-3 shrink-0" />
+                <span className="max-w-[100px] truncate">{sess.name || 'Terminal'}</span>
+                {isActive && <div className="w-1.5 h-1.5 rounded-full bg-mandy-500 shrink-0" />}
               </button>
 
               <button
@@ -387,20 +390,20 @@ const HeaderBar = ({
                   e.stopPropagation();
                   setMenuOpenId(prev => prev === sess.id ? null : sess.id);
                 }}
-                className="p-0.5 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
+                className="p-1.5 rounded-md text-surface-400 hover:text-surface-200 hover:bg-surface-600 transition"
                 title="Opciones"
               >
-                <MoreVertical className="w-2.5 h-2.5" />
+                <MoreVertical className="w-3.5 h-3.5" />
               </button>
 
               {menuOpenId === sess.id && (
-                <div className="absolute top-full left-0 mt-1 w-36 bg-surface-800 border border-surface-600/50 rounded-lg shadow-xl shadow-black/40 z-50 overflow-hidden">
+                <div className="fixed z-[999] w-40 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden" style={{ top: menuRef.current ? menuRef.current.getBoundingClientRect().bottom + 4 : 0, left: menuRef.current ? menuRef.current.getBoundingClientRect().left : 0 }}>
                   <button
                     onClick={() => {
                       onRenameSession(sess);
                       setMenuOpenId(null);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-surface-300 hover:bg-surface-700 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
                   >
                     <Pencil className="w-3 h-3" />
                     Renombrar
@@ -412,7 +415,7 @@ const HeaderBar = ({
                       if (terminalTab) closeTabById(terminalTab.id);
                       setMenuOpenId(null);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-surface-700 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-surface-700 transition"
                   >
                     <X className="w-3 h-3" />
                     Cerrar sesión
@@ -547,6 +550,13 @@ const HeaderBar = ({
           title="Tablero"
         >
           <KanbanSquare className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={openFilesTab}
+          className="p-1.5 rounded-full transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+          title="Explorador de archivos"
+        >
+          <FolderOpen className="w-3.5 h-3.5" />
         </button>
 
         {/* User menu */}
