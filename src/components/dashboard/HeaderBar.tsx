@@ -146,7 +146,9 @@ const HeaderBar = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   /* ── Terminal helpers ── */
   const workerToken = currentWorkspace && user
@@ -174,8 +176,12 @@ const HeaderBar = ({
   useEffect(() => {
     if (!menuOpenId && !showUploadMenu) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideMenu = menuRef.current && menuRef.current.contains(target);
+      const insideButton = menuButtonRef.current && menuButtonRef.current.contains(target);
+      if (!insideMenu && !insideButton) {
         setMenuOpenId(null);
+        setMenuPos(null);
         setShowUploadMenu(false);
       }
     };
@@ -368,7 +374,7 @@ const HeaderBar = ({
         {workspaceSessions.map(sess => {
           const isActive = activeSessionId === sess.id;
           return (
-            <div key={sess.id} className="relative flex items-center gap-0.5 shrink-0" ref={menuOpenId === sess.id ? menuRef : undefined}>
+            <div key={sess.id} className="relative flex items-center gap-0.5 shrink-0">
               <button
                 onClick={() => {
                   selectSession(sess.id);
@@ -386,9 +392,17 @@ const HeaderBar = ({
               </button>
 
               <button
+                ref={menuOpenId === sess.id ? menuButtonRef : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setMenuOpenId(prev => prev === sess.id ? null : sess.id);
+                  if (menuOpenId === sess.id) {
+                    setMenuOpenId(null);
+                    setMenuPos(null);
+                  } else {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setMenuPos({ top: rect.bottom + 4, left: Math.max(0, rect.right - 160) });
+                    setMenuOpenId(sess.id);
+                  }
                 }}
                 className="p-1.5 rounded-md text-surface-400 hover:text-surface-200 hover:bg-surface-600 transition"
                 title="Opciones"
@@ -396,12 +410,17 @@ const HeaderBar = ({
                 <MoreVertical className="w-3.5 h-3.5" />
               </button>
 
-              {menuOpenId === sess.id && (
-                <div className="absolute right-0 top-full mt-1 z-[999] w-40 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+              {menuOpenId === sess.id && menuPos && (
+                <div
+                  ref={menuRef}
+                  className="fixed z-[9999] w-40 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden"
+                  style={{ top: menuPos.top, left: menuPos.left }}
+                >
                   <button
                     onClick={() => {
                       onRenameSession(sess);
                       setMenuOpenId(null);
+                      setMenuPos(null);
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
                   >
@@ -414,6 +433,7 @@ const HeaderBar = ({
                       const terminalTab = openTabs.find(t => t.type === 'terminal' && t.sessionId === sess.id);
                       if (terminalTab) closeTabById(terminalTab.id);
                       setMenuOpenId(null);
+                      setMenuPos(null);
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-surface-700 transition"
                   >
