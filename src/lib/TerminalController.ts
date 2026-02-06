@@ -41,6 +41,7 @@ export interface WorkspaceSession {
 
 export class TerminalController {
   private terminals: Map<string, TerminalInstance> = new Map();
+  private sessionOwnership: Map<string, boolean> = new Map();
   public socket: Socket | null = null;
   private nexusUrl: string;
   private initialized = false;
@@ -51,6 +52,8 @@ export class TerminalController {
   private onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void;
   private onDocChange?: (event: DocChangeEvent) => void;
   private onWorkspaceSessionsChange?: (data: { workspaceId: string, sessions: WorkspaceSession[] }) => void;
+  private onRestoreFailed?: (payload: { sessionId: string; reason: string }) => void;
+  private onSessionJoined?: (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => void;
 
   public get term(): any {
     if (this.activeSessionId) {
@@ -237,6 +240,14 @@ export class TerminalController {
     this.onWorkspaceSessionsChange = handler;
   }
 
+  public setRestoreFailedHandler(handler: (payload: { sessionId: string; reason: string }) => void) {
+    this.onRestoreFailed = handler;
+  }
+
+  public setSessionJoinedHandler(handler: (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => void) {
+    this.onSessionJoined = handler;
+  }
+
   public connect(
     token: string,
     uid: string,
@@ -299,6 +310,7 @@ export class TerminalController {
 
     this.socket.on('session-created', (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => {
       this.activeSessionId = data.id;
+      this.sessionOwnership.set(data.id, true);
       const instance = this.getTerminalInstance(data.id);
       if (instance) {
         instance.term.clear();
@@ -336,8 +348,23 @@ export class TerminalController {
       this.onDocChange?.(event);
     });
 
-    this.socket.on('workspace-sessions', (data: { workspaceId: string, sessions: WorkspaceSession[] }) => {
-      this.onWorkspaceSessionsChange?.(data);
+    this.socket.on('restore-failed', (payload: { sessionId: string; reason: string }) => {
+      console.warn(`[TerminalController] restore-failed for session ${payload.sessionId}: ${payload.reason}`);
+      this.onRestoreFailed?.(payload);
+    });
+
+    this.socket.on('session-joined', (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => {
+      console.log(`[TerminalController] session-joined: ${payload.id} (owner: ${payload.isOwner})`);
+      this.sessionOwnership.set(payload.id, payload.isOwner);
+      const instance = this.getTerminalInstance(payload.id);
+      if (instance && !payload.isOwner) {
+        instance.term.writeln('\x1b[36m📺 Conectado a sesión compartida\x1b[0m');
+      }
+      this.onSessionJoined?.(payload);
+    });
+
+    this.socket.on('join-session-failed', (payload: { sessionId: string; reason: string }) => {
+      console.warn(`[TerminalController] join-session-failed: ${payload.sessionId} - ${payload.reason}`);
     });
 
     this.socket.connect();
@@ -373,6 +400,12 @@ export class TerminalController {
     }
   }
 
+  public joinSession(sessionId: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('join-session', { sessionId });
+    }
+  }
+
   public startSession(payload?: { workspaceId?: string; workspaceName?: string; workspaceType?: string }) {
     if (this.socket?.connected) {
       this.socket.emit('create-session', payload);
@@ -402,6 +435,7 @@ export class TerminalController {
       instance.term?.dispose();
       this.terminals.delete(sessionId);
     }
+    this.sessionOwnership.delete(sessionId);
   }
 
   public focusSession(sessionId: string) {
@@ -419,11 +453,18 @@ export class TerminalController {
       // Forzar repintado para corregir artefactos
       instance.term.refresh(0, rows - 1);
 
-      if (this.socket?.connected && cols > 0 && rows > 0) {
+      // tmux-like: solo el owner redimensiona el PTY del worker
+      // Los viewers tienen su propio grid local via xterm.js
+      const isOwner = this.sessionOwnership.get(sessionId) ?? true;
+      if (isOwner && this.socket?.connected && cols > 0 && rows > 0) {
         this.socket.emit('resize', { sessionId, cols, rows });
       }
     } catch (e) {
     }
+  }
+
+  public isSessionOwner(sessionId: string): boolean {
+    return this.sessionOwnership.get(sessionId) ?? true;
   }
 
   public mount(container: HTMLElement) {
@@ -460,6 +501,7 @@ export class TerminalController {
       instance.term?.dispose();
     });
     this.terminals.clear();
+    this.sessionOwnership.clear();
     this.subscribedWorkspaces.clear();
     this.workspaceStatuses.clear();
     this.socket?.disconnect();
