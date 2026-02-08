@@ -291,7 +291,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
             let pendingSessionMeta: { workspaceId: string; workspaceType: 'personal' | 'shared'; workspaceName?: string } | null = null;
 
-            const handleSessionCreated = (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => {
+            const handleSessionCreated = (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string; sessionName?: string }) => {
                 const isRestored = restoringSessionIdsRef.current.has(data.id);
                 if (!isRestored) {
                     setIsCreatingSession(false);
@@ -306,6 +306,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                     const persisted = persistedSessionsRef.current.get(data.id);
                     const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
                     const fallbackName = persisted?.name || `Terminal ${existingCount + 1}`;
+                    const serverName = data.sessionName;
 
                     if (existing) {
                         const nextSession = {
@@ -313,7 +314,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                             workspaceId,
                             workspaceType,
                             workspaceName,
-                            name: existing.name || persisted?.name || fallbackName
+                            name: serverName || existing.name || persisted?.name || fallbackName
                         };
                         if (
                             existing.workspaceId === nextSession.workspaceId
@@ -328,7 +329,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
                     const newSession: TerminalSession = {
                         id: data.id,
-                        name: persisted?.name || fallbackName,
+                        name: serverName || persisted?.name || fallbackName,
                         workspaceId,
                         workspaceType,
                         workspaceName
@@ -371,12 +372,13 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
                     const newSessions = serverSessions.map(s => {
                         const existing = prev.find(p => p.id === s.id);
+                        const serverName = s.sessionName;
                         return {
                             id: s.id,
                             workspaceId: s.workspaceId,
                             workspaceName: s.workspaceName,
                             workspaceType: (s.workspaceType as 'personal' | 'shared') || 'shared',
-                            name: existing?.name || s.workspaceName || `Terminal ${s.id.substring(0, 4)}`
+                            name: serverName || existing?.name || s.workspaceName || `Terminal ${s.id.substring(0, 4)}`
                         };
                     });
 
@@ -411,6 +413,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             controller.setSessionJoinedHandler((payload) => {
                 debugLog('[TerminalContext] session-joined:', payload);
                 const { id: sessionId, workspaceId, workspaceName, workspaceType, isOwner } = payload;
+                const serverName = (payload as any).sessionName;
 
                 setSessions(prev => {
                     const existing = prev.find(s => s.id === sessionId);
@@ -418,7 +421,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
                     const newSession: TerminalSession = {
                         id: sessionId,
-                        name: workspaceName || `Terminal ${sessionId.substring(0, 4)}`,
+                        name: serverName || workspaceName || `Terminal ${sessionId.substring(0, 4)}`,
                         workspaceId,
                         workspaceType: (workspaceType as 'personal' | 'shared') || 'shared',
                         workspaceName
@@ -434,6 +437,15 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                     savePersistedActiveSession(currentUser.uid, sessionId);
                     savedActiveSessionIdRef.current = sessionId;
                 }
+            });
+
+            // Listen for session renames from other clients
+            controller.setSessionRenamedHandler((payload) => {
+                debugLog('[TerminalContext] session-renamed:', payload);
+                const { sessionId, sessionName } = payload;
+                setSessions(prev => prev.map(s =>
+                    s.id === sessionId ? { ...s, name: sessionName } : s
+                ));
             });
 
             controller.connect(
@@ -528,6 +540,8 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         setSessions(prev => prev.map(session => (
             session.id === sessionId ? { ...session, name: trimmed } : session
         )));
+        // Broadcast rename to other clients via hub
+        controllerRef.current?.renameSession(sessionId, trimmed);
     }, []);
 
     const subscribeToWorkspace = useCallback((workspaceId: string) => {
