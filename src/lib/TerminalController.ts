@@ -37,6 +37,7 @@ export interface WorkspaceSession {
   workspaceName?: string;
   workspaceType?: string;
   ownerUid?: string;
+  sessionName?: string;
 }
 
 export class TerminalController {
@@ -54,6 +55,7 @@ export class TerminalController {
   private onWorkspaceSessionsChange?: (data: { workspaceId: string, sessions: WorkspaceSession[] }) => void;
   private onRestoreFailed?: (payload: { sessionId: string; reason: string }) => void;
   private onSessionJoined?: (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => void;
+  private onSessionRenamed?: (payload: { sessionId: string; sessionName: string }) => void;
 
   public get term(): any {
     if (this.activeSessionId) {
@@ -367,6 +369,11 @@ export class TerminalController {
       console.warn(`[TerminalController] join-session-failed: ${payload.sessionId} - ${payload.reason}`);
     });
 
+    this.socket.on('session-renamed', (payload: { sessionId: string; sessionName: string }) => {
+      console.log(`[TerminalController] session-renamed: ${payload.sessionId} -> "${payload.sessionName}"`);
+      this.onSessionRenamed?.(payload);
+    });
+
     this.socket.connect();
   }
 
@@ -426,6 +433,16 @@ export class TerminalController {
     }
 
     this.disposeSession(sessionId);
+  }
+
+  public renameSession(sessionId: string, sessionName: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('rename-session', { sessionId, sessionName });
+    }
+  }
+
+  public setSessionRenamedHandler(handler: (payload: { sessionId: string; sessionName: string }) => void) {
+    this.onSessionRenamed = handler;
   }
 
   public disposeSession(sessionId: string) {
