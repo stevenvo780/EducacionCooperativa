@@ -14,6 +14,14 @@ interface MermaidGlobal {
 
 let loadPromise: Promise<MermaidGlobal> | null = null;
 
+// Mutex: mermaid.render() is NOT safe for concurrent calls — serialize them
+let renderQueue: Promise<void> = Promise.resolve();
+function queueRender<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    renderQueue = renderQueue.then(() => fn().then(resolve, reject), () => fn().then(resolve, reject));
+  });
+}
+
 // Mermaid render() needs a visible sandbox in the DOM for SVG dimension calculations
 function ensureSandbox(): void {
   if (document.getElementById('mermaid-sandbox')) return;
@@ -50,6 +58,7 @@ function loadMermaid(): Promise<MermaidGlobal> {
       }
       m.initialize({
         startOnLoad: false,
+        securityLevel: 'loose',
         theme: 'dark',
         themeVariables: {
           primaryColor: '#1e293b',
@@ -67,7 +76,7 @@ function loadMermaid(): Promise<MermaidGlobal> {
           edgeLabelBackground: '#0f172a',
           nodeTextColor: '#e2e8f0'
         },
-        flowchart: { curve: 'basis', padding: 16 },
+        flowchart: { curve: 'basis', padding: 16, htmlLabels: true, useMaxWidth: true },
         sequence: { mirrorActors: false },
         gantt: { axisFormat: '%Y-%m-%d' }
       });
@@ -106,13 +115,15 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
       idRef.current += 1;
       const id = `mmd-${Date.now()}-${idRef.current}`;
 
-      // render() works in memory — no need for a visible DOM node
-      const { svg } = await Promise.race([
-        mermaid.render(id, chart.trim()),
-        new Promise<never>((_, rej) =>
-          setTimeout(() => rej(new Error('Timeout renderizando diagrama')), RENDER_TIMEOUT)
-        )
-      ]);
+      // render() is NOT safe for concurrent calls — use mutex queue
+      const { svg } = await queueRender(() =>
+        Promise.race([
+          mermaid.render(id, chart.trim()),
+          new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error('Timeout renderizando diagrama')), RENDER_TIMEOUT)
+          )
+        ])
+      );
 
       if (!svg || !svg.includes('<svg')) {
         throw new Error('Mermaid no generó SVG válido');
