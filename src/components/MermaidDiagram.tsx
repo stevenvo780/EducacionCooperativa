@@ -79,12 +79,12 @@ interface MermaidDiagramProps {
 }
 
 const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const mermaidRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
 
   const renderDiagram = useCallback(async () => {
-    const el = containerRef.current;
+    const el = mermaidRef.current;
     if (!el) return;
 
     setState('loading');
@@ -93,7 +93,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
     try {
       const mermaid = await loadMermaid();
 
-      // Wipe any previous SVG and set the raw mermaid code
+      // Wipe previous render and set raw mermaid code
       el.innerHTML = '';
       el.removeAttribute('data-processed');
       const pre = document.createElement('pre');
@@ -121,7 +121,9 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
   }, [renderDiagram]);
 
   return (
-    <div ref={containerRef} className="mermaid-container">
+    <div className="mermaid-container">
+      {/* This div is exclusively managed by mermaid — React never touches its children */}
+      <div ref={mermaidRef} style={{ display: state === 'ok' ? 'block' : 'none' }} />
       {state === 'loading' && (
         <div className="mermaid-loading">
           <div className="mermaid-loading-spinner" />
