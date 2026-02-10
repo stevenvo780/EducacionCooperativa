@@ -28,12 +28,7 @@ import rehypeRaw from 'rehype-raw';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, withAuthToken, getAuthToken } from '@/services/apiClient';
-import dynamic from 'next/dynamic';
-
-const MermaidDiagram = dynamic(() => import('@/components/MermaidDiagram'), {
-  ssr: false,
-  loading: () => <div className="mermaid-loading"><span>Cargando diagrama…</span></div>
-});
+import MermaidDiagram from '@/components/MermaidDiagram';
 
 // Helper function to highlight text in DOM nodes
 const highlightTextInNode = (node: Node, searchTerm: string, highlights: HTMLElement[]): void => {
