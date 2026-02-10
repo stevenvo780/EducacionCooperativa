@@ -24,7 +24,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, withAuthToken, getAuthToken } from '@/services/apiClient';
@@ -77,17 +76,44 @@ const clearHighlights = (container: HTMLElement): void => {
   });
 };
 
+// Error boundary to prevent mermaid crashes from taking down the whole app
+class DiagramErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: string },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback: string }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="mermaid-error">
+          <div className="mermaid-error-label">⚠ Error al renderizar diagrama</div>
+          <pre className="mermaid-error-source">{this.props.fallback}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const MarkdownPreview = React.memo(({ content }: { content: string }) => (
   <ReactMarkdown
     remarkPlugins={[remarkMath, remarkGfm]}
-    rehypePlugins={[rehypeKatex, rehypeRaw]}
+    rehypePlugins={[rehypeKatex]}
     components={{
       pre({ children }) {
         const child = React.Children.toArray(children)[0] as React.ReactElement;
         const className: string = (child?.props as Record<string, string>)?.className || '';
         if (/language-mermaid/.test(className)) {
           const code = String((child?.props as Record<string, unknown>)?.children || '').replace(/\n$/, '');
-          return <MermaidDiagram chart={code} />;
+          return (
+            <DiagramErrorBoundary fallback={code}>
+              <MermaidDiagram chart={code} />
+            </DiagramErrorBoundary>
+          );
         }
         return <pre>{children}</pre>;
       }
