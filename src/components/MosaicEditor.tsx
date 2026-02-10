@@ -88,11 +88,10 @@ const MarkdownPreview = React.memo(({ content }: { content: string }) => (
     rehypePlugins={[rehypeKatex, rehypeRaw]}
     components={{
       pre({ children }) {
-        /* eslint-disable @typescript-eslint/no-explicit-any */
-        const child = React.Children.toArray(children)[0] as any;
-        const className: string = child?.props?.className || '';
+        const child = React.Children.toArray(children)[0] as React.ReactElement;
+        const className: string = (child?.props as Record<string, string>)?.className || '';
         if (/language-mermaid/.test(className)) {
-          const code = String(child?.props?.children || '').replace(/\n$/, '');
+          const code = String((child?.props as Record<string, unknown>)?.children || '').replace(/\n$/, '');
           return <MermaidDiagram chart={code} />;
         }
         return <pre>{children}</pre>;
