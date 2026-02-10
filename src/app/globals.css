@@ -46,7 +46,7 @@ body {
 .markdown-preview h6 {
   color: #f8fafc;
   font-weight: 700;
-  margin: 1.4rem 0 0.6rem;
+  margin: 1.2rem 0 0.4rem;
 }
 
 .markdown-preview h1 { font-size: 1.6rem; }
@@ -56,7 +56,11 @@ body {
 .markdown-preview h5 { font-size: 0.95rem; }
 .markdown-preview h6 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
-.markdown-preview p,
+.markdown-preview p {
+  margin: 0.45rem 0;
+  white-space: pre-wrap;
+}
+
 .markdown-preview li,
 .markdown-preview td,
 .markdown-preview th {
@@ -66,11 +70,11 @@ body {
 .markdown-preview ul,
 .markdown-preview ol {
   padding-left: 1.4rem;
-  margin: 0.6rem 0 1rem;
+  margin: 0.4rem 0 0.6rem;
 }
 
 .markdown-preview li {
-  margin: 0.3rem 0;
+  margin: 0.15rem 0;
 }
 
 .markdown-preview a {
@@ -81,20 +85,20 @@ body {
 .markdown-preview hr {
   border: 0;
   border-top: 1px solid #334155;
-  margin: 1.5rem 0;
+  margin: 1rem 0;
 }
 
 .markdown-preview blockquote {
   border-left: 3px solid #334155;
   padding-left: 0.9rem;
   color: #94a3b8;
-  margin: 1rem 0;
+  margin: 0.6rem 0;
 }
 
 .markdown-preview table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1rem 0;
+  margin: 0.6rem 0;
 }
 
 .markdown-preview th,
@@ -123,7 +127,7 @@ body {
   border-radius: 0.6rem;
   padding: 0.9rem 1rem;
   overflow-x: auto;
-  margin: 1rem 0;
+  margin: 0.6rem 0;
 }
 
 .markdown-preview pre code {
@@ -137,6 +141,90 @@ body {
 .markdown-preview img {
   max-width: 100%;
   border-radius: 0.6rem;
+}
+
+/* ── Mermaid Diagrams ── */
+.mermaid-container {
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.6rem;
+  overflow-x: auto;
+}
+
+.mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.6rem;
+}
+
+.mermaid-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #334155;
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: mermaid-spin 0.8s linear infinite;
+}
+
+@keyframes mermaid-spin {
+  to { transform: rotate(360deg); }
+}
+
+.mermaid-error {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 0.6rem;
+}
+
+.mermaid-error-label {
+  color: #fca5a5;
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+
+.mermaid-error-detail {
+  color: #fca5a5;
+  font-size: 0.8rem;
+  margin: 0.3rem 0;
+  white-space: pre-wrap;
+}
+
+.mermaid-error-source {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  margin: 0.3rem 0;
+  padding: 0.5rem;
+  background: #0f172a;
+  border-radius: 0.35rem;
+  white-space: pre-wrap;
+}
+
+/* ── Spacing fine-tune: first/last child reset ── */
+.markdown-preview > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-preview > *:last-child {
+  margin-bottom: 0;
 }
 
 @layer utilities {
