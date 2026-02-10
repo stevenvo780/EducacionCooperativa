@@ -24,9 +24,16 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, withAuthToken, getAuthToken } from '@/services/apiClient';
+import dynamic from 'next/dynamic';
+
+const MermaidDiagram = dynamic(() => import('@/components/MermaidDiagram'), {
+  ssr: false,
+  loading: () => <div className="mermaid-loading"><span>Cargando diagrama…</span></div>
+});
 
 // Helper function to highlight text in DOM nodes
 const highlightTextInNode = (node: Node, searchTerm: string, highlights: HTMLElement[]): void => {
@@ -76,7 +83,22 @@ const clearHighlights = (container: HTMLElement): void => {
 };
 
 const MarkdownPreview = React.memo(({ content }: { content: string }) => (
-  <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+  <ReactMarkdown
+    remarkPlugins={[remarkMath, remarkGfm]}
+    rehypePlugins={[rehypeKatex, rehypeRaw]}
+    components={{
+      pre({ children }) {
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const child = React.Children.toArray(children)[0] as any;
+        const className: string = child?.props?.className || '';
+        if (/language-mermaid/.test(className)) {
+          const code = String(child?.props?.children || '').replace(/\n$/, '');
+          return <MermaidDiagram chart={code} />;
+        }
+        return <pre>{children}</pre>;
+      }
+    }}
+  >
     {content}
   </ReactMarkdown>
 ));
