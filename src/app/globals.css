@@ -58,14 +58,9 @@ body {
 
 .markdown-preview p {
   margin: 0.45rem 0;
-  white-space: pre-wrap;
 }
 
-.markdown-preview li,
-.markdown-preview td,
-.markdown-preview th {
-  white-space: pre-wrap;
-}
+
 
 .markdown-preview ul,
 .markdown-preview ol {
