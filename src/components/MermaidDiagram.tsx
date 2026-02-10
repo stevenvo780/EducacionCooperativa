@@ -99,13 +99,14 @@ interface MermaidDiagramProps {
 }
 
 const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [svgHtml, setSvgHtml] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const idRef = useRef(0);
 
   const renderDiagram = useCallback(async () => {
     setState('loading');
+    setSvgHtml('');
     setErrorMsg('');
 
     try {
@@ -129,12 +130,8 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
         throw new Error('Mermaid no generó SVG válido');
       }
 
-      // Inject SVG into container
-      const el = containerRef.current;
-      if (el) {
-        el.innerHTML = svg;
-      }
-
+      // Store SVG in React state so it survives re-renders
+      setSvgHtml(svg);
       setState('ok');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error desconocido';
@@ -149,7 +146,9 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
 
   return (
     <div className="mermaid-container">
-      <div ref={containerRef} style={{ display: state === 'ok' ? 'block' : 'none' }} />
+      {state === 'ok' && svgHtml && (
+        <div dangerouslySetInnerHTML={{ __html: svgHtml }} />
+      )}
       {state === 'loading' && (
         <div className="mermaid-loading">
           <div className="mermaid-loading-spinner" />
