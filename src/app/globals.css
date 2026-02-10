@@ -180,7 +180,11 @@ body {
   background-color: #1e293b !important;
 }
 
-.mermaid-container .cluster-label .nodeLabel {
+.mermaid-container .cluster-label .nodeLabel,
+.mermaid-container .cluster-label .nodeLabel p,
+.mermaid-container .cluster-label foreignObject div,
+.mermaid-container .cluster-label foreignObject div span,
+.mermaid-container .cluster-label foreignObject div span p {
   color: #e2e8f0 !important;
 }
 
