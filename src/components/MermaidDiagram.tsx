@@ -9,9 +9,19 @@ const RENDER_TIMEOUT = 10000;
 interface MermaidGlobal {
   initialize: (config: Record<string, unknown>) => void;
   run: (opts: { nodes: Element[]; suppressErrors?: boolean }) => Promise<void>;
+  render: (id: string, definition: string) => Promise<{ svg: string }>;
 }
 
 let loadPromise: Promise<MermaidGlobal> | null = null;
+
+// Mermaid render() needs a visible sandbox in the DOM for SVG dimension calculations
+function ensureSandbox(): void {
+  if (document.getElementById('mermaid-sandbox')) return;
+  const sandbox = document.createElement('div');
+  sandbox.id = 'mermaid-sandbox';
+  sandbox.style.cssText = 'position:fixed;top:-10000px;left:-10000px;width:2000px;height:2000px;visibility:hidden;z-index:-1;';
+  document.body.appendChild(sandbox);
+}
 
 function loadMermaid(): Promise<MermaidGlobal> {
   if (loadPromise) return loadPromise;
@@ -61,6 +71,7 @@ function loadMermaid(): Promise<MermaidGlobal> {
         sequence: { mirrorActors: false },
         gantt: { axisFormat: '%Y-%m-%d' }
       });
+      ensureSandbox();
       resolve(m);
     };
     script.onerror = () => {
@@ -79,39 +90,44 @@ interface MermaidDiagramProps {
 }
 
 const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
-  const mermaidRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
+  const idRef = useRef(0);
 
   const renderDiagram = useCallback(async () => {
-    const el = mermaidRef.current;
-    if (!el) return;
-
     setState('loading');
     setErrorMsg('');
 
     try {
       const mermaid = await loadMermaid();
 
-      // Wipe previous render and set raw mermaid code
-      el.innerHTML = '';
-      el.removeAttribute('data-processed');
-      const pre = document.createElement('pre');
-      pre.className = 'mermaid';
-      pre.textContent = chart.trim();
-      el.appendChild(pre);
+      // Unique ID per render (mermaid requires unique IDs)
+      idRef.current += 1;
+      const id = `mmd-${Date.now()}-${idRef.current}`;
 
-      // Timeout race
-      await Promise.race([
-        mermaid.run({ nodes: [pre], suppressErrors: true }),
+      // render() works in memory — no need for a visible DOM node
+      const { svg } = await Promise.race([
+        mermaid.render(id, chart.trim()),
         new Promise<never>((_, rej) =>
           setTimeout(() => rej(new Error('Timeout renderizando diagrama')), RENDER_TIMEOUT)
         )
       ]);
 
+      if (!svg || !svg.includes('<svg')) {
+        throw new Error('Mermaid no generó SVG válido');
+      }
+
+      // Inject SVG into container
+      const el = containerRef.current;
+      if (el) {
+        el.innerHTML = svg;
+      }
+
       setState('ok');
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error desconocido');
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      setErrorMsg(msg);
       setState('error');
     }
   }, [chart]);
@@ -122,8 +138,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
 
   return (
     <div className="mermaid-container">
-      {/* This div is exclusively managed by mermaid — React never touches its children */}
-      <div ref={mermaidRef} style={{ display: state === 'ok' ? 'block' : 'none' }} />
+      <div ref={containerRef} style={{ display: state === 'ok' ? 'block' : 'none' }} />
       {state === 'loading' && (
         <div className="mermaid-loading">
           <div className="mermaid-loading-spinner" />
