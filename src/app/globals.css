@@ -166,6 +166,72 @@ body {
   height: auto;
 }
 
+/* Force readable text contrast in all mermaid diagrams */
+.mermaid-container .nodeLabel,
+.mermaid-container .node .label,
+.mermaid-container .node foreignObject div {
+  color: #0f172a !important;
+}
+
+.mermaid-container .edgeLabel,
+.mermaid-container .edgeLabel span,
+.mermaid-container .edgeLabel p {
+  color: #e2e8f0 !important;
+  background-color: #1e293b !important;
+}
+
+.mermaid-container .cluster-label .nodeLabel {
+  color: #e2e8f0 !important;
+}
+
+.mermaid-container .cluster rect {
+  fill: #1e293b !important;
+  stroke: #475569 !important;
+}
+
+/* State diagram */
+.mermaid-container .statediagram-state .state-title {
+  fill: #e2e8f0 !important;
+}
+
+.mermaid-container .state-note-text {
+  fill: #0f172a !important;
+}
+
+/* Sequence diagram */
+.mermaid-container .actor {
+  fill: #dbeafe !important;
+  stroke: #3b82f6 !important;
+}
+
+.mermaid-container text.actor {
+  fill: #0f172a !important;
+}
+
+/* XY/Pie chart text */
+.mermaid-container .legend text,
+.mermaid-container .pieCircle + text,
+.mermaid-container .slice {
+  fill: #e2e8f0 !important;
+}
+
+/* Flowchart lines & markers */
+.mermaid-container .flowchart-link {
+  stroke: #60a5fa !important;
+}
+
+.mermaid-container marker path {
+  fill: #60a5fa !important;
+  stroke: #60a5fa !important;
+}
+
+/* General SVG text fallback for non-HTML labels */
+.mermaid-container .label text,
+.mermaid-container .labelText,
+.mermaid-container .label-text {
+  fill: #e2e8f0 !important;
+}
+
 .mermaid-loading {
   display: flex;
   align-items: center;
