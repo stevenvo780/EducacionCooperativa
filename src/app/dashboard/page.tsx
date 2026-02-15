@@ -1048,10 +1048,6 @@ function DashboardContent() {
         }
 
         setOpenTabs(prev => {
-            const tabToClose = prev.find(t => t.id === docId);
-            if (tabToClose?.type === 'terminal' && tabToClose.sessionId) {
-                destroySession(tabToClose.sessionId);
-            }
             const next = prev.filter(t => t.id !== docId);
             if (selectedDocId === docId) {
                 setSelectedDocId(next[next.length - 1]?.id ?? null);
@@ -1066,7 +1062,7 @@ function DashboardContent() {
             if (newLeaves.length === 0) return null;
             return createBalancedTreeFromLeaves(newLeaves);
         });
-    }, [selectedDocId, currentWorkspace, destroySession]);
+    }, [selectedDocId, currentWorkspace]);
 
     const openDocument = async (doc: DocItem) => {
         if (doc.type === 'folder') return;
