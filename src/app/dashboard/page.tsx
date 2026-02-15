@@ -1924,17 +1924,17 @@ function DashboardContent() {
 
     const handleDownloadDoc = (doc: DocItem) => {
         if (!doc) return;
-        
+
         let url = doc.url;
         const filename = doc.name;
-        
+
         // Si no es un archivo externo y tiene contenido, crear blob
         if (!url && doc.content) {
              const mimeType = doc.mimeType || 'text/plain';
              const blob = new Blob([doc.content], { type: mimeType });
              url = URL.createObjectURL(blob);
         }
-        
+
         if (url) {
             const link = document.createElement('a');
             link.href = url;
