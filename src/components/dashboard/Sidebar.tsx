@@ -3,7 +3,7 @@
 import type React from 'react';
 import { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, Loader2, Pencil, Search, Settings, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, Folder, FolderOpen, Loader2, Pencil, Search, Settings, Trash2, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -67,6 +67,7 @@ interface SidebarProps {
   handleDocDragEnd: () => void;
   deleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
   onRenameDocument: (doc: DocItem) => void;
+  onDownloadDoc?: (doc: DocItem) => void;
   getIcon: (doc: DocItem) => React.ReactNode;
   folderDragOver: string | null;
   onFolderDragOver: (e: React.DragEvent, path: string) => void;
@@ -93,6 +94,7 @@ const Sidebar = ({
   handleDocDragEnd,
   deleteDocument,
   onRenameDocument,
+  onDownloadDoc,
   getIcon,
   folderDragOver,
   onFolderDragOver,
@@ -282,6 +284,18 @@ const Sidebar = ({
             <span className="truncate flex-1">{item.doc.name}</span>
             <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{item.doc.folder?.split('/').pop()}</span>
             <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {onDownloadDoc && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownloadDoc(item.doc);
+                  }}
+                  className="text-surface-500 hover:text-surface-300 p-0.5"
+                  title="Descargar"
+                >
+                  <Download className="w-3 h-3" />
+                </button>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -369,6 +383,18 @@ const Sidebar = ({
           </div>
           <span className="truncate flex-1">{item.doc.name}</span>
           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onDownloadDoc && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownloadDoc(item.doc);
+                }}
+                className="text-surface-500 hover:text-surface-300 p-0.5"
+                title="Descargar"
+              >
+                <Download className="w-3 h-3" />
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
