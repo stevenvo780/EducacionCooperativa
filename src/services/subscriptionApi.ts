@@ -22,7 +22,6 @@ export async function fetchSubscriptionStatus(): Promise<UserSubscription> {
 export async function createPaymentPreference(planId: PlanId): Promise<{
   preferenceId: string;
   initPoint: string;
-  sandboxInitPoint: string;
 }> {
   const res = await authFetch('/api/payments/create-preference', {
     method: 'POST',
