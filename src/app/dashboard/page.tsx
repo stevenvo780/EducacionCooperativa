@@ -1922,6 +1922,35 @@ function DashboardContent() {
         await deleteItems({ docIds: [], folderPaths: [folder.path] });
     };
 
+    const handleDownloadDoc = (doc: DocItem) => {
+        if (!doc) return;
+        
+        let url = doc.url;
+        const filename = doc.name;
+        
+        // Si no es un archivo externo y tiene contenido, crear blob
+        if (!url && doc.content) {
+             const mimeType = doc.mimeType || 'text/plain';
+             const blob = new Blob([doc.content], { type: mimeType });
+             url = URL.createObjectURL(blob);
+        }
+        
+        if (url) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // Liberar memoria si convertimos contenido a URL
+            if (!doc.url && doc.content) {
+                URL.revokeObjectURL(url);
+            }
+        } else {
+             showDialog({ type: 'error', title: 'Error', message: 'No se puede descargar este documento (sin URL ni contenido).' });
+        }
+    };
+
     const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
         e.stopPropagation();
         if (deletingIds[docItem.id]) return;
@@ -2190,6 +2219,7 @@ function DashboardContent() {
                                     onDuplicateDoc={copyDocument}
                                     onMoveDoc={moveDocumentToFolder}
                                     onRenameDoc={promptRenameDocument}
+                                    onDownloadDoc={handleDownloadDoc}
                                     onReorderDocs={reorderDocsInFolder}
                                     onReorderFolders={reorderFoldersInParent}
                                     activeFolder={activeFolder}
