@@ -62,6 +62,9 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import { useSyncEvents } from '@/hooks/useSyncEvents';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { fetchSubscriptionStatus, verifyPayment } from '@/services/subscriptionApi';
+import { type PlanId, PLANS, canAccessTerminals } from '@/types/subscription';
+import PricingModal from '@/components/dashboard/PricingModal';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -94,6 +97,8 @@ function DashboardContent() {
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState<Record<string, { email?: string | null; displayName?: string | null }>>({});
+    const [currentPlan, setCurrentPlan] = useState<PlanId>('free');
+    const [showPricingModal, setShowPricingModal] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
     const reduceMotion = useReducedMotion();
@@ -141,6 +146,54 @@ function DashboardContent() {
             cancelled = true;
         };
     }, [user]);
+
+    // Load subscription status
+    useEffect(() => {
+        if (!user) return;
+        let cancelled = false;
+        fetchSubscriptionStatus()
+            .then((sub) => {
+                if (!cancelled && sub?.planId) {
+                    setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setCurrentPlan('free');
+            });
+        return () => { cancelled = true; };
+    }, [user]);
+
+    // Handle payment callback from MercadoPago
+    useEffect(() => {
+        const paymentStatus = searchParams?.get('payment');
+        if (paymentStatus === 'success' || paymentStatus === 'pending') {
+            // First try to verify/activate the payment
+            verifyPayment()
+                .then((result) => {
+                    if (result.status === 'active' && result.planId) {
+                        setCurrentPlan(result.planId as PlanId);
+                    } else {
+                        // Fallback: fetch subscription status
+                        return fetchSubscriptionStatus();
+                    }
+                })
+                .then((sub) => {
+                    if (sub && 'planId' in sub) {
+                        setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
+                    }
+                })
+                .catch(() => {
+                    // Last resort: just fetch status
+                    fetchSubscriptionStatus()
+                        .then((sub) => {
+                            if (sub?.planId) {
+                                setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
+                            }
+                        })
+                        .catch(() => {});
+                });
+        }
+    }, [searchParams]);
 
     const workspaces = useAppSelector(state => state.dashboard.workspaces);
     const invites = useAppSelector(state => state.dashboard.invites);
@@ -881,6 +934,12 @@ function DashboardContent() {
     }, [deferredDocs, deferredSidebarQuery]);
 
     const openTerminal = async (session?: { id: string; name?: string }) => {
+        // Verificar si el plan actual permite terminales
+        if (!canAccessTerminals(currentPlan)) {
+            setShowPricingModal(true);
+            return;
+        }
+
         const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
         const terminalName = session?.name || 'Mi Asistente';
 
@@ -2186,6 +2245,8 @@ function DashboardContent() {
                         folderInputProps={folderInputProps}
                         defaultFolderName={DEFAULT_FOLDER_NAME}
                         openFilesTab={openFilesTab}
+                        onOpenPricing={() => setShowPricingModal(true)}
+                        currentPlanName={PLANS[currentPlan]?.name}
                     />
                 )}
 
@@ -2585,6 +2646,13 @@ function DashboardContent() {
                         </m.div>
                     )}
                 </AnimatePresence>
+
+                <PricingModal
+                    isOpen={showPricingModal}
+                    onClose={() => setShowPricingModal(false)}
+                    currentPlan={currentPlan}
+                    userEmail={userEmail}
+                />
             </div>
         </LazyMotion>
     );
