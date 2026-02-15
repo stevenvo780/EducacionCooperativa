@@ -210,6 +210,30 @@ async function textToMarkdown(file: File): Promise<string> {
   return `# ${title}\n\n${content}`;
 }
 
+// ...existing code...
+/**
+ * Convert HTML file to Markdown using Turndown
+ */
+async function htmlToMarkdown(file: File, onProgress?: (progress: number) => void): Promise<string> {
+  const TurndownClass = await loadTurndown();
+  if (onProgress) onProgress(30);
+
+  const text = await file.text();
+  if (onProgress) onProgress(60);
+
+  const turndown = new TurndownClass({
+    headingStyle: 'atx',
+    codeBlockStyle: 'fenced',
+    bulletListMarker: '-'
+  });
+
+  const markdown = turndown.turndown(text);
+  if (onProgress) onProgress(100);
+
+  const title = file.name.replace(/\.(html?|htm)$/i, '');
+  return `# ${title}\n\n${markdown}`;
+}
+
 /**
  * Check if file can be converted to markdown
  */
@@ -225,7 +249,19 @@ export function canConvertToMarkdown(file: File): boolean {
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     mimeType === 'application/msword' ||
     extension === 'txt' ||
-    mimeType === 'text/plain'
+    extension === 'text' ||
+    extension === 'md' ||
+    extension === 'markdown' ||
+    extension === 'json' ||
+    extension === 'xml' ||
+    extension === 'csv' ||
+    extension === 'html' ||
+    extension === 'htm' ||
+    mimeType === 'text/plain' ||
+    mimeType === 'text/html' ||
+    mimeType === 'application/json' ||
+    mimeType === 'text/xml' ||
+    mimeType === 'text/csv'
   );
 }
 
@@ -241,20 +277,59 @@ export async function convertToMarkdown(
 
   let markdown: string;
 
-  if (extension === 'pdf' || mimeType === 'application/pdf') {
-    markdown = await pdfToMarkdown(file, onProgress);
-  } else if (
-    extension === 'docx' ||
-    extension === 'doc' ||
-    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    mimeType === 'application/msword'
-  ) {
-    markdown = await docxToMarkdown(file, onProgress);
-  } else if (extension === 'txt' || mimeType === 'text/plain') {
-    markdown = await textToMarkdown(file);
-    if (onProgress) onProgress(100);
-  } else {
-    throw new Error(`Unsupported file type: ${extension || mimeType}`);
+  try {
+    if (extension === 'pdf' || mimeType === 'application/pdf') {
+      markdown = await pdfToMarkdown(file, onProgress);
+    } else if (
+      extension === 'docx' ||
+      extension === 'doc' ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mimeType === 'application/msword'
+    ) {
+      markdown = await docxToMarkdown(file, onProgress);
+    } else if (extension === 'html' || extension === 'htm' || mimeType === 'text/html') {
+      markdown = await htmlToMarkdown(file, onProgress);
+    } else if (
+      extension === 'txt' ||
+      extension === 'text' ||
+      extension === 'md' ||
+      extension === 'markdown' ||
+      extension === 'json' ||
+      extension === 'xml' ||
+      extension === 'csv' ||
+      mimeType === 'text/plain' ||
+      mimeType === 'application/json' ||
+      mimeType === 'text/xml' ||
+      mimeType === 'text/csv'
+    ) {
+      const content = await file.text();
+      let formattedContent = content;
+      
+      // Intentar formatear JSON si es posible
+      if (extension === 'json' || mimeType === 'application/json') {
+          try {
+              formattedContent = JSON.stringify(JSON.parse(content), null, 2);
+          } catch (e) {
+              // Si falla el parseo, dejar como está
+          }
+      }
+
+      const title = file.name.replace(/\.[^.]+$/, '');
+      const lang = extension === 'json' ? 'json' : extension === 'xml' ? 'xml' : extension === 'csv' ? 'csv' : '';
+      
+      if (lang) {
+          markdown = `# ${title}\n\n\`\`\`${lang}\n${formattedContent}\n\`\`\``;
+      } else {
+          markdown = `# ${title}\n\n${formattedContent}`;
+      }
+      
+      if (onProgress) onProgress(100);
+    } else {
+      throw new Error(`Unsupported file type: ${extension || mimeType}`);
+    }
+  } catch (error) {
+    console.error('Conversion error:', error);
+    throw error;
   }
 
   // Generate suggested name
@@ -263,6 +338,7 @@ export async function convertToMarkdown(
 
   return { markdown, suggestedName };
 }
+// ...existing code...
 
 export type ConversionProgress = {
   phase: 'loading' | 'converting' | 'done' | 'error';
