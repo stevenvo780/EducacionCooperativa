@@ -25,7 +25,8 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-  Loader2
+  Loader2,
+  X
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -176,6 +177,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [overflowMenuId, setOverflowMenuId] = useState<string | null>(null);
   const [downloadingFolder, setDownloadingFolder] = useState<string | null>(null);
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const toolbarMenuRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(800);
 
@@ -198,6 +202,25 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   // Auto-collapse sidebar when panel is narrow
   const isCompact = containerWidth < 550;
   const isUltraCompact = containerWidth < 380;
+
+  // Auto-collapse sidebar when embedded in Mosaic and compact
+  useEffect(() => {
+    if (embedded && isCompact) {
+      setSidebarCollapsed(true);
+    }
+  }, [embedded, isCompact]);
+
+  // Close toolbar menu on click outside
+  useEffect(() => {
+    if (!toolbarMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (toolbarMenuRef.current && !toolbarMenuRef.current.contains(e.target as Node)) {
+        setToolbarMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [toolbarMenuOpen]);
 
   const docsByFolder = useMemo(() => {
     const grouped: Record<string, DocItem[]> = {};
@@ -1006,84 +1029,170 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   return (
     <div ref={containerRef} className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-surface-700 flex-wrap">
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Sidebar toggle for compact mode */}
-          <button
-            onClick={() => setSidebarCollapsed(prev => !prev)}
-            className="p-1 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition"
-            title={sidebarCollapsed ? 'Mostrar carpetas' : 'Ocultar carpetas'}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-          </button>
-          <Folder className="w-4 h-4 text-amber-400" />
-          {!isUltraCompact && (
-            <span className="font-medium text-sm truncate max-w-[120px]">{currentWorkspaceName}</span>
-          )}
-          {!isCompact && currentWorkspaceId && currentWorkspaceId !== 'personal' && (
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(currentWorkspaceId);
-              }}
-              className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
-              title="Copiar ID del workspace"
-            >
-              <Copy className="w-2.5 h-2.5 shrink-0" />
-            </button>
-          )}
-        </div>
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-surface-700">
+        {/* Sidebar toggle */}
+        <button
+          onClick={() => setSidebarCollapsed(prev => !prev)}
+          className="p-1 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition shrink-0"
+          title={sidebarCollapsed ? 'Mostrar carpetas' : 'Ocultar carpetas'}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+        </button>
 
-        <div className="flex-1 min-w-[80px]">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar..."
-              className="w-full pl-7 pr-3 py-1 bg-surface-800 border border-surface-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50"
-            />
+        {/* Workspace name — hide on ultracompact */}
+        {!isUltraCompact && (
+          <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+            <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-medium text-sm truncate max-w-[100px]">{currentWorkspaceName}</span>
           </div>
-        </div>
+        )}
 
-        <div className="flex items-center gap-0.5 shrink-0">
-          {onCreateFile && (
+        {/* Search — collapsible in ultracompact */}
+        {isUltraCompact && !searchExpanded ? (
+          <button
+            onClick={() => setSearchExpanded(true)}
+            className="p-1 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition shrink-0"
+            title="Buscar"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        ) : (
+          <div className={`flex-1 min-w-0 ${isUltraCompact ? 'flex items-center gap-1' : ''}`}>
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar..."
+                autoFocus={isUltraCompact && searchExpanded}
+                onBlur={() => { if (isUltraCompact && !searchQuery) setSearchExpanded(false); }}
+                className="w-full pl-7 pr-3 py-1 bg-surface-800 border border-surface-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50"
+              />
+            </div>
+            {isUltraCompact && searchExpanded && (
+              <button
+                onClick={() => { setSearchQuery(''); setSearchExpanded(false); }}
+                className="p-0.5 rounded text-surface-400 hover:text-surface-200 shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons — inline when wide, overflow menu when compact */}
+        {isCompact ? (
+          <div className="relative shrink-0" ref={toolbarMenuRef}>
             <button
-              onClick={onCreateFile}
-              className="p-1.5 hover:bg-surface-700 rounded transition-colors"
-              title="Nuevo archivo"
+              onClick={() => setToolbarMenuOpen(prev => !prev)}
+              className={`p-1 rounded transition shrink-0 ${
+                toolbarMenuOpen
+                  ? 'bg-surface-700 text-surface-200'
+                  : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700'
+              }`}
+              title="Acciones"
             >
-              <Plus className="w-4 h-4 text-slate-400" />
+              <MoreHorizontal className="w-4 h-4" />
             </button>
-          )}
-          {onCreateFolder && !isUltraCompact && (
-            <button
-              onClick={onCreateFolder}
-              className="p-1.5 hover:bg-surface-700 rounded transition-colors"
-              title="Nueva carpeta"
-            >
-              <FolderPlus className="w-4 h-4 text-slate-400" />
-            </button>
-          )}
-          {onUploadFile && (
-            <button
-              onClick={onUploadFile}
-              className="p-1.5 hover:bg-surface-700 rounded transition-colors"
-              title="Subir archivo"
-            >
-              <Upload className="w-4 h-4 text-slate-400" />
-            </button>
-          )}
-          {onUploadFolder && !isUltraCompact && (
-            <button
-              onClick={onUploadFolder}
-              className="p-1.5 hover:bg-surface-700 rounded transition-colors"
-              title="Subir carpeta"
-            >
-              <FolderInput className="w-4 h-4 text-slate-400" />
-            </button>
-          )}
-        </div>
+            {toolbarMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+                {onCreateFile && (
+                  <button
+                    onClick={() => { onCreateFile(); setToolbarMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Nuevo archivo
+                  </button>
+                )}
+                {onCreateFolder && (
+                  <button
+                    onClick={() => { onCreateFolder(); setToolbarMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5" /> Nueva carpeta
+                  </button>
+                )}
+                <div className="border-t border-surface-700 my-0.5" />
+                {onUploadFile && (
+                  <button
+                    onClick={() => { onUploadFile(); setToolbarMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Subir archivo
+                  </button>
+                )}
+                {onUploadFolder && (
+                  <button
+                    onClick={() => { onUploadFolder(); setToolbarMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <FolderInput className="w-3.5 h-3.5" /> Subir carpeta
+                  </button>
+                )}
+                {!isCompact && currentWorkspaceId && currentWorkspaceId !== 'personal' && (
+                  <>
+                    <div className="border-t border-surface-700 my-0.5" />
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(currentWorkspaceId); setToolbarMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copiar ID
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-0.5 shrink-0">
+            {onCreateFile && (
+              <button
+                onClick={onCreateFile}
+                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                title="Nuevo archivo"
+              >
+                <Plus className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+            {onCreateFolder && (
+              <button
+                onClick={onCreateFolder}
+                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                title="Nueva carpeta"
+              >
+                <FolderPlus className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+            {onUploadFile && (
+              <button
+                onClick={onUploadFile}
+                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                title="Subir archivo"
+              >
+                <Upload className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+            {onUploadFolder && (
+              <button
+                onClick={onUploadFolder}
+                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                title="Subir carpeta"
+              >
+                <FolderInput className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+            {currentWorkspaceId && currentWorkspaceId !== 'personal' && (
+              <button
+                onClick={() => navigator.clipboard.writeText(currentWorkspaceId)}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
+                title="Copiar ID del workspace"
+              >
+                <Copy className="w-2.5 h-2.5 shrink-0" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {hasSelection && (
@@ -1109,8 +1218,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       )}
 
       <div className="flex-1 min-h-0 flex">
-        {!sidebarCollapsed && (
-        <aside className={`${isCompact ? 'w-40' : 'w-56'} border-r border-surface-700/60 bg-surface-800/40 flex flex-col shrink-0 transition-all duration-150`}>
+        {!sidebarCollapsed && !isUltraCompact && (
+        <aside className={`${isCompact ? 'w-36' : 'w-56'} border-r border-surface-700/60 bg-surface-800/40 flex flex-col shrink-0 transition-all duration-150`}>
           <div className="px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Carpetas</div>
           <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-4 space-y-1">
             {renderFolderTree('')}
