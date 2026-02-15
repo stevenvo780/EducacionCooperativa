@@ -55,10 +55,9 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail }
         throw new Error(data.error || 'Error al crear preferencia de pago');
       }
 
-      // Redirigir al checkout de MercadoPago
-      const checkoutUrl = data.initPoint || data.sandboxInitPoint;
-      if (checkoutUrl) {
-        window.location.href = checkoutUrl;
+      // Redirigir al checkout de MercadoPago (producción)
+      if (data.initPoint) {
+        window.location.href = data.initPoint;
       } else {
         throw new Error('No se recibió URL de checkout');
       }
