@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
     const preferenceClient = new Preference(client);
 
-    const appUrl = 'https://visormarkdown-virid.vercel.app';
+    const appUrl = 'https://agora.humanizar.cloud';
 
     const preference = await preferenceClient.create({
       body: {

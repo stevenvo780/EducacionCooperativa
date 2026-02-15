@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const collectionStatus = searchParams.get('collection_status') || searchParams.get('status') || '';
   const [userId, planId] = externalReference.split('|');
 
-  const appUrl = 'https://visormarkdown-virid.vercel.app';
+  const appUrl = 'https://agora.humanizar.cloud';
   const redirectUrl = new URL(`${appUrl}/dashboard`);
   redirectUrl.searchParams.set('payment', 'success');
   if (planId) redirectUrl.searchParams.set('plan', planId);
