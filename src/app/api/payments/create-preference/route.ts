@@ -81,7 +81,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       preferenceId: preference.id,
-      initPoint: preference.init_point
+      initPoint: preference.init_point,
+      sandboxInitPoint: preference.sandbox_init_point
     });
   } catch (error: any) {
     console.error('Error creating payment preference:', error?.cause || error?.message);
