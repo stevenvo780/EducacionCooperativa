@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ChevronUp,
   Copy,
+  Crown,
   FolderOpen,
   FolderPlus,
   FolderUp,
@@ -35,6 +36,8 @@ import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { WorkerStatus } from '@/lib/TerminalController';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
+import { formatStorageSize } from '@/types/subscription';
 
 interface HeaderBarProps {
   onToggleMobileSidebar: () => void;
@@ -89,6 +92,8 @@ interface HeaderBarProps {
   folderInputProps: React.InputHTMLAttributes<HTMLInputElement>;
   defaultFolderName: string;
   openFilesTab: () => void;
+  onOpenPricing?: () => void;
+  currentPlanName?: string;
 }
 
 const HeaderBar = ({
@@ -141,14 +146,24 @@ const HeaderBar = ({
   handleFolderUpload,
   folderInputProps,
   defaultFolderName,
-  openFilesTab
+  openFilesTab,
+  onOpenPricing,
+  currentPlanName
 }: HeaderBarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Load storage usage when user menu opens
+  useEffect(() => {
+    if (showUserMenu && !storageUsage) {
+      fetchStorageUsage().then(setStorageUsage).catch(() => {});
+    }
+  }, [showUserMenu, storageUsage]);
 
   /* ── Terminal helpers ── */
   const workerToken = currentWorkspace && user
@@ -598,6 +613,41 @@ const HeaderBar = ({
                   <p className="text-sm text-surface-200 truncate">{user?.email}</p>
                 </div>
                 <div className="py-1">
+                  {onOpenPricing && (
+                    <button
+                      onClick={() => {
+                        onOpenPricing();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-amber-400 hover:bg-surface-700 transition"
+                    >
+                      <Crown className="w-4 h-4" />
+                      <span>Planes y precios</span>
+                      {currentPlanName && (
+                        <span className="ml-auto text-xs bg-surface-600 px-2 py-0.5 rounded-full text-surface-300">
+                          {currentPlanName}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                  {/* Storage usage bar */}
+                  {storageUsage && (
+                    <div className="px-4 py-2 border-b border-surface-600/50">
+                      <div className="flex items-center justify-between text-xs text-surface-400 mb-1">
+                        <span>Almacenamiento</span>
+                        <span>{formatStorageSize(storageUsage.usedMB)} / {formatStorageSize(storageUsage.limitMB)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            storageUsage.percentage >= 90 ? 'bg-red-500' :
+                            storageUsage.percentage >= 70 ? 'bg-yellow-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${Math.min(storageUsage.percentage, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   <a
                     href="/docs"
                     target="_blank"

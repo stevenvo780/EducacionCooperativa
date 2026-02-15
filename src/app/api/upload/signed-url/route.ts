@@ -4,6 +4,8 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
+import { getStorageLimitMB, formatStorageSize } from '@/types/subscription';
+import type { PlanId } from '@/types/subscription';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +34,40 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // Check storage limit for the user's plan
+        const subSnap = await adminDb.collection('subscriptions').doc(auth.uid).get();
+        let planId: PlanId = 'free';
+        if (subSnap.exists) {
+            const subData = subSnap.data();
+            if (subData?.status === 'active' && subData?.planId) {
+                planId = subData.planId as PlanId;
+            }
+        }
+        const limitMB = getStorageLimitMB(planId);
+        const limitBytes = limitMB * 1024 * 1024;
+
+        // Calculate current usage
+        const bucket = adminStorage.bucket();
+        const userPrefix = `users/${auth.uid}/`;
+        const [existingFiles] = await bucket.getFiles({ prefix: userPrefix });
+        let totalBytes = 0;
+        for (const f of existingFiles) {
+            const [meta] = await f.getMetadata();
+            totalBytes += parseInt(meta.size as string, 10) || 0;
+        }
+
+        // Estimate new file size from Content-Length hint (client should send fileSize)
+        const fileSize = body.fileSize || 0;
+        if (totalBytes + fileSize > limitBytes) {
+            const usedMB = Math.round((totalBytes / (1024 * 1024)) * 100) / 100;
+            return NextResponse.json({
+                error: `Límite de almacenamiento alcanzado. Usas ${formatStorageSize(usedMB)} de ${formatStorageSize(limitMB)}. Mejora tu plan para subir más archivos.`,
+                code: 'STORAGE_LIMIT_EXCEEDED',
+                usedMB,
+                limitMB
+            }, { status: 413 });
+        }
+
         const safeName = sanitizeFileName(fileName);
         const normalizedFolder = normalizeFolderPath(folder);
         const storagePath = buildStoragePath({
@@ -41,7 +77,6 @@ export async function POST(req: NextRequest) {
             fileName: safeName
         });
 
-        const bucket = adminStorage.bucket();
         if (!bucket?.name) {
             throw new Error('Storage bucket not configured');
         }
