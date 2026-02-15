@@ -304,7 +304,7 @@ export async function convertToMarkdown(
     ) {
       const content = await file.text();
       let formattedContent = content;
-      
+
       // Intentar formatear JSON si es posible
       if (extension === 'json' || mimeType === 'application/json') {
           try {
@@ -316,13 +316,13 @@ export async function convertToMarkdown(
 
       const title = file.name.replace(/\.[^.]+$/, '');
       const lang = extension === 'json' ? 'json' : extension === 'xml' ? 'xml' : extension === 'csv' ? 'csv' : '';
-      
+
       if (lang) {
           markdown = `# ${title}\n\n\`\`\`${lang}\n${formattedContent}\n\`\`\``;
       } else {
           markdown = `# ${title}\n\n${formattedContent}`;
       }
-      
+
       if (onProgress) onProgress(100);
     } else {
       throw new Error(`Unsupported file type: ${extension || mimeType}`);
