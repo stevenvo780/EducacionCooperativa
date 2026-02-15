@@ -172,9 +172,19 @@ export const uploadFileApi = async (formData: FormData) => {
       fileName: file.name,
       mimeType: file.type || 'application/octet-stream',
       workspaceId,
-      folder
+      folder,
+      fileSize: file.size
     })
   });
+
+  // Handle storage limit exceeded
+  if (signedUrlRes.status === 413) {
+    const errData = await signedUrlRes.json();
+    const err = new Error(errData.error || 'Límite de almacenamiento alcanzado');
+    (err as any).code = 'STORAGE_LIMIT_EXCEEDED';
+    throw err;
+  }
+
   assertOk(signedUrlRes, 'Failed to get upload URL');
   const uploadInfo = await signedUrlRes.json();
 

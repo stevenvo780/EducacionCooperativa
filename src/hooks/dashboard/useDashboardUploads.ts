@@ -280,15 +280,23 @@ export const useDashboardUploads = ({
       }
       setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
       scheduleUploadStatusClear();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload failed', error);
+      const isStorageLimit = error?.code === 'STORAGE_LIMIT_EXCEEDED';
       setUploadStatus(prev => prev ? {
         ...prev,
         phase: 'error',
-        error: 'Error al subir'
+        error: isStorageLimit
+          ? error.message
+          : 'Error al subir'
       } : prev);
       scheduleUploadStatusClear();
-      await showDialog({ type: 'error', title: 'Error al subir archivo' });
+      await showDialog({
+        type: 'error',
+        title: isStorageLimit
+          ? 'Límite de almacenamiento alcanzado'
+          : 'Error al subir archivo'
+      });
     }
   }, [
     user,
