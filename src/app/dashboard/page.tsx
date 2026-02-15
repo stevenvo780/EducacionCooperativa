@@ -39,6 +39,7 @@ import {
     fetchCurrentUserApi,
     deleteDocumentApi,
     deleteWorkspaceApi,
+    downloadDocumentBlobApi,
     fetchDocsApi,
     fetchDocumentRawApi,
     fetchWorkspacesApi,
@@ -1899,7 +1900,26 @@ function DashboardContent() {
         });
 
         const allDocIds = Array.from(new Set([...docIds, ...folderDocIds, ...docIdsFromFolders]));
-        if (allDocIds.length === 0) return;
+
+        if (allDocIds.length === 0 && filteredFolderPaths.length === 0) return;
+
+        if (allDocIds.length === 0) {
+            // Carpeta vacía (virtual o sin documentos) – confirmar y refrescar
+            const confirmResult = await showDialog({
+                type: 'confirm',
+                title: 'Confirmar eliminación',
+                message: '¿Eliminar la carpeta vacía? Esta acción no se puede deshacer.',
+                confirmLabel: 'Eliminar',
+                cancelLabel: 'Cancelar',
+                danger: true
+            });
+            if (!confirmResult.confirmed) return;
+            // Refrescar documentos para que las carpetas virtuales se recalculen
+            await fetchDocs();
+            setDeleteStatus({ phase: 'done', name: 'Carpeta eliminada' });
+            scheduleDeleteStatusClear();
+            return;
+        }
 
         const label = allDocIds.length === 1 ? 'Elemento' : `${allDocIds.length} elementos`;
         const confirmResult = await showDialog({
@@ -1922,32 +1942,64 @@ function DashboardContent() {
         await deleteItems({ docIds: [], folderPaths: [folder.path] });
     };
 
-    const handleDownloadDoc = (doc: DocItem) => {
+    const handleDownloadDoc = async (doc: DocItem) => {
         if (!doc) return;
-
-        let url = doc.url;
-        const filename = doc.name;
-
-        // Si no es un archivo externo y tiene contenido, crear blob
-        if (!url && doc.content) {
-             const mimeType = doc.mimeType || 'text/plain';
-             const blob = new Blob([doc.content], { type: mimeType });
-             url = URL.createObjectURL(blob);
-        }
-
-        if (url) {
+        try {
+            const { blob } = await downloadDocumentBlobApi(doc.id);
+            const blobUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
+            link.href = blobUrl;
+            link.download = doc.name;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            // Liberar memoria si convertimos contenido a URL
-            if (!doc.url && doc.content) {
-                URL.revokeObjectURL(url);
+            URL.revokeObjectURL(blobUrl);
+        } catch (err) {
+            console.error('Download error:', err);
+            showDialog({ type: 'error', title: 'Error al descargar', message: 'No se pudo descargar el archivo.' });
+        }
+    };
+
+    const handleDownloadFolder = async (folderPath: string) => {
+        const folderName = folderPath.split('/').pop() || folderPath || 'carpeta';
+        // Collect all docs in this folder and subfolders
+        const folderDocs = docs.filter(d => {
+            const docFolder = normalizeFolderPath(d.folder);
+            return docFolder === folderPath || docFolder.startsWith(folderPath + '/');
+        });
+        if (folderDocs.length === 0) {
+            showDialog({ type: 'info', title: 'Carpeta vacía', message: 'No hay archivos para descargar en esta carpeta.' });
+            return;
+        }
+        try {
+            const JSZip = (await import('jszip')).default;
+            const zip = new JSZip();
+            for (const doc of folderDocs) {
+                try {
+                    const { blob } = await downloadDocumentBlobApi(doc.id);
+                    // Build relative path inside zip
+                    const docFolder = normalizeFolderPath(doc.folder);
+                    const relativePath = docFolder.startsWith(folderPath + '/')
+                        ? docFolder.slice(folderPath.length + 1)
+                        : '';
+                    const fullPath = relativePath ? `${relativePath}/${doc.name}` : doc.name;
+                    zip.file(fullPath, blob);
+                } catch (err) {
+                    console.warn(`Skipping ${doc.name}:`, err);
+                }
             }
-        } else {
-             showDialog({ type: 'error', title: 'Error', message: 'No se puede descargar este documento (sin URL ni contenido).' });
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const blobUrl = URL.createObjectURL(zipBlob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `${folderName}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(blobUrl);
+        } catch (err) {
+            console.error('Folder download error:', err);
+            showDialog({ type: 'error', title: 'Error al descargar', message: 'No se pudo descargar la carpeta.' });
         }
     };
 
@@ -2180,6 +2232,7 @@ function DashboardContent() {
                         handleDocDragEnd={handleDocDragEnd}
                         deleteDocument={deleteDocument}
                         onRenameDocument={promptRenameDocument}
+                        onDownloadDoc={handleDownloadDoc}
                         getIcon={getIcon}
                         folderDragOver={folderDragOver}
                         onFolderDragOver={handleFolderDragOver}
@@ -2220,6 +2273,7 @@ function DashboardContent() {
                                     onMoveDoc={moveDocumentToFolder}
                                     onRenameDoc={promptRenameDocument}
                                     onDownloadDoc={handleDownloadDoc}
+                                    onDownloadFolder={handleDownloadFolder}
                                     onReorderDocs={reorderDocsInFolder}
                                     onReorderFolders={reorderFoldersInParent}
                                     activeFolder={activeFolder}

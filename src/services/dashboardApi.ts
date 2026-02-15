@@ -109,6 +109,14 @@ export const fetchDocumentRawApi = async (docId: string) => {
   return res.text();
 };
 
+export const downloadDocumentBlobApi = async (docId: string): Promise<{ blob: Blob; mimeType: string }> => {
+  const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
+  assertOk(res, 'Failed to download document');
+  const mimeType = res.headers.get('Content-Type')?.split(';')[0]?.trim() || 'application/octet-stream';
+  const blob = await res.blob();
+  return { blob, mimeType };
+};
+
 export const fetchUserProfilesApi = async (params: { workspaceId: string; userIds: string[] }) => {
   const res = await authFetch('/api/users/lookup', {
     method: 'POST',

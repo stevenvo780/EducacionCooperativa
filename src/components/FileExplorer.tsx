@@ -21,7 +21,11 @@ import {
   FolderInput,
   Pencil,
   GripVertical,
-  Download
+  Download,
+  MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Loader2
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -120,6 +124,7 @@ interface FileExplorerProps {
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
   onDownloadDoc?: (doc: DocItem) => void;
+  onDownloadFolder?: (folderPath: string) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
   onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   currentWorkspaceName?: string;
@@ -144,6 +149,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   onMoveDoc,
   onRenameDoc,
   onDownloadDoc,
+  onDownloadFolder,
   onReorderDocs,
   onReorderFolders,
   currentWorkspaceName = 'Espacio Personal',
@@ -167,10 +173,31 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
   const lastSelectedIndex = useRef<number>(-1);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [overflowMenuId, setOverflowMenuId] = useState<string | null>(null);
+  const [downloadingFolder, setDownloadingFolder] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(800);
 
   const normalizedDocs = useMemo(() => {
     return docs.map(doc => ({ ...doc, folder: normalizeFolderPath(doc.folder) }));
   }, [docs]);
+
+  // Track container width for responsive layout
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width ?? 800;
+      setContainerWidth(w);
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
+
+  // Auto-collapse sidebar when panel is narrow
+  const isCompact = containerWidth < 550;
+  const isUltraCompact = containerWidth < 380;
 
   const docsByFolder = useMemo(() => {
     const grouped: Record<string, DocItem[]> = {};
@@ -649,11 +676,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             <Folder className="w-4 h-4 text-surface-500" />
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-sm font-semibold truncate">{folder.name}</span>
-              <span className="text-[11px] text-surface-500 truncate">{folder.path}</span>
+              {!isUltraCompact && <span className="text-[11px] text-surface-500 truncate">{folder.path}</span>}
             </div>
             <span className="text-[10px] text-surface-500">{count}</span>
-            <div className="ml-auto flex items-center gap-2">
-              {canReorderFolders && folder.docId && (
+            <div className={`ml-auto flex items-center gap-1 ${isCompact ? '' : 'gap-2'}`}>
+              {canReorderFolders && folder.docId && !isUltraCompact && (
                 <button
                   draggable
                   onDragStart={(e) => {
@@ -674,13 +701,31 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   <GripVertical className="w-3.5 h-3.5" />
                 </button>
               )}
+              {onDownloadFolder && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDownloadingFolder(folder.path);
+                    onDownloadFolder(folder.path);
+                    setTimeout(() => setDownloadingFolder(null), 5000);
+                  }}
+                  disabled={downloadingFolder === folder.path}
+                  className={`p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition ${isCompact ? '' : 'opacity-0 group-hover:opacity-100'}`}
+                  title="Descargar carpeta"
+                >
+                  {downloadingFolder === folder.path
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Download className="w-3.5 h-3.5" />
+                  }
+                </button>
+              )}
               {onDeleteFolder && folder.kind !== 'system' && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteFolder(folder);
                   }}
-                  className="p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition opacity-0 group-hover:opacity-100"
+                  className={`p-1 rounded-md text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 transition ${isCompact ? '' : 'opacity-0 group-hover:opacity-100'}`}
                   title="Eliminar carpeta"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -757,22 +802,47 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           <div className="text-surface-500">{getFileIcon(doc)}</div>
           <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-semibold truncate">{doc.name}</span>
-            <span className="text-[11px] text-surface-500 truncate">{doc.folder || DEFAULT_FOLDER_NAME}</span>
+            {!isUltraCompact && <span className="text-[11px] text-surface-500 truncate">{doc.folder || DEFAULT_FOLDER_NAME}</span>}
           </div>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
-            {getDocBadge(doc)}
-          </span>
-          <span
-            className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
-              uploaded
-                ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
-                : 'border-amber-500/40 text-amber-300 bg-amber-500/10'
-            }`}
-            title={syncTitle}
-          >
-            <SyncIcon className="w-3 h-3" />
-            <span>{syncLabel}</span>
-          </span>
+          {!isUltraCompact && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
+              {getDocBadge(doc)}
+            </span>
+          )}
+          {!isCompact && (
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+                uploaded
+                  ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
+                  : 'border-amber-500/40 text-amber-300 bg-amber-500/10'
+              }`}
+              title={syncTitle}
+            >
+              <SyncIcon className="w-3 h-3" />
+              <span>{syncLabel}</span>
+            </span>
+          )}
+          {/* Actions: responsive overflow menu for compact, inline for wide */}
+          {isCompact ? (
+            <div className="ml-auto relative flex items-center gap-1">
+              {onDownloadDoc && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDownloadDoc(doc); }}
+                  className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
+                  title="Descargar"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleContextMenu(e, doc.id); }}
+                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
+                title="Más acciones"
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
           <div className="ml-auto flex items-center gap-2">
             {canReorderDocs && (
               <button
@@ -856,6 +926,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
     );
@@ -934,12 +1005,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   }, [folderChildrenMap, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange, docMap, onRenameDoc]);
 
   return (
-    <div className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
-      <div className="flex items-center gap-3 px-3 py-2 border-b border-surface-700">
+    <div ref={containerRef} className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-surface-700 flex-wrap">
         <div className="flex items-center gap-2 shrink-0">
+          {/* Sidebar toggle for compact mode */}
+          <button
+            onClick={() => setSidebarCollapsed(prev => !prev)}
+            className="p-1 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition"
+            title={sidebarCollapsed ? 'Mostrar carpetas' : 'Ocultar carpetas'}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
           <Folder className="w-4 h-4 text-amber-400" />
-          <span className="font-medium text-sm truncate max-w-[120px]">{currentWorkspaceName}</span>
-          {currentWorkspaceId && currentWorkspaceId !== 'personal' && (
+          {!isUltraCompact && (
+            <span className="font-medium text-sm truncate max-w-[120px]">{currentWorkspaceName}</span>
+          )}
+          {!isCompact && currentWorkspaceId && currentWorkspaceId !== 'personal' && (
             <button
               onClick={() => {
                 navigator.clipboard.writeText(currentWorkspaceId);
@@ -952,7 +1033,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-[80px]">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
             <input
@@ -975,7 +1056,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               <Plus className="w-4 h-4 text-slate-400" />
             </button>
           )}
-          {onCreateFolder && (
+          {onCreateFolder && !isUltraCompact && (
             <button
               onClick={onCreateFolder}
               className="p-1.5 hover:bg-surface-700 rounded transition-colors"
@@ -993,7 +1074,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               <Upload className="w-4 h-4 text-slate-400" />
             </button>
           )}
-          {onUploadFolder && (
+          {onUploadFolder && !isUltraCompact && (
             <button
               onClick={onUploadFolder}
               className="p-1.5 hover:bg-surface-700 rounded transition-colors"
@@ -1028,12 +1109,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       )}
 
       <div className="flex-1 min-h-0 flex">
-        <aside className="w-56 border-r border-surface-700/60 bg-surface-800/40 flex flex-col">
+        {!sidebarCollapsed && (
+        <aside className={`${isCompact ? 'w-40' : 'w-56'} border-r border-surface-700/60 bg-surface-800/40 flex flex-col shrink-0 transition-all duration-150`}>
           <div className="px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Carpetas</div>
           <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-4 space-y-1">
             {renderFolderTree('')}
           </div>
         </aside>
+        )}
         <section className="flex-1 min-h-0 flex flex-col">
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-xs text-surface-400 uppercase tracking-wider">Contenido</span>
@@ -1089,6 +1172,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               >
                 <Copy className="w-4 h-4" />
                 Duplicar
+              </button>
+            )}
+            {onDownloadDoc && (
+              <button
+                onClick={() => {
+                  const doc = docMap.get(contextMenu.docId);
+                  if (doc) onDownloadDoc(doc);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-200 hover:bg-surface-700 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Descargar
               </button>
             )}
             {onRenameDoc && (

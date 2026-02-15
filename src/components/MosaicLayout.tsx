@@ -10,6 +10,13 @@ const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 const KanbanBoard = dynamic(() => import('@/components/dashboard/KanbanBoard'), { ssr: false });
+const SpreadsheetViewer = dynamic(() => import('@/components/SpreadsheetViewer'), { ssr: false });
+
+const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xls', 'csv', 'tsv']);
+function isSpreadsheetDoc(doc: { name: string }): boolean {
+  const ext = doc.name.split('.').pop()?.toLowerCase() || '';
+  return SPREADSHEET_EXTENSIONS.has(ext);
+}
 
 interface SearchState {
   currentMatch: number;
@@ -67,6 +74,7 @@ interface MosaicLayoutProps {
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
   onDownloadDoc?: (doc: DocItem) => void;
+  onDownloadFolder?: (folderPath: string) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
   onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   activeFolder?: string;
@@ -99,6 +107,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onMoveDoc,
   onRenameDoc,
   onDownloadDoc,
+  onDownloadFolder,
   onReorderDocs,
   onReorderFolders,
   activeFolder,
@@ -156,8 +165,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     return refObj as React.MutableRefObject<{ next: () => void; prev: () => void } | null>;
   }, []);
 
-  const renderToolbarControls = useCallback((doc: { id: string; type?: string }, mode: ViewMode) => {
-    const isTextDoc = doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board';
+  const renderToolbarControls = useCallback((doc: { id: string; type?: string; name: string }, mode: ViewMode) => {
+    const isTextDoc = doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && !isSpreadsheetDoc(doc);
     const searchTerm = docSearchTerms[doc.id] || '';
     const searchState = docSearchStates[doc.id] || { currentMatch: 0, totalMatches: 0 };
 
@@ -253,6 +262,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isTerminal = doc.type === 'terminal';
     const isFileExplorer = doc.type === 'files';
     const isBoard = doc.type === 'board';
+    const isSpreadsheet = !isTerminal && !isFileExplorer && !isBoard && isSpreadsheetDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
 
@@ -288,6 +298,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         onMoveDoc={onMoveDoc}
                         onRenameDoc={onRenameDoc}
                         onDownloadDoc={onDownloadDoc}
+                        onDownloadFolder={onDownloadFolder}
                         onReorderDocs={onReorderDocs}
                         onReorderFolders={onReorderFolders}
                         activeFolder={activeFolder}
@@ -301,6 +312,11 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         workspaceId={doc.workspaceId ?? currentWorkspaceId}
                         workspaceName={currentWorkspaceName}
                         ownerId={doc.ownerId ?? currentUserId}
+                      />
+                  ) : isSpreadsheet ? (
+                      <SpreadsheetViewer
+                        docId={doc.id}
+                        docName={doc.name}
                       />
                   ) : (
                       <Editor
@@ -319,7 +335,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
     onSelectDoc, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
-    onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc,
+    onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, onDownloadFolder,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
     handleSearchStateChange, getSearchNavRef
