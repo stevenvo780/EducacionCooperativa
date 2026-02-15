@@ -34,6 +34,7 @@ interface PDFJSLib {
 let pdfjsLib: PDFJSLib | null = null;
 let mammoth: typeof import('mammoth') | null = null;
 let TurndownService: typeof import('turndown').default | null = null;
+let xlsxLib: typeof import('xlsx') | null = null;
 
 /**
  * Load PDF.js from CDN (avoids build issues with Next.js/Terser)
@@ -202,6 +203,191 @@ async function docxToMarkdown(file: File, onProgress?: (progress: number) => voi
 }
 
 /**
+ * Lazy load SheetJS (xlsx) library
+ */
+export async function loadXlsx() {
+  if (xlsxLib) return xlsxLib;
+  xlsxLib = await import('xlsx');
+  return xlsxLib;
+}
+
+/**
+ * Escape pipe characters for Markdown table cells
+ */
+function escapeTableCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+}
+
+/**
+ * Convert a 2D array of strings into a Markdown table
+ */
+function arrayToMarkdownTable(rows: string[][]): string {
+  if (rows.length === 0) return '';
+
+  const header = rows[0].map(escapeTableCell);
+  const separator = header.map(() => '---');
+  const body = rows.slice(1).map(row => row.map(escapeTableCell));
+
+  const lines: string[] = [
+    `| ${header.join(' | ')} |`,
+    `| ${separator.join(' | ')} |`,
+    ...body.map(row => `| ${row.join(' | ')} |`)
+  ];
+
+  return lines.join('\n');
+}
+
+/**
+ * Convert Excel file (.xlsx / .xls) to Markdown tables
+ */
+async function excelToMarkdown(file: File, onProgress?: (progress: number) => void): Promise<string> {
+  const XLSX = await loadXlsx();
+  if (onProgress) onProgress(10);
+
+  const arrayBuffer = await file.arrayBuffer();
+  if (onProgress) onProgress(30);
+
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  if (onProgress) onProgress(50);
+
+  const title = file.name.replace(/\.[^.]+$/, '');
+  const parts: string[] = [`# ${title}`];
+  const sheetCount = workbook.SheetNames.length;
+
+  workbook.SheetNames.forEach((name, idx) => {
+    const sheet = workbook.Sheets[name];
+    const rows: string[][] = XLSX.utils.sheet_to_json<string[]>(sheet, {
+      header: 1,
+      defval: '',
+      blankrows: false
+    });
+
+    // Normalizar: asegurar que todas las filas tengan la misma cantidad de columnas
+    const maxCols = Math.max(...rows.map(r => r.length), 0);
+    const normalized = rows.map(row => {
+      const padded = row.map(cell => String(cell ?? ''));
+      while (padded.length < maxCols) padded.push('');
+      return padded;
+    });
+
+    if (sheetCount > 1) {
+      parts.push(`\n## ${name}\n`);
+    } else {
+      parts.push('');
+    }
+
+    if (normalized.length > 0) {
+      parts.push(arrayToMarkdownTable(normalized));
+    } else {
+      parts.push('*Hoja vacía*');
+    }
+
+    if (onProgress) {
+      onProgress(50 + Math.round(((idx + 1) / sheetCount) * 50));
+    }
+  });
+
+  return parts.join('\n');
+}
+
+/**
+ * Parse CSV text into a 2D array (handles quoted fields, commas, newlines)
+ */
+export function parseCsv(text: string, delimiter = ','): string[][] {
+  const rows: string[][] = [];
+  let current: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        field += '"';
+        i++; // skip escaped quote
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === delimiter) {
+        current.push(field);
+        field = '';
+      } else if (ch === '\n' || (ch === '\r' && next === '\n')) {
+        current.push(field);
+        field = '';
+        if (current.some(c => c !== '')) rows.push(current);
+        current = [];
+        if (ch === '\r') i++; // skip \n in \r\n
+      } else if (ch === '\r') {
+        current.push(field);
+        field = '';
+        if (current.some(c => c !== '')) rows.push(current);
+        current = [];
+      } else {
+        field += ch;
+      }
+    }
+  }
+
+  // Last field/row
+  current.push(field);
+  if (current.some(c => c !== '')) rows.push(current);
+
+  return rows;
+}
+
+/**
+ * Auto-detect CSV delimiter (comma, semicolon, tab)
+ */
+export function detectDelimiter(text: string): string {
+  const firstLines = text.split('\n').slice(0, 5).join('\n');
+  const counts: Record<string, number> = { ',': 0, ';': 0, '\t': 0 };
+  for (const ch of firstLines) {
+    if (ch in counts) counts[ch]++;
+  }
+  // Return the delimiter with highest count, default to comma
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/**
+ * Convert CSV file to Markdown table
+ */
+async function csvToMarkdown(file: File, onProgress?: (progress: number) => void): Promise<string> {
+  if (onProgress) onProgress(20);
+  const text = await file.text();
+  if (onProgress) onProgress(50);
+
+  const delimiter = detectDelimiter(text);
+  const rows = parseCsv(text, delimiter);
+
+  // Normalizar columnas
+  const maxCols = Math.max(...rows.map(r => r.length), 0);
+  const normalized = rows.map(row => {
+    const padded = [...row];
+    while (padded.length < maxCols) padded.push('');
+    return padded;
+  });
+
+  const title = file.name.replace(/\.[^.]+$/, '');
+  let markdown = `# ${title}\n\n`;
+
+  if (normalized.length > 0) {
+    markdown += arrayToMarkdownTable(normalized);
+  } else {
+    markdown += '*Archivo vacío*';
+  }
+
+  if (onProgress) onProgress(100);
+  return markdown;
+}
+
+/**
  * Convert plain text file to Markdown
  */
 async function textToMarkdown(file: File): Promise<string> {
@@ -248,6 +434,10 @@ export function canConvertToMarkdown(file: File): boolean {
     extension === 'doc' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     mimeType === 'application/msword' ||
+    extension === 'xlsx' ||
+    extension === 'xls' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mimeType === 'application/vnd.ms-excel' ||
     extension === 'txt' ||
     extension === 'text' ||
     extension === 'md' ||
@@ -255,13 +445,15 @@ export function canConvertToMarkdown(file: File): boolean {
     extension === 'json' ||
     extension === 'xml' ||
     extension === 'csv' ||
+    extension === 'tsv' ||
     extension === 'html' ||
     extension === 'htm' ||
     mimeType === 'text/plain' ||
     mimeType === 'text/html' ||
     mimeType === 'application/json' ||
     mimeType === 'text/xml' ||
-    mimeType === 'text/csv'
+    mimeType === 'text/csv' ||
+    mimeType === 'text/tab-separated-values'
   );
 }
 
@@ -290,17 +482,29 @@ export async function convertToMarkdown(
     } else if (extension === 'html' || extension === 'htm' || mimeType === 'text/html') {
       markdown = await htmlToMarkdown(file, onProgress);
     } else if (
+      extension === 'xlsx' ||
+      extension === 'xls' ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mimeType === 'application/vnd.ms-excel'
+    ) {
+      markdown = await excelToMarkdown(file, onProgress);
+    } else if (
+      extension === 'csv' ||
+      extension === 'tsv' ||
+      mimeType === 'text/csv' ||
+      mimeType === 'text/tab-separated-values'
+    ) {
+      markdown = await csvToMarkdown(file, onProgress);
+    } else if (
       extension === 'txt' ||
       extension === 'text' ||
       extension === 'md' ||
       extension === 'markdown' ||
       extension === 'json' ||
       extension === 'xml' ||
-      extension === 'csv' ||
       mimeType === 'text/plain' ||
       mimeType === 'application/json' ||
-      mimeType === 'text/xml' ||
-      mimeType === 'text/csv'
+      mimeType === 'text/xml'
     ) {
       const content = await file.text();
       let formattedContent = content;
@@ -315,7 +519,7 @@ export async function convertToMarkdown(
       }
 
       const title = file.name.replace(/\.[^.]+$/, '');
-      const lang = extension === 'json' ? 'json' : extension === 'xml' ? 'xml' : extension === 'csv' ? 'csv' : '';
+      const lang = extension === 'json' ? 'json' : extension === 'xml' ? 'xml' : '';
 
       if (lang) {
           markdown = `# ${title}\n\n\`\`\`${lang}\n${formattedContent}\n\`\`\``;
