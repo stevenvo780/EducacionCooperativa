@@ -1048,6 +1048,14 @@ function DashboardContent() {
         }
 
         setOpenTabs(prev => {
+            const tabToClose = prev.find(t => t.id === docId);
+            // If closing a terminal tab, clear activeSessionId so the
+            // auto-open useEffect does not re-create it immediately.
+            // The session stays alive in the backend — user can reopen
+            // it from the topbar session list at any time.
+            if (tabToClose?.type === 'terminal' && tabToClose.sessionId) {
+                clearActiveSession();
+            }
             const next = prev.filter(t => t.id !== docId);
             if (selectedDocId === docId) {
                 setSelectedDocId(next[next.length - 1]?.id ?? null);
@@ -1062,7 +1070,7 @@ function DashboardContent() {
             if (newLeaves.length === 0) return null;
             return createBalancedTreeFromLeaves(newLeaves);
         });
-    }, [selectedDocId, currentWorkspace]);
+    }, [selectedDocId, currentWorkspace, clearActiveSession]);
 
     const openDocument = async (doc: DocItem) => {
         if (doc.type === 'folder') return;
