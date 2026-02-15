@@ -66,6 +66,7 @@ interface MosaicLayoutProps {
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
+  onDownloadDoc?: (doc: DocItem) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
   onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   activeFolder?: string;
@@ -97,6 +98,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onDuplicateDoc,
   onMoveDoc,
   onRenameDoc,
+  onDownloadDoc,
   onReorderDocs,
   onReorderFolders,
   activeFolder,
@@ -285,6 +287,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         onDuplicateDoc={onDuplicateDoc}
                         onMoveDoc={onMoveDoc}
                         onRenameDoc={onRenameDoc}
+                        onDownloadDoc={onDownloadDoc}
                         onReorderDocs={onReorderDocs}
                         onReorderFolders={onReorderFolders}
                         activeFolder={activeFolder}

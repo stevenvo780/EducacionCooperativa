@@ -20,7 +20,8 @@ import {
   Copy,
   FolderInput,
   Pencil,
-  GripVertical
+  GripVertical,
+  Download
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -118,6 +119,7 @@ interface FileExplorerProps {
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
+  onDownloadDoc?: (doc: DocItem) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
   onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   currentWorkspaceName?: string;
@@ -141,6 +143,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   onDuplicateDoc,
   onMoveDoc,
   onRenameDoc,
+  onDownloadDoc,
   onReorderDocs,
   onReorderFolders,
   currentWorkspaceName = 'Espacio Personal',
@@ -802,6 +805,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 title="Duplicar"
               >
                 <Copy className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onDownloadDoc && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownloadDoc(doc);
+                }}
+                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
+                title="Descargar"
+              >
+                <Download className="w-3.5 h-3.5" />
               </button>
             )}
             {onRenameDoc && (
