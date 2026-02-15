@@ -360,8 +360,9 @@ export const useDashboardUploads = ({
     setIsDragActive(false);
     const { files, preservePaths } = await collectDroppedFiles(e);
     if (files.length === 0) return;
-    await uploadFiles(files, DEFAULT_FOLDER_NAME, { preservePaths });
-  }, [collectDroppedFiles, isFileDrag, uploadFiles]);
+    const targetFolder = activeFolder || DEFAULT_FOLDER_NAME;
+    await uploadFiles(files, targetFolder, { preservePaths });
+  }, [collectDroppedFiles, isFileDrag, uploadFiles, activeFolder]);
 
   const uploadDroppedFilesToFolder = useCallback(async (e: React.DragEvent, targetFolder: string) => {
     const { files, preservePaths } = await collectDroppedFiles(e);

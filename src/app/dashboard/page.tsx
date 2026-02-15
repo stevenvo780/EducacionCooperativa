@@ -2109,7 +2109,7 @@ function DashboardContent() {
                     modalPop={modalPop}
                 />
 
-                <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} />
+                <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} activeFolder={activeFolder} />
                 <StatusToasts uploadStatus={uploadStatus} deleteStatus={deleteStatus} />
                 <DialogModal
                     dialogConfig={dialogConfig}
