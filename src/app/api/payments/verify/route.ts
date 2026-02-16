@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
         mpMerchantOrderId: payment.order?.id ? String(payment.order.id) : null,
         startDate: now.toISOString(),
         endDate: endDate.toISOString(),
+        pendingPlanId: null,
         updatedAt: now.toISOString()
       }, { merge: true });
 
