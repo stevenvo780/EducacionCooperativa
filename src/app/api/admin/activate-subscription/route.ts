@@ -5,15 +5,22 @@ import type { PlanId } from '@/types/subscription';
 /* eslint-disable no-console */
 
 const ADMIN_PASSWORD = process.env.APP_PASSWORD || '';
+const ENABLE_ADMIN_ENDPOINTS = process.env.ENABLE_ADMIN_ENDPOINTS === 'true';
 
 /**
  * POST /api/admin/activate-subscription
  * Admin endpoint to manually activate a subscription for a user.
+ * DISABLED in production unless ENABLE_ADMIN_ENDPOINTS=true.
  * Requires APP_PASSWORD header for authentication.
  *
  * Body: { userId: string, planId: 'basic' | 'pro' | 'enterprise', durationMonths?: number }
  */
 export async function POST(req: NextRequest) {
+  // Block in production unless explicitly enabled
+  if (!ENABLE_ADMIN_ENDPOINTS) {
+    return NextResponse.json({ error: 'Endpoint deshabilitado' }, { status: 403 });
+  }
+
   try {
     const authHeader = req.headers.get('x-admin-password') || '';
     if (!ADMIN_PASSWORD || authHeader !== ADMIN_PASSWORD) {
