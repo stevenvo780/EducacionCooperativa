@@ -71,14 +71,29 @@ export async function POST(req: NextRequest) {
     });
 
     // Guardar preferencia pendiente en Firestore
-    await adminDb.collection('subscriptions').doc(auth.uid).set({
-      userId: auth.uid,
-      planId: planId,
-      status: 'pending',
-      mpPreferenceId: preference.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    // IMPORTANTE: Si ya tiene suscripción activa, NO cambiar status/planId
+    // para no perder el acceso si el usuario no completa el pago
+    const existingSub = await adminDb.collection('subscriptions').doc(auth.uid).get();
+    const existingData = existingSub.exists ? existingSub.data() : null;
+
+    if (existingData?.status === 'active') {
+      // Tiene plan activo — solo guardar referencia de nueva preferencia
+      await adminDb.collection('subscriptions').doc(auth.uid).set({
+        mpPreferenceId: preference.id,
+        pendingPlanId: planId,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } else {
+      // No tiene plan activo — OK poner pending
+      await adminDb.collection('subscriptions').doc(auth.uid).set({
+        userId: auth.uid,
+        planId: planId,
+        status: 'pending',
+        mpPreferenceId: preference.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
 
     const checkoutUrl = isSandbox
       ? preference.sandbox_init_point

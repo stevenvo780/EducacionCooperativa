@@ -30,30 +30,41 @@ export async function GET(req: NextRequest) {
       const payment = await paymentClient.get({ id: Number(paymentId) });
 
       const now = new Date();
-      const endDate = await calculateSmartEndDate(userId);
+
+      // Leer suscripción actual para deduplicación
+      const existingSub = await adminDb.collection('subscriptions').doc(userId).get();
+      const existingData = existingSub.exists ? existingSub.data() : null;
 
       if (payment.status === 'approved') {
-        await adminDb.collection('subscriptions').doc(userId).set({
-          userId,
-          planId: planId as PlanId,
-          status: 'active',
-          mpPaymentId: String(paymentId),
-          mpMerchantOrderId: payment.order?.id ? String(payment.order.id) : null,
-          startDate: now.toISOString(),
-          endDate: endDate.toISOString(),
-          updatedAt: now.toISOString()
-        }, { merge: true });
+        // Deduplicación: si ya se activó con este mismo paymentId, no extender de nuevo
+        if (existingData?.status === 'active' && existingData?.mpPaymentId === String(paymentId)) {
+          console.log(`[Callback/Success] ⏭️ Payment ${paymentId} already processed for user ${userId}, skipping`);
+        } else {
+          const endDate = await calculateSmartEndDate(userId);
 
-        await adminDb.collection('users').doc(userId).set({
-          subscription: {
+          await adminDb.collection('subscriptions').doc(userId).set({
+            userId,
             planId: planId as PlanId,
             status: 'active',
+            mpPaymentId: String(paymentId),
+            mpMerchantOrderId: payment.order?.id ? String(payment.order.id) : null,
             startDate: now.toISOString(),
-            endDate: endDate.toISOString()
-          }
-        }, { merge: true });
+            endDate: endDate.toISOString(),
+            pendingPlanId: null,
+            updatedAt: now.toISOString()
+          }, { merge: true });
 
-        console.log(`[Callback/Success] ✅ Subscription activated for user ${userId}, plan: ${planId}`);
+          await adminDb.collection('users').doc(userId).set({
+            subscription: {
+              planId: planId as PlanId,
+              status: 'active',
+              startDate: now.toISOString(),
+              endDate: endDate.toISOString()
+            }
+          }, { merge: true });
+
+          console.log(`[Callback/Success] ✅ Subscription activated for user ${userId}, plan: ${planId}`);
+        }
       } else if (payment.status === 'pending' || payment.status === 'in_process') {
         await adminDb.collection('subscriptions').doc(userId).set({
           userId,

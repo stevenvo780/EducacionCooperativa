@@ -39,50 +39,71 @@ export async function POST(req: NextRequest) {
       }
 
       const now = new Date();
-      const endDate = await calculateSmartEndDate(userId);
+
+      // Leer suscripción actual para deduplicación y protección
+      const existingSub = await adminDb.collection('subscriptions').doc(userId).get();
+      const existingData = existingSub.exists ? existingSub.data() : null;
 
       if (payment.status === 'approved') {
-        await adminDb.collection('subscriptions').doc(userId).set({
-          userId,
-          planId: planId as PlanId,
-          status: 'active',
-          mpPaymentId: String(paymentId),
-          mpMerchantOrderId: payment.order?.id ? String(payment.order.id) : null,
-          startDate: now.toISOString(),
-          endDate: endDate.toISOString(),
-          updatedAt: now.toISOString()
-        }, { merge: true });
+        // Deduplicación: si ya se activó con este mismo paymentId, no extender de nuevo
+        if (existingData?.status === 'active' && existingData?.mpPaymentId === String(paymentId)) {
+          console.log(`[Webhook] ⏭️ Payment ${paymentId} already processed for user ${userId}, skipping`);
+        } else {
+          const endDate = await calculateSmartEndDate(userId);
 
-        // También actualizar el documento del usuario
-        await adminDb.collection('users').doc(userId).set({
-          subscription: {
+          await adminDb.collection('subscriptions').doc(userId).set({
+            userId,
             planId: planId as PlanId,
             status: 'active',
+            mpPaymentId: String(paymentId),
+            mpMerchantOrderId: payment.order?.id ? String(payment.order.id) : null,
             startDate: now.toISOString(),
-            endDate: endDate.toISOString()
-          }
-        }, { merge: true });
+            endDate: endDate.toISOString(),
+            pendingPlanId: null,
+            updatedAt: now.toISOString()
+          }, { merge: true });
 
-        console.log(`✅ Subscription activated for user ${userId}, plan: ${planId}`);
+          await adminDb.collection('users').doc(userId).set({
+            subscription: {
+              planId: planId as PlanId,
+              status: 'active',
+              startDate: now.toISOString(),
+              endDate: endDate.toISOString()
+            }
+          }, { merge: true });
+
+          console.log(`✅ Subscription activated for user ${userId}, plan: ${planId}`);
+        }
       } else if (payment.status === 'pending' || payment.status === 'in_process') {
-        await adminDb.collection('subscriptions').doc(userId).set({
-          userId,
-          planId: planId as PlanId,
-          status: 'pending',
-          mpPaymentId: String(paymentId),
-          updatedAt: now.toISOString()
-        }, { merge: true });
+        // Solo poner pending si NO tiene ya una suscripción activa
+        if (existingData?.status === 'active') {
+          console.log(`[Webhook] ⏭️ User ${userId} already has active sub, ignoring pending status for payment ${paymentId}`);
+        } else {
+          await adminDb.collection('subscriptions').doc(userId).set({
+            userId,
+            planId: planId as PlanId,
+            status: 'pending',
+            mpPaymentId: String(paymentId),
+            updatedAt: now.toISOString()
+          }, { merge: true });
 
-        console.log(`⏳ Payment pending for user ${userId}, plan: ${planId}`);
+          console.log(`⏳ Payment pending for user ${userId}, plan: ${planId}`);
+        }
       } else if (payment.status === 'rejected' || payment.status === 'cancelled') {
-        await adminDb.collection('subscriptions').doc(userId).set({
-          userId,
-          status: 'cancelled',
-          mpPaymentId: String(paymentId),
-          updatedAt: now.toISOString()
-        }, { merge: true });
+        // Solo cancelar si el pago rechazado corresponde al pago ACTUAL
+        // No cancelar si tiene un plan activo con otro paymentId
+        if (existingData?.status === 'active' && existingData?.mpPaymentId !== String(paymentId)) {
+          console.log(`[Webhook] ⚠️ Rejected payment ${paymentId} ignored — user ${userId} has active sub with different payment`);
+        } else {
+          await adminDb.collection('subscriptions').doc(userId).set({
+            userId,
+            status: 'cancelled',
+            mpPaymentId: String(paymentId),
+            updatedAt: now.toISOString()
+          }, { merge: true });
 
-        console.log(`❌ Payment rejected/cancelled for user ${userId}`);
+          console.log(`❌ Payment rejected/cancelled for user ${userId}`);
+        }
       }
     }
 

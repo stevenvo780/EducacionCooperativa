@@ -30,11 +30,18 @@ export async function GET(req: NextRequest) {
     if (data.status === 'active' && data.endDate) {
       const endDate = new Date(data.endDate);
       if (endDate < new Date()) {
-        // Suscripción expirada
+        // Suscripción expirada — actualizar ambos documentos
+        const nowIso = new Date().toISOString();
         await adminDb.collection('subscriptions').doc(auth.uid).update({
           status: 'expired',
-          updatedAt: new Date().toISOString()
+          updatedAt: nowIso
         });
+        await adminDb.collection('users').doc(auth.uid).set({
+          subscription: {
+            planId: 'free',
+            status: 'expired'
+          }
+        }, { merge: true });
         data.status = 'expired';
       }
     }
