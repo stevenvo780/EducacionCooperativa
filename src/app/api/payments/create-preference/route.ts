@@ -5,6 +5,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { PLANS, type PlanId } from '@/types/subscription';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
+const isSandbox = process.env.MERCADOPAGO_SANDBOX === 'true';
 
 export async function POST(req: NextRequest) {
   try {
@@ -79,10 +80,13 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString()
     }, { merge: true });
 
+    const checkoutUrl = isSandbox
+      ? preference.sandbox_init_point
+      : preference.init_point;
+
     return NextResponse.json({
       preferenceId: preference.id,
-      initPoint: preference.init_point,
-      sandboxInitPoint: preference.sandbox_init_point
+      checkoutUrl
     });
   } catch (error: any) {
     console.error('Error creating payment preference:', error?.cause || error?.message);
