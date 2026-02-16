@@ -98,6 +98,7 @@ function DashboardContent() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState<Record<string, { email?: string | null; displayName?: string | null }>>({});
     const [currentPlan, setCurrentPlan] = useState<PlanId>('free');
+    const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
     const [showPricingModal, setShowPricingModal] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -155,10 +156,14 @@ function DashboardContent() {
             .then((sub) => {
                 if (!cancelled && sub?.planId) {
                     setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
+                    setSubscriptionEndDate(sub.status === 'active' && sub.endDate ? sub.endDate : null);
                 }
             })
             .catch(() => {
-                if (!cancelled) setCurrentPlan('free');
+                if (!cancelled) {
+                    setCurrentPlan('free');
+                    setSubscriptionEndDate(null);
+                }
             });
         return () => { cancelled = true; };
     }, [user]);
@@ -180,6 +185,7 @@ function DashboardContent() {
                 .then((sub) => {
                     if (sub && 'planId' in sub) {
                         setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
+                        setSubscriptionEndDate(sub.status === 'active' && sub.endDate ? sub.endDate : null);
                     }
                 })
                 .catch(() => {
@@ -188,6 +194,7 @@ function DashboardContent() {
                         .then((sub) => {
                             if (sub?.planId) {
                                 setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
+                                setSubscriptionEndDate(sub.status === 'active' && sub.endDate ? sub.endDate : null);
                             }
                         })
                         .catch(() => {});
@@ -2652,6 +2659,7 @@ function DashboardContent() {
                     onClose={() => setShowPricingModal(false)}
                     currentPlan={currentPlan}
                     userEmail={userEmail}
+                    endDate={subscriptionEndDate}
                 />
             </div>
         </LazyMotion>

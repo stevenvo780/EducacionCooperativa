@@ -11,11 +11,12 @@ interface PricingModalProps {
   onClose: () => void;
   currentPlan: PlanId;
   userEmail?: string | null;
+  endDate?: string | null;
 }
 
 const WHATSAPP_ENTERPRISE_URL = 'https://wa.me/573246780067?text=Hola%2C%20me%20interesa%20el%20plan%20Enterprise%20de%20Agora';
 
-export default function PricingModal({ isOpen, onClose, currentPlan, userEmail }: PricingModalProps) {
+export default function PricingModal({ isOpen, onClose, currentPlan, userEmail, endDate }: PricingModalProps) {
   const [loading, setLoading] = useState<PlanId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
@@ -31,8 +32,10 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail }
   if (!isOpen) return null;
 
   const handleSelectPlan = async (planId: PlanId) => {
-    if (planId === currentPlan) return;
     if (planId === 'free') return;
+
+    // Solo bloquear si es plan gratuito intentando "seleccionarse"
+    // Planes de pago permiten renovación (re-compra del mismo plan)
 
     if (planId === 'enterprise') {
       window.open(WHATSAPP_ENTERPRISE_URL, '_blank');
@@ -138,6 +141,7 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail }
                 isPopular={isPopular}
                 isLoading={loading === planId}
                 onSelect={() => handleSelectPlan(planId)}
+                endDate={isCurrent ? endDate : undefined}
               />
             );
           })}
@@ -160,13 +164,15 @@ function PlanCard({
   isCurrent,
   isPopular,
   isLoading,
-  onSelect
+  onSelect,
+  endDate
 }: {
   plan: PlanConfig;
   isCurrent: boolean;
   isPopular: boolean;
   isLoading: boolean;
   onSelect: () => void;
+  endDate?: string | null;
 }) {
   const borderColor = isPopular
     ? 'border-blue-500/50 ring-1 ring-blue-500/20'
@@ -234,6 +240,31 @@ function PlanCard({
           <MessageCircle size={16} />
           Contactar por WhatsApp
         </a>
+      ) : isCurrent && plan.price > 0 ? (
+        <>
+          {endDate && (
+            <p className="text-xs text-gray-400 text-center mb-2">
+              Vence el {new Date(endDate).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          )}
+          <button
+            onClick={onSelect}
+            disabled={isLoading}
+            className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              <>
+                <ExternalLink size={16} />
+                Renovar plan
+              </>
+            )}
+          </button>
+        </>
       ) : isCurrent ? (
         <button
           disabled

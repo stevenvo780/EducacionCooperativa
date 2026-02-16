@@ -3,6 +3,7 @@ import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import type { PlanId } from '@/types/subscription';
+import { calculateSmartEndDate } from '@/app/api/payments/helpers';
 
 /* eslint-disable no-console */
 
@@ -48,8 +49,7 @@ export async function POST(req: NextRequest) {
     const payment = await paymentClient.get({ id: Number(paymentId) });
 
     const now = new Date();
-    const endDate = new Date(now);
-    endDate.setMonth(endDate.getMonth() + 1);
+    const endDate = await calculateSmartEndDate(auth.uid);
 
     const planId = subData?.planId || (payment.external_reference?.split('|')[1]);
 

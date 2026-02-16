@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { adminDb } from '@/lib/firebase-admin';
 import type { PlanId } from '@/types/subscription';
+import { calculateSmartEndDate } from '@/app/api/payments/helpers';
 
 /* eslint-disable no-console */
 
-const mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || '';
+const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,8 +39,7 @@ export async function POST(req: NextRequest) {
       }
 
       const now = new Date();
-      const endDate = new Date(now);
-      endDate.setMonth(endDate.getMonth() + 1);
+      const endDate = await calculateSmartEndDate(userId);
 
       if (payment.status === 'approved') {
         await adminDb.collection('subscriptions').doc(userId).set({
