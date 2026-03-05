@@ -5,15 +5,17 @@
 ### SSH Config (~/.ssh/config)
 ```
 Host worker-prod
-    HostName 10.8.0.5
+    HostName 100.98.136.112   # humanizar1 vía NetBird mesh
     User humanizar
     IdentityFile ~/.ssh/id_ed25519
 
 Host hub-prod
-    HostName 148.230.88.162
+    HostName 100.98.176.95     # VPS vía NetBird mesh
     User humanizar
     IdentityFile ~/.ssh/id_ed25519
 ```
+
+> ⚠️ Las IPs `10.8.0.x` de WireGuard fueron retiradas el 2026-03-05. Toda la conectividad es vía NetBird mesh (`100.98.0.0/16`).
 
 ### Sudo sin password (en servidores)
 ```bash
@@ -49,15 +51,17 @@ vercel --prod
 
 ## Arquitectura
 
-### Hub (hub-prod: 148.230.88.162:3010)
+### Hub (hub-prod: 100.98.176.95:3010 vía NetBird)
 - Servidor central de WebSockets y autenticación
 - Servicio: `edu-hub.service`
 - Logs: `ssh hub-prod 'sudo journalctl -u edu-hub -f'`
+- Proxy público: `https://hub.humanizar-dev.cloud`
 
-### Worker (worker-prod: 10.8.0.5)
-- Ejecuta containers Docker por workspace
+### Worker (worker-prod: 100.98.136.112 vía NetBird)
+- Ejecuta containers Docker por workspace (11 activos al 2026-03-05)
 - Gestión: `edu-worker-manager`
 - Imagen: `stevenvo780/edu-worker:latest`
+- Config: `/etc/edu-worker/worker.env` → `NEXUS_URL=http://100.98.176.95:3010`
 
 ---
 
