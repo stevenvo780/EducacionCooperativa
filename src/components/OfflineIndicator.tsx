@@ -26,7 +26,7 @@ function timeAgo(ts: number): string {
 }
 
 export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow }: Props) {
-  const isOnline = syncStatus?.isOnline ?? (typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const isOnline = syncStatus?.isOnline ?? true;
   const isSyncing = syncStatus?.isSyncing ?? false;
   const pendingCount = syncStatus?.pendingCount ?? 0;
   const failedCount = syncStatus?.failedCount ?? 0;
