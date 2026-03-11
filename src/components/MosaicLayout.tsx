@@ -64,7 +64,8 @@ interface MosaicLayoutProps {
   onCloseTab: (docId: string) => void;
   onSelectDoc: (doc: DocItem) => void;
   onActivateTab?: (docId: string) => void;
-  onDropDocOnTile?: (docId: string, targetTileId: string) => void;
+  onDropDocOnTile?: (docId: string, targetTileId: string, position: 'left' | 'right' | 'top' | 'bottom' | 'replace') => void;
+  onDropDocOnEmpty?: (docId: string) => void;
   onCreateFile?: () => void;
   onCreateFolder?: () => void;
   onUploadFile?: () => void;
@@ -100,6 +101,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onSelectDoc,
   onActivateTab,
   onDropDocOnTile,
+  onDropDocOnEmpty,
   onCreateFile,
   onCreateFolder,
   onUploadFile,
@@ -124,7 +126,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
 }) => {
   const [docSearchTerms, setDocSearchTerms] = useState<Record<string, string>>({});
   const [docSearchStates, setDocSearchStates] = useState<Record<string, SearchState>>({});
-  const [dragOverTileId, setDragOverTileId] = useState<string | null>(null);
+  const [dragOverInfo, setDragOverInfo] = useState<{ tileId: string; position: 'left' | 'right' | 'top' | 'bottom' | 'replace' } | null>(null);
+  const [dragOverEmpty, setDragOverEmpty] = useState(false);
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
 
@@ -261,31 +264,66 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     );
   }, [onSetDocMode, onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
 
-  const handleTileDragOver = useCallback((e: React.DragEvent, tileId: string) => {
+  const calcDropPosition = useCallback((e: React.DragEvent<HTMLDivElement>): 'left' | 'right' | 'top' | 'bottom' | 'replace' => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const edgeThreshold = 0.22;
+    if (x < edgeThreshold) return 'left';
+    if (x > 1 - edgeThreshold) return 'right';
+    if (y < edgeThreshold) return 'top';
+    if (y > 1 - edgeThreshold) return 'bottom';
+    return 'replace';
+  }, []);
+
+  const handleTileDragOver = useCallback((e: React.DragEvent<HTMLDivElement>, tileId: string) => {
     const types = Array.from(e.dataTransfer.types ?? []);
     if (!types.includes('application/x-doc-id')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragLeaveTimer.current) { clearTimeout(dragLeaveTimer.current); dragLeaveTimer.current = null; }
-    setDragOverTileId(prev => (prev === tileId ? prev : tileId));
-  }, []);
+    const position = calcDropPosition(e);
+    setDragOverInfo(prev => {
+      if (prev && prev.tileId === tileId && prev.position === position) return prev;
+      return { tileId, position };
+    });
+  }, [calcDropPosition]);
 
   const handleTileDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    dragLeaveTimer.current = setTimeout(() => setDragOverTileId(null), 80);
+    dragLeaveTimer.current = setTimeout(() => setDragOverInfo(null), 80);
   }, []);
 
-  const handleTileDrop = useCallback((e: React.DragEvent, tileId: string) => {
+  const handleTileDrop = useCallback((e: React.DragEvent<HTMLDivElement>, tileId: string) => {
     const types = Array.from(e.dataTransfer.types ?? []);
     if (!types.includes('application/x-doc-id')) return;
     e.preventDefault();
     e.stopPropagation();
-    setDragOverTileId(null);
+    const position = calcDropPosition(e);
+    setDragOverInfo(null);
     const docId = e.dataTransfer.getData('application/x-doc-id');
     if (docId && docId !== tileId) {
-      onDropDocOnTile?.(docId, tileId);
+      onDropDocOnTile?.(docId, tileId, position);
     }
-  }, [onDropDocOnTile]);
+  }, [onDropDocOnTile, calcDropPosition]);
+
+  const handleEmptyDragOver = useCallback((e: React.DragEvent) => {
+    const types = Array.from(e.dataTransfer.types ?? []);
+    if (!types.includes('application/x-doc-id')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverEmpty(true);
+  }, []);
+
+  const handleEmptyDrop = useCallback((e: React.DragEvent) => {
+    const types = Array.from(e.dataTransfer.types ?? []);
+    if (!types.includes('application/x-doc-id')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverEmpty(false);
+    const docId = e.dataTransfer.getData('application/x-doc-id');
+    if (docId) onDropDocOnEmpty?.(docId);
+  }, [onDropDocOnEmpty]);
 
   const renderTile = useCallback((id: string, path: MosaicPath) => {
     const doc = tabById.get(id) || docById.get(id);
@@ -297,7 +335,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isSpreadsheet = !isTerminal && !isFileExplorer && !isBoard && isSpreadsheetDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
-    const isDragTarget = dragOverTileId === doc.id;
+    const dropInfo = dragOverInfo?.tileId === doc.id ? dragOverInfo : null;
 
     return (
         <MosaicWindow<string>
@@ -307,7 +345,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             toolbarControls={renderToolbarControls(doc, mode)}
         >
             <div
-                className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'} transition-all duration-150 ${isDragTarget ? 'ring-2 ring-sky-500 ring-inset bg-sky-500/10' : ''}`}
+                className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
                 onMouseDownCapture={() => {
                   onActivateTab?.(doc.id);
                 }}
@@ -318,6 +356,15 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                 onDragLeave={handleTileDragLeave}
                 onDrop={(e) => handleTileDrop(e, doc.id)}
             >
+                {dropInfo && (
+                  <div className="absolute inset-0 z-50 pointer-events-none">
+                    {dropInfo.position === 'left' && <div className="absolute inset-y-0 left-0 w-1/2 bg-sky-500/20 border-l-4 border-sky-500 rounded-l" />}
+                    {dropInfo.position === 'right' && <div className="absolute inset-y-0 right-0 w-1/2 bg-sky-500/20 border-r-4 border-sky-500 rounded-r" />}
+                    {dropInfo.position === 'top' && <div className="absolute inset-x-0 top-0 h-1/2 bg-sky-500/20 border-t-4 border-sky-500 rounded-t" />}
+                    {dropInfo.position === 'bottom' && <div className="absolute inset-x-0 bottom-0 h-1/2 bg-sky-500/20 border-b-4 border-sky-500 rounded-b" />}
+                    {dropInfo.position === 'replace' && <div className="absolute inset-0 bg-sky-500/10 ring-2 ring-inset ring-sky-500" />}
+                  </div>
+                )}
                  {isTerminal ? (
                       <Terminal
                         nexusUrl={nexusUrl}
@@ -376,15 +423,32 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms, dragOverTileId,
+    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms, dragOverInfo,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
     onSelectDoc, onActivateTab, onDropDocOnTile, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
-    handleTileDragOver, handleTileDragLeave, handleTileDrop,
+    handleTileDragOver, handleTileDragLeave, handleTileDrop, calcDropPosition,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, onDownloadFolder,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
     handleSearchStateChange, getSearchNavRef
   ]);
+
+  const emptyZeroState = useMemo(() => (
+    <div
+      className={`h-full w-full flex flex-col items-center justify-center text-surface-400 p-8 text-center transition-colors duration-150 ${dragOverEmpty ? 'bg-sky-500/10 ring-2 ring-inset ring-sky-500' : ''}`}
+      onDragOver={handleEmptyDragOver}
+      onDragLeave={() => setDragOverEmpty(false)}
+      onDrop={handleEmptyDrop}
+    >
+      <div className="max-w-md space-y-4 pointer-events-none">
+        <div className="w-16 h-16 bg-surface-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <Columns className="w-8 h-8 text-surface-400" />
+        </div>
+        <h3 className="text-xl font-medium text-surface-200">{dragOverEmpty ? 'Soltar aquí para abrir' : 'No hay paneles abiertos'}</h3>
+        <p className="text-surface-400">{dragOverEmpty ? 'Suelta el archivo para abrirlo en el panel' : 'Selecciona o arrastra un archivo del explorador para comenzar.'}</p>
+      </div>
+    </div>
+  ), [dragOverEmpty, handleEmptyDragOver, handleEmptyDrop]);
 
   return (
     <>
@@ -393,17 +457,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           value={value}
           onChange={onChange}
           className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
-          zeroStateView={
-              <div className="h-full w-full flex flex-col items-center justify-center text-surface-400 p-8 text-center">
-                  <div className="max-w-md space-y-4">
-                      <div className="w-16 h-16 bg-surface-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                          <Columns className="w-8 h-8 text-surface-400" />
-                      </div>
-                      <h3 className="text-xl font-medium text-surface-200">No hay paneles abiertos</h3>
-                      <p className="text-surface-400">Selecciona un archivo del explorador o abre una nueva terminal para comenzar.</p>
-                  </div>
-              </div>
-          }
+          zeroStateView={emptyZeroState}
       />
       <style jsx global>{`
         .mosaic-window-compact .mosaic-window-toolbar {

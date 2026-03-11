@@ -1149,6 +1149,26 @@ function DashboardContent() {
         };
     }, []);
 
+    const splitLeafInTree = useCallback((
+        node: MosaicNode<string>,
+        targetId: string,
+        newId: string,
+        position: 'left' | 'right' | 'top' | 'bottom'
+    ): MosaicNode<string> => {
+        if (typeof node === 'string') {
+            if (node !== targetId) return node;
+            const direction = (position === 'left' || position === 'right') ? 'row' : 'column';
+            const first = (position === 'left' || position === 'top') ? newId : targetId;
+            const second = (position === 'left' || position === 'top') ? targetId : newId;
+            return { direction, first, second, splitPercentage: 50 };
+        }
+        return {
+            ...node,
+            first: splitLeafInTree(node.first, targetId, newId, position),
+            second: splitLeafInTree(node.second, targetId, newId, position)
+        };
+    }, []);
+
     const openDocument = async (doc: DocItem) => {
         if (doc.type === 'folder') return;
         setActiveFolderSafe(normalizeFolderPath(doc.folder));
@@ -1195,44 +1215,87 @@ function DashboardContent() {
         setSelectedDocId(doc.id);
     };
 
-    const handleDropDocOnTile = useCallback(async (droppedDocId: string, targetTileId: string) => {
+    const handleDropDocOnTile = useCallback(async (droppedDocId: string, targetTileId: string, position: 'left' | 'right' | 'top' | 'bottom' | 'replace') => {
         if (droppedDocId === targetTileId) return;
         const droppedDoc = docs.find(d => d.id === droppedDocId) || openTabs.find(t => t.id === droppedDocId);
         if (!droppedDoc || droppedDoc.type === 'folder') return;
 
         const targetTab = openTabs.find(t => t.id === targetTileId);
-        if (targetTab?.type === 'terminal' && targetTab.sessionId) {
-            clearActiveSession();
-        }
-
         const isAlreadyOpen = openTabs.some(t => t.id === droppedDocId);
 
-        if (isAlreadyOpen) {
-            // Doc already open in another tile — swap the two tiles
-            setMosaicNode(current => {
-                if (!current) return droppedDocId;
-                // First replace droppedDocId with a temp placeholder
-                const temp = `__swap_temp_${Date.now()}`;
-                let swapped = replaceLeafId(current, droppedDocId, temp);
-                swapped = replaceLeafId(swapped, targetTileId, droppedDocId);
-                swapped = replaceLeafId(swapped, temp, targetTileId);
-                return swapped;
-            });
-        } else {
-            // New doc — replace target tile
-            setOpenTabs(prev => {
-                const next = prev.filter(tab => tab.id !== targetTileId && tab.id !== droppedDocId);
-                return [...next, droppedDoc];
-            });
+        // Ensure the doc is in openTabs
+        if (!isAlreadyOpen) {
+            setOpenTabs(prev => [...prev.filter(t => t.id !== droppedDocId), droppedDoc]);
+        }
 
-            setMosaicNode(current => {
-                if (!current) return droppedDocId;
-                return replaceLeafId(current, targetTileId, droppedDocId);
-            });
+        if (position === 'replace') {
+            // Replace target tile
+            if (targetTab?.type === 'terminal' && targetTab.sessionId) {
+                clearActiveSession();
+            }
+            if (isAlreadyOpen) {
+                // Swap the two tiles
+                setMosaicNode(current => {
+                    if (!current) return droppedDocId;
+                    const temp = `__swap_temp_${Date.now()}`;
+                    let swapped = replaceLeafId(current, droppedDocId, temp);
+                    swapped = replaceLeafId(swapped, targetTileId, droppedDocId);
+                    swapped = replaceLeafId(swapped, temp, targetTileId);
+                    return swapped;
+                });
+            } else {
+                setOpenTabs(prev => prev.filter(t => t.id !== targetTileId));
+                setMosaicNode(current => {
+                    if (!current) return droppedDocId;
+                    return replaceLeafId(current, targetTileId, droppedDocId);
+                });
+            }
+        } else {
+            // Split: create a new split alongside the target
+            if (isAlreadyOpen) {
+                // Remove from old position first, then split the target
+                setMosaicNode(current => {
+                    if (!current) return droppedDocId;
+                    // Remove the dropped doc from its current position by replacing it
+                    // with a marker, then clean the tree
+                    const removeLeaf = (node: MosaicNode<string>, leafId: string): MosaicNode<string> | null => {
+                        if (typeof node === 'string') {
+                            return node === leafId ? null : node;
+                        }
+                        const first = removeLeaf(node.first, leafId);
+                        const second = removeLeaf(node.second, leafId);
+                        if (!first && !second) return null;
+                        if (!first) return second;
+                        if (!second) return first;
+                        return { ...node, first, second };
+                    };
+                    const cleaned = removeLeaf(current, droppedDocId);
+                    if (!cleaned) return droppedDocId;
+                    return splitLeafInTree(cleaned, targetTileId, droppedDocId, position);
+                });
+            } else {
+                setMosaicNode(current => {
+                    if (!current) return droppedDocId;
+                    return splitLeafInTree(current, targetTileId, droppedDocId, position);
+                });
+            }
         }
 
         setSelectedDocId(droppedDocId);
-    }, [docs, openTabs, clearActiveSession, replaceLeafId]);
+    }, [docs, openTabs, clearActiveSession, replaceLeafId, splitLeafInTree]);
+
+    const handleDropDocOnEmpty = useCallback(async (droppedDocId: string) => {
+        const droppedDoc = docs.find(d => d.id === droppedDocId) || openTabs.find(t => t.id === droppedDocId);
+        if (!droppedDoc || droppedDoc.type === 'folder') return;
+
+        const isAlreadyOpen = openTabs.some(t => t.id === droppedDocId);
+        if (!isAlreadyOpen) {
+            setOpenTabs(prev => [...prev, droppedDoc]);
+        }
+        setMosaicNode(droppedDocId);
+        setSelectedDocId(droppedDocId);
+        setShowMobileSidebar(false);
+    }, [docs, openTabs, setShowMobileSidebar]);
 
     const showDialog = useCallback((config: DialogConfig) => {
         return new Promise<DialogResult>((resolve) => {
@@ -2388,7 +2451,29 @@ function DashboardContent() {
                         onFolderDragLeave={handleFolderDragLeave}
                     />
 
-                    <div className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative">
+                    <div
+                        className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative"
+                        onDragOver={(e) => {
+                            if (!mosaicNode) {
+                                const types = Array.from(e.dataTransfer.types ?? []);
+                                if (types.includes('application/x-doc-id')) {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                }
+                            }
+                        }}
+                        onDrop={(e) => {
+                            if (!mosaicNode) {
+                                const types = Array.from(e.dataTransfer.types ?? []);
+                                if (types.includes('application/x-doc-id')) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const docId = e.dataTransfer.getData('application/x-doc-id');
+                                    if (docId) handleDropDocOnEmpty(docId);
+                                }
+                            }
+                        }}
+                    >
                         {mosaicNode ? (
                             <div className="flex-1 min-h-0 relative">
                                 <MosaicLayout
@@ -2403,6 +2488,7 @@ function DashboardContent() {
                                     onSelectDoc={openDocument}
                                     onActivateTab={setSelectedDocId}
                                     onDropDocOnTile={handleDropDocOnTile}
+                                    onDropDocOnEmpty={handleDropDocOnEmpty}
                                     onCreateFile={() => createDoc(undefined, activeFolder)}
                                     onCreateFolder={() => createFolder()}
                                     onUploadFile={() => {
