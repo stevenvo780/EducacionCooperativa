@@ -25,8 +25,9 @@ export interface OfflineSyncState {
 }
 
 export function useOfflineSync() {
+  // Always start as online=true on server; real status set in useEffect after mount
   const [state, setState] = useState<OfflineSyncState>({
-    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    isOnline: true,
     isSyncing: false,
     pendingCount: 0,
     failedCount: 0,
@@ -40,15 +41,38 @@ export function useOfflineSync() {
   useEffect(() => {
     isMounted.current = true;
 
+    // Determine real connectivity: navigator.onLine can be unreliable
+    // (returns false in headless/server environments). Cross-check with a
+    // lightweight fetch if navigator.onLine says offline.
+    const checkRealConnectivity = async (): Promise<boolean> => {
+      if (navigator.onLine) return true;
+      // navigator.onLine is false — verify with a real request
+      try {
+        const res = await fetch('/api/auth', { method: 'HEAD', cache: 'no-store' });
+        return res.ok || res.status === 405 || res.status === 401;
+      } catch {
+        return false;
+      }
+    };
+
+    checkRealConnectivity().then((online) => {
+      if (isMounted.current) {
+        setState(prev => ({ ...prev, isOnline: online }));
+      }
+    });
+
     const goOnline = () => {
       if (isMounted.current) {
         setState(prev => ({ ...prev, isOnline: true }));
       }
     };
     const goOffline = () => {
-      if (isMounted.current) {
-        setState(prev => ({ ...prev, isOnline: false }));
-      }
+      // Double-check: navigator.onLine can lie
+      checkRealConnectivity().then((stillOnline) => {
+        if (isMounted.current) {
+          setState(prev => ({ ...prev, isOnline: stillOnline }));
+        }
+      });
     };
 
     window.addEventListener('online', goOnline);
