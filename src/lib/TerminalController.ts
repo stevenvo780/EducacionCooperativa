@@ -50,6 +50,7 @@ export class TerminalController {
   private nexusUrl: string;
   private initialized = false;
   private activeSessionId: string | null = null;
+  private debugEnabled = process.env.NODE_ENV !== 'production';
 
   private workspaceStatuses: Map<string, WorkerStatus> = new Map();
   private subscribedWorkspaces: Set<string> = new Set();
@@ -69,6 +70,12 @@ export class TerminalController {
 
   constructor(nexusUrl: string) {
     this.nexusUrl = nexusUrl;
+  }
+
+  private debugLog(...args: unknown[]) {
+    if (this.debugEnabled) {
+      console.log(...args);
+    }
   }
 
   private loadScript(src: string): Promise<void> {
@@ -98,22 +105,22 @@ export class TerminalController {
     if (this.initialized) return true;
 
     const startTime = performance.now();
-    console.log('[TerminalController] Starting initialization...');
+    this.debugLog('[TerminalController] Starting initialization...');
 
     try {
       this.loadCSS('https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css');
 
       const xtermStart = performance.now();
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js');
-      console.log(`[TerminalController] xterm.js loaded in ${(performance.now() - xtermStart).toFixed(0)}ms`);
+      this.debugLog(`[TerminalController] xterm.js loaded in ${(performance.now() - xtermStart).toFixed(0)}ms`);
 
       const fitStart = performance.now();
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js');
-      console.log(`[TerminalController] fit addon loaded in ${(performance.now() - fitStart).toFixed(0)}ms`);
+      this.debugLog(`[TerminalController] fit addon loaded in ${(performance.now() - fitStart).toFixed(0)}ms`);
 
       const linksStart = performance.now();
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js');
-      console.log(`[TerminalController] links addon loaded in ${(performance.now() - linksStart).toFixed(0)}ms`);
+      this.debugLog(`[TerminalController] links addon loaded in ${(performance.now() - linksStart).toFixed(0)}ms`);
 
       await new Promise(r => setTimeout(r, 50));
 
@@ -122,7 +129,7 @@ export class TerminalController {
       }
 
       this.initialized = true;
-      console.log(`[TerminalController] Total initialization: ${(performance.now() - startTime).toFixed(0)}ms`);
+      this.debugLog(`[TerminalController] Total initialization: ${(performance.now() - startTime).toFixed(0)}ms`);
       return true;
     } catch (err) {
       console.error('[TerminalController] Failed to load xterm:', err);
@@ -272,7 +279,7 @@ export class TerminalController {
     this.onDocChange = onDocChange;
 
     const connectStart = performance.now();
-    console.log('[TerminalController] Starting socket connection to:', this.nexusUrl);
+    this.debugLog('[TerminalController] Starting socket connection to:', this.nexusUrl);
 
     this.socket = io(this.nexusUrl, {
       auth: { type: 'client', token, uid, sessionId },
@@ -284,7 +291,7 @@ export class TerminalController {
     });
 
     this.socket.on('connect', () => {
-      console.log(`[TerminalController] Socket connected in ${(performance.now() - connectStart).toFixed(0)}ms`);
+      this.debugLog(`[TerminalController] Socket connected in ${(performance.now() - connectStart).toFixed(0)}ms`);
       onStatusChange?.('hub-online');
       this.subscribedWorkspaces.forEach(workspaceId => {
         this.socket?.emit('workspace:subscribe', { workspaceId });
@@ -306,7 +313,7 @@ export class TerminalController {
     this.socket.on('worker-status', (data: { status: string; workspaceId?: string }) => {
       const workspaceId = data.workspaceId;
       const status = data.status as WorkerStatus;
-      console.log(`[TerminalController] Received worker-status: ${status} for workspace: ${workspaceId}`);
+      this.debugLog(`[TerminalController] Received worker-status: ${status} for workspace: ${workspaceId}`);
 
       if (workspaceId) {
         this.workspaceStatuses.set(workspaceId, status);
@@ -352,7 +359,7 @@ export class TerminalController {
     });
 
     this.socket.on('doc-change', (event: DocChangeEvent) => {
-      console.log(`[TerminalController] doc-change: ${event.action} ${event.docId} in ${event.workspaceId}`);
+      this.debugLog(`[TerminalController] doc-change: ${event.action} ${event.docId} in ${event.workspaceId}`);
       this.onDocChange?.(event);
     });
 
@@ -362,7 +369,7 @@ export class TerminalController {
     });
 
     this.socket.on('session-joined', (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => {
-      console.log(`[TerminalController] session-joined: ${payload.id} (owner: ${payload.isOwner})`);
+      this.debugLog(`[TerminalController] session-joined: ${payload.id} (owner: ${payload.isOwner})`);
       this.sessionOwnership.set(payload.id, payload.isOwner);
       const instance = this.getTerminalInstance(payload.id);
       if (instance && !payload.isOwner) {
@@ -376,7 +383,7 @@ export class TerminalController {
     });
 
     this.socket.on('session-renamed', (payload: { sessionId: string; sessionName: string }) => {
-      console.log(`[TerminalController] session-renamed: ${payload.sessionId} -> "${payload.sessionName}"`);
+      this.debugLog(`[TerminalController] session-renamed: ${payload.sessionId} -> "${payload.sessionName}"`);
       this.onSessionRenamed?.(payload);
     });
 
