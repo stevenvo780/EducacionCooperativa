@@ -1,5 +1,14 @@
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { authFetch } from '@/services/apiClient';
+import {
+  cacheDocuments,
+  getCachedDocuments,
+  cacheDocContent,
+  getCachedContent,
+  enqueueSync,
+  deleteCachedDoc,
+  type CachedDoc
+} from '@/lib/offlineStorage';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -98,15 +107,72 @@ export const fetchDocsApi = async (params: { workspaceId: string; ownerId?: stri
   if (params.view) {
     search.set('view', params.view);
   }
-  const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
-  assertOk(res, 'Failed to fetch docs via API');
-  return (await res.json()) as DocItem[];
+
+  try {
+    const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
+    assertOk(res, 'Failed to fetch docs via API');
+    const docs = (await res.json()) as DocItem[];
+
+    // Cache docs in IDB for offline use
+    try {
+      const cached: CachedDoc[] = docs.map(d => ({
+        id: d.id,
+        name: d.name,
+        type: d.type,
+        folder: d.folder,
+        mimeType: d.mimeType,
+        size: d.size,
+        storagePath: d.storagePath,
+        workspaceId: params.workspaceId,
+        ownerId: d.ownerId,
+        order: d.order,
+        updatedAt: d.updatedAt ? String(d.updatedAt) : undefined,
+        _cachedAt: Date.now()
+      }));
+      await cacheDocuments(cached);
+    } catch { /* IDB not available */ }
+
+    return docs;
+  } catch (err) {
+    // Offline fallback: return cached docs from IDB
+    if (!navigator.onLine) {
+      try {
+        const cached = await getCachedDocuments(params.workspaceId);
+        if (cached.length > 0) {
+          console.info('[offline] Serving', cached.length, 'docs from cache');
+          return cached as unknown as DocItem[];
+        }
+      } catch { /* IDB not available */ }
+    }
+    throw err;
+  }
 };
 
 export const fetchDocumentRawApi = async (docId: string) => {
-  const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
-  assertOk(res, 'Failed to load content');
-  return res.text();
+  try {
+    const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
+    assertOk(res, 'Failed to load content');
+    const text = await res.text();
+
+    // Cache content in IDB
+    try {
+      await cacheDocContent(docId, text);
+    } catch { /* IDB not available */ }
+
+    return text;
+  } catch (err) {
+    // Offline fallback
+    if (!navigator.onLine) {
+      try {
+        const cached = await getCachedContent(docId);
+        if (cached !== null) {
+          console.info('[offline] Serving content for', docId, 'from cache');
+          return cached;
+        }
+      } catch { /* IDB not available */ }
+    }
+    throw err;
+  }
 };
 
 export const downloadDocumentBlobApi = async (docId: string): Promise<{ blob: Blob; mimeType: string }> => {
@@ -128,6 +194,21 @@ export const fetchUserProfilesApi = async (params: { workspaceId: string; userId
 };
 
 export const createDocumentApi = async (payload: Record<string, unknown>) => {
+  if (!navigator.onLine) {
+    // Queue for later sync
+    const tempId = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await enqueueSync({
+      operation: 'create',
+      docId: tempId,
+      payload,
+      timestamp: Date.now(),
+      status: 'pending',
+      retries: 0
+    });
+    // Return a temp doc so the UI can render it
+    return { id: tempId, ...payload, _offline: true } as { id: string; [key: string]: unknown };
+  }
+
   const res = await authFetch('/api/documents', {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -138,6 +219,22 @@ export const createDocumentApi = async (payload: Record<string, unknown>) => {
 };
 
 export const updateDocumentApi = async (docId: string, payload: Record<string, unknown>) => {
+  if (!navigator.onLine) {
+    await enqueueSync({
+      operation: 'update',
+      docId,
+      payload: { docId, ...payload },
+      timestamp: Date.now(),
+      status: 'pending',
+      retries: 0
+    });
+    // Also update local cache so UI stays consistent
+    if (typeof payload.content === 'string') {
+      try { await cacheDocContent(docId, payload.content); } catch { /* ignore */ }
+    }
+    return;
+  }
+
   const res = await authFetch(`/api/documents/${docId}`, {
     method: 'PUT',
     headers: JSON_HEADERS,
@@ -147,6 +244,19 @@ export const updateDocumentApi = async (docId: string, payload: Record<string, u
 };
 
 export const deleteDocumentApi = async (docId: string) => {
+  if (!navigator.onLine) {
+    await enqueueSync({
+      operation: 'delete',
+      docId,
+      payload: { docId },
+      timestamp: Date.now(),
+      status: 'pending',
+      retries: 0
+    });
+    try { await deleteCachedDoc(docId); } catch { /* ignore */ }
+    return true;
+  }
+
   const res = await authFetch(`/api/documents/${docId}`, { method: 'DELETE' });
   return res.ok;
 };

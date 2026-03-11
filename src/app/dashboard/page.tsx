@@ -61,7 +61,7 @@ import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import { useSyncEvents } from '@/hooks/useSyncEvents';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { fetchSubscriptionStatus, verifyPayment } from '@/services/subscriptionApi';
 import { type PlanId, PLANS, canAccessTerminals } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
@@ -111,7 +111,7 @@ function DashboardContent() {
         duration: reduceMotion ? 0.01 : 0.1,
         ease: 'easeOut'
     }), [reduceMotion]);
-    const isOnline = useOnlineStatus();
+    const { isOnline, syncNow, pendingCount } = useOfflineSync();
 
     useEffect(() => {
         if (!user) return;
@@ -694,6 +694,16 @@ function DashboardContent() {
             fetchDocs({ showLoading: true });
         }
     }, [currentWorkspace, user, fetchDocs]);
+
+    // Re-sync + re-fetch when coming back online
+    useEffect(() => {
+        if (!isOnline || !currentWorkspace || !user) return;
+        // When going online: sync queue first, then re-fetch docs to get latest
+        if (pendingCount > 0) {
+            syncNow().then(() => fetchDocs()).catch(() => fetchDocs());
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOnline]);
 
     // Debounced sync fetch: consolida eventos rápidos y da tiempo a Firestore para propagar
     const scheduleSyncFetch = useCallback(() => {

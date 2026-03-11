@@ -1,12 +1,17 @@
 {
   "name": "Agora - Plataforma de Educación Cooperativa",
   "short_name": "Agora",
-  "description": "Plataforma de aprendizaje colaborativo offline-first",
-  "start_url": "/",
+  "description": "Plataforma de aprendizaje colaborativo offline-first. Crea, edita y organiza documentos colaborativos incluso sin conexión.",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#0a0a0f",
   "theme_color": "#000000",
   "orientation": "any",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/favicon.svg",
