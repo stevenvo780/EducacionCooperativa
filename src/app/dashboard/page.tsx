@@ -1138,13 +1138,50 @@ function DashboardContent() {
         });
     }, [selectedDocId, currentWorkspace, clearActiveSession]);
 
+    const replaceLeafId = useCallback((node: MosaicNode<string>, fromId: string, toId: string): MosaicNode<string> => {
+        if (typeof node === 'string') {
+            return node === fromId ? toId : node;
+        }
+        return {
+            ...node,
+            first: replaceLeafId(node.first, fromId, toId),
+            second: replaceLeafId(node.second, fromId, toId)
+        };
+    }, []);
+
     const openDocument = async (doc: DocItem) => {
         if (doc.type === 'folder') return;
         setActiveFolderSafe(normalizeFolderPath(doc.folder));
-        setOpenTabs(prev => {
-            if (prev.find(t => t.id === doc.id)) {
-                return prev;
+        const existingTab = openTabs.find(tab => tab.id === doc.id);
+        if (existingTab) {
+            setShowMobileSidebar(false);
+            setSelectedDocId(doc.id);
+            return;
+        }
+
+        const selectedTab = selectedDocId ? openTabs.find(tab => tab.id === selectedDocId) : undefined;
+        const replaceTargetId = selectedTab && selectedTab.type !== 'files' ? selectedTab.id : null;
+
+        if (replaceTargetId && replaceTargetId !== doc.id) {
+            if (selectedTab?.type === 'terminal' && selectedTab.sessionId) {
+                clearActiveSession();
             }
+
+            setOpenTabs(prev => {
+                const next = prev.filter(tab => tab.id !== replaceTargetId && tab.id !== doc.id);
+                return [...next, doc];
+            });
+
+            setMosaicNode(current => {
+                if (!current) return doc.id;
+                return replaceLeafId(current, replaceTargetId, doc.id);
+            });
+            setShowMobileSidebar(false);
+            setSelectedDocId(doc.id);
+            return;
+        }
+
+        setOpenTabs(prev => {
             return [...prev, doc];
         });
 
@@ -2325,6 +2362,7 @@ function DashboardContent() {
                                     onSetDocMode={setDocMode}
                                     onCloseTab={closeTabById}
                                     onSelectDoc={openDocument}
+                                    onActivateTab={setSelectedDocId}
                                     onCreateFile={() => createDoc(undefined, activeFolder)}
                                     onCreateFolder={() => createFolder()}
                                     onUploadFile={() => {

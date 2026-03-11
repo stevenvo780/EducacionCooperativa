@@ -63,6 +63,7 @@ interface MosaicLayoutProps {
   onSetDocMode: (docId: string, mode: ViewMode) => void;
   onCloseTab: (docId: string) => void;
   onSelectDoc: (doc: DocItem) => void;
+  onActivateTab?: (docId: string) => void;
   onCreateFile?: () => void;
   onCreateFolder?: () => void;
   onUploadFile?: () => void;
@@ -96,6 +97,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onSetDocMode,
   onCloseTab,
   onSelectDoc,
+  onActivateTab,
   onCreateFile,
   onCreateFolder,
   onUploadFile,
@@ -273,7 +275,14 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             className="bg-surface-900 mosaic-window-compact"
             toolbarControls={renderToolbarControls(doc, mode)}
         >
-            <div className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}>
+            <div
+                className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
+                onMouseDownCapture={() => {
+                  if (doc.type !== 'files') {
+                    onActivateTab?.(doc.id);
+                  }
+                }}
+            >
                  {isTerminal ? (
                       <Terminal
                         nexusUrl={nexusUrl}
@@ -334,7 +343,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [
     tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
-    onSelectDoc, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
+    onSelectDoc, onActivateTab, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, onDownloadFolder,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
