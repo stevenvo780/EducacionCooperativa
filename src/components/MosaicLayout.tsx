@@ -64,6 +64,7 @@ interface MosaicLayoutProps {
   onCloseTab: (docId: string) => void;
   onSelectDoc: (doc: DocItem) => void;
   onActivateTab?: (docId: string) => void;
+  onDropDocOnTile?: (docId: string, targetTileId: string) => void;
   onCreateFile?: () => void;
   onCreateFolder?: () => void;
   onUploadFile?: () => void;
@@ -98,6 +99,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onCloseTab,
   onSelectDoc,
   onActivateTab,
+  onDropDocOnTile,
   onCreateFile,
   onCreateFolder,
   onUploadFile,
@@ -122,6 +124,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
 }) => {
   const [docSearchTerms, setDocSearchTerms] = useState<Record<string, string>>({});
   const [docSearchStates, setDocSearchStates] = useState<Record<string, SearchState>>({});
+  const [dragOverTileId, setDragOverTileId] = useState<string | null>(null);
+  const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
 
   const fileExplorerDocs = useMemo(() => {
@@ -257,6 +261,32 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     );
   }, [onSetDocMode, onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
 
+  const handleTileDragOver = useCallback((e: React.DragEvent, tileId: string) => {
+    const types = Array.from(e.dataTransfer.types ?? []);
+    if (!types.includes('application/x-doc-id')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragLeaveTimer.current) { clearTimeout(dragLeaveTimer.current); dragLeaveTimer.current = null; }
+    setDragOverTileId(prev => (prev === tileId ? prev : tileId));
+  }, []);
+
+  const handleTileDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragLeaveTimer.current = setTimeout(() => setDragOverTileId(null), 80);
+  }, []);
+
+  const handleTileDrop = useCallback((e: React.DragEvent, tileId: string) => {
+    const types = Array.from(e.dataTransfer.types ?? []);
+    if (!types.includes('application/x-doc-id')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTileId(null);
+    const docId = e.dataTransfer.getData('application/x-doc-id');
+    if (docId && docId !== tileId) {
+      onDropDocOnTile?.(docId, tileId);
+    }
+  }, [onDropDocOnTile]);
+
   const renderTile = useCallback((id: string, path: MosaicPath) => {
     const doc = tabById.get(id) || docById.get(id);
     if (!doc) return <div className="p-4 text-surface-400">Documento no encontrado: {id}</div>;
@@ -267,6 +297,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isSpreadsheet = !isTerminal && !isFileExplorer && !isBoard && isSpreadsheetDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
+    const isDragTarget = dragOverTileId === doc.id;
 
     return (
         <MosaicWindow<string>
@@ -276,12 +307,16 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             toolbarControls={renderToolbarControls(doc, mode)}
         >
             <div
-                className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
+                className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'} transition-all duration-150 ${isDragTarget ? 'ring-2 ring-sky-500 ring-inset bg-sky-500/10' : ''}`}
                 onMouseDownCapture={() => {
-                  if (doc.type !== 'files') {
-                    onActivateTab?.(doc.id);
-                  }
+                  onActivateTab?.(doc.id);
                 }}
+                onFocusCapture={() => {
+                  onActivateTab?.(doc.id);
+                }}
+                onDragOver={(e) => handleTileDragOver(e, doc.id)}
+                onDragLeave={handleTileDragLeave}
+                onDrop={(e) => handleTileDrop(e, doc.id)}
             >
                  {isTerminal ? (
                       <Terminal
@@ -341,9 +376,10 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms,
+    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms, dragOverTileId,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
-    onSelectDoc, onActivateTab, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
+    onSelectDoc, onActivateTab, onDropDocOnTile, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
+    handleTileDragOver, handleTileDragLeave, handleTileDrop,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, onDownloadFolder,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
