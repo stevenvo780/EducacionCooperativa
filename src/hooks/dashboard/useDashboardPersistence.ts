@@ -141,7 +141,7 @@ export const useDashboardPersistence = ({
   }, [currentWorkspace, userUid, openTabs, closedFilesTabByWorkspace, setMosaicNode, setOpenTabs, setSelectedDocId]);
 
   useEffect(() => {
-    if (!currentWorkspaceId || docs.length === 0 || loadingDocs) return;
+    if (!currentWorkspaceId || loadingDocs) return;
     if (stateRestoredForWorkspaceRef.current === currentWorkspaceId) return;
 
     const persisted = loadDashboardState(currentWorkspaceId);

@@ -388,9 +388,16 @@ const HeaderBar = ({
 
         {workspaceSessions.map(sess => {
           const isActive = activeSessionId === sess.id;
+          const terminalDocId = `terminal-${sess.id}`;
           return (
             <div key={sess.id} className="relative flex items-center gap-0.5 shrink-0">
               <button
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('application/x-doc-id', terminalDocId);
+                  e.dataTransfer.setData('text/plain', terminalDocId);
+                }}
                 onClick={() => {
                   selectSession(sess.id);
                   openTerminal({ id: sess.id, name: sess.name || 'Terminal' });

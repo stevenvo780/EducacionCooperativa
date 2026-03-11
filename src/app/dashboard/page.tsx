@@ -907,6 +907,30 @@ function DashboardContent() {
         };
     }, []);
 
+    const resolveDraggableDoc = useCallback((docId: string): DocItem | null => {
+        const fromDocs = docs.find(d => d.id === docId);
+        if (fromDocs) return fromDocs;
+
+        const fromTabs = openTabs.find(tab => tab.id === docId);
+        if (fromTabs) return fromTabs;
+
+        if (docId.startsWith('terminal-')) {
+            const sessionId = docId.slice('terminal-'.length);
+            const session = terminalSessions.find(item => item.id === sessionId);
+            if (!session) return null;
+            return {
+                id: docId,
+                name: session.name || `Terminal ${sessionId.slice(-4)}`,
+                type: 'terminal',
+                sessionId,
+                updatedAt: new Date(),
+                ownerId: user?.uid || 'system'
+            };
+        }
+
+        return null;
+    }, [docs, openTabs, terminalSessions, user?.uid]);
+
     const openDocument = async (doc: DocItem) => {
         if (doc.type === 'folder') return;
         setActiveFolderSafe(normalizeFolderPath(doc.folder));
@@ -955,7 +979,7 @@ function DashboardContent() {
 
     const handleDropDocOnTile = useCallback(async (droppedDocId: string, targetTileId: string, position: 'left' | 'right' | 'top' | 'bottom' | 'replace') => {
         if (droppedDocId === targetTileId) return;
-        const droppedDoc = docs.find(d => d.id === droppedDocId) || openTabs.find(t => t.id === droppedDocId);
+        const droppedDoc = resolveDraggableDoc(droppedDocId);
         if (!droppedDoc || droppedDoc.type === 'folder') return;
 
         const targetTab = openTabs.find(t => t.id === targetTileId);
@@ -1020,10 +1044,10 @@ function DashboardContent() {
         }
 
         setSelectedDocId(droppedDocId);
-    }, [docs, openTabs, clearActiveSession, replaceLeafId, splitLeafInTree]);
+    }, [openTabs, clearActiveSession, replaceLeafId, resolveDraggableDoc, splitLeafInTree]);
 
     const handleDropDocOnEmpty = useCallback(async (droppedDocId: string) => {
-        const droppedDoc = docs.find(d => d.id === droppedDocId) || openTabs.find(t => t.id === droppedDocId);
+        const droppedDoc = resolveDraggableDoc(droppedDocId);
         if (!droppedDoc || droppedDoc.type === 'folder') return;
 
         const isAlreadyOpen = openTabs.some(t => t.id === droppedDocId);
@@ -1033,7 +1057,7 @@ function DashboardContent() {
         setMosaicNode(droppedDocId);
         setSelectedDocId(droppedDocId);
         setShowMobileSidebar(false);
-    }, [docs, openTabs, setShowMobileSidebar]);
+    }, [openTabs, resolveDraggableDoc, setShowMobileSidebar]);
 
     const showDialog = useCallback((config: DialogConfig) => {
         return new Promise<DialogResult>((resolve) => {
