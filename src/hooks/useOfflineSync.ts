@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { processSyncQueue, type SyncProgress } from '@/lib/offlineSync';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 import {
   getSyncQueueCount,
   getFailedSyncItems,
@@ -25,6 +26,7 @@ export interface OfflineSyncState {
 }
 
 export function useOfflineSync() {
+  const isPageVisible = usePageVisibility();
   // Always start as online=true on server; real status set in useEffect after mount
   const [state, setState] = useState<OfflineSyncState>({
     isOnline: true,
@@ -105,9 +107,10 @@ export function useOfflineSync() {
   // Poll counts periodically (every 5s) so UI stays current
   useEffect(() => {
     refreshCounts();
-    const interval = setInterval(refreshCounts, 5000);
+    if (!isPageVisible) return;
+    const interval = setInterval(refreshCounts, 15000);
     return () => clearInterval(interval);
-  }, [refreshCounts]);
+  }, [refreshCounts, isPageVisible]);
 
   // ─── Auto-sync when going online ────────────────────────────
   const syncNow = useCallback(async () => {

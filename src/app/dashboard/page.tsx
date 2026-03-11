@@ -62,6 +62,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import { useSyncEvents } from '@/hooks/useSyncEvents';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { fetchSubscriptionStatus, verifyPayment } from '@/services/subscriptionApi';
 import { type PlanId, PLANS, canAccessTerminals } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
@@ -111,6 +112,7 @@ function DashboardContent() {
         duration: reduceMotion ? 0.01 : 0.1,
         ease: 'easeOut'
     }), [reduceMotion]);
+    const isPageVisible = usePageVisibility();
     const { isOnline, syncNow, pendingCount } = useOfflineSync();
 
     useEffect(() => {
@@ -707,6 +709,7 @@ function DashboardContent() {
 
     // Debounced sync fetch: consolida eventos rápidos y da tiempo a Firestore para propagar
     const scheduleSyncFetch = useCallback(() => {
+        if (!isPageVisible) return;
         lastSyncEventRef.current = Date.now();
         if (syncFetchTimerRef.current) clearTimeout(syncFetchTimerRef.current);
         syncFetchTimerRef.current = setTimeout(() => {
@@ -716,7 +719,7 @@ function DashboardContent() {
             }
             fetchDocs();
         }, 600);
-    }, [fetchDocs]);
+    }, [fetchDocs, isPageVisible]);
 
     // Sync en tiempo real usando RTDB en lugar de polling
     const handleSyncEvent = useCallback((event: { type: string; path: string }) => {
@@ -737,7 +740,9 @@ function DashboardContent() {
     // Fallback: refresco cada 15s si no llega evento RTDB
     useEffect(() => {
         if (!currentWorkspace || !user) return;
+        if (!isPageVisible) return;
         const intervalId = setInterval(() => {
+            if (document.hidden) return;
             const now = Date.now();
             if (now - lastSyncEventRef.current >= 15000) {
                 if (process.env.NODE_ENV !== 'production') {
@@ -753,7 +758,12 @@ function DashboardContent() {
                 syncFetchTimerRef.current = null;
             }
         };
-    }, [currentWorkspace, user, fetchDocs]);
+    }, [currentWorkspace, user, fetchDocs, isPageVisible]);
+
+    useEffect(() => {
+        if (!isPageVisible || !currentWorkspace || !user) return;
+        fetchDocs();
+    }, [isPageVisible, currentWorkspace, user, fetchDocs]);
 
     useEffect(() => {
         if (!currentWorkspace || !user || !onDocChangeCallback) return;

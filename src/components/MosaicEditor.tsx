@@ -28,6 +28,7 @@ import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, withAuthToken, getAuthToken } from '@/services/apiClient';
 import MermaidDiagram from '@/components/MermaidDiagram';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 // Helper function to highlight text in DOM nodes
 const highlightTextInNode = (node: Node, searchTerm: string, highlights: HTMLElement[]): void => {
@@ -215,6 +216,7 @@ export default function MosaicEditor({
 
   const { user } = useAuth();
   const { onDocChangeCallback } = useTerminal();
+  const isPageVisible = usePageVisibility();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
   const [usePolling, setUsePolling] = useState(false);
@@ -347,7 +349,7 @@ export default function MosaicEditor({
 
   // Listen for real-time document changes
   useEffect(() => {
-    if (!onDocChangeCallback || !roomId) return;
+    if (!onDocChangeCallback || !roomId || !isPageVisible) return;
     return onDocChangeCallback((event) => {
         // If the document created/updated is the one we are viewing, reload it
         if (event.docId === roomId && (event.action === 'updated' || event.action === 'created')) {
@@ -356,12 +358,12 @@ export default function MosaicEditor({
              loadDoc();
         }
     });
-  }, [onDocChangeCallback, roomId, loadDoc]);
+  }, [onDocChangeCallback, roomId, loadDoc, isPageVisible]);
 
   // Polling fallback if needed (though onDocChangeCallback should handle it)
 
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !isPageVisible) return;
     const controller = new AbortController();
     let cancelled = false;
 
@@ -413,7 +415,12 @@ export default function MosaicEditor({
         cancelled = true;
         controller.abort();
     };
-  }, [roomId, loadDoc, applyDocData, resetDocState]);
+  }, [roomId, loadDoc, applyDocData, resetDocState, isPageVisible]);
+
+  useEffect(() => {
+    if (!isPageVisible || !roomId) return;
+    loadDoc();
+  }, [isPageVisible, roomId, loadDoc]);
 
   const handleContentChange = useCallback((val: string) => {
     setContent(val);
