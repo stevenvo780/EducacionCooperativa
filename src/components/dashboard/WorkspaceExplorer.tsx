@@ -1,7 +1,6 @@
 'use client';
 
-import type React from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { Briefcase, Cloud, CloudOff, Copy, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
@@ -503,4 +502,4 @@ const WorkspaceExplorer = ({
   );
 };
 
-export default WorkspaceExplorer;
+export default React.memo(WorkspaceExplorer);

@@ -2,9 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
 import StoreProvider from '@/components/StoreProvider';
-import { TerminalProvider } from '@/context/TerminalContext';
-
-import OfflineIndicatorWrapper from '@/components/OfflineIndicatorWrapper';
 
 export const viewport: Viewport = {
   themeColor: '#000000',
@@ -40,10 +37,7 @@ export default function RootLayout({
       <body className="">
         <StoreProvider>
           <AuthProvider>
-            <TerminalProvider>
-              {children}
-              <OfflineIndicatorWrapper />
-            </TerminalProvider>
+            {children}
           </AuthProvider>
         </StoreProvider>
       </body>

@@ -219,7 +219,6 @@ export default function MosaicEditor({
   const isPageVisible = usePageVisibility();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
-  const [usePolling, setUsePolling] = useState(false);
   const contentRef = useRef(content);
   const pendingLocalChangeRef = useRef(false);
   const lastRawKeyRef = useRef<string | null>(null);
@@ -343,7 +342,6 @@ export default function MosaicEditor({
     hasLoadedRef.current = false;
     pendingLocalChangeRef.current = false;
     lastRawKeyRef.current = null;
-    setUsePolling(false);
     loadDoc();
   }, [roomId, loadDoc]);
 
@@ -404,7 +402,6 @@ export default function MosaicEditor({
         } catch (e: any) {
             if (e.name !== 'AbortError' && !cancelled) {
                 console.error('Stream error, falling back to polling:', e);
-                setUsePolling(true);
             }
         }
     };
