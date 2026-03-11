@@ -1,7 +1,6 @@
 'use client';
 
-import type React from 'react';
-import { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ChevronDown, ChevronRight, Download, Folder, FolderOpen, Loader2, Pencil, Search, Settings, Trash2, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
@@ -514,4 +513,4 @@ const Sidebar = ({
   );
 };
 
-export default Sidebar;
+export default React.memo(Sidebar);

@@ -734,23 +734,23 @@ function DashboardContent() {
         userId: user?.uid || null,
         workspaceType: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? 'personal' : 'shared',
         onEvent: handleSyncEvent,
-        enabled: !!currentWorkspace && !!user
+        enabled: !!currentWorkspace && !!user && isPageVisible
     });
 
-    // Fallback: refresco cada 15s si no llega evento RTDB
+    // Fallback: refresco cada 60s si no llega evento RTDB
     useEffect(() => {
         if (!currentWorkspace || !user) return;
         if (!isPageVisible) return;
         const intervalId = setInterval(() => {
             if (document.hidden) return;
             const now = Date.now();
-            if (now - lastSyncEventRef.current >= 15000) {
+            if (now - lastSyncEventRef.current >= 60000) {
                 if (process.env.NODE_ENV !== 'production') {
-                    console.debug('[Sync] fallback polling triggered (no RTDB event in 15s)');
+                    console.debug('[Sync] fallback polling triggered (no RTDB event in 60s)');
                 }
                 fetchDocs();
             }
-        }, 15000);
+        }, 60000);
         return () => {
             clearInterval(intervalId);
             if (syncFetchTimerRef.current) {

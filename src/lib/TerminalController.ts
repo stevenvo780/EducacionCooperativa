@@ -14,6 +14,9 @@ export interface TerminalInstance {
   fitAddon: any;
   container: HTMLElement | null;
   resizeObserver: ResizeObserver | null;
+  fitTimeout: ReturnType<typeof setTimeout> | null;
+  fitRaf: number | null;
+  lastFitAt: number;
   mounted: boolean;
 }
 
@@ -165,6 +168,9 @@ export class TerminalController {
       fitAddon,
       container: null,
       resizeObserver: null,
+      fitTimeout: null,
+      fitRaf: null,
+      lastFitAt: 0,
       mounted: false
     };
 
@@ -231,7 +237,7 @@ export class TerminalController {
       instance.resizeObserver.disconnect();
     }
     instance.resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => this.fitSession(sessionId));
+      this.scheduleFitSession(sessionId);
     });
     instance.resizeObserver.observe(container);
 
@@ -448,6 +454,8 @@ export class TerminalController {
   public disposeSession(sessionId: string) {
     const instance = this.terminals.get(sessionId);
     if (instance) {
+      if (instance.fitTimeout) clearTimeout(instance.fitTimeout);
+      if (instance.fitRaf !== null) cancelAnimationFrame(instance.fitRaf);
       instance.resizeObserver?.disconnect();
       instance.term?.dispose();
       this.terminals.delete(sessionId);
@@ -458,6 +466,26 @@ export class TerminalController {
   public focusSession(sessionId: string) {
     const instance = this.terminals.get(sessionId);
     instance?.term?.focus();
+  }
+
+  private scheduleFitSession(sessionId: string) {
+    const instance = this.terminals.get(sessionId);
+    if (!instance) return;
+
+    const now = Date.now();
+    if (now - instance.lastFitAt < 100) return;
+
+    if (instance.fitTimeout) clearTimeout(instance.fitTimeout);
+    if (instance.fitRaf !== null) cancelAnimationFrame(instance.fitRaf);
+
+    instance.fitTimeout = setTimeout(() => {
+      instance.fitRaf = requestAnimationFrame(() => {
+        instance.lastFitAt = Date.now();
+        this.fitSession(sessionId);
+        instance.fitRaf = null;
+      });
+      instance.fitTimeout = null;
+    }, 50);
   }
 
   public fitSession(sessionId: string) {
@@ -514,6 +542,8 @@ export class TerminalController {
 
   public destroy() {
     this.terminals.forEach((instance) => {
+      if (instance.fitTimeout) clearTimeout(instance.fitTimeout);
+      if (instance.fitRaf !== null) cancelAnimationFrame(instance.fitRaf);
       instance.resizeObserver?.disconnect();
       instance.term?.dispose();
     });

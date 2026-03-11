@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TerminalProps {
@@ -29,6 +30,7 @@ const Terminal: React.FC<TerminalProps> = ({
 }) => {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+    const isPageVisible = usePageVisibility();
   const { user } = useAuth();
 
   const {
@@ -79,7 +81,7 @@ const Terminal: React.FC<TerminalProps> = ({
   }, [controller, workerToken]);
 
   useEffect(() => {
-      if (!effectiveSessionId || !sessionActive || !containerEl || !controller) return;
+      if (!isPageVisible || !effectiveSessionId || !sessionActive || !containerEl || !controller) return;
       let mounted = false;
 
       const tryMount = () => {
@@ -114,14 +116,14 @@ const Terminal: React.FC<TerminalProps> = ({
           observer.disconnect();
           window.clearTimeout(fallbackTimeout);
       };
-    }, [effectiveSessionId, sessionActive, controller, containerEl, sessionId]);
+        }, [effectiveSessionId, sessionActive, controller, containerEl, sessionId, isPageVisible]);
 
   useEffect(() => {
-      if (!effectiveSessionId || !sessionActive || !controller) return;
+            if (!isPageVisible || !effectiveSessionId || !sessionActive || !controller) return;
       const handleResize = () => controller?.fitSession(effectiveSessionId);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-    }, [controller, effectiveSessionId, sessionActive]);
+        }, [controller, effectiveSessionId, sessionActive, isPageVisible]);
 
   const handleCreateSession = () => {
       if (!createSession) return;

@@ -692,4 +692,4 @@ const HeaderBar = ({
   );
 };
 
-export default HeaderBar;
+export default React.memo(HeaderBar);
