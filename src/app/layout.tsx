@@ -4,7 +4,7 @@ import AuthProvider from '@/components/AuthProvider';
 import StoreProvider from '@/components/StoreProvider';
 import { TerminalProvider } from '@/context/TerminalContext';
 
-import OfflineIndicator from '@/components/OfflineIndicator';
+import OfflineIndicatorWrapper from '@/components/OfflineIndicatorWrapper';
 
 export const viewport: Viewport = {
   themeColor: '#000000',
@@ -42,7 +42,7 @@ export default function RootLayout({
           <AuthProvider>
             <TerminalProvider>
               {children}
-              <OfflineIndicator />
+              <OfflineIndicatorWrapper />
             </TerminalProvider>
           </AuthProvider>
         </StoreProvider>
