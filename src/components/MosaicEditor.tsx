@@ -457,7 +457,7 @@ export default function MosaicEditor({
 
   // Search logic - perform DOM-based highlighting
   useEffect(() => {
-    if (!previewRef.current) return;
+    if (!previewRef.current || !isPageVisible || resolvedViewMode === 'edit') return;
 
     // Clear previous highlights first
     clearHighlights(previewRef.current);
@@ -485,10 +485,11 @@ export default function MosaicEditor({
 
     const timeout = setTimeout(performHighlight, 300);
     return () => clearTimeout(timeout);
-  }, [searchTerm, debouncedContent]);
+  }, [searchTerm, debouncedContent, isPageVisible, resolvedViewMode]);
 
   // Navigate to current match when it changes
   useEffect(() => {
+    if (!isPageVisible || resolvedViewMode === 'edit') return;
     const highlights = highlightsRef.current;
     if (highlights.length === 0) return;
 
@@ -500,7 +501,7 @@ export default function MosaicEditor({
             mark.className = 'search-highlight bg-yellow-400/60 text-inherit rounded px-0.5';
         }
     });
-  }, [currentMatch, totalMatches]);
+  }, [currentMatch, totalMatches, isPageVisible, resolvedViewMode]);
 
   // Navigation function - must be defined before the effect that uses it
   const navigateSearch = useCallback((direction: 'next' | 'prev') => {

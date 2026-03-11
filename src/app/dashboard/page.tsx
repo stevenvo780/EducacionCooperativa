@@ -40,19 +40,18 @@ import {
     deleteDocumentApi,
     deleteWorkspaceApi,
     downloadDocumentBlobApi,
-    fetchDocsApi,
     fetchDocumentRawApi,
-    fetchWorkspacesApi,
     inviteMemberApi,
     removeMemberApi,
     updateDocumentApi,
     uploadFileApi,
     fetchUserProfilesApi
 } from '@/services/dashboardApi';
-import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue, normalizeWorkspace } from '@/services/dashboardUtils';
+import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue } from '@/services/dashboardUtils';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
-import { saveDashboardState, loadDashboardState, restoreOpenTabs, validateMosaicNode, clearDashboardState } from '@/services/dashboardPersistence';
+import { clearDashboardState } from '@/services/dashboardPersistence';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
+import { useDashboardPersistence } from '@/hooks/dashboard/useDashboardPersistence';
 import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
 import StatusToasts from '@/components/dashboard/StatusToasts';
 import DialogModal from '@/components/dashboard/DialogModal';
@@ -60,12 +59,13 @@ import DragOverlay from '@/components/dashboard/DragOverlay';
 import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
-import { useSyncEvents } from '@/hooks/useSyncEvents';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { fetchSubscriptionStatus, verifyPayment } from '@/services/subscriptionApi';
 import { type PlanId, PLANS, canAccessTerminals } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
+import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
+import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -306,20 +306,6 @@ function DashboardContent() {
     }, [dispatch]);
     const currentWorkspaceId = currentWorkspace?.id;
     const requestedWorkspaceId = (searchParams?.get('workspaceId') || searchParams?.get('workspace') || '').trim() || null;
-    const urlSyncInProgressRef = useRef(false);
-    const lastSubscribedWorkspaceRef = useRef<string | null>(null);
-    const requestedWorkspaceIdRef = useRef(requestedWorkspaceId);
-    requestedWorkspaceIdRef.current = requestedWorkspaceId;
-
-    useEffect(() => {
-        if (!user || !currentWorkspace) return;
-        const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
-            ? `personal:${user.uid}`
-            : currentWorkspace.id;
-        if (lastSubscribedWorkspaceRef.current === workerToken) return;
-        lastSubscribedWorkspaceRef.current = workerToken;
-        subscribeToWorkspace(workerToken);
-    }, [user, currentWorkspace, subscribeToWorkspace]);
 
     const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
     const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
@@ -395,10 +381,6 @@ function DashboardContent() {
     const docsRef = useRef<DocItem[]>([]);
     const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
-    const fetchInFlightRef = useRef<Promise<void> | null>(null);
-    const pendingRefetchRef = useRef(false);
-    const syncFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const lastSyncEventRef = useRef<number>(0);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
     const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
 
@@ -414,77 +396,30 @@ function DashboardContent() {
         currentWorkspaceRef.current = currentWorkspace;
     }, [currentWorkspace]);
 
-    const fetchWorkspaces = useCallback(async () => {
-        if (!user) return;
-
-        const personalSpace: Workspace = {
-            id: PERSONAL_WORKSPACE_ID,
-            name: 'Espacio Personal',
-            ownerId: user.uid,
-            members: [user.uid],
-            type: 'personal'
+    useEffect(() => {
+        return () => {
+            if (deleteStatusTimer.current) {
+                clearTimeout(deleteStatusTimer.current);
+                deleteStatusTimer.current = null;
+            }
         };
+    }, []);
 
-        let fetched: Workspace[] = [];
-        let fetchedInvites: Workspace[] = [];
-        try {
-            const data = await fetchWorkspacesApi({ ownerId: user.uid, email: userEmail || undefined });
-            fetched = data.workspaces.map(normalizeWorkspace);
-            fetchedInvites = data.invites.map(normalizeWorkspace);
-        } catch (e) {
-            console.error('Error fetching workspaces', e);
-        }
-
-        const allWorkspaces = [personalSpace, ...fetched.filter(ws => ws.id !== PERSONAL_WORKSPACE_ID)];
-        setWorkspaces(allWorkspaces);
-        setInvites(fetchedInvites);
-        const previousWorkspace = currentWorkspaceRef.current;
-        const reqWorkspaceId = requestedWorkspaceIdRef.current;
-        const resolvedWorkspace = (() => {
-            if (reqWorkspaceId) {
-                const match = allWorkspaces.find(ws => ws.id === reqWorkspaceId);
-                if (match) return match;
-            }
-            if (previousWorkspace) {
-                return allWorkspaces.find(ws => ws.id === previousWorkspace.id) ?? personalSpace;
-            }
-            return personalSpace;
-        })();
-        if (previousWorkspace?.id !== resolvedWorkspace.id) {
-            setCurrentWorkspace(resolvedWorkspace);
-        }
-    }, [user, userEmail, setWorkspaces, setInvites, setCurrentWorkspace]);
-
-    useEffect(() => {
-        if (urlSyncInProgressRef.current) return;
-        if (!requestedWorkspaceId || workspaces.length === 0) return;
-        if (currentWorkspace?.id === requestedWorkspaceId) return;
-        const match = workspaces.find(ws => ws.id === requestedWorkspaceId);
-        if (match) {
-            setCurrentWorkspace(match);
-        }
-    }, [requestedWorkspaceId, workspaces, currentWorkspace?.id, setCurrentWorkspace]);
-
-    const prevWorkspaceIdRef = useRef<string | null>(null);
-    useEffect(() => {
-        if (!currentWorkspaceId) return;
-        if (prevWorkspaceIdRef.current === currentWorkspaceId) return;
-        prevWorkspaceIdRef.current = currentWorkspaceId;
-
-        const currentParam = searchParams?.get('workspaceId') || '';
-        if (currentParam === currentWorkspaceId) return;
-
-        urlSyncInProgressRef.current = true;
-        const params = new URLSearchParams(searchParams?.toString());
-        params.set('workspaceId', currentWorkspaceId);
-        params.delete('workspace');
-        const query = params.toString();
-        const nextUrl = query ? `/dashboard?${query}` : '/dashboard';
-        router.replace(nextUrl, { scroll: false });
-        setTimeout(() => {
-            urlSyncInProgressRef.current = false;
-        }, 100);
-    }, [currentWorkspaceId, searchParams, router]);
+    const { fetchWorkspaces } = useDashboardWorkspaces({
+        user,
+        userEmail,
+        workspaces,
+        currentWorkspace,
+        currentWorkspaceId,
+        requestedWorkspaceId,
+        router,
+        searchParams,
+        personalWorkspaceId: PERSONAL_WORKSPACE_ID,
+        setWorkspaces,
+        setInvites,
+        setCurrentWorkspace,
+        subscribeToWorkspace
+    });
 
     const acceptInvite = async (ws: Workspace) => {
         if (!user || !userEmail) {
@@ -637,52 +572,19 @@ function DashboardContent() {
         });
     }, [currentWorkspace]);
 
-    const fetchDocs = useCallback(async (options?: { showLoading?: boolean }) => {
-        if (!user || !currentWorkspace) return;
-        if (fetchInFlightRef.current) {
-            // Un fetch ya está en vuelo: agendar trailing refetch
-            pendingRefetchRef.current = true;
-            if (process.env.NODE_ENV !== 'production') {
-                console.debug('[Sync] fetchDocs skipped (in-flight), trailing refetch queued');
-            }
-            return fetchInFlightRef.current;
-        }
-        const showLoading = options?.showLoading ?? docsRef.current.length === 0;
-        if (showLoading) setLoadingDocs(true);
-        if (process.env.NODE_ENV !== 'production') {
-            console.debug('[Sync] fetchDocs starting API call…');
-        }
-        const fetchPromise = (async () => {
-            try {
-                const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? 'personal' : currentWorkspace.id;
-                const fetched = await fetchDocsApi({
-                    workspaceId: wsId,
-                    ownerId: currentWorkspace.id === PERSONAL_WORKSPACE_ID ? user.uid : undefined,
-                    view: 'metadata'
-                });
-
-                if (process.env.NODE_ENV !== 'production') {
-                    console.debug('[Sync] fetchDocs got', fetched.length, 'docs from API');
-                }
-                applyDocsSnapshot(fetched);
-            } catch (error) {
-                console.error('Error fetching docs', error);
-            }
-        })();
-
-        fetchInFlightRef.current = fetchPromise;
-        try {
-            await fetchPromise;
-        } finally {
-            fetchInFlightRef.current = null;
-            if (showLoading) setLoadingDocs(false);
-            // Trailing refetch: si llegaron eventos durante el fetch, re-pedir datos frescos
-            if (pendingRefetchRef.current) {
-                pendingRefetchRef.current = false;
-                setTimeout(() => fetchDocs(), 800);
-            }
-        }
-    }, [user, currentWorkspace, applyDocsSnapshot]);
+    const { fetchDocs, requestDocsRefresh } = useDashboardDocsSync({
+        user,
+        currentWorkspace,
+        docsLength: docs.length,
+        isOnline,
+        pendingCount,
+        isPageVisible,
+        syncNow,
+        personalWorkspaceId: PERSONAL_WORKSPACE_ID,
+        applyDocsSnapshot,
+        setLoadingDocs,
+        onDocChangeCallback
+    });
 
     useEffect(() => {
         if (!loading && !user) router.push('/login');
@@ -691,219 +593,35 @@ function DashboardContent() {
         }
     }, [user, loading, router, fetchWorkspaces]);
 
-    useEffect(() => {
-        if (currentWorkspace && user) {
-            fetchDocs({ showLoading: true });
-        }
-    }, [currentWorkspace, user, fetchDocs]);
-
-    // Re-sync + re-fetch when coming back online
-    useEffect(() => {
-        if (!isOnline || !currentWorkspace || !user) return;
-        // When going online: sync queue first, then re-fetch docs to get latest
-        if (pendingCount > 0) {
-            syncNow().then(() => fetchDocs()).catch(() => fetchDocs());
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOnline]);
-
-    // Debounced sync fetch: consolida eventos rápidos y da tiempo a Firestore para propagar
-    const scheduleSyncFetch = useCallback(() => {
-        if (!isPageVisible) return;
-        lastSyncEventRef.current = Date.now();
-        if (syncFetchTimerRef.current) clearTimeout(syncFetchTimerRef.current);
-        syncFetchTimerRef.current = setTimeout(() => {
-            syncFetchTimerRef.current = null;
-            if (process.env.NODE_ENV !== 'production') {
-                console.debug('[Sync] debounced fetch triggered');
-            }
-            fetchDocs();
-        }, 600);
-    }, [fetchDocs, isPageVisible]);
-
-    // Sync en tiempo real usando RTDB en lugar de polling
-    const handleSyncEvent = useCallback((event: { type: string; path: string }) => {
-        if (process.env.NODE_ENV !== 'production') {
-            console.debug('[Sync] RTDB event received:', event.type, event.path);
-        }
-        scheduleSyncFetch();
-    }, [scheduleSyncFetch]);
-
-    const { publishEvent } = useSyncEvents({
-        workspaceId: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? null : currentWorkspace?.id || null,
-        userId: user?.uid || null,
-        workspaceType: currentWorkspace?.id === PERSONAL_WORKSPACE_ID ? 'personal' : 'shared',
-        onEvent: handleSyncEvent,
-        enabled: !!currentWorkspace && !!user && isPageVisible
+    useDashboardPersistence({
+        currentWorkspace,
+        currentWorkspaceId,
+        userUid: user?.uid,
+        docs,
+        loadingDocs,
+        openTabs,
+        selectedDocId,
+        mosaicNode,
+        docModes,
+        sidebarWidth,
+        activeFolder,
+        isSidebarCollapsed,
+        isHeaderCollapsed,
+        closedFilesTabByWorkspace,
+        rootFolderPath: ROOT_FOLDER_PATH,
+        zenRestoreRef,
+        setSidebarWidth,
+        setActiveFolderSafe,
+        setDocModes,
+        setIsSidebarCollapsed,
+        setIsHeaderCollapsed,
+        setIsZenMode,
+        setOpenTabs,
+        setMosaicNode,
+        setSelectedDocId,
+        setClosedFilesTabByWorkspace,
+        clearActiveSession
     });
-
-    // Fallback: refresco cada 60s si no llega evento RTDB
-    useEffect(() => {
-        if (!currentWorkspace || !user) return;
-        if (!isPageVisible) return;
-        const intervalId = setInterval(() => {
-            if (document.hidden) return;
-            const now = Date.now();
-            if (now - lastSyncEventRef.current >= 60000) {
-                if (process.env.NODE_ENV !== 'production') {
-                    console.debug('[Sync] fallback polling triggered (no RTDB event in 60s)');
-                }
-                fetchDocs();
-            }
-        }, 60000);
-        return () => {
-            clearInterval(intervalId);
-            if (syncFetchTimerRef.current) {
-                clearTimeout(syncFetchTimerRef.current);
-                syncFetchTimerRef.current = null;
-            }
-        };
-    }, [currentWorkspace, user, fetchDocs, isPageVisible]);
-
-    useEffect(() => {
-        if (!isPageVisible || !currentWorkspace || !user) return;
-        fetchDocs();
-    }, [isPageVisible, currentWorkspace, user, fetchDocs]);
-
-    useEffect(() => {
-        if (!currentWorkspace || !user || !onDocChangeCallback) return;
-
-        const unsubscribe = onDocChangeCallback((event) => {
-            const eventWorkspaceId = event.workspaceId;
-            const currentWsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID
-                ? `personal:${user.uid}`
-                : currentWorkspace.id;
-
-            if (eventWorkspaceId === currentWsId || eventWorkspaceId === currentWorkspace.id) {
-                scheduleSyncFetch();
-            }
-        });
-
-        return unsubscribe;
-    }, [currentWorkspace, user, onDocChangeCallback, scheduleSyncFetch]);
-
-    const [stateRestoredForWorkspace, setStateRestoredForWorkspace] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!currentWorkspaceId) return;
-        const persisted = loadDashboardState(currentWorkspaceId);
-        if (persisted) {
-            if (persisted.sidebarWidth) setSidebarWidth(persisted.sidebarWidth);
-            if (typeof persisted.activeFolder === 'string') {
-                setActiveFolderSafe(persisted.activeFolder);
-            }
-            if (persisted.docModes) setDocModes(persisted.docModes);
-            setIsSidebarCollapsed(Boolean(persisted.isSidebarCollapsed));
-            setIsHeaderCollapsed(Boolean(persisted.isHeaderCollapsed));
-        } else {
-            setDocModes({});
-            setIsSidebarCollapsed(false);
-            setIsHeaderCollapsed(false);
-        }
-        setIsZenMode(false);
-        zenRestoreRef.current = { sidebar: false, header: false };
-        setOpenTabs([]);
-        setMosaicNode(null);
-        setSelectedDocId(null);
-        setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspaceId]: false }));
-        setStateRestoredForWorkspace(null);
-        clearActiveSession();
-    }, [currentWorkspaceId, clearActiveSession, setActiveFolderSafe]);
-
-    useEffect(() => {
-        if (!currentWorkspace || !user) return;
-        const filesTabId = `files-${currentWorkspace.id}`;
-        const hasFilesTab = openTabs.some(tab => tab.id === filesTabId);
-        const isClosedForWorkspace = closedFilesTabByWorkspace[currentWorkspace.id];
-        if (hasFilesTab || isClosedForWorkspace) return;
-
-        (async () => {
-            const newFilesItem: DocItem = {
-                id: filesTabId,
-                name: 'Archivos',
-                type: 'files',
-                updatedAt: new Date(),
-                ownerId: user.uid
-            };
-
-            setOpenTabs(prev => [...prev, newFilesItem]);
-            const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-            setMosaicNode(current => {
-                const leaves = getLeaves(current);
-                if (leaves.includes(filesTabId)) return current;
-                return createBalancedTreeFromLeaves([...leaves, filesTabId]);
-            });
-            setSelectedDocId(filesTabId);
-        })();
-    }, [currentWorkspace, user, openTabs, closedFilesTabByWorkspace]);
-
-    useEffect(() => {
-        if (!currentWorkspaceId || !docs.length || loadingDocs) return;
-        if (stateRestoredForWorkspace === currentWorkspaceId) return;
-
-        const persisted = loadDashboardState(currentWorkspaceId);
-        if (persisted?.openTabs && persisted.openTabs.length > 0) {
-            const restoredTabs = restoreOpenTabs(persisted.openTabs, docs);
-            if (restoredTabs.length > 0) {
-                setOpenTabs(prev => {
-                    const existingIds = new Set(prev.map(t => t.id));
-                    const newTabs = restoredTabs.filter(t => !existingIds.has(t.id));
-                    return [...prev, ...newTabs];
-                });
-
-                if (persisted.mosaicNode) {
-                    (async () => {
-                        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-                        setMosaicNode(() => {
-                            const tabIds = new Set([
-                                ...restoredTabs.map(t => t.id),
-                                ...openTabs.map(t => t.id)
-                            ]);
-                            const validated = validateMosaicNode(persisted.mosaicNode!, tabIds);
-                            if (validated) return validated;
-                            const allIds = [...tabIds];
-                            return allIds.length > 0 ? createBalancedTreeFromLeaves(allIds) : null;
-                        });
-                    })();
-                }
-
-                if (persisted.selectedDocId) {
-                    const selectedExists = restoredTabs.some(t => t.id === persisted.selectedDocId) ||
-                        openTabs.some(t => t.id === persisted.selectedDocId);
-                    if (selectedExists) {
-                        setSelectedDocId(persisted.selectedDocId);
-                    }
-                }
-            }
-        }
-        setStateRestoredForWorkspace(currentWorkspaceId);
-    }, [currentWorkspaceId, docs, loadingDocs, stateRestoredForWorkspace, openTabs]);
-
-    useEffect(() => {
-        if (!currentWorkspaceId || loadingDocs) return;
-        const timeoutId = setTimeout(() => {
-            saveDashboardState(currentWorkspaceId, {
-                openTabs,
-                selectedDocId,
-                mosaicNode,
-                docModes,
-                sidebarWidth,
-                activeFolder,
-                isSidebarCollapsed,
-                isHeaderCollapsed
-            });
-        }, 500);
-        return () => clearTimeout(timeoutId);
-    }, [currentWorkspaceId, openTabs, selectedDocId, mosaicNode, docModes, sidebarWidth, activeFolder, isSidebarCollapsed, isHeaderCollapsed, loadingDocs]);
-
-    useEffect(() => {
-        if (currentWorkspaceId) {
-            const persisted = loadDashboardState(currentWorkspaceId);
-            if (!persisted?.activeFolder) {
-                setActiveFolderSafe(ROOT_FOLDER_PATH);
-            }
-        }
-    }, [currentWorkspaceId, setActiveFolderSafe]);
 
     useEffect(() => {
         return () => {
@@ -1434,7 +1152,7 @@ function DashboardContent() {
                 workspaceId: docWorkspaceId,
                 folder: parentPath
             });
-            await fetchDocs();
+            await requestDocsRefresh();
             return true;
         } catch (error) {
             console.error('Failed to create folder', error);
@@ -1483,10 +1201,10 @@ function DashboardContent() {
 
         try {
             await updateDocumentApi(docId, { folder: targetPath });
-            await fetchDocs();
+            await requestDocsRefresh();
         } catch (error) {
             console.error('Error moving document', error);
-            await fetchDocs();
+            await requestDocsRefresh({ force: true });
         }
     };
 
@@ -1561,9 +1279,9 @@ function DashboardContent() {
                 }));
             }
 
-            await fetchDocs();
+            await requestDocsRefresh();
         } catch (error) {
-            await fetchDocs();
+            await requestDocsRefresh({ force: true });
             await showDialog({
                 type: 'error',
                 title: 'No se pudo renombrar',
@@ -1623,12 +1341,12 @@ function DashboardContent() {
 
         try {
             await Promise.all(updates.map(update => updateDocumentApi(update.id, { order: update.order })));
-            await fetchDocs();
+            await requestDocsRefresh();
         } catch (error) {
             console.error('Error reordering docs', error);
-            await fetchDocs();
+            await requestDocsRefresh({ force: true });
         }
-    }, [fetchDocs]);
+    }, [requestDocsRefresh]);
 
     const reorderFoldersInParent = useCallback(async (payload: { parentPath: string; orderedPaths: string[] }) => {
         if (!payload.orderedPaths.length) return;
@@ -1650,12 +1368,12 @@ function DashboardContent() {
 
         try {
             await Promise.all(updates.map(update => updateDocumentApi(update.docId, { order: update.order })));
-            await fetchDocs();
+            await requestDocsRefresh();
         } catch (error) {
             console.error('Error reordering folders', error);
-            await fetchDocs();
+            await requestDocsRefresh({ force: true });
         }
-    }, [fetchDocs]);
+    }, [requestDocsRefresh]);
 
     const copyDocument = async (docItem: DocItem) => {
         if (!user) return;
@@ -1695,7 +1413,7 @@ function DashboardContent() {
 
         try {
             const data = await createDocumentApi(payload);
-            await fetchDocs();
+            await requestDocsRefresh();
             openDocument({
                 id: String(data.id),
                 name: newName,
@@ -1833,7 +1551,7 @@ function DashboardContent() {
             const docRef = { id: String(data.id) };
 
             setNewDocName('');
-            await fetchDocs();
+            await requestDocsRefresh();
             openDocument({
                 id: docRef.id,
                 name: name,
@@ -2081,7 +1799,7 @@ function DashboardContent() {
                 setDocs(prev => prev.filter(item => !succeeded.includes(item.id)));
                 succeeded.forEach(id => closeTabById(id));
             }
-            await fetchDocs();
+            await requestDocsRefresh({ force: true });
 
             if (failed.length > 0) {
                 console.error('Error deleting', failed);
@@ -2144,7 +1862,7 @@ function DashboardContent() {
             });
             if (!confirmResult.confirmed) return;
             // Refrescar documentos para que las carpetas virtuales se recalculen
-            await fetchDocs();
+            await requestDocsRefresh({ force: true });
             setDeleteStatus({ phase: 'done', name: 'Carpeta eliminada' });
             scheduleDeleteStatusClear();
             return;
