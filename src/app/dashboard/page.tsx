@@ -1195,6 +1195,45 @@ function DashboardContent() {
         setSelectedDocId(doc.id);
     };
 
+    const handleDropDocOnTile = useCallback(async (droppedDocId: string, targetTileId: string) => {
+        if (droppedDocId === targetTileId) return;
+        const droppedDoc = docs.find(d => d.id === droppedDocId) || openTabs.find(t => t.id === droppedDocId);
+        if (!droppedDoc || droppedDoc.type === 'folder') return;
+
+        const targetTab = openTabs.find(t => t.id === targetTileId);
+        if (targetTab?.type === 'terminal' && targetTab.sessionId) {
+            clearActiveSession();
+        }
+
+        const isAlreadyOpen = openTabs.some(t => t.id === droppedDocId);
+
+        if (isAlreadyOpen) {
+            // Doc already open in another tile — swap the two tiles
+            setMosaicNode(current => {
+                if (!current) return droppedDocId;
+                // First replace droppedDocId with a temp placeholder
+                const temp = `__swap_temp_${Date.now()}`;
+                let swapped = replaceLeafId(current, droppedDocId, temp);
+                swapped = replaceLeafId(swapped, targetTileId, droppedDocId);
+                swapped = replaceLeafId(swapped, temp, targetTileId);
+                return swapped;
+            });
+        } else {
+            // New doc — replace target tile
+            setOpenTabs(prev => {
+                const next = prev.filter(tab => tab.id !== targetTileId && tab.id !== droppedDocId);
+                return [...next, droppedDoc];
+            });
+
+            setMosaicNode(current => {
+                if (!current) return droppedDocId;
+                return replaceLeafId(current, targetTileId, droppedDocId);
+            });
+        }
+
+        setSelectedDocId(droppedDocId);
+    }, [docs, openTabs, clearActiveSession, replaceLeafId]);
+
     const showDialog = useCallback((config: DialogConfig) => {
         return new Promise<DialogResult>((resolve) => {
             setDialogConfig(config);
@@ -2363,6 +2402,7 @@ function DashboardContent() {
                                     onCloseTab={closeTabById}
                                     onSelectDoc={openDocument}
                                     onActivateTab={setSelectedDocId}
+                                    onDropDocOnTile={handleDropDocOnTile}
                                     onCreateFile={() => createDoc(undefined, activeFolder)}
                                     onCreateFolder={() => createFolder()}
                                     onUploadFile={() => {
