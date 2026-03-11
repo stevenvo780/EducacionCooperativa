@@ -405,7 +405,7 @@ function DashboardContent() {
         };
     }, []);
 
-    const { fetchWorkspaces } = useDashboardWorkspaces({
+    const { fetchWorkspaces, selectWorkspace } = useDashboardWorkspaces({
         user,
         userEmail,
         workspaces,
@@ -1477,7 +1477,7 @@ function DashboardContent() {
             setNewWorkspaceName('');
             setShowNewWorkspaceModal(false);
             await fetchWorkspaces();
-            setCurrentWorkspace({
+            selectWorkspace({
                 id: String(data.id),
                 name: data.name ?? newWorkspaceName,
                 ownerId: data.ownerId ?? user.uid,
@@ -1536,7 +1536,7 @@ function DashboardContent() {
                     members: [user.uid],
                     type: 'personal'
                 };
-                setCurrentWorkspace(personalSpace);
+                selectWorkspace(personalSpace);
                 setDocs([]);
                 setFolders([]);
                 setOpenTabs([]);
@@ -2027,7 +2027,7 @@ function DashboardContent() {
             // Update local state
             const updatedMembers = currentWorkspace.members.filter(m => m !== userId);
             const updatedWorkspace = { ...currentWorkspace, members: updatedMembers };
-            setCurrentWorkspace(updatedWorkspace);
+            selectWorkspace(updatedWorkspace);
 
             await showDialog({ type: 'info', title: 'Miembro eliminado', message: 'El usuario ha sido eliminado del espacio de trabajo.' });
         } catch (e) {
@@ -2119,7 +2119,7 @@ function DashboardContent() {
                         isBoardOpen={isBoardOpen}
                         onOpenBoard={openBoard}
                         onAcceptInvite={acceptInvite}
-                        onSelectWorkspace={setCurrentWorkspace}
+                        onSelectWorkspace={selectWorkspace}
                         onDeleteWorkspace={deleteWorkspace}
                         onNewWorkspace={() => setShowNewWorkspaceModal(true)}
                         onShowMembers={() => setShowMembersModal(true)}

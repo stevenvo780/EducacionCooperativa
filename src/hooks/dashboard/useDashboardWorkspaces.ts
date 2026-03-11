@@ -65,6 +65,17 @@ export const useDashboardWorkspaces = ({
     subscribeToWorkspace(workerToken);
   }, [user, currentWorkspace, personalWorkspaceId, subscribeToWorkspace]);
 
+  const selectWorkspace = useCallback((workspace: Workspace | null) => {
+    if (!workspace) {
+      setCurrentWorkspace(null);
+      return;
+    }
+
+    urlSyncInProgressRef.current = true;
+    currentWorkspaceRef.current = workspace;
+    setCurrentWorkspace(workspace);
+  }, [setCurrentWorkspace]);
+
   const fetchWorkspaces = useCallback(async () => {
     if (!user) return;
 
@@ -144,6 +155,7 @@ export const useDashboardWorkspaces = ({
   }, [currentWorkspaceId, currentSearchParams, router, searchParams]);
 
   return {
-    fetchWorkspaces
+    fetchWorkspaces,
+    selectWorkspace
   };
 };
