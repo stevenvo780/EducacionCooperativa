@@ -229,28 +229,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
               )}
             </div>
             <span className="w-px h-4 bg-surface-600 mx-1" />
-            <button
-              onClick={() => onSetDocMode(doc.id, 'edit')}
-              className={`p-1 rounded transition ${mode === 'edit' ? 'bg-sky-600 text-white' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
-              title="Edicion"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => onSetDocMode(doc.id, 'preview')}
-              className={`p-1 rounded transition ${mode === 'preview' ? 'bg-emerald-600 text-white' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
-              title="Vista"
-            >
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => onSetDocMode(doc.id, 'split')}
-              className={`p-1 rounded transition ${mode === 'split' ? 'bg-indigo-600 text-white' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
-              title="Dividir"
-            >
-              <Columns className="w-3.5 h-3.5" />
-            </button>
-            <span className="w-px h-4 bg-surface-600 mx-1" />
           </>
         )}
         <button
@@ -262,7 +240,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </button>
       </div>
     );
-  }, [onSetDocMode, onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
+  }, [onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
 
   const calcDropPosition = useCallback((e: React.DragEvent<HTMLDivElement>): 'left' | 'right' | 'top' | 'bottom' | 'replace' => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -413,7 +391,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       <Editor
                         roomId={doc.id}
                         embedded
-                        viewMode={mode}
                         externalSearchTerm={searchTerm}
                         onSearchStateChange={(state) => handleSearchStateChange(doc.id, state)}
                         searchNavRef={getSearchNavRef(doc.id)}
