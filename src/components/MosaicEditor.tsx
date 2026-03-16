@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import {
   MDXEditor,
   AdmonitionDirectiveDescriptor,
@@ -26,7 +27,6 @@ import {
   InsertAdmonition,
   InsertFrontmatter,
   InsertImage,
-  InsertTable,
   InsertThematicBreak,
   ListsToggle,
   Separator,
@@ -39,7 +39,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3 } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, getAuthToken } from '@/services/apiClient';
@@ -146,6 +146,102 @@ const QUICK_INSERTS: QuickInsert[] = [
   }
 ];
 
+// ── Table Grid Picker (visual NxM selector like Google Docs) ──
+const TABLE_MAX_ROWS = 8;
+const TABLE_MAX_COLS = 8;
+
+function TableGridPicker({ onInsert }: { onInsert: (rows: number, cols: number) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [hoverRow, setHoverRow] = React.useState(0);
+  const [hoverCol, setHoverCol] = React.useState(0);
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const popoverRef = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
+
+  // Position the popover using fixed coords from button rect
+  React.useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left });
+  }, [open]);
+
+  // Close on click outside
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        btnRef.current && !btnRef.current.contains(target) &&
+        popoverRef.current && !popoverRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 transition hover:bg-slate-700 hover:text-white"
+        title="Insertar tabla"
+      >
+        <Grid3x3 className="h-3.5 w-3.5" />
+      </button>
+      {open && pos && ReactDOM.createPortal(
+        <div
+          ref={popoverRef}
+          className="table-grid-popover"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 99999 }}
+        >
+          <div className="rounded-xl border border-slate-600 bg-slate-900 p-5 shadow-2xl shadow-black/60">
+            <div className="mb-3 text-center text-sm font-semibold text-slate-200">
+              {hoverRow > 0 ? `${hoverRow} × ${hoverCol}` : 'Tamaño de tabla'}
+            </div>
+            <div
+              className="grid gap-[3px]"
+              style={{ gridTemplateColumns: `repeat(${TABLE_MAX_COLS}, 1fr)` }}
+              onMouseLeave={() => { setHoverRow(0); setHoverCol(0); }}
+            >
+              {Array.from({ length: TABLE_MAX_ROWS * TABLE_MAX_COLS }, (_, idx) => {
+                const r = Math.floor(idx / TABLE_MAX_COLS) + 1;
+                const c = (idx % TABLE_MAX_COLS) + 1;
+                const active = r <= hoverRow && c <= hoverCol;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`h-[28px] w-[28px] rounded border-2 transition-all duration-100 ${
+                      active
+                        ? 'border-blue-400 bg-blue-500/50 scale-105'
+                        : 'border-slate-600 bg-slate-800 hover:border-slate-400'
+                    }`}
+                    onMouseEnter={() => { setHoverRow(r); setHoverCol(c); }}
+                    onClick={() => {
+                      onInsert(r, c);
+                      setOpen(false);
+                      setHoverRow(0);
+                      setHoverCol(0);
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-3 text-center text-xs text-slate-400">
+              Máx {TABLE_MAX_ROWS}×{TABLE_MAX_COLS}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 export default function MosaicEditor({
   initialContent = '',
   roomId,
@@ -167,7 +263,7 @@ export default function MosaicEditor({
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
-  const [showToolsPanel, setShowToolsPanel] = useState(!embedded);
+  const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [toolbarVisibility, setToolbarVisibility] = useState<ToolbarVisibility>(DEFAULT_TOOLBAR_VISIBILITY);
 
   // Search state
@@ -191,6 +287,9 @@ export default function MosaicEditor({
   const mdxEditorRef = useRef<MDXEditorMethods>(null);
   const isNormalizingRef = useRef(false);
   const saveRequestIdRef = useRef(0);
+  const editorShellRef = useRef<HTMLDivElement | null>(null);
+  const [showCompactMenu, setShowCompactMenu] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -210,6 +309,26 @@ export default function MosaicEditor({
     } catch {
     }
   }, [toolbarVisibility]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const updateFullscreenState = () => {
+      const fullscreenElement = document.fullscreenElement;
+      const frameElement = typeof window !== 'undefined' ? window.frameElement : null;
+      setIsFullscreen(Boolean(
+        fullscreenElement
+        && (fullscreenElement === editorShellRef.current || fullscreenElement === frameElement)
+      ));
+    };
+
+    updateFullscreenState();
+    document.addEventListener('fullscreenchange', updateFullscreenState);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', updateFullscreenState);
+    };
+  }, []);
 
   /** Helper: update the editor content (remount with new key) */
   const setEditorContent = useCallback((md: string) => {
@@ -547,6 +666,27 @@ export default function MosaicEditor({
     handleContentChange(editor.getMarkdown());
   }, [handleContentChange]);
 
+  const toggleFullscreen = useCallback(async () => {
+    if (typeof document === 'undefined') return;
+
+    const frameElement = typeof window !== 'undefined' && window.frameElement instanceof HTMLElement
+      ? window.frameElement
+      : null;
+    const target = frameElement ?? editorShellRef.current;
+
+    if (!target) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await target.requestFullscreen();
+      }
+    } catch (error) {
+      console.error('Error toggling fullscreen editor:', error);
+    }
+  }, []);
+
   const renderToolbarContents = useCallback(() => {
     const sections: React.ReactNode[] = [];
 
@@ -577,7 +717,15 @@ export default function MosaicEditor({
     ));
     pushSection('insert', (
       <>
-        <InsertTable />
+        <TableGridPicker onInsert={(rows, cols) => {
+          const header = '| ' + Array.from({ length: cols }, (_, i) => `Col ${i + 1}`).join(' | ') + ' |';
+          const sep = '| ' + Array.from({ length: cols }, () => '---').join(' | ') + ' |';
+          const body = Array.from({ length: rows - 1 }, () =>
+            '| ' + Array.from({ length: cols }, () => '   ').join(' | ') + ' |'
+          ).join('\n');
+          const tableMd = `\n${header}\n${sep}\n${body}\n`;
+          insertSnippet(tableMd);
+        }} />
         <InsertThematicBreak />
         <InsertCodeBlock />
       </>
@@ -589,8 +737,72 @@ export default function MosaicEditor({
       </>
     ));
 
-    return <>{sections}</>;
-  }, [toolbarVisibility]);
+    return (
+      <>
+        {/* ── Custom controls ── */}
+        <div className="relative shrink-0" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+          <button
+            type="button"
+            onClick={() => setShowCompactMenu(c => !c)}
+            className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-600 bg-slate-700/60 text-slate-300 transition hover:bg-slate-600 hover:text-white"
+            title="Más opciones"
+          >
+            <MoreHorizontal className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void toggleFullscreen()}
+            className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-600 bg-slate-700/60 text-slate-300 transition hover:bg-slate-600 hover:text-white"
+            title={isFullscreen ? 'Restaurar' : 'Maximizar'}
+          >
+            {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+          </button>
+        </div>
+        {showCompactMenu && ReactDOM.createPortal(
+          <div
+            className="table-grid-popover"
+            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99998 }}
+            onClick={() => setShowCompactMenu(false)}
+          >
+            <div
+              style={{ position: 'fixed', top: 34, left: 8, zIndex: 99999 }}
+              className="min-w-[200px] rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-2xl shadow-black/60"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button type="button" onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+                <Settings2 className="h-3.5 w-3.5 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
+              </button>
+              <button type="button" onClick={() => { setToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+                <Sparkles className="h-3.5 w-3.5 text-slate-400" />Restaurar barra completa
+              </button>
+              <button type="button" onClick={() => { void toggleFullscreen(); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5 text-slate-400" /> : <Maximize2 className="h-3.5 w-3.5 text-slate-400" />}
+                {isFullscreen ? 'Salir pantalla completa' : 'Pantalla completa'}
+              </button>
+              <div className="my-1 h-px bg-slate-700" />
+              <div className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-500">Insertar rápido</div>
+              {QUICK_INSERTS.map((snippet) => (
+                <button
+                  key={snippet.id}
+                  type="button"
+                  onClick={() => { insertSnippet(snippet.markdown); setShowCompactMenu(false); }}
+                  className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  <Sparkles className="h-3 w-3 text-blue-400" />{snippet.title}
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
+
+        <Separator />
+
+        {/* ── MDXEditor toolbar groups ── */}
+        {sections}
+      </>
+    );
+  }, [toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setToolbarVisibility]);
 
   // MDXEditor plugins configuration
   const editorPlugins = useMemo(() => {
@@ -702,7 +914,14 @@ export default function MosaicEditor({
 
   // ── WYSIWYG Markdown Editor (tipo Obsidian) ──
   return (
-    <div className={clsx('flex flex-col h-full bg-slate-950 text-slate-300 relative mdx-editor-dark', embedded && 'editor-embedded')}>
+    <div
+      ref={editorShellRef}
+      className={clsx(
+        'flex flex-col h-full bg-slate-950 text-slate-300 relative mdx-editor-dark',
+        embedded && 'editor-embedded',
+        isFullscreen && 'z-[9999]'
+      )}
+    >
       {!embedded && (
         <div className="h-10 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -759,45 +978,9 @@ export default function MosaicEditor({
         </div>
       )}
 
-      <div className="shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {embedded && (
-              <span className="max-w-[180px] truncate text-xs font-medium text-slate-400" title={docName}>
-                {docName || 'Documento'}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowToolsPanel((current) => !current)}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-600 hover:bg-slate-700"
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-              Herramientas
-            </button>
-            <span className="text-[11px] text-slate-500">
-              {enabledToolbarGroupsCount}/7 grupos visibles
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {QUICK_INSERTS.slice(0, embedded ? 2 : 4).map((snippet) => (
-              <button
-                key={snippet.id}
-                type="button"
-                onClick={() => insertSnippet(snippet.markdown)}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:border-blue-500/50 hover:bg-slate-700 hover:text-white"
-                title={snippet.description}
-              >
-                <Sparkles className="h-3 w-3" />
-                {snippet.title}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {showToolsPanel && (
-          <div className="border-t border-slate-800 px-3 py-3">
+      {showToolsPanel && (
+        <div className="shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm">
+          <div className="px-3 py-3">
             <div className="grid gap-4 lg:grid-cols-[1.1fr_1.4fr]">
               <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -859,8 +1042,8 @@ export default function MosaicEditor({
               </section>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="flex-1 relative overflow-hidden">
         <MDXEditor
@@ -930,12 +1113,58 @@ export default function MosaicEditor({
           border-color: #334155 !important;
         }
 
-        /* Toolbar styling */
+        /* Toolbar styling – compact single-line */
         .mdx-editor-dark [class*="_toolbar"] {
           background: #1e293b !important;
           border-bottom: 1px solid #334155 !important;
+          padding: 2px 4px !important;
+          min-height: 0 !important;
+          overflow: visible !important;
         }
 
+        /* Force all toolbar wrappers to single-line no-wrap */
+        .mdx-editor-dark [class*="_toolbarRoot"] {
+          overflow: visible !important;
+        }
+        .mdx-editor-dark [class*="_toolbarRoot"] > div {
+          flex-wrap: nowrap !important;
+          align-items: center !important;
+        }
+
+        /* Compact toolbar buttons */
+        .mdx-editor-dark [class*="_toolbarRoot"] button,
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="button"] {
+          padding: 2px 3px !important;
+          min-width: 24px !important;
+          min-height: 24px !important;
+          height: 24px !important;
+        }
+        .mdx-editor-dark [class*="_toolbarRoot"] svg {
+          width: 14px !important;
+          height: 14px !important;
+        }
+        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_selectTrigger"] {
+          padding: 1px 5px !important;
+          height: 24px !important;
+          font-size: 11px !important;
+        }
+        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_separator"],
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="separator"] {
+          height: 16px !important;
+          margin: 0 1px !important;
+          width: 1px !important;
+          background: #334155 !important;
+        }
+        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toggleGroupRoot"],
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="group"] {
+          gap: 0 !important;
+        }
+
+        /* Hide scrollbar on toolbar overflow */
+        .scrollbar-none::-webkit-scrollbar { display: none; }
+        .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Toolbar button colors */
         .mdx-editor-dark [class*="_toolbarRoot"] button,
         .mdx-editor-dark [class*="_toolbarRoot"] [role="button"],
         .mdx-editor-dark [class*="_toolbarRoot"] button *,
@@ -999,10 +1228,23 @@ export default function MosaicEditor({
           stroke: currentColor !important;
         }
 
-        /* Separator */
+        /* Separator colors */
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_separator"],
         .mdx-editor-dark [class*="_toolbarRoot"] [role="separator"] {
           background: #334155 !important;
+        }
+        /* Toggle group compact */
+        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toggleGroupRoot"],
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="group"] {
+          gap: 0 !important;
+        }
+
+        /* Table grid picker portal – standalone styling */
+        .table-grid-popover button {
+          padding: 0 !important;
+          min-width: 0 !important;
+          min-height: 0 !important;
+          height: auto !important;
         }
 
         /* Content editable area */
