@@ -14,7 +14,6 @@ import {
   imagePlugin,
   codeBlockPlugin,
   codeMirrorPlugin,
-  diffSourcePlugin,
   frontmatterPlugin,
   toolbarPlugin,
   BoldItalicUnderlineToggles,
@@ -27,7 +26,6 @@ import {
   ListsToggle,
   Separator,
   InsertCodeBlock,
-  DiffSourceToggleWrapper,
   UndoRedo,
   type MDXEditorMethods
 } from '@mdxeditor/editor';
@@ -413,14 +411,9 @@ export default function MosaicEditor({
       }
     }),
     frontmatterPlugin(),
-    diffSourcePlugin({ viewMode: 'rich-text' }),
     toolbarPlugin({
       toolbarContents: () => (
         <>
-          <DiffSourceToggleWrapper>
-            <></>
-          </DiffSourceToggleWrapper>
-          <Separator />
           <UndoRedo />
           <Separator />
           <BoldItalicUnderlineToggles />
