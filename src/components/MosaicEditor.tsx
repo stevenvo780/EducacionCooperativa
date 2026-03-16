@@ -79,7 +79,12 @@ export default function MosaicEditor({
   onSearchStateChange,
   searchNavRef
 }: EditorProps) {
-  const [content, setContent] = useState(initialContent);
+  // MDXEditor is UNCONTROLLED: `markdown` prop is only read on mount.
+  // We use `initialMarkdown` + `editorKey` for mount/remount,
+  // and `contentRef` + `statsContent` for tracking without re-render loops.
+  const [initialMarkdown, setInitialMarkdown] = useState(initialContent);
+  const [editorKey, setEditorKey] = useState(0);
+  const [statsContent, setStatsContent] = useState(initialContent); // only for stats display
   const [saving, setSaving] = useState(false);
   const [docType, setDocType] = useState<'text' | 'file'>('text');
   const [fileUrl, setFileUrl] = useState<string | null>(null);
@@ -99,27 +104,29 @@ export default function MosaicEditor({
   const isPageVisible = usePageVisibility();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
-  const contentRef = useRef(content);
+  const contentRef = useRef(initialContent);
   const pendingLocalChangeRef = useRef(false);
   const lastRawKeyRef = useRef<string | null>(null);
   const rawLoadInFlightRef = useRef(false);
   const mdxEditorRef = useRef<MDXEditorMethods>(null);
+  const isNormalizingRef = useRef(false);
 
-  useEffect(() => {
-    contentRef.current = content;
-  }, [content]);
+  /** Helper: update the editor content (remount with new key) */
+  const setEditorContent = useCallback((md: string) => {
+    contentRef.current = md;
+    setInitialMarkdown(md);
+    setStatsContent(md);
+    setEditorKey(k => k + 1); // force MDXEditor remount with new markdown
+  }, []);
 
   const resetDocState = useCallback(() => {
     setDocType('text');
     setFileUrl(null);
     setFileName('');
     setFileMime('');
-    setContent('');
-    if (mdxEditorRef.current) {
-      mdxEditorRef.current.setMarkdown('');
-    }
+    setEditorContent('');
     hasLoadedRef.current = true;
-  }, []);
+  }, [setEditorContent]);
 
   const maybeLoadRawContent = useCallback(async (key: string | null) => {
     if (!roomId || !key) return;
@@ -131,17 +138,14 @@ export default function MosaicEditor({
       if (!res.ok) return;
       const text = await res.text();
       if (text && text !== contentRef.current) {
-        setContent(text);
-        if (mdxEditorRef.current) {
-          mdxEditorRef.current.setMarkdown(text);
-        }
+        setEditorContent(text);
       }
     } catch (e) {
       console.error('Error loading raw content:', e);
     } finally {
       rawLoadInFlightRef.current = false;
     }
-  }, [roomId]);
+  }, [roomId, setEditorContent]);
 
   const applyDocData = useCallback((data: any) => {
     if (!data) {
@@ -162,7 +166,8 @@ export default function MosaicEditor({
       setFileName(name || 'Archivo');
       setFileMime(mimeType);
       setDocName(name || 'Archivo');
-      setContent('');
+      contentRef.current = '';
+      setStatsContent('');
       hasLoadedRef.current = true;
       return;
     }
@@ -178,23 +183,31 @@ export default function MosaicEditor({
       const same = incoming === contentRef.current;
       const skipOwn = pendingLocalChangeRef.current && data.lastUpdatedBy === user?.uid && !same;
       if (!same && !skipOwn) {
-        setContent(incoming);
+        // Use setMarkdown if editor is mounted (avoids full remount),
+        // fall back to remount via setEditorContent
         if (mdxEditorRef.current) {
+          contentRef.current = incoming;
+          setStatsContent(incoming);
           mdxEditorRef.current.setMarkdown(incoming);
+        } else {
+          setEditorContent(incoming);
         }
       }
     } else if (type === 'file' && (url || storagePath)) {
       const rawKey = storagePath || url;
       maybeLoadRawContent(rawKey);
     } else if (!pendingLocalChangeRef.current) {
-      setContent('');
       if (mdxEditorRef.current) {
+        contentRef.current = '';
+        setStatsContent('');
         mdxEditorRef.current.setMarkdown('');
+      } else {
+        setEditorContent('');
       }
     }
 
     hasLoadedRef.current = true;
-  }, [maybeLoadRawContent, resetDocState, user?.uid]);
+  }, [maybeLoadRawContent, resetDocState, setEditorContent, user?.uid]);
 
   const loadDoc = useCallback(async () => {
     if (!roomId) return;
@@ -290,8 +303,8 @@ export default function MosaicEditor({
   }, [isPageVisible, roomId, loadDoc]);
 
   const handleContentChange = useCallback((val: string) => {
-    setContent(val);
     contentRef.current = val;
+    setStatsContent(val);
     if (!roomId || docType === 'file') return;
     if (!hasLoadedRef.current) return;
 
@@ -356,10 +369,10 @@ export default function MosaicEditor({
   }, [searchNavRef, totalMatches, navigateSearch]);
 
   const stats = useMemo(() => {
-    const trimmed = content.trim();
+    const trimmed = statsContent.trim();
     const words = trimmed ? trimmed.split(/\s+/).length : 0;
-    return { words, chars: content.length };
-  }, [content]);
+    return { words, chars: statsContent.length };
+  }, [statsContent]);
 
   // MDXEditor plugins configuration
   const editorPlugins = useMemo(() => [
@@ -429,6 +442,8 @@ export default function MosaicEditor({
   ], []);
 
   const handleMdxChange = useCallback((md: string) => {
+    // Skip if this is MDXEditor's initial markdown normalization
+    if (isNormalizingRef.current) return;
     handleContentChange(md);
   }, [handleContentChange]);
 
@@ -541,8 +556,9 @@ export default function MosaicEditor({
 
       <div className="flex-1 relative overflow-hidden">
         <MDXEditor
+          key={editorKey}
           ref={mdxEditorRef}
-          markdown={content}
+          markdown={initialMarkdown}
           onChange={handleMdxChange}
           plugins={editorPlugins}
           contentEditableClassName="mdx-content-editable"
