@@ -373,66 +373,75 @@ export default function MosaicEditor({
   }, [statsContent]);
 
   // MDXEditor plugins configuration
-  const editorPlugins = useMemo(() => [
-    headingsPlugin(),
-    listsPlugin(),
-    quotePlugin(),
-    thematicBreakPlugin(),
-    markdownShortcutPlugin(),
-    tablePlugin(),
-    linkPlugin(),
-    linkDialogPlugin(),
-    imagePlugin({ imageUploadHandler: async () => '/placeholder.png' }),
-    codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
-    codeMirrorPlugin({
-      codeBlockLanguages: {
-        js: 'JavaScript',
-        javascript: 'JavaScript',
-        ts: 'TypeScript',
-        typescript: 'TypeScript',
-        python: 'Python',
-        py: 'Python',
-        css: 'CSS',
-        html: 'HTML',
-        json: 'JSON',
-        bash: 'Bash',
-        sh: 'Shell',
-        sql: 'SQL',
-        yaml: 'YAML',
-        xml: 'XML',
-        markdown: 'Markdown',
-        mermaid: 'Mermaid',
-        rust: 'Rust',
-        go: 'Go',
-        java: 'Java',
-        cpp: 'C++',
-        c: 'C',
-        '': 'Texto plano'
-      }
-    }),
-    frontmatterPlugin(),
-    toolbarPlugin({
-      toolbarContents: () => (
-        <>
-          <UndoRedo />
-          <Separator />
-          <BoldItalicUnderlineToggles />
-          <CodeToggle />
-          <Separator />
-          <BlockTypeSelect />
-          <Separator />
-          <ListsToggle />
-          <Separator />
-          <CreateLink />
-          <InsertImage />
-          <Separator />
-          <InsertTable />
-          <InsertThematicBreak />
-          <InsertCodeBlock />
-        </>
-      )
-    })
-  ], []);
+  const editorPlugins = useMemo(() => {
+    const plugins = [
+      headingsPlugin(),
+      listsPlugin(),
+      quotePlugin(),
+      thematicBreakPlugin(),
+      markdownShortcutPlugin(),
+      tablePlugin(),
+      linkPlugin(),
+      linkDialogPlugin(),
+      imagePlugin({ imageUploadHandler: async () => '/placeholder.png' }),
+      codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
+      codeMirrorPlugin({
+        codeBlockLanguages: {
+          js: 'JavaScript',
+          javascript: 'JavaScript',
+          ts: 'TypeScript',
+          typescript: 'TypeScript',
+          python: 'Python',
+          py: 'Python',
+          css: 'CSS',
+          html: 'HTML',
+          json: 'JSON',
+          bash: 'Bash',
+          sh: 'Shell',
+          sql: 'SQL',
+          yaml: 'YAML',
+          xml: 'XML',
+          markdown: 'Markdown',
+          mermaid: 'Mermaid',
+          rust: 'Rust',
+          go: 'Go',
+          java: 'Java',
+          cpp: 'C++',
+          c: 'C',
+          '': 'Texto plano'
+        }
+      }),
+      frontmatterPlugin()
+    ];
+
+    if (!embedded) {
+      plugins.push(
+        toolbarPlugin({
+          toolbarContents: () => (
+            <>
+              <UndoRedo />
+              <Separator />
+              <BoldItalicUnderlineToggles />
+              <CodeToggle />
+              <Separator />
+              <BlockTypeSelect />
+              <Separator />
+              <ListsToggle />
+              <Separator />
+              <CreateLink />
+              <InsertImage />
+              <Separator />
+              <InsertTable />
+              <InsertThematicBreak />
+              <InsertCodeBlock />
+            </>
+          )
+        })
+      );
+    }
+
+    return plugins;
+  }, [embedded]);
 
   const handleMdxChange = useCallback((md: string) => {
     // Skip if this is MDXEditor's initial markdown normalization
