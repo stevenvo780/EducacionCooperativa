@@ -747,6 +747,22 @@ export default function MosaicEditor({
     }));
   }, []);
 
+  const setViewModeWithSync = useCallback((nextMode: ViewMode) => {
+    const editor = mdxEditorRef.current;
+    const latestMarkdown = editor ? editor.getMarkdown() : contentRef.current;
+
+    contentRef.current = latestMarkdown;
+    setStatsContent(latestMarkdown);
+    pendingLocalChangeRef.current = latestMarkdown !== lastSyncedContentRef.current;
+
+    if (nextMode === 'edit') {
+      setInitialMarkdown(latestMarkdown);
+      setEditorKey((currentKey) => currentKey + 1);
+    }
+
+    setViewMode(nextMode);
+  }, []);
+
   const insertSnippet = useCallback((snippet: string) => {
     const editor = mdxEditorRef.current;
     if (!editor) return;
@@ -841,7 +857,7 @@ export default function MosaicEditor({
           </button>
           <button
             type="button"
-            onClick={() => setViewMode(v => v === 'preview' ? 'edit' : 'preview')}
+            onClick={() => setViewModeWithSync(viewMode === 'preview' ? 'edit' : 'preview')}
             className={clsx(
               'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
               viewMode === 'preview'
@@ -850,7 +866,7 @@ export default function MosaicEditor({
             )}
             title={viewMode === 'preview' ? 'Volver a editar' : 'Vista previa (LaTeX, Mermaid)'}
           >
-            {viewMode === 'preview' ? <PenLine className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {viewMode === 'preview' ? <PenLine className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
           <button
             type="button"
@@ -903,7 +919,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setToolbarVisibility]);
+  }, [toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setToolbarVisibility, setViewModeWithSync]);
 
   // MDXEditor plugins configuration
   const editorPlugins = useMemo(() => {
@@ -1152,7 +1168,7 @@ export default function MosaicEditor({
             <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
               <button
                 type="button"
-                onClick={() => setViewMode('edit')}
+                onClick={() => setViewModeWithSync('edit')}
                 className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
               >
                 <PenLine className="h-3 w-3" />
@@ -1304,6 +1320,13 @@ export default function MosaicEditor({
           width: 14px !important;
           height: 14px !important;
         }
+
+        .mdx-editor-dark .lucide {
+          fill: none !important;
+          stroke: currentColor !important;
+          stroke-width: 2.2 !important;
+        }
+
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_selectTrigger"] {
           padding: 1px 5px !important;
           height: 24px !important;
