@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import {
     onAuthStateChanged,
     User,
@@ -43,12 +43,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
-    const initialized = useRef(false);
 
     useEffect(() => {
-        if (initialized.current) return;
-        initialized.current = true;
-
         // Restaurar email guardado desde localStorage
         const storedEmail = localStorage.getItem('agora_user_email');
         if (storedEmail) {
@@ -85,6 +81,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                         localStorage.setItem('agora_user_email', authUser.email);
                     }
                     localStorage.removeItem('agora_user');
+                } else {
+                    setUser(null);
                 }
                 setLoading(false);
             });
@@ -136,10 +134,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (userData.customToken) {
             try {
-                await signInWithCustomToken(userData.customToken);
+                const credential = await signInWithCustomToken(userData.customToken);
+                setUser(credential.user);
+                setLoading(false);
                 // Guardar el email porque Firebase custom tokens no lo incluyen
                 setUserEmail(normalizedEmail);
                 localStorage.setItem('agora_user_email', normalizedEmail);
+                localStorage.removeItem('agora_user');
                 router.push('/dashboard');
                 return;
             } catch (tokenError) {
@@ -187,10 +188,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (userData.customToken) {
             try {
-                await signInWithCustomToken(userData.customToken);
+                const credential = await signInWithCustomToken(userData.customToken);
+                setUser(credential.user);
+                setLoading(false);
                 // Guardar el email porque Firebase custom tokens no lo incluyen
                 setUserEmail(normalizedEmail);
                 localStorage.setItem('agora_user_email', normalizedEmail);
+                localStorage.removeItem('agora_user');
                 router.push('/dashboard');
                 return;
             } catch (tokenError) {
