@@ -128,8 +128,29 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const [docSearchStates, setDocSearchStates] = useState<Record<string, SearchState>>({});
   const [dragOverInfo, setDragOverInfo] = useState<{ tileId: string; position: 'left' | 'right' | 'top' | 'bottom' | 'replace' } | null>(null);
   const [dragOverEmpty, setDragOverEmpty] = useState(false);
+  const [isDraggingDoc, setIsDraggingDoc] = useState(false);
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
+
+  // Detect global drag of documents to show overlay over iframes
+  useEffect(() => {
+    const handleGlobalDragStart = (e: DragEvent) => {
+      const types = Array.from(e.dataTransfer?.types ?? []);
+      if (types.includes('application/x-doc-id')) {
+        setIsDraggingDoc(true);
+      }
+    };
+    const handleGlobalDragEnd = () => setIsDraggingDoc(false);
+    const handleGlobalDrop = () => setIsDraggingDoc(false);
+    document.addEventListener('dragstart', handleGlobalDragStart);
+    document.addEventListener('dragend', handleGlobalDragEnd);
+    document.addEventListener('drop', handleGlobalDrop);
+    return () => {
+      document.removeEventListener('dragstart', handleGlobalDragStart);
+      document.removeEventListener('dragend', handleGlobalDragEnd);
+      document.removeEventListener('drop', handleGlobalDrop);
+    };
+  }, []);
 
   const fileExplorerDocs = useMemo(() => {
       return docs.filter(d => d.type !== 'terminal' && d.type !== 'files' && d.type !== 'board');
@@ -334,6 +355,10 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                 onDragLeave={handleTileDragLeave}
                 onDrop={(e) => handleTileDrop(e, doc.id)}
             >
+                {/* Transparent overlay during drag to prevent iframe from capturing drag events */}
+                {isDraggingDoc && (
+                  <div className="absolute inset-0 z-40" style={{ background: 'transparent' }} />
+                )}
                 {dropInfo && (
                   <div className="absolute inset-0 z-50 pointer-events-none">
                     {dropInfo.position === 'left' && <div className="absolute inset-y-0 left-0 w-1/2 bg-sky-500/20 border-l-4 border-sky-500 rounded-l" />}
@@ -400,7 +425,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms, dragOverInfo,
+    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms, dragOverInfo, isDraggingDoc,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
     onSelectDoc, onActivateTab, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     handleTileDragOver, handleTileDragLeave, handleTileDrop,

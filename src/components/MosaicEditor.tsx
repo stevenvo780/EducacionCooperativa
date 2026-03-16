@@ -1689,9 +1689,9 @@ export default function MosaicEditor({
           position: relative !important;
         }
 
-        /* ── Tool cells (row/column controls): make them very slim ── */
+        /* ── Tool cells (row/column controls): slim ── */
         .mdx-editor-dark [class*="_toolCell"] {
-          background: #1e293b !important;
+          background: #1a2332 !important;
           padding: 0 !important;
           transition: background 0.15s ease !important;
         }
@@ -1700,24 +1700,23 @@ export default function MosaicEditor({
         .mdx-editor-dark table thead:first-child tr:first-child [class*="_toolCell"],
         .mdx-editor-dark table [class*="_toolCell"]:has(button[title="Column menu"]),
         .mdx-editor-dark table [class*="_toolCell"]:has(button[aria-label="Column menu"]) {
-          height: 4px !important;
-          max-height: 4px !important;
-          min-height: 0 !important;
-          line-height: 0 !important;
-          font-size: 0 !important;
+          height: 22px !important;
+          max-height: 22px !important;
+          min-height: 22px !important;
+          line-height: 22px !important;
         }
 
         /* Left column tool cells (row menus) - slim column */
         .mdx-editor-dark table [class*="_toolCell"]:has(button[title="Row menu"]),
         .mdx-editor-dark table [class*="_toolCell"]:has(button[aria-label="Row menu"]) {
-          width: 20px !important;
-          min-width: 20px !important;
-          max-width: 20px !important;
+          width: 22px !important;
+          min-width: 22px !important;
+          max-width: 22px !important;
         }
 
-        /* ── All buttons inside tool cells: hidden by default, shown on hover ── */
+        /* ── All buttons inside tool cells: always visible but subtle ── */
         .mdx-editor-dark [class*="_toolCell"] button {
-          opacity: 0 !important;
+          opacity: 0.35 !important;
           width: 100% !important;
           height: 100% !important;
           padding: 0 !important;
@@ -1728,7 +1727,7 @@ export default function MosaicEditor({
           background: transparent !important;
           color: #64748b !important;
           cursor: pointer !important;
-          transition: opacity 0.15s ease, background 0.15s ease !important;
+          transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
@@ -1736,64 +1735,84 @@ export default function MosaicEditor({
 
         .mdx-editor-dark [class*="_toolCell"] button svg,
         .mdx-editor-dark [class*="_toolCell"] button img {
-          width: 10px !important;
-          height: 10px !important;
+          width: 11px !important;
+          height: 11px !important;
         }
 
-        /* Show buttons on hover of the tool cell or the whole row */
+        /* Brighten buttons on hover of the tool cell or the whole row */
         .mdx-editor-dark [class*="_toolCell"]:hover button,
         .mdx-editor-dark table tr:hover [class*="_toolCell"] button {
-          opacity: 1 !important;
+          opacity: 0.8 !important;
         }
 
         .mdx-editor-dark [class*="_toolCell"]:hover {
-          background: #334155 !important;
+          background: #263040 !important;
         }
 
         .mdx-editor-dark [class*="_toolCell"] button:hover {
-          background: rgba(59, 130, 246, 0.15) !important;
+          opacity: 1 !important;
+          background: rgba(59, 130, 246, 0.12) !important;
           color: #60a5fa !important;
         }
 
-        /* ── Top-left corner cell (empty): subtle indicator ── */
+        /* ── Top-left corner cell: subtle ── */
         .mdx-editor-dark table thead:first-child tr:first-child th:first-child,
         .mdx-editor-dark table tr:first-child td:first-child[class*="_toolCell"]:not(:has(button)) {
-          width: 20px !important;
-          min-width: 20px !important;
-          max-width: 20px !important;
-          height: 4px !important;
-          max-height: 4px !important;
+          width: 22px !important;
+          min-width: 22px !important;
+          max-width: 22px !important;
+          height: 22px !important;
+          max-height: 22px !important;
           padding: 0 !important;
-          background: #1e293b !important;
+          background: #1a2332 !important;
         }
 
-        /* ── Delete table button (top-right corner) ── */
+        /* ── Delete table button (top-right corner): smaller ── */
         .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]),
         .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) {
-          width: 20px !important;
-          min-width: 20px !important;
-          max-width: 20px !important;
-          height: 4px !important;
-          max-height: 4px !important;
+          width: 18px !important;
+          min-width: 18px !important;
+          max-width: 18px !important;
+          height: 22px !important;
+          max-height: 22px !important;
           padding: 0 !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]) button,
+        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) button {
+          opacity: 0.2 !important;
+          color: #94a3b8 !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]) button svg,
+        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) button img {
+          width: 9px !important;
+          height: 9px !important;
         }
 
         .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]):hover,
         .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]):hover {
-          background: rgba(239, 68, 68, 0.15) !important;
+          background: rgba(239, 68, 68, 0.1) !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]):hover button,
+        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]):hover button {
+          opacity: 0.7 !important;
+          color: #f87171 !important;
         }
 
         .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]) button:hover,
         .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) button:hover {
+          opacity: 1 !important;
           color: #ef4444 !important;
-          background: rgba(239, 68, 68, 0.2) !important;
+          background: rgba(239, 68, 68, 0.15) !important;
         }
 
         /* ── Add row / add column buttons: slim + styled ── */
         .mdx-editor-dark [class*="_addRowButton"],
         .mdx-editor-dark [class*="_addColumnButton"] {
           background: transparent !important;
-          border: 1px dashed #334155 !important;
+          border: 1px dashed #2d3d50 !important;
           color: #475569 !important;
           padding: 0 !important;
           margin: 0 !important;
@@ -1823,13 +1842,13 @@ export default function MosaicEditor({
         .mdx-editor-dark [class*="_addColumnButton"] img {
           width: 10px !important;
           height: 10px !important;
-          opacity: 0.5 !important;
+          opacity: 0.4 !important;
           transition: opacity 0.15s ease !important;
         }
 
         .mdx-editor-dark [class*="_addRowButton"]:hover,
         .mdx-editor-dark [class*="_addColumnButton"]:hover {
-          background: rgba(59, 130, 246, 0.1) !important;
+          background: rgba(59, 130, 246, 0.08) !important;
           border-color: #3b82f6 !important;
           color: #60a5fa !important;
         }
@@ -1869,7 +1888,7 @@ export default function MosaicEditor({
         }
 
         .mdx-editor-dark [class*="_iconButton"]:hover {
-          background: rgba(59, 130, 246, 0.15) !important;
+          background: rgba(59, 130, 246, 0.12) !important;
           color: #60a5fa !important;
         }
 
@@ -1882,11 +1901,11 @@ export default function MosaicEditor({
         .mdx-editor-dark table > thead:first-of-type th,
         .mdx-editor-dark table > thead:first-of-type td {
           padding: 0 !important;
-          height: 4px !important;
-          max-height: 4px !important;
-          min-height: 0 !important;
+          height: 22px !important;
+          max-height: 22px !important;
+          min-height: 22px !important;
           overflow: hidden !important;
-          line-height: 0 !important;
+          line-height: 22px !important;
           font-size: 0 !important;
           border: none !important;
           border-bottom: 1px solid #1e293b !important;
