@@ -39,9 +39,14 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3 } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Eye, PenLine } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import remarkGfm from 'remark-gfm';
+import MermaidDiagram from '@/components/MermaidDiagram';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 
@@ -149,6 +154,87 @@ const QUICK_INSERTS: QuickInsert[] = [
 // ── Table Grid Picker (visual NxM selector like Google Docs) ──
 const TABLE_MAX_ROWS = 8;
 const TABLE_MAX_COLS = 8;
+
+// ── Error boundary para diagramas ──
+class DiagramErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: string },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback: string }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="mermaid-error">
+          <div className="mermaid-error-label">⚠ Error al renderizar diagrama</div>
+          <pre className="mermaid-error-source">{this.props.fallback}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── Preview con LaTeX + Mermaid ──
+function unescapeLatex(md: string): string {
+  // MDXEditor escapes many chars for CommonMark safety. We need to reverse
+  // that so remark-math can find $ delimiters and LaTeX gets clean formulas.
+
+  // Step 1: Restore block math delimiters  \$\$ ... \$\$ → $$ ... $$
+  let result = md.replace(/\\\$\\\$([\s\S]*?)\\\$\\\$/g, '$$$$$$1$$$$');
+  // Step 2: Restore inline math delimiters  \$ ... \$ → $ ... $
+  result = result.replace(/\\\$((?!\$)[^\n]*?)\\\$/g, '$$$1$$');
+  // Step 3: Strip remaining backslash escapes before ASCII punctuation.
+  // MDXEditor escapes = * _ { } [ ] ( ) # + - . ! | ~ < > ^ ` etc.
+  // ReactMarkdown handles unescaped markdown the same way, and LaTeX
+  // needs the raw characters (e.g. \= is a macron accent, not equals).
+  result = result.replace(/\\([=*_{}[\]()#+\-.!|~<>^`])/g, '$1');
+  return result;
+}
+
+const MarkdownPreview = React.memo(({ content }: { content: string }) => {
+  const processed = useMemo(() => unescapeLatex(content), [content]);
+  return (
+  <div className="markdown-preview-container prose prose-invert max-w-none p-6 overflow-auto h-full">
+    <ReactMarkdown
+      remarkPlugins={[remarkMath, remarkGfm]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        pre({ children }) {
+          const child = React.Children.toArray(children)[0] as React.ReactElement;
+          const className: string = (child?.props as Record<string, string>)?.className || '';
+          if (/language-mermaid/.test(className)) {
+            const code = String((child?.props as Record<string, unknown>)?.children || '').trim();
+            return (
+              <DiagramErrorBoundary fallback={code}>
+                <MermaidDiagram chart={code} />
+              </DiagramErrorBoundary>
+            );
+          }
+          return <pre>{children}</pre>;
+        },
+        code({ className, children, ...props }) {
+          if (/language-mermaid/.test(className || '')) {
+            const code = String(children).trim();
+            return (
+              <DiagramErrorBoundary fallback={code}>
+                <MermaidDiagram chart={code} />
+              </DiagramErrorBoundary>
+            );
+          }
+          return <code className={className} {...props}>{children}</code>;
+        }
+      }}
+    >
+      {processed}
+    </ReactMarkdown>
+  </div>
+  );
+});
+MarkdownPreview.displayName = 'MarkdownPreview';
 
 function TableGridPicker({ onInsert }: { onInsert: (rows: number, cols: number) => void }) {
   const [open, setOpen] = React.useState(false);
@@ -290,6 +376,7 @@ export default function MosaicEditor({
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const [showCompactMenu, setShowCompactMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('edit');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -751,6 +838,19 @@ export default function MosaicEditor({
           </button>
           <button
             type="button"
+            onClick={() => setViewMode(v => v === 'preview' ? 'edit' : 'preview')}
+            className={clsx(
+              'inline-flex h-6 w-6 items-center justify-center rounded border transition',
+              viewMode === 'preview'
+                ? 'border-blue-500 bg-blue-600/30 text-blue-300 hover:bg-blue-600/40'
+                : 'border-slate-600 bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white'
+            )}
+            title={viewMode === 'preview' ? 'Volver a editar' : 'Vista previa (LaTeX, Mermaid)'}
+          >
+            {viewMode === 'preview' ? <PenLine className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+          </button>
+          <button
+            type="button"
             onClick={() => void toggleFullscreen()}
             className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-600 bg-slate-700/60 text-slate-300 transition hover:bg-slate-600 hover:text-white"
             title={isFullscreen ? 'Restaurar' : 'Maximizar'}
@@ -802,7 +902,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setToolbarVisibility]);
+  }, [toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setToolbarVisibility]);
 
   // MDXEditor plugins configuration
   const editorPlugins = useMemo(() => {
@@ -1046,16 +1146,33 @@ export default function MosaicEditor({
       )}
 
       <div className="flex-1 relative overflow-hidden">
-        <MDXEditor
-          key={editorKey}
-          ref={mdxEditorRef}
-          markdown={initialMarkdown}
-          onChange={handleMdxChange}
-          plugins={editorPlugins}
-          contentEditableClassName="mdx-content-editable"
-          className="mdx-editor-root h-full"
-          placeholder="Escribe aquí... Usa Markdown como en Obsidian ✨"
-        />
+        {viewMode === 'preview' ? (
+          <>
+            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
+              <button
+                type="button"
+                onClick={() => setViewMode('edit')}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+              >
+                <PenLine className="h-3 w-3" />
+                Volver a editar
+              </button>
+              <span className="text-[11px] text-slate-500">Vista previa — LaTeX, Mermaid y tablas se renderizan aquí</span>
+            </div>
+            <MarkdownPreview content={statsContent || contentRef.current} />
+          </>
+        ) : (
+          <MDXEditor
+            key={editorKey}
+            ref={mdxEditorRef}
+            markdown={initialMarkdown}
+            onChange={handleMdxChange}
+            plugins={editorPlugins}
+            contentEditableClassName="mdx-content-editable"
+            className="mdx-editor-root h-full"
+            placeholder="Escribe aquí... Usa Markdown como en Obsidian ✨"
+          />
+        )}
       </div>
 
       {/* Status bar for embedded mode */}
@@ -1618,6 +1735,160 @@ export default function MosaicEditor({
 
         .mdx-editor-dark [class*="_diffSourceWrapper"] > div {
           height: 100% !important;
+        }
+
+        /* ─── Markdown Preview (LaTeX + Mermaid) ─── */
+        .markdown-preview-container {
+          background: #0f172a;
+          color: #e2e8f0;
+          font-size: 15px;
+          line-height: 1.75;
+        }
+        .markdown-preview-container h1,
+        .markdown-preview-container h2,
+        .markdown-preview-container h3,
+        .markdown-preview-container h4 {
+          color: #f1f5f9;
+          font-weight: 700;
+          margin-top: 1.5em;
+          margin-bottom: 0.5em;
+        }
+        .markdown-preview-container h1 { font-size: 2em; border-bottom: 1px solid #334155; padding-bottom: 0.3em; }
+        .markdown-preview-container h2 { font-size: 1.5em; border-bottom: 1px solid #1e293b; padding-bottom: 0.2em; }
+        .markdown-preview-container h3 { font-size: 1.25em; }
+        .markdown-preview-container p { margin: 0.75em 0; }
+        .markdown-preview-container a { color: #60a5fa; text-decoration: underline; }
+        .markdown-preview-container strong { color: #f8fafc; }
+        .markdown-preview-container code:not(pre code) {
+          background: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 4px;
+          padding: 2px 6px;
+          font-size: 0.875em;
+          color: #f472b6;
+        }
+        .markdown-preview-container pre {
+          background: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 8px;
+          padding: 16px;
+          overflow-x: auto;
+          margin: 1em 0;
+        }
+        .markdown-preview-container pre code {
+          background: none;
+          border: none;
+          padding: 0;
+          color: #e2e8f0;
+          font-size: 0.875em;
+        }
+        .markdown-preview-container blockquote {
+          border-left: 4px solid #3b82f6;
+          background: #1e293b;
+          padding: 8px 16px;
+          margin: 1em 0;
+          border-radius: 0 8px 8px 0;
+          color: #cbd5e1;
+        }
+        .markdown-preview-container table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 1em 0;
+        }
+        .markdown-preview-container th,
+        .markdown-preview-container td {
+          border: 1px solid #334155;
+          padding: 8px 12px;
+          text-align: left;
+        }
+        .markdown-preview-container th {
+          background: #1e293b;
+          font-weight: 600;
+          color: #f1f5f9;
+        }
+        .markdown-preview-container tr:nth-child(even) {
+          background: #0f172a;
+        }
+        .markdown-preview-container tr:nth-child(odd) {
+          background: #1e293b40;
+        }
+        .markdown-preview-container ul,
+        .markdown-preview-container ol {
+          padding-left: 1.5em;
+          margin: 0.5em 0;
+        }
+        .markdown-preview-container li { margin: 0.25em 0; }
+        .markdown-preview-container hr {
+          border: none;
+          border-top: 1px solid #334155;
+          margin: 2em 0;
+        }
+        .markdown-preview-container img {
+          max-width: 100%;
+          border-radius: 8px;
+        }
+
+        /* KaTeX overrides for dark theme */
+        .markdown-preview-container .katex { color: #e2e8f0; font-size: 1.1em; }
+        .markdown-preview-container .katex-display { margin: 1em 0; overflow-x: auto; }
+        .markdown-preview-container .katex-display > .katex {
+          background: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 8px;
+          padding: 12px 16px;
+          display: inline-block;
+        }
+
+        /* Mermaid containers */
+        .markdown-preview-container .mermaid-container {
+          margin: 1em 0;
+          padding: 16px;
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 8px;
+          text-align: center;
+          overflow-x: auto;
+        }
+        .markdown-preview-container .mermaid-container svg {
+          max-width: 100%;
+          height: auto;
+        }
+        .mermaid-loading {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #94a3b8;
+          font-size: 13px;
+          padding: 12px;
+        }
+        .mermaid-loading-spinner {
+          width: 16px;
+          height: 16px;
+          border: 2px solid #334155;
+          border-top-color: #3b82f6;
+          border-radius: 50%;
+          animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .mermaid-error {
+          background: #1e293b;
+          border: 1px solid #ef4444;
+          border-radius: 8px;
+          padding: 12px;
+          margin: 8px 0;
+        }
+        .mermaid-error-label {
+          color: #ef4444;
+          font-weight: 600;
+          font-size: 13px;
+          margin-bottom: 8px;
+        }
+        .mermaid-error-detail,
+        .mermaid-error-source {
+          font-size: 12px;
+          color: #94a3b8;
+          overflow-x: auto;
+          white-space: pre-wrap;
         }
       `}</style>
     </div>
