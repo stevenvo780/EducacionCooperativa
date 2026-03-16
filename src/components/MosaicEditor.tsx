@@ -1428,17 +1428,21 @@ export default function MosaicEditor({
           color: #e2e8f0;
           font-size: 15px;
           line-height: 1.75;
-          padding: 1.5rem 2rem;
+          padding: 0.9rem 2rem 1.5rem;
           min-height: 100%;
           max-width: 100%;
           outline: none;
           caret-color: #60a5fa;
         }
 
+        .mdx-content-editable > :first-child {
+          margin-top: 0 !important;
+        }
+
         .mdx-content-editable h1 {
           font-size: 2em;
           font-weight: 700;
-          margin: 1em 0 0.5em;
+          margin: 0.6em 0 0.5em;
           color: #f1f5f9;
           border-bottom: 1px solid #334155;
           padding-bottom: 0.3em;
@@ -2048,7 +2052,8 @@ export default function MosaicEditor({
           margin-top: 1.5em;
           margin-bottom: 0.5em;
         }
-        .markdown-preview-container h1 { font-size: 2em; border-bottom: 1px solid #334155; padding-bottom: 0.3em; }
+        .markdown-preview-container > :first-child { margin-top: 0 !important; }
+        .markdown-preview-container h1 { font-size: 2em; border-bottom: 1px solid #334155; padding-bottom: 0.3em; margin-top: 0.6em; }
         .markdown-preview-container h2 { font-size: 1.5em; border-bottom: 1px solid #1e293b; padding-bottom: 0.2em; }
         .markdown-preview-container h3 { font-size: 1.25em; }
         .markdown-preview-container p { margin: 0.75em 0; }

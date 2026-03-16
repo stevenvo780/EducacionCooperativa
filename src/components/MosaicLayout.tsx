@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown } from 'lucide-react';
+import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown, Check } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -76,6 +76,7 @@ interface MosaicLayoutProps {
   onDuplicateDoc?: (doc: DocItem) => void;
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
+  onRenameDocInline?: (doc: DocItem, nextName: string) => Promise<void> | void;
   onDownloadDoc?: (doc: DocItem) => void;
   onDownloadFolder?: (folderPath: string) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
@@ -112,6 +113,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onDuplicateDoc,
   onMoveDoc,
   onRenameDoc,
+  onRenameDocInline,
   onDownloadDoc,
   onDownloadFolder,
   onReorderDocs,
@@ -129,6 +131,9 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const [dragOverInfo, setDragOverInfo] = useState<{ tileId: string; position: 'left' | 'right' | 'top' | 'bottom' | 'replace' } | null>(null);
   const [dragOverEmpty, setDragOverEmpty] = useState(false);
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
+  const [editingTitleDocId, setEditingTitleDocId] = useState<string | null>(null);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
+  const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
 
@@ -194,6 +199,35 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     };
     return refObj as React.MutableRefObject<{ next: () => void; prev: () => void } | null>;
   }, []);
+
+  const startInlineRename = useCallback((doc: DocItem) => {
+    if (!onRenameDocInline) return;
+    setEditingTitleDocId(doc.id);
+    setEditingTitleValue(doc.name || '');
+  }, [onRenameDocInline]);
+
+  const cancelInlineRename = useCallback(() => {
+    setEditingTitleDocId(null);
+    setEditingTitleValue('');
+  }, []);
+
+  const submitInlineRename = useCallback(async (doc: DocItem) => {
+    if (!onRenameDocInline) return;
+    const trimmed = editingTitleValue.trim();
+    if (!trimmed || trimmed === doc.name) {
+      cancelInlineRename();
+      return;
+    }
+
+    setRenamingDocId(doc.id);
+    try {
+      await onRenameDocInline(doc, trimmed);
+      setEditingTitleDocId(null);
+      setEditingTitleValue('');
+    } finally {
+      setRenamingDocId(null);
+    }
+  }, [cancelInlineRename, editingTitleValue, onRenameDocInline]);
 
   const renderToolbarControls = useCallback((doc: { id: string; type?: string; name: string }, mode: ViewMode) => {
     const isTextDoc = doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && !isSpreadsheetDoc(doc);
@@ -262,6 +296,96 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       </div>
     );
   }, [onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
+
+  const renderWindowToolbar = useCallback((doc: DocItem, mode: ViewMode) => {
+    const canRenameInline = Boolean(onRenameDocInline) && doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board';
+    const isEditingTitle = editingTitleDocId === doc.id;
+    const isRenaming = renamingDocId === doc.id;
+
+    return (
+      <div className="flex h-full w-full min-w-0 items-center justify-between gap-2 px-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {isEditingTitle ? (
+            <div
+              className="flex min-w-0 flex-1 items-center gap-1"
+              onMouseDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="text"
+                value={editingTitleValue}
+                onChange={(e) => setEditingTitleValue(e.target.value)}
+                onBlur={() => {
+                  void submitInlineRename(doc);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void submitInlineRename(doc);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelInlineRename();
+                  }
+                }}
+                autoFocus
+                className="h-5 min-w-0 flex-1 rounded border border-sky-500/50 bg-surface-950 px-2 text-xs text-surface-100 outline-none focus:border-sky-400"
+                aria-label="Renombrar archivo"
+              />
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={() => {
+                  void submitInlineRename(doc);
+                }}
+                disabled={isRenaming}
+                className="inline-flex h-5 w-5 items-center justify-center rounded text-emerald-300 transition hover:bg-emerald-500/10 disabled:cursor-wait disabled:opacity-60"
+                title="Guardar nombre"
+              >
+                <Check className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={cancelInlineRename}
+                disabled={isRenaming}
+                className="inline-flex h-5 w-5 items-center justify-center rounded text-surface-400 transition hover:bg-surface-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                title="Cancelar"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                startInlineRename(doc);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (canRenameInline) startInlineRename(doc);
+              }}
+              disabled={!canRenameInline}
+              className={`mosaic-inline-title group flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] ${canRenameInline ? 'text-surface-300 hover:bg-surface-800/80 hover:text-white' : 'cursor-default text-surface-300'}`}
+              title={canRenameInline ? 'Click para renombrar' : doc.name}
+            >
+              <span className="truncate">{doc.name}</span>
+              {canRenameInline && <Pencil className="h-3 w-3 shrink-0 text-surface-500 opacity-0 transition group-hover:opacity-100" />}
+            </button>
+          )}
+        </div>
+        <span className="h-4 w-px shrink-0 bg-surface-600/80" />
+        <div className="shrink-0 pl-1">{renderToolbarControls(doc, mode)}</div>
+      </div>
+    );
+  }, [cancelInlineRename, editingTitleDocId, editingTitleValue, onRenameDocInline, renderToolbarControls, renamingDocId, startInlineRename, submitInlineRename]);
 
   const calcDropPosition = useCallback((e: React.DragEvent<HTMLDivElement>): 'left' | 'right' | 'top' | 'bottom' | 'replace' => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -342,6 +466,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             title={doc.name}
             className="bg-surface-900 mosaic-window-compact"
             toolbarControls={renderToolbarControls(doc, mode)}
+          renderToolbar={() => renderWindowToolbar(doc, mode)}
         >
             <div
                 className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
@@ -425,11 +550,11 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    tabById, docById, docModes, nexusUrl, renderToolbarControls, docSearchTerms, dragOverInfo, isDraggingDoc,
+    tabById, docById, docModes, nexusUrl, renderToolbarControls, renderWindowToolbar, docSearchTerms, dragOverInfo, isDraggingDoc,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
     onSelectDoc, onActivateTab, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     handleTileDragOver, handleTileDragLeave, handleTileDrop,
-    onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, onDownloadFolder,
+    onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onRenameDocInline, onDownloadDoc, onDownloadFolder,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
     handleSearchStateChange, getSearchNavRef
@@ -471,6 +596,9 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         .mosaic-window-compact .mosaic-window-title {
           font-size: 11px !important;
           color: rgb(180 180 190) !important;
+        }
+        .mosaic-window-compact .mosaic-inline-title:disabled {
+          opacity: 1;
         }
       `}</style>
     </>
