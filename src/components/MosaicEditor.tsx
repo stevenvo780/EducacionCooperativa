@@ -1679,24 +1679,243 @@ export default function MosaicEditor({
           color: #ffffff !important;
         }
 
-        /* Table editor controls */
-        .mdx-editor-dark [class*="_tableEditor"],
+        /* ─── Table editor controls: professional slim toolbars ─── */
+
+        /* The table wrapper itself */
+        .mdx-editor-dark [class*="_tableEditor"] {
+          border: 1px solid #334155 !important;
+          border-radius: 6px !important;
+          overflow: hidden !important;
+          position: relative !important;
+        }
+
+        /* ── Tool cells (row/column controls): make them very slim ── */
         .mdx-editor-dark [class*="_toolCell"] {
+          background: #1e293b !important;
+          padding: 0 !important;
+          transition: background 0.15s ease !important;
+        }
+
+        /* Top row tool cells (column menus) - slim bar */
+        .mdx-editor-dark table thead:first-child tr:first-child [class*="_toolCell"],
+        .mdx-editor-dark table [class*="_toolCell"]:has(button[title="Column menu"]),
+        .mdx-editor-dark table [class*="_toolCell"]:has(button[aria-label="Column menu"]) {
+          height: 4px !important;
+          max-height: 4px !important;
+          min-height: 0 !important;
+          line-height: 0 !important;
+          font-size: 0 !important;
+        }
+
+        /* Left column tool cells (row menus) - slim column */
+        .mdx-editor-dark table [class*="_toolCell"]:has(button[title="Row menu"]),
+        .mdx-editor-dark table [class*="_toolCell"]:has(button[aria-label="Row menu"]) {
+          width: 20px !important;
+          min-width: 20px !important;
+          max-width: 20px !important;
+        }
+
+        /* ── All buttons inside tool cells: hidden by default, shown on hover ── */
+        .mdx-editor-dark [class*="_toolCell"] button {
+          opacity: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          min-width: 0 !important;
+          min-height: 0 !important;
+          border: none !important;
+          background: transparent !important;
+          color: #64748b !important;
+          cursor: pointer !important;
+          transition: opacity 0.15s ease, background 0.15s ease !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"] button svg,
+        .mdx-editor-dark [class*="_toolCell"] button img {
+          width: 10px !important;
+          height: 10px !important;
+        }
+
+        /* Show buttons on hover of the tool cell or the whole row */
+        .mdx-editor-dark [class*="_toolCell"]:hover button,
+        .mdx-editor-dark table tr:hover [class*="_toolCell"] button {
+          opacity: 1 !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"]:hover {
+          background: #334155 !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"] button:hover {
+          background: rgba(59, 130, 246, 0.15) !important;
+          color: #60a5fa !important;
+        }
+
+        /* ── Top-left corner cell (empty): subtle indicator ── */
+        .mdx-editor-dark table thead:first-child tr:first-child th:first-child,
+        .mdx-editor-dark table tr:first-child td:first-child[class*="_toolCell"]:not(:has(button)) {
+          width: 20px !important;
+          min-width: 20px !important;
+          max-width: 20px !important;
+          height: 4px !important;
+          max-height: 4px !important;
+          padding: 0 !important;
           background: #1e293b !important;
         }
 
+        /* ── Delete table button (top-right corner) ── */
+        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]),
+        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) {
+          width: 20px !important;
+          min-width: 20px !important;
+          max-width: 20px !important;
+          height: 4px !important;
+          max-height: 4px !important;
+          padding: 0 !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]):hover,
+        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]):hover {
+          background: rgba(239, 68, 68, 0.15) !important;
+        }
+
+        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]) button:hover,
+        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) button:hover {
+          color: #ef4444 !important;
+          background: rgba(239, 68, 68, 0.2) !important;
+        }
+
+        /* ── Add row / add column buttons: slim + styled ── */
         .mdx-editor-dark [class*="_addRowButton"],
-        .mdx-editor-dark [class*="_addColumnButton"],
-        .mdx-editor-dark [class*="_iconButton"] {
-          background: #334155 !important;
-          color: #94a3b8 !important;
+        .mdx-editor-dark [class*="_addColumnButton"] {
+          background: transparent !important;
+          border: 1px dashed #334155 !important;
+          color: #475569 !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          cursor: pointer !important;
+          transition: all 0.15s ease !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 0 !important;
+        }
+
+        .mdx-editor-dark [class*="_addRowButton"] {
+          height: 18px !important;
+          min-height: 18px !important;
+          max-height: 18px !important;
+        }
+
+        .mdx-editor-dark [class*="_addColumnButton"] {
+          width: 18px !important;
+          min-width: 18px !important;
+          max-width: 18px !important;
+        }
+
+        .mdx-editor-dark [class*="_addRowButton"] svg,
+        .mdx-editor-dark [class*="_addColumnButton"] svg,
+        .mdx-editor-dark [class*="_addRowButton"] img,
+        .mdx-editor-dark [class*="_addColumnButton"] img {
+          width: 10px !important;
+          height: 10px !important;
+          opacity: 0.5 !important;
+          transition: opacity 0.15s ease !important;
         }
 
         .mdx-editor-dark [class*="_addRowButton"]:hover,
-        .mdx-editor-dark [class*="_addColumnButton"]:hover,
+        .mdx-editor-dark [class*="_addColumnButton"]:hover {
+          background: rgba(59, 130, 246, 0.1) !important;
+          border-color: #3b82f6 !important;
+          color: #60a5fa !important;
+        }
+
+        .mdx-editor-dark [class*="_addRowButton"]:hover svg,
+        .mdx-editor-dark [class*="_addColumnButton"]:hover svg,
+        .mdx-editor-dark [class*="_addRowButton"]:hover img,
+        .mdx-editor-dark [class*="_addColumnButton"]:hover img {
+          opacity: 1 !important;
+        }
+
+        /* ── Bottom row tool cells (add row area): slim ── */
+        .mdx-editor-dark table tbody:last-child tr:last-child [class*="_toolCell"],
+        .mdx-editor-dark table tfoot tr [class*="_toolCell"] {
+          height: 18px !important;
+          max-height: 18px !important;
+          min-height: 0 !important;
+          padding: 0 !important;
+        }
+
+        /* ── Right column tool cells (add column): slim ── */
+        .mdx-editor-dark table tr th:last-child[class*="_toolCell"],
+        .mdx-editor-dark table tr td:last-child[class*="_toolCell"] {
+          width: 18px !important;
+          min-width: 18px !important;
+          max-width: 18px !important;
+          padding: 0 !important;
+        }
+
+        /* General icon button within table */
+        .mdx-editor-dark [class*="_iconButton"] {
+          background: transparent !important;
+          color: #64748b !important;
+          padding: 2px !important;
+          border-radius: 3px !important;
+          transition: all 0.15s ease !important;
+        }
+
         .mdx-editor-dark [class*="_iconButton"]:hover {
-          background: #475569 !important;
-          color: #e2e8f0 !important;
+          background: rgba(59, 130, 246, 0.15) !important;
+          color: #60a5fa !important;
+        }
+
+        /* ── First thead rowgroup: contains top tool row → compact ── */
+        .mdx-editor-dark table > thead:first-of-type,
+        .mdx-editor-dark table > colgroup + thead {
+          line-height: 0 !important;
+        }
+
+        .mdx-editor-dark table > thead:first-of-type th,
+        .mdx-editor-dark table > thead:first-of-type td {
+          padding: 0 !important;
+          height: 4px !important;
+          max-height: 4px !important;
+          min-height: 0 !important;
+          overflow: hidden !important;
+          line-height: 0 !important;
+          font-size: 0 !important;
+          border: none !important;
+          border-bottom: 1px solid #1e293b !important;
+        }
+
+        /* But NOT the actual header row with data */
+        .mdx-editor-dark table > thead:first-of-type + thead th,
+        .mdx-editor-dark table > thead:nth-of-type(2) th {
+          padding: 0.5em 0.75em !important;
+          height: auto !important;
+          max-height: none !important;
+          line-height: normal !important;
+          font-size: inherit !important;
+          overflow: visible !important;
+          border: 1px solid #334155 !important;
+        }
+
+        /* ── Last tfoot/tbody rowgroup: contains bottom tool row → compact ── */
+        .mdx-editor-dark table > tfoot th,
+        .mdx-editor-dark table > tfoot td,
+        .mdx-editor-dark table > tbody:last-of-type:not(:nth-of-type(2)) th,
+        .mdx-editor-dark table > tbody:last-of-type:not(:nth-of-type(2)) td {
+          padding: 0 !important;
+          height: 18px !important;
+          max-height: 18px !important;
+          min-height: 0 !important;
+          overflow: hidden !important;
+          border: none !important;
+          border-top: 1px solid #1e293b !important;
         }
 
         /* Placeholder */
