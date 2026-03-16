@@ -1253,6 +1253,26 @@ export default function MosaicEditor({
           min-width: 24px !important;
           min-height: 24px !important;
           height: 24px !important;
+          border: none !important;
+          border-bottom: none !important;
+          box-shadow: none !important;
+          outline: none !important;
+          text-decoration: none !important;
+        }
+        /* Kill any underline/border decoration on toolbar toggle items and their wrappers */
+        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toggleSingleGroup"],
+        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toggleSingleGroupButton"],
+        .mdx-editor-dark [class*="_toolbarRoot"] [data-state],
+        .mdx-editor-dark [class*="_toolbarRoot"] [data-orientation],
+        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toolbarToggle"],
+        .mdx-editor-dark [class*="_toolbarRoot"] > *,
+        .mdx-editor-dark [class*="_toolbarRoot"] > * > *,
+        .mdx-editor-dark [class*="_toolbarRoot"] > * > * > * {
+          border: none !important;
+          border-bottom: none !important;
+          box-shadow: none !important;
+          text-decoration: none !important;
+          outline: none !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"] svg {
           width: 14px !important;
@@ -1265,12 +1285,13 @@ export default function MosaicEditor({
         }
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_separator"],
         .mdx-editor-dark [class*="_toolbarRoot"] [role="separator"] {
-          height: 0 !important;
-          margin: 0 !important;
-          width: 0 !important;
+          height: 16px !important;
+          margin: 0 3px !important;
+          width: 1px !important;
           border: none !important;
-          background: transparent !important;
-          display: none !important;
+          background: #334155 !important;
+          display: inline-block !important;
+          flex-shrink: 0 !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toggleGroupRoot"],
         .mdx-editor-dark [class*="_toolbarRoot"] [role="group"] {
@@ -1343,17 +1364,6 @@ export default function MosaicEditor({
           color: #cbd5e1 !important;
           fill: currentColor !important;
           stroke: currentColor !important;
-        }
-
-        /* Separator colors */
-        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_separator"],
-        .mdx-editor-dark [class*="_toolbarRoot"] [role="separator"] {
-          background: #334155 !important;
-        }
-        /* Toggle group compact */
-        .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toggleGroupRoot"],
-        .mdx-editor-dark [class*="_toolbarRoot"] [role="group"] {
-          gap: 0 !important;
         }
 
         /* Table grid picker portal – standalone styling */
