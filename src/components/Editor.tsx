@@ -1,11 +1,6 @@
 'use client';
 import React from 'react';
-import dynamic from 'next/dynamic';
-
-const MosaicEditor = dynamic(() => import('./MosaicEditor'), {
-  ssr: false,
-  loading: () => <div className="h-full w-full flex items-center justify-center text-surface-400">Loading editor...</div>
-});
+import MosaicEditor from './MosaicEditor';
 
 export type ViewMode = 'edit' | 'split' | 'preview';
 

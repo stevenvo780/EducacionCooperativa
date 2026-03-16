@@ -4,9 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
-
-const DynamicEditor = dynamic(() => import('@/components/Editor'), { ssr: false });
+import Editor from '@/components/Editor';
 
 export default function EditorPage({ params }: { params: { id: string } }) {
   const { user, loading } = useAuth();
@@ -26,10 +24,10 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-950">
-      <DynamicEditor
+      <Editor
         roomId={roomId}
         initialContent="# Cargando..."
-        embedded={false}
+        embedded={frameMode}
         forceInline
         onClose={frameMode ? undefined : () => router.push('/dashboard')}
       />
