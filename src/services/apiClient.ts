@@ -1,11 +1,41 @@
 import { auth as getAuth } from '@/lib/firebase';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+
+const waitForAuthUser = async (timeoutMs = 3000): Promise<User | null> => {
+  const firebaseAuth = getAuth();
+
+  if (firebaseAuth.currentUser) {
+    return firebaseAuth.currentUser;
+  }
+
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => {
+      unsubscribe();
+      resolve(firebaseAuth.currentUser);
+    }, timeoutMs);
+
+    const unsubscribe = onAuthStateChanged(
+      firebaseAuth,
+      (user) => {
+        window.clearTimeout(timeout);
+        unsubscribe();
+        resolve(user);
+      },
+      () => {
+        window.clearTimeout(timeout);
+        unsubscribe();
+        resolve(firebaseAuth.currentUser);
+      }
+    );
+  });
+};
 
 export const getAuthToken = async () => {
   if (typeof window === 'undefined') return null;
 
   try {
     const firebaseAuth = getAuth();
-    const user = firebaseAuth.currentUser;
+    const user = firebaseAuth.currentUser ?? await waitForAuthUser();
     if (user?.getIdToken) {
       return await user.getIdToken();
     }

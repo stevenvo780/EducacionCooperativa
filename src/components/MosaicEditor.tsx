@@ -414,34 +414,32 @@ export default function MosaicEditor({
       frontmatterPlugin()
     ];
 
-    if (!embedded) {
-      plugins.push(
-        toolbarPlugin({
-          toolbarContents: () => (
-            <>
-              <UndoRedo />
-              <Separator />
-              <BoldItalicUnderlineToggles />
-              <CodeToggle />
-              <Separator />
-              <BlockTypeSelect />
-              <Separator />
-              <ListsToggle />
-              <Separator />
-              <CreateLink />
-              <InsertImage />
-              <Separator />
-              <InsertTable />
-              <InsertThematicBreak />
-              <InsertCodeBlock />
-            </>
-          )
-        })
-      );
-    }
+    plugins.push(
+      toolbarPlugin({
+        toolbarContents: () => (
+          <>
+            <UndoRedo />
+            <Separator />
+            <BoldItalicUnderlineToggles />
+            <CodeToggle />
+            <Separator />
+            <BlockTypeSelect />
+            <Separator />
+            <ListsToggle />
+            <Separator />
+            <CreateLink />
+            <InsertImage />
+            <Separator />
+            <InsertTable />
+            <InsertThematicBreak />
+            <InsertCodeBlock />
+          </>
+        )
+      })
+    );
 
     return plugins;
-  }, [embedded]);
+  }, []);
 
   const handleMdxChange = useCallback((md: string) => {
     // Skip if this is MDXEditor's initial markdown normalization
@@ -631,21 +629,34 @@ export default function MosaicEditor({
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] button,
-        .mdx-editor-dark [class*="_toolbarRoot"] [role="button"] {
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="button"],
+        .mdx-editor-dark [class*="_toolbarRoot"] button *,
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="button"] *,
+        .mdx-editor-dark [class*="_toolbarRoot"] span,
+        .mdx-editor-dark [class*="_toolbarRoot"] label,
+        .mdx-editor-dark [class*="_toolbarRoot"] svg {
           color: #94a3b8 !important;
+          fill: currentColor !important;
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] button:hover,
-        .mdx-editor-dark [class*="_toolbarRoot"] [role="button"]:hover {
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="button"]:hover,
+        .mdx-editor-dark [class*="_toolbarRoot"] button:hover *,
+        .mdx-editor-dark [class*="_toolbarRoot"] [role="button"]:hover * {
           background: #334155 !important;
           color: #e2e8f0 !important;
+          fill: currentColor !important;
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] button[data-state="on"],
         .mdx-editor-dark [class*="_toolbarRoot"] [data-active="true"],
-        .mdx-editor-dark [class*="_toolbarRoot"] [aria-pressed="true"] {
+        .mdx-editor-dark [class*="_toolbarRoot"] [aria-pressed="true"],
+        .mdx-editor-dark [class*="_toolbarRoot"] button[data-state="on"] *,
+        .mdx-editor-dark [class*="_toolbarRoot"] [data-active="true"] *,
+        .mdx-editor-dark [class*="_toolbarRoot"] [aria-pressed="true"] * {
           background: #3b82f6 !important;
           color: #ffffff !important;
+          fill: currentColor !important;
         }
 
         /* Select/dropdown in toolbar */
@@ -657,9 +668,27 @@ export default function MosaicEditor({
           border-color: #334155 !important;
         }
 
+        .mdx-editor-dark [class*="_selectTrigger"] *,
+        .mdx-editor-dark [class*="_selectContent"] *,
+        .mdx-editor-dark [class*="_selectItem"] *,
+        .mdx-editor-dark [data-radix-popper-content-wrapper] *,
+        .mdx-editor-dark [role="listbox"] *,
+        .mdx-editor-dark [role="option"] * {
+          color: #e2e8f0 !important;
+          fill: currentColor !important;
+        }
+
         .mdx-editor-dark [class*="_selectItem"]:hover,
         .mdx-editor-dark [class*="_selectItem"][data-highlighted] {
           background: #334155 !important;
+        }
+
+        .mdx-editor-dark [class*="_selectTrigger"] svg,
+        .mdx-editor-dark [class*="_toolbarRoot"] svg,
+        .mdx-editor-dark [data-radix-popper-content-wrapper] svg {
+          color: #cbd5e1 !important;
+          fill: currentColor !important;
+          stroke: currentColor !important;
         }
 
         /* Separator */
