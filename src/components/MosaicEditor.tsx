@@ -827,35 +827,35 @@ export default function MosaicEditor({
     return (
       <>
         {/* ── Custom controls ── */}
-        <div className="relative shrink-0" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+        <div className="relative shrink-0" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <button
             type="button"
             onClick={() => setShowCompactMenu(c => !c)}
-            className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-600 bg-slate-700/60 text-slate-300 transition hover:bg-slate-600 hover:text-white"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
             title="Más opciones"
           >
-            <MoreHorizontal className="h-3 w-3" />
+            <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setViewMode(v => v === 'preview' ? 'edit' : 'preview')}
             className={clsx(
-              'inline-flex h-6 w-6 items-center justify-center rounded border transition',
+              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
               viewMode === 'preview'
-                ? 'border-blue-500 bg-blue-600/30 text-blue-300 hover:bg-blue-600/40'
-                : 'border-slate-600 bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white'
+                ? 'bg-blue-600/25 text-blue-300 hover:bg-blue-600/35'
+                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
             )}
             title={viewMode === 'preview' ? 'Volver a editar' : 'Vista previa (LaTeX, Mermaid)'}
           >
-            {viewMode === 'preview' ? <PenLine className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            {viewMode === 'preview' ? <PenLine className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
           <button
             type="button"
             onClick={() => void toggleFullscreen()}
-            className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-600 bg-slate-700/60 text-slate-300 transition hover:bg-slate-600 hover:text-white"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
             title={isFullscreen ? 'Restaurar' : 'Maximizar'}
           >
-            {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
         </div>
         {showCompactMenu && ReactDOM.createPortal(
@@ -895,8 +895,6 @@ export default function MosaicEditor({
           </div>,
           document.body
         )}
-
-        <Separator />
 
         {/* ── MDXEditor toolbar groups ── */}
         {sections}
@@ -1267,10 +1265,12 @@ export default function MosaicEditor({
         }
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_separator"],
         .mdx-editor-dark [class*="_toolbarRoot"] [role="separator"] {
-          height: 16px !important;
-          margin: 0 1px !important;
-          width: 1px !important;
-          background: #334155 !important;
+          height: 0 !important;
+          margin: 0 !important;
+          width: 0 !important;
+          border: none !important;
+          background: transparent !important;
+          display: none !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_toggleGroupRoot"],
         .mdx-editor-dark [class*="_toolbarRoot"] [role="group"] {
@@ -1691,32 +1691,32 @@ export default function MosaicEditor({
 
         /* ── Tool cells (row/column controls): slim ── */
         .mdx-editor-dark [class*="_toolCell"] {
-          background: #1a2332 !important;
+          background: #151e2d !important;
           padding: 0 !important;
           transition: background 0.15s ease !important;
         }
 
-        /* Top row tool cells (column menus) - slim bar */
+        /* Top row tool cells (column menus) - thin bar */
         .mdx-editor-dark table thead:first-child tr:first-child [class*="_toolCell"],
         .mdx-editor-dark table [class*="_toolCell"]:has(button[title="Column menu"]),
         .mdx-editor-dark table [class*="_toolCell"]:has(button[aria-label="Column menu"]) {
-          height: 22px !important;
-          max-height: 22px !important;
-          min-height: 22px !important;
-          line-height: 22px !important;
+          height: 18px !important;
+          max-height: 18px !important;
+          min-height: 18px !important;
+          line-height: 18px !important;
         }
 
         /* Left column tool cells (row menus) - slim column */
         .mdx-editor-dark table [class*="_toolCell"]:has(button[title="Row menu"]),
         .mdx-editor-dark table [class*="_toolCell"]:has(button[aria-label="Row menu"]) {
-          width: 22px !important;
-          min-width: 22px !important;
-          max-width: 22px !important;
+          width: 18px !important;
+          min-width: 18px !important;
+          max-width: 18px !important;
         }
 
-        /* ── All buttons inside tool cells: always visible but subtle ── */
+        /* ── All buttons inside tool cells: always visible, good contrast ── */
         .mdx-editor-dark [class*="_toolCell"] button {
-          opacity: 0.35 !important;
+          opacity: 0.5 !important;
           width: 100% !important;
           height: 100% !important;
           padding: 0 !important;
@@ -1725,7 +1725,7 @@ export default function MosaicEditor({
           min-height: 0 !important;
           border: none !important;
           background: transparent !important;
-          color: #64748b !important;
+          color: #94a3b8 !important;
           cursor: pointer !important;
           transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease !important;
           display: flex !important;
@@ -1733,54 +1733,57 @@ export default function MosaicEditor({
           justify-content: center !important;
         }
 
+        /* 3-dot icons: small, round hover */
         .mdx-editor-dark [class*="_toolCell"] button svg,
         .mdx-editor-dark [class*="_toolCell"] button img {
-          width: 11px !important;
-          height: 11px !important;
+          width: 12px !important;
+          height: 12px !important;
+        }
+
+        /* Circular hover effect on tool cell buttons */
+        .mdx-editor-dark [class*="_toolCell"] button:hover {
+          opacity: 1 !important;
+          background: rgba(148, 163, 184, 0.15) !important;
+          border-radius: 50% !important;
+          color: #e2e8f0 !important;
         }
 
         /* Brighten buttons on hover of the tool cell or the whole row */
         .mdx-editor-dark [class*="_toolCell"]:hover button,
         .mdx-editor-dark table tr:hover [class*="_toolCell"] button {
-          opacity: 0.8 !important;
+          opacity: 0.75 !important;
         }
 
         .mdx-editor-dark [class*="_toolCell"]:hover {
-          background: #263040 !important;
-        }
-
-        .mdx-editor-dark [class*="_toolCell"] button:hover {
-          opacity: 1 !important;
-          background: rgba(59, 130, 246, 0.12) !important;
-          color: #60a5fa !important;
+          background: #1c2a3a !important;
         }
 
         /* ── Top-left corner cell: subtle ── */
         .mdx-editor-dark table thead:first-child tr:first-child th:first-child,
         .mdx-editor-dark table tr:first-child td:first-child[class*="_toolCell"]:not(:has(button)) {
-          width: 22px !important;
-          min-width: 22px !important;
-          max-width: 22px !important;
-          height: 22px !important;
-          max-height: 22px !important;
+          width: 18px !important;
+          min-width: 18px !important;
+          max-width: 18px !important;
+          height: 18px !important;
+          max-height: 18px !important;
           padding: 0 !important;
-          background: #1a2332 !important;
+          background: #151e2d !important;
         }
 
-        /* ── Delete table button (top-right corner): smaller ── */
+        /* ── Delete table button (top-right corner): same width as add-column ── */
         .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]),
         .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) {
           width: 18px !important;
           min-width: 18px !important;
           max-width: 18px !important;
-          height: 22px !important;
-          max-height: 22px !important;
+          height: 18px !important;
+          max-height: 18px !important;
           padding: 0 !important;
         }
 
         .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]) button,
         .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) button {
-          opacity: 0.2 !important;
+          opacity: 0.25 !important;
           color: #94a3b8 !important;
         }
 
@@ -1790,13 +1793,7 @@ export default function MosaicEditor({
           height: 9px !important;
         }
 
-        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]):hover,
-        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]):hover {
-          background: rgba(239, 68, 68, 0.1) !important;
-        }
-
-        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]):hover button,
-        .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]):hover button {
+        .mdx-editor-dark [class*="_toolCell"]:has(button[title="Delete table"]):hover button {
           opacity: 0.7 !important;
           color: #f87171 !important;
         }
@@ -1805,7 +1802,8 @@ export default function MosaicEditor({
         .mdx-editor-dark [class*="_toolCell"]:has(button[aria-label="Delete table"]) button:hover {
           opacity: 1 !important;
           color: #ef4444 !important;
-          background: rgba(239, 68, 68, 0.15) !important;
+          background: rgba(239, 68, 68, 0.12) !important;
+          border-radius: 50% !important;
         }
 
         /* ── Add row / add column buttons: slim + styled ── */
@@ -1883,13 +1881,13 @@ export default function MosaicEditor({
           background: transparent !important;
           color: #64748b !important;
           padding: 2px !important;
-          border-radius: 3px !important;
+          border-radius: 50% !important;
           transition: all 0.15s ease !important;
         }
 
         .mdx-editor-dark [class*="_iconButton"]:hover {
-          background: rgba(59, 130, 246, 0.12) !important;
-          color: #60a5fa !important;
+          background: rgba(148, 163, 184, 0.15) !important;
+          color: #e2e8f0 !important;
         }
 
         /* ── First thead rowgroup: contains top tool row → compact ── */
@@ -1901,11 +1899,11 @@ export default function MosaicEditor({
         .mdx-editor-dark table > thead:first-of-type th,
         .mdx-editor-dark table > thead:first-of-type td {
           padding: 0 !important;
-          height: 22px !important;
-          max-height: 22px !important;
-          min-height: 22px !important;
+          height: 18px !important;
+          max-height: 18px !important;
+          min-height: 18px !important;
           overflow: hidden !important;
-          line-height: 22px !important;
+          line-height: 18px !important;
           font-size: 0 !important;
           border: none !important;
           border-bottom: 1px solid #1e293b !important;
