@@ -39,7 +39,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Eye, PenLine } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Eye, PenLine, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
@@ -169,7 +169,10 @@ class DiagramErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <div className="mermaid-error">
-          <div className="mermaid-error-label">⚠ Error al renderizar diagrama</div>
+          <div className="mermaid-error-label">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span>Error al renderizar diagrama</span>
+          </div>
           <pre className="mermaid-error-source">{this.props.fallback}</pre>
         </div>
       );
@@ -1168,7 +1171,7 @@ export default function MosaicEditor({
             plugins={editorPlugins}
             contentEditableClassName="mdx-content-editable"
             className="mdx-editor-root h-full"
-            placeholder="Escribe aquí... Usa Markdown como en Obsidian ✨"
+            placeholder="Escribe aquí... Usa Markdown como en Obsidian"
           />
         )}
       </div>
@@ -1229,21 +1232,44 @@ export default function MosaicEditor({
         }
 
         /* Toolbar styling – compact single-line */
+        .mdx-editor-dark toolbar,
+        .mdx-editor-dark [role="toolbar"],
         .mdx-editor-dark [class*="_toolbar"] {
           background: #1e293b !important;
           border-bottom: 1px solid #334155 !important;
           padding: 2px 4px !important;
           min-height: 0 !important;
-          overflow: visible !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+          justify-content: flex-start !important;
+        }
+
+        .mdx-editor-dark toolbar::-webkit-scrollbar,
+        .mdx-editor-dark [role="toolbar"]::-webkit-scrollbar,
+        .mdx-editor-dark [class*="_toolbar"]::-webkit-scrollbar {
+          display: none !important;
         }
 
         /* Force all toolbar wrappers to single-line no-wrap */
         .mdx-editor-dark [class*="_toolbarRoot"] {
-          overflow: visible !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+          justify-content: flex-start !important;
+        }
+        .mdx-editor-dark [class*="_toolbarRoot"]::-webkit-scrollbar {
+          display: none !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"] > div {
           flex-wrap: nowrap !important;
           align-items: center !important;
+          width: max-content !important;
+          min-width: max-content !important;
         }
 
         /* Compact toolbar buttons */
@@ -2125,6 +2151,9 @@ export default function MosaicEditor({
         }
         .mermaid-error-label {
           color: #ef4444;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
           font-weight: 600;
           font-size: 13px;
           margin-bottom: 8px;
