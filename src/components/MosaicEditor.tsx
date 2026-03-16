@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   MDXEditor,
+  AdmonitionDirectiveDescriptor,
   headingsPlugin,
   listsPlugin,
   quotePlugin,
@@ -14,18 +15,23 @@ import {
   imagePlugin,
   codeBlockPlugin,
   codeMirrorPlugin,
+  directivesPlugin,
   frontmatterPlugin,
   toolbarPlugin,
   BoldItalicUnderlineToggles,
   BlockTypeSelect,
   CodeToggle,
   CreateLink,
+  HighlightToggle,
+  InsertAdmonition,
+  InsertFrontmatter,
   InsertImage,
   InsertTable,
   InsertThematicBreak,
   ListsToggle,
   Separator,
   InsertCodeBlock,
+  StrikeThroughSupSubToggles,
   UndoRedo,
   type MDXEditorMethods
 } from '@mdxeditor/editor';
@@ -33,7 +39,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import { authFetch, getAuthToken } from '@/services/apiClient';
@@ -68,6 +74,78 @@ const isVideoMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('vi
 const isAudioMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('audio/');
 const isPdfMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/pdf';
 
+type ToolbarGroupKey = 'history' | 'inline' | 'structure' | 'lists' | 'media' | 'insert' | 'advanced';
+
+type ToolbarVisibility = Record<ToolbarGroupKey, boolean>;
+
+type QuickInsert = {
+  id: string;
+  title: string;
+  description: string;
+  markdown: string;
+};
+
+const TOOLBAR_VISIBILITY_STORAGE_KEY = 'agora.editor.toolbar.visibility.v1';
+
+const DEFAULT_TOOLBAR_VISIBILITY: ToolbarVisibility = {
+  history: true,
+  inline: true,
+  structure: true,
+  lists: true,
+  media: true,
+  insert: true,
+  advanced: true
+};
+
+const TOOLBAR_GROUP_LABELS: Record<ToolbarGroupKey, string> = {
+  history: 'Historial',
+  inline: 'Formato',
+  structure: 'Bloques',
+  lists: 'Listas',
+  media: 'Links y media',
+  insert: 'Inserciones',
+  advanced: 'Avanzadas'
+};
+
+const QUICK_INSERTS: QuickInsert[] = [
+  {
+    id: 'latex-inline',
+    title: 'LaTeX inline',
+    description: 'Inserta una fórmula inline con KaTeX.',
+    markdown: '$E = mc^2$'
+  },
+  {
+    id: 'latex-block',
+    title: 'Bloque LaTeX',
+    description: 'Inserta un bloque matemático multilínea.',
+    markdown: '$$\n\\int_{a}^{b} f(x) \\, dx = F(b) - F(a)\n$$\n'
+  },
+  {
+    id: 'mermaid',
+    title: 'Diagrama Mermaid',
+    description: 'Inserta una plantilla de diagrama/flujo.',
+    markdown: '```mermaid\ngraph TD\n  Inicio[Inicio] --> Idea[Idea]\n  Idea --> Revision[Revisión]\n  Revision --> Publicacion[Publicación]\n```\n'
+  },
+  {
+    id: 'admonition',
+    title: 'Admonición',
+    description: 'Añade una nota resaltada tipo callout.',
+    markdown: ':::note[Nota importante]\nEscribe aquí la observación clave.\n:::\n'
+  },
+  {
+    id: 'frontmatter',
+    title: 'Frontmatter',
+    description: 'Inserta metadatos YAML al inicio del documento.',
+    markdown: '---\ntitle: Documento\ntags:\n  - clase\n  - apunte\n---\n\n'
+  },
+  {
+    id: 'checklist',
+    title: 'Checklist',
+    description: 'Crea una lista de tareas lista para editar.',
+    markdown: '- [ ] Primer pendiente\n- [ ] Segundo pendiente\n- [ ] Tercer pendiente\n'
+  }
+];
+
 export default function MosaicEditor({
   initialContent = '',
   roomId,
@@ -89,6 +167,8 @@ export default function MosaicEditor({
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
+  const [showToolsPanel, setShowToolsPanel] = useState(!embedded);
+  const [toolbarVisibility, setToolbarVisibility] = useState<ToolbarVisibility>(DEFAULT_TOOLBAR_VISIBILITY);
 
   // Search state
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
@@ -103,18 +183,47 @@ export default function MosaicEditor({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
   const contentRef = useRef(initialContent);
+  const lastSyncedContentRef = useRef(initialContent);
   const pendingLocalChangeRef = useRef(false);
+  const hasLocalEditsThisSessionRef = useRef(false);
   const lastRawKeyRef = useRef<string | null>(null);
   const rawLoadInFlightRef = useRef(false);
   const mdxEditorRef = useRef<MDXEditorMethods>(null);
   const isNormalizingRef = useRef(false);
+  const saveRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const rawValue = window.localStorage.getItem(TOOLBAR_VISIBILITY_STORAGE_KEY);
+      if (!rawValue) return;
+      const parsed = JSON.parse(rawValue) as Partial<ToolbarVisibility>;
+      setToolbarVisibility({ ...DEFAULT_TOOLBAR_VISIBILITY, ...parsed });
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(TOOLBAR_VISIBILITY_STORAGE_KEY, JSON.stringify(toolbarVisibility));
+    } catch {
+    }
+  }, [toolbarVisibility]);
 
   /** Helper: update the editor content (remount with new key) */
   const setEditorContent = useCallback((md: string) => {
     contentRef.current = md;
+    lastSyncedContentRef.current = md;
+    pendingLocalChangeRef.current = false;
+    hasLocalEditsThisSessionRef.current = false;
     setInitialMarkdown(md);
     setStatsContent(md);
     setEditorKey(k => k + 1); // force MDXEditor remount with new markdown
+  }, []);
+
+  const hasUnsavedLocalChanges = useCallback(() => {
+    return pendingLocalChangeRef.current || contentRef.current !== lastSyncedContentRef.current;
   }, []);
 
   const resetDocState = useCallback(() => {
@@ -147,7 +256,9 @@ export default function MosaicEditor({
 
   const applyDocData = useCallback((data: any) => {
     if (!data) {
-      resetDocState();
+      if (!hasUnsavedLocalChanges()) {
+        resetDocState();
+      }
       return;
     }
 
@@ -179,12 +290,26 @@ export default function MosaicEditor({
     const incoming = typeof data.content === 'string' ? data.content : null;
     if (incoming !== null) {
       const same = incoming === contentRef.current;
-      const skipOwn = pendingLocalChangeRef.current && data.lastUpdatedBy === user?.uid && !same;
-      if (!same && !skipOwn) {
+      const isOutOfOrderOwnSnapshot = hasLocalEditsThisSessionRef.current
+        && data.lastUpdatedBy === user?.uid
+        && incoming !== contentRef.current;
+
+      if (isOutOfOrderOwnSnapshot) {
+        return;
+      }
+
+      const hasUnsavedChanges = hasUnsavedLocalChanges();
+      if (!same && hasUnsavedChanges) {
+        return;
+      }
+
+      if (!same) {
         // Use setMarkdown if editor is mounted (avoids full remount),
         // fall back to remount via setEditorContent
         if (mdxEditorRef.current) {
           contentRef.current = incoming;
+          lastSyncedContentRef.current = incoming;
+          pendingLocalChangeRef.current = false;
           setStatsContent(incoming);
           mdxEditorRef.current.setMarkdown(incoming);
         } else {
@@ -194,9 +319,11 @@ export default function MosaicEditor({
     } else if (type === 'file' && (url || storagePath)) {
       const rawKey = storagePath || url;
       maybeLoadRawContent(rawKey);
-    } else if (!pendingLocalChangeRef.current) {
+    } else if (!hasUnsavedLocalChanges()) {
       if (mdxEditorRef.current) {
         contentRef.current = '';
+        lastSyncedContentRef.current = '';
+        pendingLocalChangeRef.current = false;
         setStatsContent('');
         mdxEditorRef.current.setMarkdown('');
       } else {
@@ -205,14 +332,16 @@ export default function MosaicEditor({
     }
 
     hasLoadedRef.current = true;
-  }, [maybeLoadRawContent, resetDocState, setEditorContent, user?.uid]);
+  }, [hasUnsavedLocalChanges, maybeLoadRawContent, resetDocState, setEditorContent, user?.uid]);
 
   const loadDoc = useCallback(async () => {
     if (!roomId) return;
     try {
       const res = await authFetch(`/api/documents/${roomId}`, { cache: 'no-store' });
       if (!res.ok) {
-        resetDocState();
+        if (!hasUnsavedLocalChanges()) {
+          resetDocState();
+        }
         return;
       }
       const data = await res.json();
@@ -220,12 +349,13 @@ export default function MosaicEditor({
     } catch (e) {
       console.error('Error loading document:', e);
     }
-  }, [roomId, applyDocData, resetDocState]);
+  }, [roomId, applyDocData, hasUnsavedLocalChanges, resetDocState]);
 
   useEffect(() => {
     if (!roomId) return;
     hasLoadedRef.current = false;
     pendingLocalChangeRef.current = false;
+    hasLocalEditsThisSessionRef.current = false;
     lastRawKeyRef.current = null;
     loadDoc();
   }, [roomId, loadDoc]);
@@ -306,11 +436,23 @@ export default function MosaicEditor({
     if (!roomId || docType === 'file') return;
     if (!hasLoadedRef.current) return;
 
-    pendingLocalChangeRef.current = true;
-    setSaving(true);
+    const hasUnsavedChanges = val !== lastSyncedContentRef.current;
+    if (hasUnsavedChanges) {
+      hasLocalEditsThisSessionRef.current = true;
+    }
+    pendingLocalChangeRef.current = hasUnsavedChanges;
+
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
+    if (!hasUnsavedChanges) {
+      setSaving(false);
+      return;
+    }
+
+    setSaving(true);
+
     saveTimeoutRef.current = setTimeout(async () => {
+      const requestId = ++saveRequestIdRef.current;
       try {
         const res = await authFetch(`/api/documents/${roomId}`, {
           method: 'PUT',
@@ -324,11 +466,23 @@ export default function MosaicEditor({
         if (!res.ok) {
           throw new Error('Failed to save');
         }
+
+        if (requestId === saveRequestIdRef.current && contentRef.current === val) {
+          lastSyncedContentRef.current = val;
+          pendingLocalChangeRef.current = false;
+          setSaving(false);
+        } else {
+          pendingLocalChangeRef.current = contentRef.current !== lastSyncedContentRef.current;
+          setSaving(pendingLocalChangeRef.current);
+        }
       } catch (e) {
         console.error('Error saving:', e);
       } finally {
-        pendingLocalChangeRef.current = false;
-        setSaving(false);
+        if (requestId === saveRequestIdRef.current) {
+          const stillUnsaved = contentRef.current !== lastSyncedContentRef.current;
+          pendingLocalChangeRef.current = stillUnsaved;
+          setSaving(stillUnsaved);
+        }
       }
     }, 700);
   }, [roomId, user?.uid, docType]);
@@ -372,6 +526,72 @@ export default function MosaicEditor({
     return { words, chars: statsContent.length };
   }, [statsContent]);
 
+  const enabledToolbarGroupsCount = useMemo(
+    () => Object.values(toolbarVisibility).filter(Boolean).length,
+    [toolbarVisibility]
+  );
+
+  const toggleToolbarGroup = useCallback((group: ToolbarGroupKey) => {
+    setToolbarVisibility((current) => ({
+      ...current,
+      [group]: !current[group]
+    }));
+  }, []);
+
+  const insertSnippet = useCallback((snippet: string) => {
+    const editor = mdxEditorRef.current;
+    if (!editor) return;
+    editor.focus(() => {
+      editor.insertMarkdown(snippet);
+    }, { defaultSelection: 'rootEnd', preventScroll: false });
+    handleContentChange(editor.getMarkdown());
+  }, [handleContentChange]);
+
+  const renderToolbarContents = useCallback(() => {
+    const sections: React.ReactNode[] = [];
+
+    const pushSection = (key: ToolbarGroupKey, content: React.ReactNode) => {
+      if (!toolbarVisibility[key]) return;
+      if (sections.length > 0) {
+        sections.push(<Separator key={`separator-${key}`} />);
+      }
+      sections.push(<React.Fragment key={key}>{content}</React.Fragment>);
+    };
+
+    pushSection('history', <UndoRedo />);
+    pushSection('inline', (
+      <>
+        <BoldItalicUnderlineToggles />
+        <CodeToggle />
+        <HighlightToggle />
+        <StrikeThroughSupSubToggles options={['Strikethrough', 'Sub', 'Sup']} />
+      </>
+    ));
+    pushSection('structure', <BlockTypeSelect />);
+    pushSection('lists', <ListsToggle />);
+    pushSection('media', (
+      <>
+        <CreateLink />
+        <InsertImage />
+      </>
+    ));
+    pushSection('insert', (
+      <>
+        <InsertTable />
+        <InsertThematicBreak />
+        <InsertCodeBlock />
+      </>
+    ));
+    pushSection('advanced', (
+      <>
+        <InsertAdmonition />
+        <InsertFrontmatter />
+      </>
+    ));
+
+    return <>{sections}</>;
+  }, [toolbarVisibility]);
+
   // MDXEditor plugins configuration
   const editorPlugins = useMemo(() => {
     const plugins = [
@@ -411,35 +631,20 @@ export default function MosaicEditor({
           '': 'Texto plano'
         }
       }),
+      directivesPlugin({
+        directiveDescriptors: [AdmonitionDirectiveDescriptor]
+      }),
       frontmatterPlugin()
     ];
 
     plugins.push(
       toolbarPlugin({
-        toolbarContents: () => (
-          <>
-            <UndoRedo />
-            <Separator />
-            <BoldItalicUnderlineToggles />
-            <CodeToggle />
-            <Separator />
-            <BlockTypeSelect />
-            <Separator />
-            <ListsToggle />
-            <Separator />
-            <CreateLink />
-            <InsertImage />
-            <Separator />
-            <InsertTable />
-            <InsertThematicBreak />
-            <InsertCodeBlock />
-          </>
-        )
+        toolbarContents: renderToolbarContents
       })
     );
 
     return plugins;
-  }, []);
+  }, [renderToolbarContents]);
 
   const handleMdxChange = useCallback((md: string) => {
     // Skip if this is MDXEditor's initial markdown normalization
@@ -553,6 +758,109 @@ export default function MosaicEditor({
           </div>
         </div>
       )}
+
+      <div className="shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {embedded && (
+              <span className="max-w-[180px] truncate text-xs font-medium text-slate-400" title={docName}>
+                {docName || 'Documento'}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowToolsPanel((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-600 hover:bg-slate-700"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Herramientas
+            </button>
+            <span className="text-[11px] text-slate-500">
+              {enabledToolbarGroupsCount}/7 grupos visibles
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {QUICK_INSERTS.slice(0, embedded ? 2 : 4).map((snippet) => (
+              <button
+                key={snippet.id}
+                type="button"
+                onClick={() => insertSnippet(snippet.markdown)}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:border-blue-500/50 hover:bg-slate-700 hover:text-white"
+                title={snippet.description}
+              >
+                <Sparkles className="h-3 w-3" />
+                {snippet.title}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {showToolsPanel && (
+          <div className="border-t border-slate-800 px-3 py-3">
+            <div className="grid gap-4 lg:grid-cols-[1.1fr_1.4fr]">
+              <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Panel de visibilidad</h3>
+                  <button
+                    type="button"
+                    onClick={() => setToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY)}
+                    className="text-[11px] text-slate-500 transition hover:text-slate-300"
+                  >
+                    Restaurar
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(TOOLBAR_GROUP_LABELS) as ToolbarGroupKey[]).map((group) => {
+                    const active = toolbarVisibility[group];
+                    return (
+                      <button
+                        key={group}
+                        type="button"
+                        onClick={() => toggleToolbarGroup(group)}
+                        className={clsx(
+                          'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                          active
+                            ? 'border-blue-500/50 bg-blue-500/15 text-blue-200'
+                            : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                        )}
+                      >
+                        {TOOLBAR_GROUP_LABELS[group]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                  Elige exactamente qué grupos aparecen en la barra principal: formato, bloques, listas, multimedia, inserciones y extras avanzados.
+                </p>
+              </section>
+
+              <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Biblioteca rápida</h3>
+                  <span className="text-[11px] text-slate-500">LaTeX, Mermaid, admoniciones y más</span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {QUICK_INSERTS.map((snippet) => (
+                    <button
+                      key={snippet.id}
+                      type="button"
+                      onClick={() => insertSnippet(snippet.markdown)}
+                      className="rounded-lg border border-slate-800 bg-slate-900/80 p-3 text-left transition hover:border-blue-500/40 hover:bg-slate-900"
+                    >
+                      <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-200">
+                        <Sparkles className="h-3.5 w-3.5 text-blue-300" />
+                        {snippet.title}
+                      </div>
+                      <p className="text-[11px] leading-5 text-slate-500">{snippet.description}</p>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 relative overflow-hidden">
         <MDXEditor
