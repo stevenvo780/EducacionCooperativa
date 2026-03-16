@@ -2270,6 +2270,7 @@ function DashboardContent() {
                                     onDuplicateDoc={copyDocument}
                                     onMoveDoc={moveDocumentToFolder}
                                     onRenameDoc={promptRenameDocument}
+                                    onRenameDocInline={renameDocument}
                                     onDownloadDoc={handleDownloadDoc}
                                     onDownloadFolder={handleDownloadFolder}
                                     onReorderDocs={reorderDocsInFolder}
