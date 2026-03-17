@@ -51,7 +51,7 @@ Puntos relevantes:
 2. Abrir menu contextual solo cuando haya seleccion valida.
 3. Crear acciones semanticas, no de formato.
 4. Conectar esas acciones con:
-   - `.md.st`
+   - bloques `st`
    - favoritos
    - tablero
    - referencias internas
@@ -60,7 +60,7 @@ Puntos relevantes:
 
 - definir como concepto
 - relacionar con concepto existente
-- crear entrada semantica nueva
+- crear bloque `st` nuevo
 - enviar a tarea operativa
 - marcar como evidencia
 - fijar fragmento
@@ -119,9 +119,8 @@ Y engancharlo en `MosaicEditor.tsx` cerca del shell del editor.
 
 - captura estable de seleccion: 2 a 3 dias
 - menu y acciones base: 2 a 4 dias
-- conexion con `.md.st` y tablero: 3 a 5 dias
+- conexion con `ST` y tablero: 3 a 5 dias
 
 ## Criterio de exito
 
 La idea funciona si seleccionar texto ya no es solo el paso previo a copiar, sino el inicio de una operacion academica util.
-

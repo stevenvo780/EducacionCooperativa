@@ -30,13 +30,13 @@ Para humanidades eso se queda corto.
 
 Esta idea depende de `IDEA_01_LENGUAJE_MD_ST.md`.
 
-Sin el motor semantico, la busqueda solo podria ser:
+Sin `ST` y su indice compilado, la busqueda solo podria ser:
 
 - full text
 - por nombre
 - por snippets de texto
 
-Con el motor semantico puede ser mucho mejor.
+Con `ST` y un indice semantico de conceptos, claims, pasajes y debates puede ser mucho mejor.
 
 ## Integracion con el codigo actual
 
@@ -164,7 +164,7 @@ Y luego cambiar:
 - V1 de UI: 2 a 3 dias
 - Afinar ranking: 3 a 5 dias
 
-Bloqueada hasta tener al menos una V1 del motor `.md.st`.
+Bloqueada hasta tener al menos una V1 de bloques `st`, anchors estables e indice semantico.
 
 ## Criterio de exito
 
@@ -183,4 +183,3 @@ y obtener:
 - relaciones utiles
 
 sin saber donde estaba guardado exactamente.
-
