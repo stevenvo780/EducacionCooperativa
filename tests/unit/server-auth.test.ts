@@ -78,6 +78,9 @@ describe('server auth helpers', () => {
 
   it('returns null when auth token is missing or invalid', async () => {
     await expect(requireAuth(new Request('https://app.test') as never)).resolves.toBeNull();
+    await expect(requireAuth(new Request('https://app.test', {
+      headers: { authorization: 'Token plain-value' }
+    }) as never)).resolves.toBeNull();
 
     verifyIdTokenMock.mockRejectedValueOnce(new Error('invalid'));
     await expect(requireAuth(new Request('https://app.test', {
@@ -107,6 +110,12 @@ describe('server auth helpers', () => {
       data: () => ({ members: ['u2'] })
     });
     await expect(isWorkspaceMember('ws-1', 'u1')).resolves.toBe(false);
+
+    getMock.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ members: 'u1' })
+    });
+    await expect(isWorkspaceMember('ws-1', 'u1')).resolves.toBe(false);
   });
 
   it('loads roles and detects admins', async () => {
@@ -120,6 +129,12 @@ describe('server auth helpers', () => {
       data: () => ({ role: '  admin ' })
     });
     await expect(getUserRole('u1')).resolves.toBe('admin');
+
+    getMock.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ role: '   ' })
+    });
+    await expect(getUserRole('u1')).resolves.toBeNull();
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     getMock.mockRejectedValueOnce(new Error('db down'));
@@ -141,6 +156,11 @@ describe('server auth helpers', () => {
     getMock.mockResolvedValueOnce({
       exists: true,
       data: () => ({ role: 'viewer' })
+    });
+    await expect(isAdminUser('u1')).resolves.toBe(false);
+
+    getMock.mockResolvedValueOnce({
+      exists: false
     });
     await expect(isAdminUser('u1')).resolves.toBe(false);
   });

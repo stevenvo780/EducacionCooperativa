@@ -37,6 +37,22 @@ describe('api client auth wrappers', () => {
     await expect(apiClient.getAuthToken()).resolves.toBe('token-123');
   });
 
+  it('returns null when the resolved user has no getIdToken method', async () => {
+    let successCallback: ((user: typeof authState.currentUser) => void) | undefined;
+
+    onAuthStateChangedMock.mockImplementation((_: unknown, success: typeof successCallback) => {
+      successCallback = success;
+      return vi.fn();
+    });
+
+    const apiClient = await loadApiClient();
+    const pending = apiClient.getAuthToken();
+    authState.currentUser = { uid: 'u1' };
+    successCallback?.({ uid: 'u1' });
+
+    await expect(pending).resolves.toBeNull();
+  });
+
   it('deduplicates concurrent auth waits and resolves from auth state changes', async () => {
     let successCallback: ((user: typeof authState.currentUser) => void) | undefined;
 

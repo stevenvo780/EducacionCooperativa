@@ -64,6 +64,14 @@ describe('editor semantic store', () => {
       relations: ['bad'],
       updatedAt: 0
     });
+
+    window.localStorage.setItem('editor-semantic:ws-1:u1', '1');
+    expect(loadSemanticWorkspaceState(context)).toEqual({
+      concepts: [],
+      fragments: [],
+      relations: [],
+      updatedAt: 0
+    });
   });
 
   it('creates and updates semantic concepts from selections', () => {
@@ -165,6 +173,22 @@ describe('editor semantic store', () => {
     vi.stubGlobal('crypto', undefined);
     const fallback = pinSelectionFragment(context, { ...payload, text: 'Sin UUID' });
     expect(fallback.fragments[0].id).toMatch(/^fragment-1710000000000-/);
+
+    expect(createSelectionHash({
+      text: '!!!',
+      docId: null,
+      docName: 'Vacío',
+      workspaceId: 'ws-1'
+    })).toBe('sin-doc:fragmento:3');
+
+    const anonSaved = saveSemanticWorkspaceState({ workspaceId: 'ws-1' }, {
+      concepts: [],
+      fragments: [],
+      relations: [],
+      updatedAt: 0
+    });
+    expect(anonSaved.updatedAt).toBe(1_710_000_000_000);
+    expect(window.localStorage.getItem('editor-semantic:ws-1:anon')).not.toBeNull();
   });
 
 });

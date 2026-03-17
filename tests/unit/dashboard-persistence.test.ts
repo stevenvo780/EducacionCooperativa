@@ -81,7 +81,9 @@ describe('dashboard persistence', () => {
       [
         { id: 'doc-1', name: 'Nota', type: 'text' },
         { id: 'board-1', name: 'Kanban', type: 'board' },
-        { id: 'terminal-1', name: 'Term', type: 'terminal', sessionId: 's1' }
+        { id: 'board-2', type: 'board' },
+        { id: 'terminal-1', name: 'Term', type: 'terminal', sessionId: 's1' },
+        { id: 'terminal-2', type: 'terminal' }
       ],
       [{ id: 'doc-1', name: 'Nota real', type: 'text' }] as never[]
     );
@@ -89,7 +91,9 @@ describe('dashboard persistence', () => {
     expect(restored).toEqual([
       { id: 'doc-1', name: 'Nota real', type: 'text' },
       { id: 'board-1', name: 'Kanban', type: 'board' },
-      { id: 'terminal-1', name: 'Term', type: 'terminal', sessionId: 's1' }
+      { id: 'board-2', name: 'Tablero', type: 'board' },
+      { id: 'terminal-1', name: 'Term', type: 'terminal', sessionId: 's1' },
+      { id: 'terminal-2', name: 'Terminal', type: 'terminal', sessionId: undefined }
     ]);
   });
 
@@ -171,6 +175,13 @@ describe('dashboard persistence', () => {
       direction: 'row',
       first: 'doc-1',
       second: 'doc-2',
+      splitPercentage: 50
+    }, openTabIds)).toBe('doc-1');
+
+    expect(validateMosaicNode({
+      direction: 'row',
+      first: 'doc-2',
+      second: 'doc-1',
       splitPercentage: 50
     }, openTabIds)).toBe('doc-1');
   });
