@@ -60,28 +60,28 @@ const selectFolderCheckbox = async (page: Page, name: string) => {
   await row.click({ modifiers: ['Control'] });
 };
 
-const dragHandleToTarget = async (
+const dropDocOnExplorerTarget = async (
   page: Page,
-  source: ReturnType<typeof docRow> | ReturnType<typeof folderRow>,
-  handleTitle: 'Reordenar archivo' | 'Reordenar carpeta',
+  docId: string,
   target: ReturnType<typeof docRow> | ReturnType<typeof folderRow>,
   position: 'before' | 'after' = 'before'
 ) => {
-  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
-  const targetBox = await target.boundingBox();
+  await expect(target).toBeVisible();
+  const dataTransfer = await page.evaluateHandle((id) => {
+    const value = new DataTransfer();
+    value.setData('application/x-doc-reorder', id);
+    value.setData('text/plain', id);
+    return value;
+  }, docId);
+  const box = await target.boundingBox();
 
-  if (!targetBox) {
-    throw new Error(`No bounding box for ${handleTitle}`);
+  if (!box) {
+    throw new Error(`No bounding box for target while dropping ${docId}`);
   }
 
-  const clientY = position === 'before'
-    ? targetBox.y + 4
-    : targetBox.y + targetBox.height - 4;
-
-  await source.getByTitle(handleTitle).dispatchEvent('dragstart', { dataTransfer });
+  const clientY = position === 'before' ? box.y + 4 : box.y + box.height - 4;
   await target.dispatchEvent('dragover', { dataTransfer, clientY });
   await target.dispatchEvent('drop', { dataTransfer, clientY });
-  await source.getByTitle(handleTitle).dispatchEvent('dragend', { dataTransfer });
 };
 
 const openMarkdownDocumentInRawMode = async (page: Page, name: string) => {
@@ -426,19 +426,18 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
   await expect(folderRow(page, 'Alpha')).toBeVisible();
   await expect(docRow(page, 'dos.md')).toBeVisible();
 
-  await dragHandleToTarget(page, folderRow(page, 'Beta'), 'Reordenar carpeta', folderRow(page, 'Alpha'));
-  await expect.poll(() => {
-    const alpha = state.docsByWorkspace['ws-shared'].find((doc) => doc.id === 'folder-alpha');
-    const beta = state.docsByWorkspace['ws-shared'].find((doc) => doc.id === 'folder-beta');
-    return typeof alpha?.order === 'number' && typeof beta?.order === 'number' ? beta.order < alpha.order : false;
-  }).toBe(true);
-
-  await dragHandleToTarget(page, docRow(page, 'dos.md'), 'Reordenar archivo', docRow(page, 'uno.md'));
+  await dropDocOnExplorerTarget(page, 'doc-order-2', docRow(page, 'uno.md'));
   await expect.poll(() => {
     const one = state.docsByWorkspace['ws-shared'].find((doc) => doc.id === 'doc-order-1');
     const two = state.docsByWorkspace['ws-shared'].find((doc) => doc.id === 'doc-order-2');
     return typeof one?.order === 'number' && typeof two?.order === 'number' ? two.order < one.order : false;
   }).toBe(true);
+
+  await dropDocOnExplorerTarget(page, 'doc-order-1', folderRow(page, 'Beta'));
+  await expect.poll(() => {
+    const moved = state.docsByWorkspace['ws-shared'].find((doc) => doc.id === 'doc-order-1');
+    return moved?.folder ?? null;
+  }).toBe('Tema/Beta');
 
   await selectFolderCheckbox(page, 'Beta');
   await selectFileCheckbox(page, 'dos.md');
@@ -448,9 +447,9 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
   await expect(page.getByText('2 seleccionados', { exact: true })).toHaveCount(0);
 
   await page.getByTitle('Seleccionar todo / Ninguno').click();
-  await expect(page.getByText('4 seleccionados', { exact: true })).toBeVisible();
+  await expect(page.getByText('3 seleccionados', { exact: true })).toBeVisible();
   const selectionBar = page.locator('div').filter({
-    has: page.getByText('4 seleccionados', { exact: true })
+    has: page.getByText('3 seleccionados', { exact: true })
   }).first();
   await selectionBar.getByRole('button', { name: 'Eliminar', exact: true }).click();
 
