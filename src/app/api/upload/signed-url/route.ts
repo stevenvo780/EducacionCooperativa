@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
 import { Plan, SubscriptionStatus, formatStorageSize, getStorageLimitMB, type PlanId } from '@/types/subscription';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 export const runtime = 'nodejs';
 
@@ -20,13 +22,24 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { fileName, mimeType, workspaceId = 'personal', folder = 'No estructurado' } = body;
+        const {
+            fileName,
+            mimeType,
+            workspaceId = PERSONAL_WORKSPACE_ID,
+            folder = 'No estructurado'
+        } = body as {
+            fileName?: string;
+            mimeType?: string;
+            workspaceId?: string;
+            folder?: string;
+            fileSize?: number;
+        };
 
         if (!fileName || !mimeType) {
             return NextResponse.json({ error: 'fileName and mimeType required' }, { status: 400 });
         }
 
-        if (workspaceId !== 'personal') {
+        if (!isPersonalWorkspaceId(workspaceId)) {
             const member = await isWorkspaceMember(workspaceId, auth.uid);
             if (!member) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -56,7 +69,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Estimate new file size from Content-Length hint (client should send fileSize)
-        const fileSize = body.fileSize || 0;
+        const fileSize = typeof body.fileSize === 'number' ? body.fileSize : 0;
         if (totalBytes + fileSize > limitBytes) {
             const usedMB = Math.round((totalBytes / (1024 * 1024)) * 100) / 100;
             return NextResponse.json({
@@ -101,8 +114,8 @@ export async function POST(req: NextRequest) {
             ownerId: auth.uid
         });
 
-    } catch (error: any) {
-        console.error('Signed URL Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Signed URL Error:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

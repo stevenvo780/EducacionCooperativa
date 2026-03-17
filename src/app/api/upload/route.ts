@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
+import { DocumentType } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 // Limit uploads to 50 MB and force Node runtime (edge has smaller limits)
 export const runtime = 'nodejs';
@@ -18,21 +21,25 @@ export async function POST(req: NextRequest) {
         }
 
         const formData = await req.formData();
-        const file = formData.get('file') as File;
+        const fileEntry = formData.get('file');
         const ownerId = auth.uid;
-        const workspaceId = (formData.get('workspaceId') as string) || 'personal';
+        const workspaceIdEntry = formData.get('workspaceId');
+        const workspaceId = typeof workspaceIdEntry === 'string' && workspaceIdEntry.trim()
+            ? workspaceIdEntry
+            : PERSONAL_WORKSPACE_ID;
         const folderField = formData.get('folder');
         const folder = normalizeFolderPath(typeof folderField === 'string' ? folderField : undefined);
 
-        if (!file) {
+        if (!(fileEntry instanceof File)) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
         }
+        const file = fileEntry;
 
         if (file.size > MAX_FILE_SIZE) {
             return NextResponse.json({ error: 'El archivo supera el límite de 50MB' }, { status: 413 });
         }
 
-        if (workspaceId !== 'personal') {
+        if (!isPersonalWorkspaceId(workspaceId)) {
             const member = await isWorkspaceMember(workspaceId, auth.uid);
             if (!member) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -87,7 +94,7 @@ export async function POST(req: NextRequest) {
             id: docRef.id,
             url,
             name: file.name,
-            type: 'file',
+            type: DocumentType.File,
             path: filename,
             storagePath: filename,
             mimeType: file.type,
@@ -96,8 +103,8 @@ export async function POST(req: NextRequest) {
             updatedAt: { seconds: Date.now() / 1000 }
         });
 
-    } catch (error: any) {
-        console.error('Upload Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Upload Error:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

@@ -1,18 +1,25 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, buildStoragePrefix, ensureMarkdownFileName, sanitizeFileName, getStorageBaseName } from '@/lib/storage-path';
+import { DocumentType } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 // Throttle Firestore URL updates: max once per 50 minutes per document
 const urlRefreshThrottle = new Map<string, number>();
 const URL_REFRESH_THROTTLE_MS = 50 * 60 * 1000;
+type StoredDocumentRecord = Record<string, unknown>;
 
 const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: string) => {
     const workspaceId = typeof data?.workspaceId === 'string' ? data.workspaceId : null;
-    if (!workspaceId || workspaceId === 'personal') {
+    if (isPersonalWorkspaceId(workspaceId)) {
         return data?.ownerId === uid;
+    }
+    if (!workspaceId) {
+        return false;
     }
     return isWorkspaceMember(workspaceId, uid);
 };
@@ -33,20 +40,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
 
-        const existingData = snap.data();
-        if (!(await canAccessDoc(existingData as Record<string, unknown> | undefined, auth.uid))) {
+        const existingData = snap.data() as StoredDocumentRecord | undefined;
+        if (!(await canAccessDoc(existingData, auth.uid))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
-        const existingWorkspaceId = typeof existingData?.workspaceId === 'string' ? existingData.workspaceId : 'personal';
+        const existingWorkspaceId = typeof existingData?.workspaceId === 'string' ? existingData.workspaceId : PERSONAL_WORKSPACE_ID;
         const existingOwnerId = typeof existingData?.ownerId === 'string' ? existingData.ownerId : auth.uid;
         const existingFolder = typeof existingData?.folder === 'string' ? existingData.folder : undefined;
         const existingStoragePath = typeof existingData?.storagePath === 'string' ? existingData.storagePath : undefined;
-        const isFileDoc = existingData?.type === 'file';
+        const isFileDoc = existingData?.type === DocumentType.File;
 
         const normalizedFolder = typeof body.folder === 'string'
             ? normalizeFolderPath(body.folder)
             : normalizeFolderPath(existingFolder);
-        const nextName = typeof body.name === 'string' ? body.name : (existingData?.name as string | undefined);
+        const existingName = typeof existingData?.name === 'string' ? existingData.name : undefined;
+        const nextName = typeof body.name === 'string' ? body.name : existingName;
         const nextFileName = isFileDoc
             ? sanitizeFileName(nextName || 'archivo')
             : ensureMarkdownFileName(nextName || 'Sin titulo');
@@ -118,7 +126,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
             storagePath = targetStoragePath;
         }
 
-        if (body.content !== undefined && existingData?.type !== 'file') {
+        if (body.content !== undefined && existingData?.type !== DocumentType.File) {
             const bucket = adminStorage.bucket();
             if (bucket.name && storagePath) {
                 try {
@@ -126,8 +134,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                         contentType: 'text/markdown',
                         metadata: { ownerId: existingOwnerId }
                     });
-                } catch (e) {
-                    console.warn('Failed to update storage backing:', e);
+                } catch (error) {
+                    console.warn('Failed to update storage backing:', getErrorMessage(error));
                 }
             }
         }
@@ -136,7 +144,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
             updatedAt: FieldValue.serverTimestamp()
         };
 
-        if (body.content !== undefined && existingData?.type !== 'file') {
+        if (body.content !== undefined && existingData?.type !== DocumentType.File) {
             updateData.content = body.content;
             updateData.lastUpdatedBy = auth.uid;
         }
@@ -161,17 +169,17 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                     });
                     updateData.url = url;
                 }
-            } catch (e) {
-                console.warn('Failed to refresh file URL:', e);
+            } catch (error) {
+                console.warn('Failed to refresh file URL:', getErrorMessage(error));
             }
         }
 
         await docRef.update(updateData);
 
         return NextResponse.json({ status: 'success' });
-    } catch (error: any) {
-        console.error('Error updating document:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error updating document:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }
 
@@ -187,8 +195,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                 id: params.id,
                 name: 'Documento de Prueba.md',
                 content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
-                type: 'text',
-                workspaceId: 'personal',
+                type: DocumentType.Text,
+                workspaceId: PERSONAL_WORKSPACE_ID,
                 folder: 'No estructurado',
                 updatedAt: { seconds: Date.now() / 1000 },
                 createdAt: { seconds: Date.now() / 1000 },
@@ -202,14 +210,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         if (!docSnap.exists) {
              return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
-        const data = docSnap.data() ?? {};
-        if (!(await canAccessDoc(data as Record<string, unknown> | undefined, auth.uid))) {
+        const data = (docSnap.data() ?? {}) as StoredDocumentRecord;
+        if (!(await canAccessDoc(data, auth.uid))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         // Refresh signed URL for file-type documents so viewers never get ExpiredToken errors.
         // Throttle Firestore writes to at most once per 50 min per document.
-        if (data.type === 'file' && typeof data.storagePath === 'string') {
+        if (data.type === DocumentType.File && typeof data.storagePath === 'string') {
             try {
                 const bucket = adminStorage.bucket();
                 if (bucket?.name) {
@@ -224,15 +232,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                         adminDb.collection('documents').doc(id).update({ url: freshUrl }).catch(() => {});
                     }
                 }
-            } catch (e) {
-                console.warn('Failed to refresh signed URL on GET:', e);
+            } catch (error) {
+                console.warn('Failed to refresh signed URL on GET:', getErrorMessage(error));
             }
         }
 
         return NextResponse.json({ id: docSnap.id, ...data });
-    } catch (error: any) {
-        console.error('Error fetching document:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error fetching document:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }
 
@@ -250,11 +258,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
             return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
 
-        const data = snap.data() as any;
-        if (!(await canAccessDoc(data as Record<string, unknown> | undefined, auth.uid))) {
+        const data = snap.data() as StoredDocumentRecord | undefined;
+        if (!(await canAccessDoc(data, auth.uid))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
-        const storagePath = data?.storagePath as string | undefined;
+        const storagePath = typeof data?.storagePath === 'string' ? data.storagePath : undefined;
 
         // Borrar archivo de Storage si existe (tanto para files como para documentos markdown)
         if (storagePath) {
@@ -263,15 +271,15 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
             if (!hasOtherReferences) {
                 const bucket = adminStorage.bucket();
                 if (bucket?.name) {
-                    await bucket.file(storagePath).delete().catch((e) => console.warn('Storage delete failed', e));
+                    await bucket.file(storagePath).delete().catch((error) => console.warn('Storage delete failed', getErrorMessage(error)));
                 }
             }
         }
 
         await docRef.delete();
         return NextResponse.json({ status: 'deleted' });
-    } catch (error: any) {
-        console.error('Error deleting document:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error deleting document:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

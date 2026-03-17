@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
+import { getErrorMessage } from '@/lib/error-utils';
 import { requireAuth, isWorkspaceMember } from '@/lib/server-auth';
 import { bufferToMarkdown, canConvertToMarkdown } from '@/lib/markdownConversion';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
+import { DocumentType } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 export const runtime = 'nodejs';
 
@@ -34,9 +37,9 @@ export async function POST(req: NextRequest) {
     }
 
     const workspaceIdInput = formData.get('workspaceId');
-    const workspaceId = typeof workspaceIdInput === 'string' && workspaceIdInput.trim() ? workspaceIdInput : 'personal';
+    const workspaceId = typeof workspaceIdInput === 'string' && workspaceIdInput.trim() ? workspaceIdInput : PERSONAL_WORKSPACE_ID;
 
-    if (workspaceId !== 'personal') {
+    if (!isPersonalWorkspaceId(workspaceId)) {
       const member = await isWorkspaceMember(workspaceId, auth.uid);
       if (!member) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -90,7 +93,7 @@ export async function POST(req: NextRequest) {
     if (shouldCreate) {
       const docRef = await adminDb.collection('documents').add({
         name: conversion.suggestedName,
-        type: 'text',
+        type: DocumentType.Text,
         content: conversion.markdown,
         mimeType: 'text/markdown',
         ownerId,
@@ -108,7 +111,7 @@ export async function POST(req: NextRequest) {
       createdDoc = {
         id: docRef.id,
         name: conversion.suggestedName,
-        type: 'text',
+        type: DocumentType.Text,
         mimeType: 'text/markdown',
         ownerId,
         workspaceId,
@@ -126,8 +129,8 @@ export async function POST(req: NextRequest) {
       suggestedName: conversion.suggestedName,
       createdDoc
     });
-  } catch (error: any) {
-    console.error('Error al convertir a markdown:', error);
-    return NextResponse.json({ error: error.message ?? 'Error inesperado' }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error al convertir a markdown:', getErrorMessage(error));
+    return NextResponse.json({ error: getErrorMessage(error, 'Error inesperado') }, { status: 500 });
   }
 }

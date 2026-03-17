@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       .get();
 
     if (expiredSnap.empty) {
-      console.log('[Cron] No expired subscriptions found');
+      console.debug('[Cron] No expired subscriptions found');
       return NextResponse.json({
         message: 'No expired subscriptions',
         checked: 0,

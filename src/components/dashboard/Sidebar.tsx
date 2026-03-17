@@ -6,7 +6,6 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, F
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
-import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
 
@@ -480,78 +479,62 @@ const Sidebar = ({
               </span>
             </div>
 
-            <div className="px-2 pb-2">
-              <div className="rounded-xl border border-surface-700/70 bg-surface-900/50 p-2">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-amber-300/90">
-                    <Star className="h-3.5 w-3.5 fill-current" />
-                    <span>Favoritos</span>
-                  </div>
-                  <span className="text-[10px] text-surface-500">{favoriteDocs.length}/{MAX_FAVORITE_DOCS}</span>
-                </div>
+            {favoriteDocs.length > 0 && (
+              <div className="px-2 pb-1.5">
+                <div className="space-y-0.5">
+                  {favoriteDocs.map((doc, index) => {
+                    const isSelected = selectedDocId === doc.id;
 
-                {favoriteDocs.length === 0 ? (
-                  <p className="px-1 py-1 text-[11px] leading-relaxed text-surface-500">
-                    Fija hasta {MAX_FAVORITE_DOCS} documentos para abrirlos aquí en un clic.
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {favoriteDocs.map((doc, index) => {
-                      const isSelected = selectedDocId === doc.id;
-
-                      return (
-                        <div
-                          key={doc.id}
-                          className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition ${
-                            isSelected ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/30' : 'text-surface-200 hover:bg-surface-800/80'
-                          }`}
+                    return (
+                      <div
+                        key={doc.id}
+                        className={`group flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition ${
+                          isSelected ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/30' : 'text-surface-200 hover:bg-surface-800/80'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => openDocument(doc)}
+                          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                          title={doc.name}
                         >
+                          <Star className={`h-3 w-3 shrink-0 fill-current ${isSelected ? 'text-amber-200' : 'text-amber-400/70'}`} />
+                          <span className="truncate">{doc.name}</span>
+                        </button>
+                        <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
                           <button
                             type="button"
-                            onClick={() => openDocument(doc)}
-                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                            title={doc.name}
+                            onClick={() => onMoveFavorite(doc.id, 'up')}
+                            disabled={index === 0}
+                            className="rounded p-0.5 text-surface-500 hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-30"
+                            title="Subir"
                           >
-                            <span className={`shrink-0 ${isSelected ? 'text-amber-200' : 'text-amber-300'}`}>
-                              <Star className="h-3.5 w-3.5 fill-current" />
-                            </span>
-                            <span className="truncate">{doc.name}</span>
+                            <ArrowUp className="h-2.5 w-2.5" />
                           </button>
-                          <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={() => onMoveFavorite(doc.id, 'up')}
-                              disabled={index === 0}
-                              className="rounded p-0.5 text-surface-500 hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-30"
-                              title="Subir favorito"
-                            >
-                              <ArrowUp className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onMoveFavorite(doc.id, 'down')}
-                              disabled={index === favoriteDocs.length - 1}
-                              className="rounded p-0.5 text-surface-500 hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-30"
-                              title="Bajar favorito"
-                            >
-                              <ArrowDown className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onToggleFavorite(doc)}
-                              className="rounded p-0.5 text-amber-300 hover:text-amber-200"
-                              title="Quitar de favoritos"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onMoveFavorite(doc.id, 'down')}
+                            disabled={index === favoriteDocs.length - 1}
+                            className="rounded p-0.5 text-surface-500 hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-30"
+                            title="Bajar"
+                          >
+                            <ArrowDown className="h-2.5 w-2.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onToggleFavorite(doc)}
+                            className="rounded p-0.5 text-surface-400 hover:text-amber-200"
+                            title="Quitar"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="px-2 py-1">
               <div className="relative">
