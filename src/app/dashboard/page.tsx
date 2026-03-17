@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal, type TerminalSession } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Key, Loader2, Minimize2, Shield, Terminal as TerminalIcon, Trash2, Users, X } from 'lucide-react';
+import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Key, Loader2, Minimize2, PanelLeftOpen, Shield, Terminal as TerminalIcon, Trash2, Users, X } from 'lucide-react';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -2100,10 +2100,7 @@ function DashboardContent() {
                     <HeaderBar
                         onToggleMobileSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
                         onClearSelectedDoc={() => setSelectedDocId(null)}
-                        isSidebarCollapsed={isSidebarCollapsed}
-                        isHeaderCollapsed={isHeaderCollapsed}
                         isZenMode={isZenMode}
-                        onToggleSidebarCollapse={handleToggleSidebarCollapse}
                         onToggleHeaderCollapse={handleToggleHeaderCollapse}
                         onToggleZenMode={handleToggleZenMode}
                         showWorkspaceMenu={showWorkspaceMenu}
@@ -2171,6 +2168,19 @@ function DashboardContent() {
                     </div>
                 )}
 
+                {isSidebarCollapsed && !isZenMode && (
+                    <div className="absolute bottom-3 left-2 z-50">
+                        <button
+                            onClick={handleToggleSidebarCollapse}
+                            className="flex items-center justify-center w-8 h-8 bg-surface-800/90 border border-surface-600/60 rounded-full text-surface-300 hover:text-white hover:border-mandy-500/40 hover:bg-surface-700/80 transition shadow-xl shadow-black/30 backdrop-blur"
+                            title="Mostrar panel de archivos"
+                            aria-label="Mostrar panel de archivos"
+                        >
+                            <PanelLeftOpen className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
+
                 {isZenMode && (
                     <div className="absolute bottom-3 right-3 z-50">
                         <button
@@ -2190,6 +2200,7 @@ function DashboardContent() {
                         isCollapsed={isSidebarCollapsed}
                         showMobileSidebar={showMobileSidebar}
                         onCloseMobileSidebar={() => setShowMobileSidebar(false)}
+                        onToggleSidebarCollapse={handleToggleSidebarCollapse}
                         currentWorkspace={currentWorkspace}
                         activeFolder={activeFolder}
                         setActiveFolder={setActiveFolderSafe}
