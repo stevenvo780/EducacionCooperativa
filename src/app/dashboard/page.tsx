@@ -82,6 +82,10 @@ import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
 import { useSubscription } from '@/hooks/dashboard/useSubscription';
 import { useQuickSearch } from '@/hooks/dashboard/useQuickSearch';
 import { useDeleteDocument } from '@/hooks/dashboard/useDeleteDocument';
+import { useTerminalTabs } from '@/hooks/dashboard/useTerminalTabs';
+import { useMosaicTabs } from '@/hooks/dashboard/useMosaicTabs';
+import { useDocumentActions } from '@/hooks/dashboard/useDocumentActions';
+import { useWorkspaceActions } from '@/hooks/dashboard/useWorkspaceActions';
 import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
@@ -682,7 +686,54 @@ function DashboardContent() {
         saveFavoriteDocIds(currentWorkspaceId, user.uid, sanitized);
     }, [currentWorkspaceId, docs, favoriteDocIds, loadingDocs, user?.uid]);
 
-    const openTerminal = async (session?: { id: string; name?: string }) => {
+    const { openTerminal, handleRequestNewTerminal } = useTerminalTabs({
+        currentPlan,
+        setShowPricingModal,
+        openTabs,
+        setOpenTabs,
+        setMosaicNode,
+        setSelectedDocId,
+        setShowMobileSidebar,
+        selectSession,
+        activeSessionId,
+        terminalSessions,
+        user,
+        currentWorkspace,
+        createSession,
+        getSessionsForWorkspace
+    });
+
+    const {
+        openBoard,
+        openStRunner,
+        openFilesTab,
+        closeTabById,
+        openDocument,
+        openDocumentInTile,
+        handleDropDocOnTile,
+        handleDropDocOnEmpty
+    } = useMosaicTabs({
+        currentWorkspace,
+        user,
+        openTabs,
+        setOpenTabs,
+        setMosaicNode,
+        selectedDocId,
+        setSelectedDocId,
+        setShowMobileSidebar,
+        setClosedFilesTabByWorkspace,
+        docs,
+        terminalSessions,
+        clearActiveSession,
+        setActiveFolderSafe
+    });
+
+    openBoardRef.current = openBoard;
+    openDocumentRef.current = openDocument;
+    openDocumentInTileRef.current = openDocumentInTile;
+
+    // NOTE: openTerminal was here
+    const openTerminal_placeholder = async (session?: { id: string; name?: string }) => {
         // Verificar si el plan actual permite terminales
         if (!canAccessTerminals(currentPlan)) {
             setShowPricingModal(true);

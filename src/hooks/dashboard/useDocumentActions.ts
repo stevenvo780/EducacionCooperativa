@@ -26,8 +26,8 @@ interface UseDocumentActionsOptions {
     requestDocsRefresh: (opts?: { force?: boolean }) => Promise<void>;
     showDialog: (config: DialogConfig) => Promise<DialogResult>;
     openDocument: (doc: DocItem) => Promise<void>;
-    docsRef: React.RefObject<DocItem[]>;
-    foldersRef: React.RefObject<FolderItem[]>;
+    docsRef: { current: DocItem[] };
+    foldersRef: { current: FolderItem[] };
     newDocName: string;
     setNewDocName: (name: string) => void;
     setIsCreating: (value: boolean) => void;

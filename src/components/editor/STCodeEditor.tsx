@@ -2,6 +2,15 @@
 
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 
+// ── Tipos de completions ────────────────────────────────────
+
+interface CompletionItem {
+  label: string;
+  kind: string;
+  detail?: string;
+  insertText?: string;
+}
+
 // ── Categorías de tokens para syntax highlighting ───────────
 
 type TokenCategory =
@@ -228,6 +237,14 @@ export default function STCodeEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeLine, setActiveLine] = useState(0);
 
+  // ── Autocomplete state ──
+  const [completions, setCompletions] = useState<CompletionItem[]>([]);
+  const [completionIdx, setCompletionIdx] = useState(0);
+  const [showCompletions, setShowCompletions] = useState(false);
+  const [completionPos, setCompletionPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const completionRef = useRef<HTMLDivElement>(null);
+  const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Highlighted HTML (memoized) ──
   const highlightedHtml = useMemo(() => highlightCode(value), [value]);
 
@@ -261,13 +278,151 @@ export default function STCodeEditor({
     }
   }, []);
 
+  // ── Fetch completions from st-lang ──
+  const fetchCompletions = useCallback(async (code: string, line: number, col: number) => {
+    try {
+      const mod = await import('@stevenvo780/st-lang/api');
+      // The completion function accepts (code, line, col) at runtime
+      const completionFn = (mod as Record<string, unknown>).completion as (code: string, line: number, col: number) => CompletionItem[];
+      const items = completionFn(code, line, col);
+      return items || [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // ── Calculate popup position based on cursor in textarea ──
+  const calcCompletionPos = useCallback(() => {
+    const ta = textareaRef.current;
+    const container = containerRef.current;
+    if (!ta || !container) return { top: 0, left: 0 };
+    const text = ta.value.substring(0, ta.selectionStart);
+    const lines = text.split('\n');
+    const lineNum = lines.length;
+    const colNum = lines[lines.length - 1].length;
+    // Each line is 20px, padding 12px, gutter 44px
+    const top = (lineNum) * 20 + 12 - ta.scrollTop;
+    const left = colNum * 7.8 + 12 + 44 - ta.scrollLeft; // ~7.8px per char at 13px mono
+    return { top: Math.max(0, top), left: Math.max(44, left) };
+  }, []);
+
+  // ── Request completions with debounce ──
+  const requestCompletions = useCallback((code: string) => {
+    if (completionTimerRef.current) clearTimeout(completionTimerRef.current);
+    completionTimerRef.current = setTimeout(async () => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const text = ta.value.substring(0, ta.selectionStart);
+      const lines = text.split('\n');
+      const line = lines.length;
+      const col = lines[lines.length - 1].length;
+
+      // Only trigger if there's a word being typed (at least 1 char on line)
+      const currentLine = lines[lines.length - 1].trimStart();
+      if (currentLine.length === 0) {
+        setShowCompletions(false);
+        return;
+      }
+
+      const items = await fetchCompletions(code, line, col);
+      // Filter by current word prefix
+      const wordMatch = currentLine.match(/(\w+)$/);
+      const prefix = wordMatch ? wordMatch[1].toLowerCase() : '';
+      const filtered = prefix
+        ? items.filter(item => item.label.toLowerCase().startsWith(prefix))
+        : items;
+
+      if (filtered.length > 0) {
+        setCompletions(filtered);
+        setCompletionIdx(0);
+        setCompletionPos(calcCompletionPos());
+        setShowCompletions(true);
+      } else {
+        setShowCompletions(false);
+      }
+    }, 150);
+  }, [fetchCompletions, calcCompletionPos]);
+
+  // ── Accept completion ──
+  const acceptCompletion = useCallback((item: CompletionItem) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const pos = ta.selectionStart;
+    const before = ta.value.substring(0, pos);
+    const after = ta.value.substring(pos);
+
+    // Find the word prefix to replace
+    const wordMatch = before.match(/(\w+)$/);
+    const prefixLen = wordMatch ? wordMatch[1].length : 0;
+    const beforeWord = before.substring(0, before.length - prefixLen);
+
+    // Use insertText if available, strip snippet placeholders
+    const insert = (item.insertText || item.label).replace(/\$\{\d+:([^}]*)}/g, '$1');
+    const newValue = beforeWord + insert + after;
+    onChange(newValue);
+    setShowCompletions(false);
+
+    // Restore cursor position
+    requestAnimationFrame(() => {
+      const newPos = beforeWord.length + insert.length;
+      ta.selectionStart = ta.selectionEnd = newPos;
+      ta.focus();
+    });
+  }, [onChange]);
+
+  // ── Dismiss completions ──
+  const dismissCompletions = useCallback(() => {
+    setShowCompletions(false);
+    setCompletions([]);
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (completionTimerRef.current) clearTimeout(completionTimerRef.current);
+    };
+  }, []);
+
   // ── Handle change ──
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      onChange(e.target.value);
+      const newVal = e.target.value;
+      onChange(newVal);
       updateActiveLine();
+      requestCompletions(newVal);
     },
-    [onChange, updateActiveLine]
+    [onChange, updateActiveLine, requestCompletions]
+  );
+
+  // ── Internal key handler (completions + external) ──
+  const handleInternalKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (showCompletions && completions.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setCompletionIdx(i => (i + 1) % completions.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setCompletionIdx(i => (i - 1 + completions.length) % completions.length);
+          return;
+        }
+        if (e.key === 'Tab' || e.key === 'Enter') {
+          e.preventDefault();
+          acceptCompletion(completions[completionIdx]);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          dismissCompletions();
+          return;
+        }
+      }
+      // Pass to external handler
+      onKeyDown?.(e);
+    },
+    [showCompletions, completions, completionIdx, acceptCompletion, dismissCompletions, onKeyDown]
   );
 
   // ── Handle click/keyup for active line ──
@@ -340,7 +495,7 @@ export default function STCodeEditor({
           ref={textareaRef}
           value={value}
           onChange={handleChange}
-          onKeyDown={onKeyDown}
+          onKeyDown={handleInternalKeyDown}
           onScroll={handleScroll}
           className="st-editor-textarea"
           spellCheck={false}
@@ -355,6 +510,31 @@ export default function STCodeEditor({
         {/* Show placeholder when empty */}
         {!value && (
           <div className="st-editor-placeholder">{placeholder}</div>
+        )}
+
+        {/* ── Autocomplete popup ── */}
+        {showCompletions && completions.length > 0 && (
+          <div
+            ref={completionRef}
+            className="st-autocomplete-popup"
+            style={{ top: completionPos.top, left: completionPos.left }}
+          >
+            {completions.map((item, i) => (
+              <button
+                key={`${item.label}-${i}`}
+                className={`st-autocomplete-item ${i === completionIdx ? 'st-autocomplete-active' : ''}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  acceptCompletion(item);
+                }}
+                onMouseEnter={() => setCompletionIdx(i)}
+              >
+                <span className={`st-autocomplete-kind st-ac-${item.kind}`}>{item.kind === 'keyword' ? 'K' : item.kind === 'snippet' ? 'S' : 'V'}</span>
+                <span className="st-autocomplete-label">{item.label}</span>
+                {item.detail && <span className="st-autocomplete-detail">{item.detail}</span>}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>

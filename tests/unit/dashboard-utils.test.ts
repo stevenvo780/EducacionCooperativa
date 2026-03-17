@@ -26,6 +26,7 @@ describe('dashboard data helpers', () => {
     expect(getUpdatedAtValue('not-a-date')).toBe(0);
     expect(getUpdatedAtValue({ seconds: 3 })).toBe(3000);
     expect(getUpdatedAtValue({ toDate: () => date })).toBe(date.getTime());
+    expect(getUpdatedAtValue({} as never)).toBe(0);
     expect(getUpdatedAtValue({ toDate: () => 'bad' as unknown as Date })).toBe(0);
   });
 
@@ -67,6 +68,28 @@ describe('dashboard data helpers', () => {
     expect(areDocsEquivalent(docs as never[], [{ ...docs[0], ownerId: 'u2' }] as never[])).toBe(false);
     expect(areDocsEquivalent(docs as never[], [{ ...docs[0], size: 99 }] as never[])).toBe(false);
     expect(areDocsEquivalent(docs as never[], [{ ...docs[0], updatedAt: 999 }] as never[])).toBe(false);
+    expect(areDocsEquivalent(
+      [{
+        id: '2',
+        name: 'Vacio',
+        type: 'text',
+        updatedAt: undefined
+      }] as never[],
+      [{
+        id: '2',
+        name: 'Vacio',
+        type: 'text',
+        folder: '',
+        mimeType: '',
+        url: '',
+        storagePath: '',
+        workspaceId: '',
+        ownerId: '',
+        size: 0,
+        order: null,
+        updatedAt: undefined
+      }] as never[]
+    )).toBe(true);
 
     const folders = [{
       id: 'f1',
@@ -87,6 +110,24 @@ describe('dashboard data helpers', () => {
     expect(areFoldersEquivalent(folders as never[], [{ ...folders[0], kind: 'doc' }] as never[])).toBe(false);
     expect(areFoldersEquivalent(folders as never[], [{ ...folders[0], docId: 'd2' }] as never[])).toBe(false);
     expect(areFoldersEquivalent(folders as never[], [{ ...folders[0], order: 2 }] as never[])).toBe(false);
+    expect(areFoldersEquivalent(
+      [{
+        id: 'f2',
+        name: 'Sin doc',
+        path: 'Sin doc',
+        parentPath: '',
+        kind: 'folder'
+      }] as never[],
+      [{
+        id: 'f2',
+        name: 'Sin doc',
+        path: 'Sin doc',
+        parentPath: '',
+        kind: 'folder',
+        docId: '',
+        order: null
+      }] as never[]
+    )).toBe(true);
   });
 
   it('normalizes workspace payloads', () => {
@@ -135,6 +176,7 @@ describe('dashboard data helpers', () => {
     const txtFile = new File(['txt'], 'archivo.txt', { type: '' });
     const unsupportedFile = new File(['bin'], 'archivo.exe', { type: 'application/octet-stream' });
 
+    expect(isMarkdownName(undefined)).toBe(false);
     expect(isMarkdownName('nota.markdown')).toBe(true);
     expect(isMarkdownName('nota.txt')).toBe(false);
     expect(isMarkdownFile(markdownByMime)).toBe(true);
@@ -146,6 +188,7 @@ describe('dashboard data helpers', () => {
     expect(isMarkdownConvertibleFile(textFile)).toBe(true);
     expect(isMarkdownConvertibleFile(logFile)).toBe(true);
     expect(isMarkdownConvertibleFile(txtFile)).toBe(true);
+    expect(isMarkdownConvertibleFile({ name: '', type: '' } as File)).toBe(false);
     expect(isMarkdownConvertibleFile(unsupportedFile)).toBe(false);
 
     const markdownDoc = { name: 'nota.md', mimeType: 'text/plain' };
@@ -165,6 +208,7 @@ describe('dashboard data helpers', () => {
     expect(getDocBadge(boardDoc as never)).toBe('TAB');
     expect(getDocBadge({ type: 'file', ...markdownDoc } as never)).toBe('MD');
     expect(getDocBadge(binaryDoc as never)).toBe('POWE');
+    expect(getDocBadge({ type: 'file', name: 'foto.png', mimeType: '' } as never)).toBe('PNG');
     expect(getDocBadge({ type: 'file', name: 'archivo', mimeType: '' } as never)).toBe('FILE');
     expect(getDocBadge(plainDoc as never)).toBe('DOC');
     expect(getDocBadge({ name: 'otro.md' } as never)).toBe('MD');

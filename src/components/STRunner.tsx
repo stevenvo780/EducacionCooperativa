@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Play, RotateCcw, Trash2, ChevronDown, Zap, BookOpen, Terminal, AlertTriangle, List, Info } from 'lucide-react';
+import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
@@ -27,63 +27,7 @@ check valid ((P -> Q) -> (!Q -> !P))
 truth_table (P & Q)
 `;
 
-const EXAMPLES: { label: string; code: string }[] = [
-  {
-    label: 'Modus Ponens',
-    code: `logic classical.propositional
-axiom a1 : P -> Q
-axiom a2 : P
-derive Q from {a1, a2}`
-  },
-  {
-    label: 'Tabla de verdad',
-    code: `logic classical.propositional
-truth_table (P -> Q)`
-  },
-  {
-    label: 'Contramodelo',
-    code: `logic classical.propositional
-countermodel (P -> Q)`
-  },
-  {
-    label: 'Equivalencia lógica',
-    code: `logic classical.propositional
-check equivalent (P -> Q), (! P | Q)`
-  },
-  {
-    label: 'Derivación encadenada',
-    code: `logic classical.propositional
-axiom a1 : P -> Q
-axiom a2 : Q -> R
-axiom a3 : P
-derive R from {a1, a2, a3}`
-  },
-  {
-    label: 'De Morgan',
-    code: `logic classical.propositional
-check equivalent (!(P & Q)), (!P | !Q)
-check equivalent (!(P | Q)), (!P & !Q)`
-  },
-  {
-    label: 'Prueba desde teoría',
-    code: `logic classical.propositional
-axiom a1 : P -> Q
-axiom a2 : Q -> R
-axiom a3 : P
-prove R`
-  },
-  {
-    label: 'Capa textual',
-    code: `logic classical.propositional
-let p1 = passage [[doc.md#section1]]
-let f1 = formalize p1 as (P -> Q)
-claim c1 : P -> Q
-support c1 <- f1
-confidence c1 = 0.9
-context c1 = "Análisis del documento"
-render claims`
-  }
-];
+
 
 // ── Subcomponentes ──────────────────────────────────────────
 
@@ -291,7 +235,6 @@ export default function STRunner({
   const [mode, setMode] = useState<STRunnerMode>(initialMode);
   const [code, setCode] = useState(initialCode || DEFAULT_SCRIPT);
   const [replInput, setReplInput] = useState('');
-  const [showExamples, setShowExamples] = useState(false);
   const replInputRef = useRef<HTMLInputElement>(null);
   const [replHistory, setReplHistory] = useState<string[]>([]);
   const [replHistoryIdx, setReplHistoryIdx] = useState(-1);
@@ -389,12 +332,6 @@ export default function STRunner({
     [handleRun]
   );
 
-  // ── Cargar ejemplo ──
-  const loadExample = useCallback((exCode: string) => {
-    setCode(exCode);
-    setShowExamples(false);
-  }, []);
-
   // ── Resumen de teoría (sidebar info) ──
   const theoryInfo = useMemo(() => {
     if (!theorySummary) return null;
@@ -458,30 +395,6 @@ export default function STRunner({
         </div>
 
         <div className="flex-1" />
-
-        {/* Examples dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowExamples(!showExamples)}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-white rounded hover:bg-slate-800"
-          >
-            Ejemplos
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showExamples && (
-            <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 w-52">
-              {EXAMPLES.map((ex, i) => (
-                <button
-                  key={i}
-                  onClick={() => loadExample(ex.code)}
-                  className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white first:rounded-t-lg last:rounded-b-lg"
-                >
-                  {ex.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Actions */}
         {mode === 'script' && (

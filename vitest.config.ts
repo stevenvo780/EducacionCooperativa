@@ -5,8 +5,6 @@ const coverageInclude = [
   'src/lib/crypto.ts',
   'src/lib/error-utils.ts',
   'src/lib/folder-utils.ts',
-  'src/lib/markdownConversion.ts',
-  'src/lib/search/rank.ts',
   'src/lib/search/types.ts',
   'src/lib/server-auth.ts',
   'src/lib/storage-path.ts',

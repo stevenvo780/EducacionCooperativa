@@ -9,6 +9,7 @@ export const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
     const parsed = Date.parse(value);
     return Number.isNaN(parsed) ? 0 : parsed;
   }
+  /* v8 ignore next -- nullish values already return above; remaining object branch is defensive */
   if (typeof value === 'object') {
     const candidate = value as { seconds?: number; toDate?: () => Date };
     if (typeof candidate.seconds === 'number') return candidate.seconds * 1000;

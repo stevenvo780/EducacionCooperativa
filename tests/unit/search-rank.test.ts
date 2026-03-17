@@ -53,13 +53,23 @@ Otra línea con #Memoria y #Archivo para reforzar conceptos.
 describe('semantic search ranking', () => {
   it('returns recent documents for empty queries with pagination clamping', () => {
     const result = buildSemanticSearchResults({
-      docs,
+      docs: [
+        ...docs,
+        {
+          id: 'doc-5',
+          name: 'Objeto vacio',
+          folder: 'Extra',
+          mimeType: 'text/plain',
+          updatedAt: {},
+          content: ''
+        }
+      ],
       query: '   ',
       limit: 0,
       offset: 1
     });
 
-    expect(result.totalCandidates).toBe(4);
+    expect(result.totalCandidates).toBe(5);
     expect(result.offset).toBe(1);
     expect(result.hasMore).toBe(true);
     expect(result.results).toHaveLength(1);

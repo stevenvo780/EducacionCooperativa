@@ -27,6 +27,8 @@ const baseState = {
 
 describe('dashboard persistence', () => {
   it('saves, loads and clears dashboard state', () => {
+    expect(loadDashboardState('ws-missing')).toBeNull();
+
     saveDashboardState('ws-1', baseState);
 
     const raw = window.localStorage.getItem('dashboard_state_ws-1');
@@ -98,6 +100,8 @@ describe('dashboard persistence', () => {
   });
 
   it('stores and loads favorite docs safely', () => {
+    expect(loadFavoriteDocIds('ws-missing', 'u1')).toEqual([]);
+
     saveFavoriteDocIds(
       'ws-1',
       'u1',
