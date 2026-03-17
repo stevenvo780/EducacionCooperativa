@@ -65,10 +65,12 @@ import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
 import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
+import { useMarkdownLinter } from '@/hooks/useMarkdownLinter';
 import { normalizePath } from '@/lib/folder-utils';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
+import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import {
   attachLinkedDocumentToSelection,
   getRecentSemanticItems,
@@ -146,6 +148,9 @@ export default function MosaicEditor({
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [rawScrollPos, setRawScrollPos] = useState({ top: 0, left: 0 });
+
+  const { diagnostics: markdownDiagnostics } = useMarkdownLinter(statsContent);
 
   const toggleCompactMenu = useCallback(() => {
     if (!showCompactMenu && menuBtnRef.current) {
@@ -1666,13 +1671,29 @@ export default function MosaicEditor({
                 </button>
                 <span className="text-[11px] text-slate-500">Markdown puro — aquí ves y editas el texto exacto del documento</span>
               </div>
-              <textarea
-                value={statsContent}
-                onChange={(event) => handleContentChange(event.target.value)}
-                spellCheck={false}
-                className="markdown-raw-textarea h-full w-full resize-none border-0 bg-slate-950/95 px-5 py-4 font-mono text-[13px] leading-6 text-slate-100 outline-none"
-                placeholder="# Markdown puro\n\nEscribe aquí el contenido exacto del documento..."
-              />
+              <div className="flex-1 relative overflow-hidden">
+                <textarea
+                  value={statsContent}
+                  onChange={(event) => handleContentChange(event.target.value)}
+                  onScroll={(e) => {
+                    const target = e.currentTarget;
+                    setRawScrollPos({ top: target.scrollTop, left: target.scrollLeft });
+                  }}
+                  spellCheck={false}
+                  className="markdown-raw-textarea h-full w-full resize-none border-0 bg-slate-950/95 px-5 py-4 font-mono text-[13px] leading-6 text-slate-100 outline-none"
+                  placeholder="# Markdown puro\n\nEscribe aquí el contenido exacto del documento..."
+                />
+                <LinterOverlay 
+                  diagnostics={markdownDiagnostics}
+                  content={statsContent}
+                  lineHeight={24}
+                  charWidth={7.825}
+                  paddingTop={16}
+                  paddingLeft={20}
+                  scrollTop={rawScrollPos.top}
+                  scrollLeft={rawScrollPos.left}
+                />
+              </div>
             </>
           ) : (
             <MDXEditor
