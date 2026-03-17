@@ -240,8 +240,37 @@ const ensureMarkdownCandidateNames = (value: string) => {
   return Array.from(candidates);
 };
 
+const convertWikiLinksToMarkdown = (content: string) => {
+  const lines = content.split('\n');
+  let insideFence = false;
+
+  return lines.map((line) => {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('```')) {
+      insideFence = !insideFence;
+      return line;
+    }
+
+    if (insideFence || !line.includes('[[')) {
+      return line;
+    }
+
+    return line.replace(/\[\[([^\]]+)\]\]/g, (_match, rawTarget: string) => {
+      const [targetPart, labelPart] = rawTarget.split('|');
+      const target = targetPart?.trim();
+      const label = labelPart?.trim() || target;
+
+      if (!target) {
+        return _match;
+      }
+
+      return `[${label}](${target})`;
+    });
+  }).join('\n');
+};
+
 const MarkdownPreview = React.memo(({ content, onOpenInternalLink }: { content: string; onOpenInternalLink?: (href: string) => Promise<boolean> }) => {
-  const processed = useMemo(() => unescapeLatex(content), [content]);
+  const processed = useMemo(() => convertWikiLinksToMarkdown(unescapeLatex(content)), [content]);
   return (
   <div className="markdown-preview-container overflow-auto h-full">
     <ReactMarkdown
@@ -326,7 +355,13 @@ function ToolbarShortcutButton({
   );
 }
 
-function TableGridPicker({ onInsert }: { onInsert: (rows: number, cols: number) => void }) {
+function TableGridPicker({
+  onInsert,
+  portalContainer
+}: {
+  onInsert: (rows: number, cols: number) => void;
+  portalContainer?: Element | DocumentFragment | null;
+}) {
   const [open, setOpen] = React.useState(false);
   const [hoverRow, setHoverRow] = React.useState(0);
   const [hoverCol, setHoverCol] = React.useState(0);
@@ -412,7 +447,7 @@ function TableGridPicker({ onInsert }: { onInsert: (rows: number, cols: number) 
             </div>
           </div>
         </div>,
-        document.body
+        portalContainer ?? document.body
       )}
     </>
   );
@@ -500,7 +535,12 @@ export default function MosaicEditor({
       const frameElement = typeof window !== 'undefined' ? window.frameElement : null;
       setIsFullscreen(Boolean(
         fullscreenElement
-        && (fullscreenElement === editorShellRef.current || fullscreenElement === frameElement)
+        && (
+          fullscreenElement === document.documentElement
+          || fullscreenElement === document.body
+          || fullscreenElement === editorShellRef.current
+          || fullscreenElement === frameElement
+        )
       ));
     };
 
@@ -926,6 +966,49 @@ export default function MosaicEditor({
     }
   }, []);
 
+  useEffect(() => {
+    const editorShell = editorShellRef.current;
+    if (!editorShell) return;
+
+    const handleEditorLinkClick = (event: MouseEvent) => {
+      if (viewMode !== 'edit') return;
+      if (event.button !== 0) return;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const anchor = target.closest('.mdx-content-editable a[href]');
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+
+      const href = anchor.getAttribute('href')?.trim();
+      if (!href) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      void (async () => {
+        if (href.startsWith('#')) return;
+
+        if (isExternalMarkdownHref(href)) {
+          window.open(href, '_blank', 'noopener,noreferrer');
+          return;
+        }
+
+        const opened = await openInternalMarkdownLink(href);
+        if (!opened) {
+          window.location.assign(href);
+        }
+      })();
+    };
+
+    editorShell.addEventListener('click', handleEditorLinkClick, true);
+
+    return () => {
+      editorShell.removeEventListener('click', handleEditorLinkClick, true);
+    };
+  }, [openInternalMarkdownLink, viewMode]);
+
   const insertSnippet = useCallback((snippet: string) => {
     const editor = mdxEditorRef.current;
     if (!editor) return;
@@ -938,10 +1021,7 @@ export default function MosaicEditor({
   const toggleFullscreen = useCallback(async () => {
     if (typeof document === 'undefined') return;
 
-    const frameElement = typeof window !== 'undefined' && window.frameElement instanceof HTMLElement
-      ? window.frameElement
-      : null;
-    const target = frameElement ?? editorShellRef.current;
+    const target = document.documentElement;
 
     if (!target) return;
 
@@ -1004,7 +1084,7 @@ export default function MosaicEditor({
     ));
     pushSection('insert', (
       <>
-        <TableGridPicker onInsert={(rows, cols) => {
+        <TableGridPicker portalContainer={editorShellRef.current} onInsert={(rows, cols) => {
           const header = '| ' + Array.from({ length: cols }, (_, i) => `Col ${i + 1}`).join(' | ') + ' |';
           const sep = '| ' + Array.from({ length: cols }, () => '---').join(' | ') + ' |';
           const body = Array.from({ length: rows - 1 }, () =>
@@ -1138,7 +1218,7 @@ export default function MosaicEditor({
               ))}
             </div>
           </div>,
-          document.body
+          editorShellRef.current ?? document.body
         )}
 
         {/* ── MDXEditor toolbar groups ── */}
@@ -1528,15 +1608,29 @@ export default function MosaicEditor({
           min-height: 0 !important;
           overflow-x: auto !important;
           overflow-y: hidden !important;
-          scrollbar-width: none !important;
-          -ms-overflow-style: none !important;
+          scrollbar-width: thin !important;
+          scrollbar-color: rgba(148, 163, 184, 0.45) transparent !important;
+          -ms-overflow-style: auto !important;
           justify-content: flex-start !important;
         }
 
         .mdx-editor-dark toolbar::-webkit-scrollbar,
         .mdx-editor-dark [role="toolbar"]::-webkit-scrollbar,
         .mdx-editor-dark [class*="_toolbar"]::-webkit-scrollbar {
-          display: none !important;
+          height: 8px !important;
+        }
+
+        .mdx-editor-dark toolbar::-webkit-scrollbar-thumb,
+        .mdx-editor-dark [role="toolbar"]::-webkit-scrollbar-thumb,
+        .mdx-editor-dark [class*="_toolbar"]::-webkit-scrollbar-thumb {
+          background: rgba(148, 163, 184, 0.45) !important;
+          border-radius: 999px !important;
+        }
+
+        .mdx-editor-dark toolbar::-webkit-scrollbar-track,
+        .mdx-editor-dark [role="toolbar"]::-webkit-scrollbar-track,
+        .mdx-editor-dark [class*="_toolbar"]::-webkit-scrollbar-track {
+          background: transparent !important;
         }
 
         /* Force all toolbar wrappers to single-line no-wrap */
@@ -1545,12 +1639,18 @@ export default function MosaicEditor({
           overflow-y: hidden !important;
           width: 100% !important;
           max-width: 100% !important;
-          scrollbar-width: none !important;
-          -ms-overflow-style: none !important;
+          scrollbar-width: thin !important;
+          scrollbar-color: rgba(148, 163, 184, 0.45) transparent !important;
+          -ms-overflow-style: auto !important;
           justify-content: flex-start !important;
+          scrollbar-gutter: stable !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"]::-webkit-scrollbar {
-          display: none !important;
+          height: 8px !important;
+        }
+        .mdx-editor-dark [class*="_toolbarRoot"]::-webkit-scrollbar-thumb {
+          background: rgba(148, 163, 184, 0.45) !important;
+          border-radius: 999px !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"] > div {
           flex-wrap: nowrap !important;
@@ -1619,8 +1719,8 @@ export default function MosaicEditor({
         }
 
         /* Hide scrollbar on toolbar overflow */
-        .scrollbar-none::-webkit-scrollbar { display: none; }
-        .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+        .scrollbar-none::-webkit-scrollbar { height: 8px; width: 8px; }
+        .scrollbar-none { -ms-overflow-style: auto; scrollbar-width: thin; }
 
         /* Toolbar button colors */
         .mdx-editor-dark [class*="_toolbarRoot"] button,
@@ -1631,7 +1731,7 @@ export default function MosaicEditor({
         .mdx-editor-dark [class*="_toolbarRoot"] label,
         .mdx-editor-dark [class*="_toolbarRoot"] svg {
           color: #94a3b8 !important;
-          fill: currentColor !important;
+          fill: none !important;
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] button:hover,
@@ -1640,7 +1740,7 @@ export default function MosaicEditor({
         .mdx-editor-dark [class*="_toolbarRoot"] [role="button"]:hover * {
           background: #334155 !important;
           color: #e2e8f0 !important;
-          fill: currentColor !important;
+          fill: none !important;
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] button[data-state="on"],
@@ -1651,7 +1751,7 @@ export default function MosaicEditor({
         .mdx-editor-dark [class*="_toolbarRoot"] [aria-pressed="true"] * {
           background: #3b82f6 !important;
           color: #ffffff !important;
-          fill: currentColor !important;
+          fill: none !important;
         }
 
         /* Select/dropdown in toolbar */
@@ -1682,8 +1782,46 @@ export default function MosaicEditor({
         .mdx-editor-dark [class*="_toolbarRoot"] svg,
         .mdx-editor-dark [data-radix-popper-content-wrapper] svg {
           color: #cbd5e1 !important;
-          fill: currentColor !important;
+          fill: none !important;
           stroke: currentColor !important;
+        }
+
+        .mdx-editor-dark .mdxeditor,
+        .mdx-editor-dark .mdxeditor > div,
+        .mdx-editor-dark [class*="_rootContentEditableWrapper"],
+        .mdx-editor-dark [class*="_contentEditable"] {
+          min-width: 0 !important;
+        }
+
+        .mdx-editor-dark .mdxeditor :where([data-radix-popper-content-wrapper]) {
+          z-index: 100000 !important;
+        }
+
+        .markdown-preview-container,
+        .markdown-raw-textarea,
+        .mdx-content-editable {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+        }
+
+        .markdown-preview-container::-webkit-scrollbar,
+        .markdown-raw-textarea::-webkit-scrollbar,
+        .mdx-content-editable::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+
+        .markdown-preview-container::-webkit-scrollbar-thumb,
+        .markdown-raw-textarea::-webkit-scrollbar-thumb,
+        .mdx-content-editable::-webkit-scrollbar-thumb {
+          background: rgba(148, 163, 184, 0.45);
+          border-radius: 999px;
+        }
+
+        .markdown-preview-container::-webkit-scrollbar-track,
+        .markdown-raw-textarea::-webkit-scrollbar-track,
+        .mdx-content-editable::-webkit-scrollbar-track {
+          background: transparent;
         }
 
         /* Table grid picker portal – standalone styling */
