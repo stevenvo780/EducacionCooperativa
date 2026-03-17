@@ -64,7 +64,7 @@ const clickContextMenuAction = async (page: Page, label: string) => {
 };
 
 const clickExplorerToolbarAction = async (page: Page, label: 'Subir archivo' | 'Subir carpeta') => {
-  const directButton = page.getByTitle(label);
+  const directButton = page.getByTitle(label).first();
   if (await directButton.isVisible().catch(() => false)) {
     await directButton.click();
     return;

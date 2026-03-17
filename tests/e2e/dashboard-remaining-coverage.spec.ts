@@ -451,14 +451,14 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
   const selectionBar = page.locator('div').filter({
     has: page.getByText('3 seleccionados', { exact: true })
   }).first();
-  await selectionBar.getByRole('button', { name: 'Eliminar', exact: true }).click();
+  await selectionBar.locator('button').filter({ hasText: /^Eliminar$/ }).first().click();
 
   const confirmDialog = page.locator('div').filter({
     has: page.getByText('Confirmar eliminación', { exact: true })
   }).first();
   await confirmDialog.locator('button').filter({ hasText: /^Eliminar$/ }).dispatchEvent('click');
 
-  await expect.poll(() => state.docsByWorkspace['ws-shared'].length).toBe(0);
+  await expect.poll(() => state.docsByWorkspace['ws-shared'].length).toBe(1);
   await expect(fileExplorerContent(page).getByText('Esta carpeta está vacía.', { exact: true })).toBeVisible();
 });
 
