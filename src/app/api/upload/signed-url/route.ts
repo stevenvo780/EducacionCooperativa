@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
+import { calculateOwnedStorageUsageBytes } from '@/lib/storage-usage';
 import { Plan, SubscriptionStatus, formatStorageSize, getStorageLimitMB, type PlanId } from '@/types/subscription';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
@@ -59,14 +59,7 @@ export async function POST(req: NextRequest) {
         const limitBytes = limitMB * 1024 * 1024;
 
         // Calculate current usage
-        const bucket = adminStorage.bucket();
-        const userPrefix = `users/${auth.uid}/`;
-        const [existingFiles] = await bucket.getFiles({ prefix: userPrefix });
-        let totalBytes = 0;
-        for (const f of existingFiles) {
-            const [meta] = await f.getMetadata();
-            totalBytes += parseInt(meta.size as string, 10) || 0;
-        }
+        const totalBytes = await calculateOwnedStorageUsageBytes(auth.uid);
 
         // Estimate new file size from Content-Length hint (client should send fileSize)
         const fileSize = typeof body.fileSize === 'number' ? body.fileSize : 0;
@@ -89,6 +82,7 @@ export async function POST(req: NextRequest) {
             fileName: safeName
         });
 
+        const bucket = adminStorage.bucket();
         if (!bucket?.name) {
             throw new Error('Storage bucket not configured');
         }

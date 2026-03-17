@@ -37,6 +37,8 @@
   "exclude": [
     "node_modules",
     "old",
-    "services"
+    "services",
+    "tests",
+    "coverage"
   ]
 }

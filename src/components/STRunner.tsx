@@ -5,6 +5,8 @@ import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, 
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
+import EditorSettingsMenu from '@/components/editor/EditorSettingsMenu';
+import { type EditorConfig, loadConfig } from '@/components/editor/codemirror';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 
 // ── Constantes ──────────────────────────────────────────────
@@ -217,16 +219,16 @@ export default function STRunner({
 
   const [mode, setMode] = useState<STRunnerMode>(initialMode);
   const [internalCode, setInternalCode] = useState(initialCode || DEFAULT_SCRIPT);
-  
+
   // Use fileMode content if available, otherwise internal
   const code = fileMode ? initialCode || '' : internalCode;
-  const setCode = (val: string) => {
+  const setCode = useCallback((val: string) => {
     if (fileMode) {
       fileMode.onContentChange(val);
     } else {
       setInternalCode(val);
     }
-  };
+  }, [fileMode]);
 
   // ── Background Validation ──
   useEffect(() => {
@@ -248,6 +250,7 @@ export default function STRunner({
   const [outputHeight, setOutputHeight] = useState(300); // Height of the output panel in pixels
   const [showOutput, setShowOutput] = useState(true);
   const [isResizingOutput, setIsResizingOutput] = useState(false);
+  const [editorConfig, setEditorConfig] = useState<EditorConfig>(loadConfig);
 
   const startResizingOutput = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -378,7 +381,7 @@ export default function STRunner({
         });
       }
     },
-    [handleRun]
+    [fileMode, handleRun, setCode]
   );
 
   // ── Resumen de teoría (sidebar info) ──
@@ -493,14 +496,16 @@ export default function STRunner({
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
+
+        <EditorSettingsMenu config={editorConfig} onChange={setEditorConfig} />
       </div>
 
       {/* ── Body ── */}
       <div className="flex flex-col flex-1 overflow-hidden st-runner-body relative">
         {/* Global overlay during output resizing to prevent iframe interference */}
         {isResizingOutput && (
-          <div 
-            className="fixed inset-0 z-[100] cursor-row-resize" 
+          <div
+            className="fixed inset-0 z-[100] cursor-row-resize"
             onMouseUp={stopResizingOutput}
           />
         )}
@@ -515,18 +520,19 @@ export default function STRunner({
                 placeholder="// Escribe tu script ST aquí..."
                 className="bg-slate-950 h-full"
                 diagnostics={lastDiagnostics}
+                editorConfig={editorConfig}
               />
             </div>
 
             {/* Resize Handle and Tabs */}
             <div className="flex flex-col flex-shrink-0 bg-slate-900 border-t border-slate-800">
               {/* Actual resize handle bar */}
-              <div 
+              <div
                 onMouseDown={startResizingOutput}
                 className={`h-1 cursor-row-resize hover:bg-indigo-500/50 transition-colors ${isResizingOutput ? 'bg-indigo-500' : 'bg-transparent'}`}
                 title="Redimensionar salida"
               />
-              
+
               <div className="flex items-center gap-0 border-b border-slate-800 px-1">
                 <button
                   onClick={() => setActiveTab('output')}
@@ -582,7 +588,7 @@ export default function STRunner({
                 <button
                   onClick={() => setShowOutput(prev => !prev)}
                   className="px-3 py-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-                  title={showOutput ? "Ocultar panel" : "Mostrar panel"}
+                  title={showOutput ? 'Ocultar panel' : 'Mostrar panel'}
                 >
                   {showOutput ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                 </button>

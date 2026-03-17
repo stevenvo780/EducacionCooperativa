@@ -471,7 +471,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const handleContextMenu = (e: React.MouseEvent, docId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    openContextMenu(e.clientX, e.clientY, docId);
+    const doc = docMap.get(docId);
+    openContextMenu(e.clientX, e.clientY, { type: 'doc', id: docId, doc });
   };
 
   const toggleSelection = (key: string, e?: React.MouseEvent | React.ChangeEvent) => {

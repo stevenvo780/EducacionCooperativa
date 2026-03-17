@@ -400,7 +400,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         <button
           onClick={() => toggleFullscreen(doc.id)}
           className="p-1 rounded text-surface-400 hover:bg-surface-700 hover:text-white transition"
-          title={fullscreenDocId === doc.id ? "Salir de pantalla completa" : "Pantalla completa"}
+          title={fullscreenDocId === doc.id ? 'Salir de pantalla completa' : 'Pantalla completa'}
         >
           {fullscreenDocId === doc.id ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
         </button>

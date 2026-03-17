@@ -41,7 +41,7 @@ const spellcheckRule: LinterRule = {
             'ubiera': 'hubiera',
             'alla': 'allá / haya',
             'ay': 'hay',
-            'ahi': 'ahí',
+            'ahi': 'ahí'
         };
 
         const lines = text.split('\n');
@@ -126,7 +126,7 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   const runLint = useCallback((text: string) => {
     const allRules = [...defaultRules, ...customRules];
     const results = allRules.flatMap(rule => rule.check(text));
-    
+
     // Sort and deduplicate (optional, but good for performance)
     const sortedResults = results.sort((a, b) => a.line - b.line || a.column - b.column);
     setDiagnostics(sortedResults);

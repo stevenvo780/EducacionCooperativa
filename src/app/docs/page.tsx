@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  ArrowLeft, Terminal, Server, Download, Settings, Users, RefreshCw, 
-  Shield, HardDrive, BookOpen, ChevronDown, ChevronRight, Copy, Check, 
-  ExternalLink, Columns, PenTool, Layout, LayoutGrid, WifiOff, FileSpreadsheet, 
-  KanbanSquare, Sparkles, Network, Quote, BookmarkPlus, Briefcase, 
-  Zap, FlaskConical, Monitor, Key, LogOut, Crown, Trash2, Plus, 
+import {
+  ArrowLeft, Terminal, Server, Download, Settings, Users, RefreshCw,
+  Shield, HardDrive, BookOpen, ChevronDown, ChevronRight, Copy, Check,
+  ExternalLink, Columns, PenTool, Layout, LayoutGrid, WifiOff, FileSpreadsheet,
+  KanbanSquare, Sparkles, Network, Quote, BookmarkPlus, Briefcase,
+  Zap, FlaskConical, Monitor, Key, LogOut, Crown, Trash2, Plus,
   FolderPlus, Upload, Search, User, Globe, Lock, Layers
 } from 'lucide-react';
 import Link from 'next/link';
@@ -134,7 +134,7 @@ export default function DocsPage() {
             <div className="relative z-10">
               <h2 className="text-4xl font-extrabold text-white mb-4 tracking-tight">Bienvenido al Futuro del Aprendizaje Colaborativo</h2>
               <p className="text-surface-300 max-w-3xl text-base leading-relaxed">
-                La Plataforma Ágora no es solo un editor; es un ecosistema distribuido que combina IA, lógica formal, ejecución remota y gestión semántica de la información. 
+                La Plataforma Ágora no es solo un editor; es un ecosistema distribuido que combina IA, lógica formal, ejecución remota y gestión semántica de la información.
                 Este manual detalla cada funcionalidad para convertirte en un experto en el uso de la herramienta.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
@@ -199,7 +199,7 @@ export default function DocsPage() {
                 <h5 className="font-bold text-white text-sm mb-3">Colaboración en Tiempo Real</h5>
                 <ul className="list-disc list-inside space-y-2 text-xs text-surface-400">
                   <li><strong className="text-surface-200">Invitaciones:</strong> Envía invitaciones por correo. Los usuarios verán un indicador de notificación en su barra superior.</li>
-                  <li><strong className="text-surface-200">Miembros:</strong> Consulta quién tiene acceso y el administrador puede eliminar miembros desde el modal de "Equipo".</li>
+                  <li><strong className="text-surface-200">Miembros:</strong> Consulta quién tiene acceso y el administrador puede eliminar miembros desde el modal de &quot;Equipo&quot;.</li>
                   <li><strong className="text-surface-200">Sincronización:</strong> Cualquier cambio en la estructura de archivos es notificado instantáneamente a todos los miembros activos.</li>
                 </ul>
               </div>
@@ -233,7 +233,7 @@ export default function DocsPage() {
           <Section id="editor" icon={PenTool} title="Editor Semántico de Conocimiento">
             <div className="space-y-5">
               <p className="text-surface-400">Nuestro editor Markdown es un híbrido entre un editor de código y una herramienta de investigación.</p>
-              
+
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-mandy-400 text-sm mb-3">Selección Semántica (El Menú Inteligente)</h5>
                 <p className="text-xs text-surface-400 mb-4">Cuando seleccionas texto con el mouse, aparece un menú contextual especializado:</p>
@@ -299,7 +299,7 @@ export default function DocsPage() {
           <Section id="terminal" icon={Terminal} title="Terminal Multi-sesión & Workers">
             <div className="space-y-5">
               <p className="text-surface-400">Ágora ofrece una integración profunda con terminales Linux reales ejecutándose en contenedores Docker.</p>
-              
+
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-mandy-400 text-sm mb-3">Operativa de Sesiones (Estilo Tmux)</h5>
                 <p className="text-xs text-surface-400 mb-4">A diferencia de otras nubes, nuestras terminales son persistentes y compartibles:</p>
@@ -314,7 +314,7 @@ export default function DocsPage() {
                   </div>
                 </div>
                 <ul className="mt-4 list-disc list-inside text-xs text-surface-400 space-y-1">
-                  <li><strong className="text-surface-200">Renombrado:</strong> Haz click derecho o usa el menú de la sesión para darle un nombre (ej: "Backend Log").</li>
+                  <li><strong className="text-surface-200">Renombrado:</strong> Haz click derecho o usa el menú de la sesión para darle un nombre (ej: &quot;Backend Log&quot;).</li>
                   <li><strong className="text-surface-200">Re-conexión:</strong> Si cierras la pestaña o refrescas, la terminal sigue viva en el Worker. Al volver a abrirla, recuperas el estado.</li>
                   <li><strong className="text-surface-200">Drag & Drop:</strong> Puedes arrastrar una sesión de terminal desde la cabecera hacia el área de mosaicos para abrirla en una ventana específica.</li>
                 </ul>
@@ -338,9 +338,9 @@ export default function DocsPage() {
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-amber-400 text-sm mb-3">Funcionalidades del Tablero</h5>
                 <ul className="list-disc list-inside space-y-2 text-xs text-surface-400">
-                  <li><strong className="text-surface-200">Gestión de Columnas:</strong> Organiza tareas en "Por hacer", "En proceso" y "Finalizado" mediante Drag & Drop.</li>
+                  <li><strong className="text-surface-200">Gestión de Columnas:</strong> Organiza tareas en &quot;Por hacer&quot;, &quot;En proceso&quot; y &quot;Finalizado&quot; mediante Drag & Drop.</li>
                   <li><strong className="text-surface-200">Tarjetas Detalladas:</strong> Cada tarjeta soporta títulos y se vincula automáticamente con el usuario que la creó.</li>
-                  <li><strong className="text-surface-200">Integración con el Editor:</strong> Esta es la función estrella. Selecciona texto en un documento Markdown, elige "Enviar a Tarea" y se creará una tarjeta con ese texto como título y un enlace de vuelta al documento.</li>
+                  <li><strong className="text-surface-200">Integración con el Editor:</strong> Esta es la función estrella. Selecciona texto en un documento Markdown, elige &quot;Enviar a Tarea&quot; y se creará una tarjeta con ese texto como título y un enlace de vuelta al documento.</li>
                 </ul>
               </div>
             </div>
@@ -414,11 +414,11 @@ export default function DocsPage() {
           <Section id="ui-layout" icon={Layout} title="Productividad & Layout Adaptable">
             <div className="space-y-4">
               <p className="text-surface-400">Ágora se adapta a tu flujo de trabajo, no al revés.</p>
-              
+
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-emerald-400 text-sm mb-3">Maximizar a Pantalla Completa</h5>
                 <p className="text-xs text-surface-400 leading-relaxed">
-                  Cualquier panel (Editor, Tablero, Terminal) tiene un botón de <strong className="text-white">Expandir</strong> en su barra de herramientas. 
+                  Cualquier panel (Editor, Tablero, Terminal) tiene un botón de <strong className="text-white">Expandir</strong> en su barra de herramientas.
                   Esto activa la API Fullscreen nativa, ocultando todo lo demás del navegador para que te enfoques únicamente en esa tarea. Útil para presentaciones o sesiones de código intensas.
                 </p>
               </div>
@@ -444,7 +444,7 @@ export default function DocsPage() {
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-blue-400 text-sm mb-3">Cómo funciona el modo desconectado</h5>
                 <ul className="list-disc list-inside space-y-3 text-xs">
-                  <li><strong className="text-surface-200">Indicador de Estado:</strong> Un sensor en tiempo real te avisa si estás "En línea" o "Sin conexión" en la cabecera.</li>
+                  <li><strong className="text-surface-200">Indicador de Estado:</strong> Un sensor en tiempo real te avisa si estás &quot;En línea&quot; o &quot;Sin conexión&quot; en la cabecera.</li>
                   <li><strong className="text-surface-200">Persistencia Local:</strong> Todos tus documentos y tareas se guardan en <code className="text-surface-300">IndexedDB</code> (almacenamiento interno del navegador).</li>
                   <li><strong className="text-surface-200">Sincronización Inteligente:</strong> Al recuperar el Wi-Fi, el hook <code className="text-mandy-300">useOfflineSync</code> detecta los cambios pendientes y los sube a Firebase, fusionando el trabajo realizado sin que tengas que hacer nada.</li>
                 </ul>
@@ -479,7 +479,7 @@ export default function DocsPage() {
           <Section id="worker" icon={HardDrive} title="Edu Worker: Guía Profunda para Operadores">
             <div className="space-y-5">
               <p className="text-surface-400">El Worker es el motor que hace posible la ejecución remota de comandos.</p>
-              
+
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-white text-xs uppercase mb-3">Instalación del Gestor CLI</h5>
                 <p className="text-xs text-surface-400 mb-3">En un servidor Ubuntu/Debian, ejecuta el instalador automatizado:</p>
@@ -501,7 +501,7 @@ export default function DocsPage() {
                 <div>
                   <p className="text-amber-300 text-sm font-bold">Aislamiento Total</p>
                   <p className="text-amber-200/70 text-xs mt-1 leading-relaxed">
-                    Cada Worker corre como un usuario no privilegiado dentro de un contenedor Docker con sistema de archivos montado de forma segura. 
+                    Cada Worker corre como un usuario no privilegiado dentro de un contenedor Docker con sistema de archivos montado de forma segura.
                     Tus credenciales de SSH y Git se guardan en volúmenes persistentes que sobreviven a las actualizaciones del software.
                   </p>
                 </div>

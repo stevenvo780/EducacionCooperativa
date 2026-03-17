@@ -1,7 +1,17 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/server-auth';
+import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { isPersonalWorkspaceId } from '@/types/workspace';
+
+const canAccessSnippet = async (snippet: Record<string, unknown> | undefined, uid: string) => {
+  const workspaceId = typeof snippet?.workspaceId === 'string' ? snippet.workspaceId : null;
+  if (isPersonalWorkspaceId(workspaceId)) {
+    return snippet?.ownerId === uid;
+  }
+  if (!workspaceId) return false;
+  return isWorkspaceMember(workspaceId, uid);
+};
 
 /* ──────────────────────────────────────────────────────────
    PUT /api/snippets/[id]
@@ -15,13 +25,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const { id } = params;
     const body = await req.json();
     const allowed = ['title', 'description', 'markdown', 'category', 'order'] as const;
+    const ref = adminDb.collection('snippets').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: 'Snippet not found' }, { status: 404 });
+    }
+    if (!(await canAccessSnippet(snap.data() as Record<string, unknown> | undefined, auth.uid))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const updates: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
     for (const key of allowed) {
       if (key in body) updates[key] = body[key];
     }
 
-    await adminDb.collection('snippets').doc(id).update(updates);
+    await ref.update(updates);
     return NextResponse.json({ id, ...updates });
   } catch (err) {
     console.error('PUT /api/snippets/[id] error', err);
@@ -39,7 +57,16 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     const { id } = params;
-    await adminDb.collection('snippets').doc(id).delete();
+    const ref = adminDb.collection('snippets').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: 'Snippet not found' }, { status: 404 });
+    }
+    if (!(await canAccessSnippet(snap.data() as Record<string, unknown> | undefined, auth.uid))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    await ref.delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('DELETE /api/snippets/[id] error', err);

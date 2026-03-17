@@ -2,8 +2,8 @@ import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
-import { requireAuth } from '@/lib/server-auth';
-import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 /* ──────────────────────────────────────────────────────────
    GET /api/snippets?workspaceId=xxx
@@ -15,6 +15,12 @@ export async function GET(req: NextRequest) {
     if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     const workspaceId = req.nextUrl.searchParams.get('workspaceId') || PERSONAL_WORKSPACE_ID;
+    if (!isPersonalWorkspaceId(workspaceId)) {
+      const member = await isWorkspaceMember(workspaceId, auth.uid);
+      if (!member) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
 
     const snap = await adminDb
       .collection('snippets')
@@ -43,6 +49,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { title, description, markdown, workspaceId, category, order } = body as Record<string, unknown>;
+    const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : PERSONAL_WORKSPACE_ID;
 
     if (typeof title !== 'string' || !title.trim()) {
       return NextResponse.json({ error: 'title is required' }, { status: 400 });
@@ -50,12 +57,18 @@ export async function POST(req: NextRequest) {
     if (typeof markdown !== 'string') {
       return NextResponse.json({ error: 'markdown is required' }, { status: 400 });
     }
+    if (!isPersonalWorkspaceId(resolvedWorkspaceId)) {
+      const member = await isWorkspaceMember(resolvedWorkspaceId, auth.uid);
+      if (!member) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
 
     const data: Record<string, unknown> = {
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
       markdown,
-      workspaceId: typeof workspaceId === 'string' && workspaceId ? workspaceId : PERSONAL_WORKSPACE_ID,
+      workspaceId: resolvedWorkspaceId,
       category: typeof category === 'string' ? category.trim() : 'general',
       order: typeof order === 'number' ? order : 0,
       ownerId: auth.uid,

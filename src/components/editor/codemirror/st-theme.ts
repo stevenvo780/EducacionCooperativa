@@ -113,6 +113,17 @@ export const stEditorTheme = EditorView.theme({
     fontFamily: 'inherit',
     lineHeight: '20px'
   },
+  // ── Minimap styles ────────────────────────────────────────
+  '.cm-minimap-gutter': {
+    backgroundColor: colors.bg,
+    borderLeft: `1px solid ${colors.border}`,
+    opacity: '0.85'
+  },
+  '.cm-minimap-overlay': {
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    borderTop: '1px solid rgba(99, 102, 241, 0.4)',
+    borderBottom: '1px solid rgba(99, 102, 241, 0.4)'
+  },
   '.cm-scroller::-webkit-scrollbar': {
     width: '8px',
     height: '8px'

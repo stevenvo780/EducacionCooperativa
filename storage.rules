@@ -16,9 +16,14 @@ service firebase.storage {
       return isAuthenticated() && (request.auth.uid == userId || isSyncAgentFor(userId));
     }
 
-    function isWorkspaceAuthorized(workspaceId) {
-      // NOTE: No membership checks here; relies on app logic.
-      return isAuthenticated() || isSyncAgentFor(workspaceId);
+    function isWorkspaceMember(workspaceId) {
+      return isAuthenticated() &&
+             firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)) &&
+             request.auth.uid in firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data.members;
+    }
+
+    function isWorkspaceMemberOrAgent(workspaceId) {
+      return isWorkspaceMember(workspaceId) || isSyncAgentFor(workspaceId);
     }
 
     function isAllowedTextContentType() {
@@ -48,13 +53,10 @@ service firebase.storage {
     
     // Shared workspace storage: workspaces/{workspaceId}/...
     match /workspaces/{workspaceId}/{filePath=**} {
-      // Members can access workspace files
-      // Note: We can't check Firestore from Storage rules directly,
-      // so we rely on the sync-agent having the correct workspaceId
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && isAllowedTextContentType()
+      allow read: if isWorkspaceMemberOrAgent(workspaceId);
+      allow create, update: if isWorkspaceMemberOrAgent(workspaceId) && isAllowedTextContentType()
                                && request.resource.size < 50 * 1024 * 1024;
-      allow delete: if isAuthenticated();
+      allow delete: if isWorkspaceMemberOrAgent(workspaceId);
     }
   }
 }
