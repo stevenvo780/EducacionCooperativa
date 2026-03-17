@@ -1,20 +1,18 @@
 /**
- * offlineStorage.ts — IndexedDB persistence layer for offline-first support.
+ * offlineStorage.ts — Capa de persistencia en IndexedDB para soporte offline-first.
  *
- * Stores: documents (metadata), document-content (raw text), sync-queue, meta.
- * Uses raw IndexedDB API (zero dependencies).
+ * Almacena: metadatos de documentos, contenido en bruto, cola de sincronización y metadatos.
+ * Utiliza la API nativa de IndexedDB para evitar dependencias externas.
  */
 
 const DB_NAME = 'agora-offline';
 const DB_VERSION = 1;
 
-// ─── Store names ────────────────────────────────────────────────
 const STORE_DOCS = 'documents';
 const STORE_CONTENT = 'document-content';
 const STORE_QUEUE = 'sync-queue';
 const STORE_META = 'meta';
 
-// ─── Types ──────────────────────────────────────────────────────
 export interface CachedDoc {
   id: string;
   name: string;
@@ -27,7 +25,6 @@ export interface CachedDoc {
   ownerId?: string;
   order?: number;
   updatedAt?: string;
-  /** Timestamp when cached locally */
   _cachedAt: number;
 }
 
@@ -40,10 +37,9 @@ export interface CachedContent {
 export type SyncOperation = 'create' | 'update' | 'delete' | 'rename' | 'move';
 
 export interface SyncQueueItem {
-  id?: number; // autoIncrement
+  id?: number;
   operation: SyncOperation;
   docId: string;
-  /** Full payload needed to replay the operation */
   payload: Record<string, unknown>;
   timestamp: number;
   status: 'pending' | 'processing' | 'failed';
@@ -56,9 +52,11 @@ export interface MetaEntry {
   value: unknown;
 }
 
-// ─── DB Singleton ───────────────────────────────────────────────
 let _dbPromise: Promise<IDBDatabase> | null = null;
 
+/**
+ * Abre la conexión a la base de datos IndexedDB con la configuración de stores necesaria.
+ */
 function openDB(): Promise<IDBDatabase> {
   if (_dbPromise) return _dbPromise;
 
@@ -107,7 +105,9 @@ function openDB(): Promise<IDBDatabase> {
   return _dbPromise;
 }
 
-// ─── Generic helpers ────────────────────────────────────────────
+/**
+ * Helper para ejecutar una transacción en un store de IndexedDB.
+ */
 async function tx(
   storeName: string,
   mode: IDBTransactionMode,
@@ -144,7 +144,9 @@ async function deleteByKey(storeName: string, key: IDBValidKey): Promise<void> {
   await tx(storeName, 'readwrite', (s) => s.delete(key));
 }
 
-// ─── Documents ──────────────────────────────────────────────────
+/**
+ * Almacena múltiples documentos en caché.
+ */
 export async function cacheDocuments(docs: CachedDoc[]): Promise<void> {
   const db = await openDB();
   const transaction = db.transaction(STORE_DOCS, 'readwrite');
@@ -159,6 +161,9 @@ export async function cacheDocuments(docs: CachedDoc[]): Promise<void> {
   });
 }
 
+/**
+ * Obtiene los documentos cacheados de un workspace específico.
+ */
 export async function getCachedDocuments(workspaceId: string): Promise<CachedDoc[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -171,15 +176,24 @@ export async function getCachedDocuments(workspaceId: string): Promise<CachedDoc
   });
 }
 
+/**
+ * Obtiene un documento específico por su ID.
+ */
 export async function getCachedDoc(docId: string): Promise<CachedDoc | undefined> {
   return getByKey<CachedDoc>(STORE_DOCS, docId);
 }
 
+/**
+ * Elimina un documento y su contenido de la caché.
+ */
 export async function deleteCachedDoc(docId: string): Promise<void> {
   await deleteByKey(STORE_DOCS, docId);
   await deleteByKey(STORE_CONTENT, docId);
 }
 
+/**
+ * Limpia todos los documentos y contenidos cacheados de un workspace.
+ */
 export async function clearCachedDocs(workspaceId: string): Promise<void> {
   const docs = await getCachedDocuments(workspaceId);
   const db = await openDB();
@@ -196,17 +210,24 @@ export async function clearCachedDocs(workspaceId: string): Promise<void> {
   });
 }
 
-// ─── Document Content ───────────────────────────────────────────
+/**
+ * Almacena el contenido textual de un documento en caché.
+ */
 export async function cacheDocContent(docId: string, content: string): Promise<void> {
   await putItem(STORE_CONTENT, { docId, content, updatedAt: Date.now() } as CachedContent);
 }
 
+/**
+ * Recupera el contenido cacheadó de un documento.
+ */
 export async function getCachedContent(docId: string): Promise<string | null> {
   const entry = await getByKey<CachedContent>(STORE_CONTENT, docId);
   return entry?.content ?? null;
 }
 
-// ─── Sync Queue ─────────────────────────────────────────────────
+/**
+ * Añade una operación a la cola de sincronización.
+ */
 export async function enqueueSync(item: Omit<SyncQueueItem, 'id'>): Promise<number> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -218,6 +239,9 @@ export async function enqueueSync(item: Omit<SyncQueueItem, 'id'>): Promise<numb
   });
 }
 
+/**
+ * Obtiene los elementos pendientes de sincronizar, ordenados por fecha.
+ */
 export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -233,6 +257,9 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
   });
 }
 
+/**
+ * Obtiene los elementos que han fallado tras el número máximo de reintentos.
+ */
 export async function getFailedSyncItems(): Promise<SyncQueueItem[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -245,18 +272,30 @@ export async function getFailedSyncItems(): Promise<SyncQueueItem[]> {
   });
 }
 
+/**
+ * Obtiene todas las operaciones de la cola de sincronización.
+ */
 export async function getAllSyncItems(): Promise<SyncQueueItem[]> {
   return getAllFromStore<SyncQueueItem>(STORE_QUEUE);
 }
 
+/**
+ * Actualiza una entrada de la cola de sincronización.
+ */
 export async function updateSyncItem(item: SyncQueueItem): Promise<void> {
   await putItem(STORE_QUEUE, item);
 }
 
+/**
+ * Elimina una entrada de la cola de sincronización por su ID.
+ */
 export async function removeSyncItem(id: number): Promise<void> {
   await deleteByKey(STORE_QUEUE, id);
 }
 
+/**
+ * Elimina de la cola todos los elementos que no estén pendientes o en proceso.
+ */
 export async function clearCompletedSync(): Promise<void> {
   const all = await getAllSyncItems();
   const db = await openDB();
@@ -273,22 +312,32 @@ export async function clearCompletedSync(): Promise<void> {
   });
 }
 
+/**
+ * Obtiene el número de operaciones pendientes en la cola.
+ */
 export async function getSyncQueueCount(): Promise<number> {
   const items = await getPendingSyncItems();
   return items.length;
 }
 
-// ─── Meta ───────────────────────────────────────────────────────
+/**
+ * Establece un valor en el store de metadatos.
+ */
 export async function setMeta(key: string, value: unknown): Promise<void> {
   await putItem(STORE_META, { key, value });
 }
 
+/**
+ * Obtiene un valor del store de metadatos por su clave.
+ */
 export async function getMeta<T = unknown>(key: string): Promise<T | undefined> {
   const entry = await getByKey<MetaEntry>(STORE_META, key);
   return entry?.value as T | undefined;
 }
 
-// ─── Utility ────────────────────────────────────────────────────
+/**
+ * Verifica si IndexedDB está disponible y funcional.
+ */
 export async function isOfflineStorageAvailable(): Promise<boolean> {
   try {
     await openDB();
@@ -298,6 +347,9 @@ export async function isOfflineStorageAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * Obtiene estadísticas sobre el uso del almacenamiento offline.
+ */
 export async function getOfflineStorageStats(): Promise<{
   docCount: number;
   contentCount: number;

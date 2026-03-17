@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import type { UserSubscription } from '@/types/subscription';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireAuth(req);

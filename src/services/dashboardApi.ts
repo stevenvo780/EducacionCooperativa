@@ -12,6 +12,19 @@ import {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+// Debounce document updates to avoid sending a request per keystroke
+const UPDATE_DEBOUNCE_MS = 500;
+type PendingUpdate = {
+  payload: Record<string, unknown>;
+  timer: ReturnType<typeof setTimeout>;
+  resolve: () => void;
+  reject: (e: unknown) => void;
+};
+const _pendingDocUpdates = new Map<string, PendingUpdate>();
+
+// Deduplicate concurrent fetchDocsApi calls with identical params
+const fetchDocsInFlight = new Map<string, Promise<DocItem[]>>();
+
 const assertOk = (res: Response, fallbackMessage: string) => {
   if (!res.ok) {
     throw new Error(fallbackMessage);
@@ -98,54 +111,60 @@ export const deleteWorkspaceApi = async (params: { workspaceId: string; ownerId:
   assertOk(res, 'Failed to delete workspace');
 };
 
-export const fetchDocsApi = async (params: { workspaceId: string; ownerId?: string; view?: string }) => {
+export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; view?: string }): Promise<DocItem[]> => {
   const search = new URLSearchParams();
   search.set('workspaceId', params.workspaceId);
-  if (params.ownerId) {
-    search.set('ownerId', params.ownerId);
-  }
-  if (params.view) {
-    search.set('view', params.view);
-  }
+  if (params.ownerId) search.set('ownerId', params.ownerId);
+  if (params.view) search.set('view', params.view);
 
-  try {
-    const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
-    assertOk(res, 'Failed to fetch docs via API');
-    const docs = (await res.json()) as DocItem[];
+  const key = search.toString();
+  const existing = fetchDocsInFlight.get(key);
+  if (existing) return existing;
 
-    // Cache docs in IDB for offline use
+  const promise = (async () => {
     try {
-      const cached: CachedDoc[] = docs.map(d => ({
-        id: d.id,
-        name: d.name,
-        type: d.type,
-        folder: d.folder,
-        mimeType: d.mimeType,
-        size: d.size,
-        storagePath: d.storagePath,
-        workspaceId: params.workspaceId,
-        ownerId: d.ownerId,
-        order: d.order,
-        updatedAt: d.updatedAt ? String(d.updatedAt) : undefined,
-        _cachedAt: Date.now()
-      }));
-      await cacheDocuments(cached);
-    } catch { /* IDB not available */ }
+      const res = await authFetch(`/api/documents?${key}`, { cache: 'no-store' });
+      assertOk(res, 'Failed to fetch docs via API');
+      const docs = (await res.json()) as DocItem[];
 
-    return docs;
-  } catch (err) {
-    // Offline fallback: return cached docs from IDB
-    if (!navigator.onLine) {
+      // Cache docs in IDB for offline use
       try {
-        const cached = await getCachedDocuments(params.workspaceId);
-        if (cached.length > 0) {
-          console.info('[offline] Serving', cached.length, 'docs from cache');
-          return cached as unknown as DocItem[];
-        }
+        const cached: CachedDoc[] = docs.map(d => ({
+          id: d.id,
+          name: d.name,
+          type: d.type,
+          folder: d.folder,
+          mimeType: d.mimeType,
+          size: d.size,
+          storagePath: d.storagePath,
+          workspaceId: params.workspaceId,
+          ownerId: d.ownerId,
+          order: d.order,
+          updatedAt: d.updatedAt ? String(d.updatedAt) : undefined,
+          _cachedAt: Date.now()
+        }));
+        await cacheDocuments(cached);
       } catch { /* IDB not available */ }
+
+      return docs;
+    } catch (err) {
+      // Offline fallback: return cached docs from IDB
+      if (!navigator.onLine) {
+        try {
+          const cached = await getCachedDocuments(params.workspaceId);
+          if (cached.length > 0) {
+            console.info('[offline] Serving', cached.length, 'docs from cache');
+            return cached as unknown as DocItem[];
+          }
+        } catch { /* IDB not available */ }
+      }
+      throw err;
     }
-    throw err;
-  }
+  })();
+
+  fetchDocsInFlight.set(key, promise);
+  promise.finally(() => fetchDocsInFlight.delete(key));
+  return promise;
 };
 
 export const fetchDocumentRawApi = async (docId: string) => {
@@ -218,29 +237,48 @@ export const createDocumentApi = async (payload: Record<string, unknown>) => {
   return res.json() as Promise<{ id: string; [key: string]: unknown }>;
 };
 
-export const updateDocumentApi = async (docId: string, payload: Record<string, unknown>) => {
+export const updateDocumentApi = (docId: string, payload: Record<string, unknown>): Promise<void> => {
   if (!navigator.onLine) {
-    await enqueueSync({
-      operation: 'update',
-      docId,
-      payload: { docId, ...payload },
-      timestamp: Date.now(),
-      status: 'pending',
-      retries: 0
-    });
-    // Also update local cache so UI stays consistent
-    if (typeof payload.content === 'string') {
-      try { await cacheDocContent(docId, payload.content); } catch { /* ignore */ }
-    }
-    return;
+    return (async () => {
+      await enqueueSync({
+        operation: 'update',
+        docId,
+        payload: { docId, ...payload },
+        timestamp: Date.now(),
+        status: 'pending',
+        retries: 0
+      });
+      if (typeof payload.content === 'string') {
+        try { await cacheDocContent(docId, payload.content); } catch { /* ignore */ }
+      }
+    })();
   }
 
-  const res = await authFetch(`/api/documents/${docId}`, {
-    method: 'PUT',
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
+  // Cancel any pending debounced update for this doc
+  const existing = _pendingDocUpdates.get(docId);
+  if (existing) {
+    clearTimeout(existing.timer);
+    // Resolve previous caller early — a newer update supersedes it
+    existing.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(async () => {
+      _pendingDocUpdates.delete(docId);
+      try {
+        const res = await authFetch(`/api/documents/${docId}`, {
+          method: 'PUT',
+          headers: JSON_HEADERS,
+          body: JSON.stringify(payload)
+        });
+        assertOk(res, 'Failed to update document');
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    }, UPDATE_DEBOUNCE_MS);
+    _pendingDocUpdates.set(docId, { payload, timer, resolve, reject });
   });
-  assertOk(res, 'Failed to update document');
 };
 
 export const deleteDocumentApi = async (docId: string) => {

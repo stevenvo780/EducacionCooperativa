@@ -2,7 +2,7 @@
 import React from 'react';
 import MosaicEditor from './MosaicEditor';
 
-export type ViewMode = 'edit' | 'split' | 'preview' | 'raw';
+export type ViewMode = 'edit' | 'preview' | 'raw';
 
 export interface SearchState {
   currentMatch: number;

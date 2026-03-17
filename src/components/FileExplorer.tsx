@@ -191,12 +191,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
+    let timer: ReturnType<typeof setTimeout>;
     const ro = new ResizeObserver(entries => {
-      const w = entries[0]?.contentRect.width ?? 800;
-      setContainerWidth(w);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const w = entries[0]?.contentRect.width ?? 800;
+        setContainerWidth(w);
+      }, 150);
     });
     ro.observe(node);
-    return () => ro.disconnect();
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
   }, []);
 
   // Auto-collapse sidebar when panel is narrow
@@ -771,7 +778,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       <div style={rowStyle}>
         <div
           onClick={(e) => handleDocSelect(doc, index, e)}
-          onDoubleClick={(e) => handleDocDoubleClick(doc)}
+          onDoubleClick={() => handleDocDoubleClick(doc)}
           onContextMenu={(e) => handleContextMenu(e, doc.id)}
           onDragOver={(e) => {
             const types = Array.from(e.dataTransfer.types ?? []);
@@ -1342,4 +1349,4 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   );
 };
 
-export default FileExplorer;
+export default React.memo(FileExplorer);
