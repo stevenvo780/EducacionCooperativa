@@ -71,17 +71,19 @@ import DragOverlay from '@/components/dashboard/DragOverlay';
 import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
+import MembersModal from '@/components/dashboard/MembersModal';
+import ChangePasswordModal from '@/components/dashboard/ChangePasswordModal';
+import NewWorkspaceModal from '@/components/dashboard/NewWorkspaceModal';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { getErrorMessage } from '@/lib/error-utils';
-import { fetchSubscriptionStatus, verifyPayment } from '@/services/subscriptionApi';
-import { PLANS, Plan, SubscriptionStatus, canAccessTerminals, type PlanId } from '@/types/subscription';
+import { PLANS, canAccessTerminals } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
 import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
 import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
-import { semanticSearchApi } from '@/services/searchApi';
-import { ALL_SEARCH_RESULT_FILTER, SearchKind, type SearchResultFilter, type SearchResultItem } from '@/lib/search/types';
-import { PaymentRedirectStatus } from '@/types/payments';
+import { useSubscription } from '@/hooks/dashboard/useSubscription';
+import { useQuickSearch } from '@/hooks/dashboard/useQuickSearch';
+import { useDeleteDocument } from '@/hooks/dashboard/useDeleteDocument';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -114,9 +116,7 @@ function DashboardContent() {
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState<Record<string, { email?: string | null; displayName?: string | null }>>({});
-    const [currentPlan, setCurrentPlan] = useState<PlanId>(Plan.Free);
-    const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
-    const [showPricingModal, setShowPricingModal] = useState(false);
+    const { currentPlan, subscriptionEndDate, showPricingModal, setShowPricingModal } = useSubscription(user, searchParams);
     const router = useRouter();
     const searchParams = useSearchParams();
     const reduceMotion = useReducedMotion();
@@ -165,60 +165,6 @@ function DashboardContent() {
             cancelled = true;
         };
     }, [user]);
-
-    // Load subscription status
-    useEffect(() => {
-        if (!user) return;
-        let cancelled = false;
-        fetchSubscriptionStatus()
-            .then((sub) => {
-                if (!cancelled && sub?.planId) {
-                    setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
-                    setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
-                }
-            })
-            .catch(() => {
-                if (!cancelled) {
-                    setCurrentPlan(Plan.Free);
-                    setSubscriptionEndDate(null);
-                }
-            });
-        return () => { cancelled = true; };
-    }, [user]);
-
-    // Handle payment callback from MercadoPago
-    useEffect(() => {
-        const paymentStatus = searchParams?.get('payment');
-        if (paymentStatus === PaymentRedirectStatus.Success || paymentStatus === PaymentRedirectStatus.Pending) {
-            // First try to verify/activate the payment
-            verifyPayment()
-                .then((result) => {
-                    if (result.status === SubscriptionStatus.Active && result.planId) {
-                        setCurrentPlan(result.planId);
-                    } else {
-                        // Fallback: fetch subscription status
-                        return fetchSubscriptionStatus();
-                    }
-                })
-                .then((sub) => {
-                    if (sub && 'planId' in sub) {
-                        setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
-                        setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
-                    }
-                })
-                .catch(() => {
-                    // Last resort: just fetch status
-                    fetchSubscriptionStatus()
-                        .then((sub) => {
-                            if (sub?.planId) {
-                                setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
-                                setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
-                            }
-                        })
-                        .catch(() => {});
-                });
-        }
-    }, [searchParams]);
 
     const workspaces = useAppSelector(state => state.dashboard.workspaces);
     const invites = useAppSelector(state => state.dashboard.invites);
@@ -384,13 +330,6 @@ function DashboardContent() {
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
-    const [semanticSearchResults, setSemanticSearchResults] = useState<SearchResultItem[]>([]);
-    const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
-    const [semanticSearchError, setSemanticSearchError] = useState<string | null>(null);
-    const [quickSearchFilter, setQuickSearchFilter] = useState<SearchResultFilter>(ALL_SEARCH_RESULT_FILTER);
-
-    const quickSearchInputRef = useRef<HTMLInputElement>(null);
-    const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
     const deferredDocs = useDeferredValue(docs);
     const deferredSidebarQuery = useDeferredValue(sidebarSearchQuery);
 
