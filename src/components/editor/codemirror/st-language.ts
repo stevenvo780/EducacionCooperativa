@@ -126,18 +126,16 @@ const stStreamParser = {
       return 'operator';
     }
 
-    // ── Rainbow parens ──
+    // ── Parens / braces (coloreados por el ViewPlugin rainbow-parens) ──
     if (ch === '(' || ch === '{') {
-      const d = state.parenDepth % 4;
       state.parenDepth++;
       stream.next();
-      return `paren-${d}`;
+      return 'punctuation';
     }
     if (ch === ')' || ch === '}') {
       state.parenDepth = Math.max(0, state.parenDepth - 1);
-      const d = state.parenDepth % 4;
       stream.next();
-      return `paren-${d}`;
+      return 'punctuation';
     }
 
     // ── Punctuation ──
