@@ -18,11 +18,11 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal, type TerminalSession } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Key, Loader2, Minimize2, PanelLeftOpen, Shield, Terminal as TerminalIcon, Trash2, Users, X } from 'lucide-react';
-import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
+import { ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, PanelLeftOpen, Terminal as TerminalIcon } from 'lucide-react';
+import { LazyMotion, domAnimation, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
-import { DeletePhase, DialogKind, type DocItem, type FolderItem, type ViewMode, type Workspace, type DialogConfig, type DialogResult, type DeleteStatus } from '@/components/dashboard/types';
+import { DialogKind, type DocItem, type FolderItem, type ViewMode, type Workspace, type DialogConfig, type DialogResult } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
@@ -49,7 +49,6 @@ import {
     createDocumentApi,
     createWorkspaceApi,
     fetchCurrentUserApi,
-    deleteDocumentApi,
     deleteWorkspaceApi,
     downloadDocumentBlobApi,
     fetchDocumentRawApi,
@@ -76,7 +75,6 @@ import ChangePasswordModal from '@/components/dashboard/ChangePasswordModal';
 import NewWorkspaceModal from '@/components/dashboard/NewWorkspaceModal';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
-import { getErrorMessage } from '@/lib/error-utils';
 import { PLANS, canAccessTerminals } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
 import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
@@ -84,6 +82,7 @@ import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
 import { useSubscription } from '@/hooks/dashboard/useSubscription';
 import { useQuickSearch } from '@/hooks/dashboard/useQuickSearch';
 import { useDeleteDocument } from '@/hooks/dashboard/useDeleteDocument';
+import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
@@ -116,9 +115,9 @@ function DashboardContent() {
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState<Record<string, { email?: string | null; displayName?: string | null }>>({});
-    const { currentPlan, subscriptionEndDate, showPricingModal, setShowPricingModal } = useSubscription(user, searchParams);
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { currentPlan, subscriptionEndDate, showPricingModal, setShowPricingModal } = useSubscription(user, searchParams);
     const reduceMotion = useReducedMotion();
     const modalFade = useMemo<Transition>(() => ({
         duration: reduceMotion ? 0.01 : 0.08,
@@ -330,6 +329,30 @@ function DashboardContent() {
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
+
+    const {
+        quickSearchInputRef,
+        semanticSearchResults,
+        semanticSearchLoading,
+        semanticSearchError,
+        quickSearchFilter,
+        setQuickSearchFilter,
+        quickSearchResults,
+        closeQuickSearch,
+        handleQuickSearchSelect,
+        handleQuickSearchKeyDown
+    } = useQuickSearch({
+        showQuickSearch,
+        quickSearchQuery,
+        quickSearchIndex,
+        currentWorkspaceId: currentWorkspace?.id,
+        docs,
+        setShowQuickSearch,
+        setQuickSearchQuery,
+        setQuickSearchIndex,
+        onSelectDoc: async (doc) => { await openDocumentRef.current(doc); }
+    });
+
     const deferredDocs = useDeferredValue(docs);
     const deferredSidebarQuery = useDeferredValue(sidebarSearchQuery);
 
@@ -338,11 +361,8 @@ function DashboardContent() {
     const [inviteEmail, setInviteEmail] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [loadingDocs, setLoadingDocs] = useState(true);
-    const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
-    const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
-    const deleteStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const docsRef = useRef<DocItem[]>([]);
     const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
@@ -360,15 +380,6 @@ function DashboardContent() {
     useEffect(() => {
         currentWorkspaceRef.current = currentWorkspace;
     }, [currentWorkspace]);
-
-    useEffect(() => {
-        return () => {
-            if (deleteStatusTimer.current) {
-                clearTimeout(deleteStatusTimer.current);
-                deleteStatusTimer.current = null;
-            }
-        };
-    }, []);
 
     const { fetchWorkspaces, selectWorkspace } = useDashboardWorkspaces({
         user,
@@ -589,14 +600,6 @@ function DashboardContent() {
     });
 
     useEffect(() => {
-        return () => {
-            if (deleteStatusTimer.current) {
-                clearTimeout(deleteStatusTimer.current);
-            }
-        };
-    }, []);
-
-    useEffect(() => {
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
                 e.preventDefault();
@@ -604,8 +607,6 @@ function DashboardContent() {
                 setQuickSearchQuery('');
                 setQuickSearchIndex(0);
                 setQuickSearchFilter(ALL_SEARCH_RESULT_FILTER);
-                setSemanticSearchError(null);
-                setSemanticSearchResults([]);
                 setTimeout(() => quickSearchInputRef.current?.focus(), 50);
             }
             if (e.key === 'Escape' && showQuickSearch) {
@@ -616,7 +617,7 @@ function DashboardContent() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [showQuickSearch, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
+    }, [showQuickSearch, quickSearchInputRef, setQuickSearchFilter, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
 
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
@@ -637,132 +638,6 @@ function DashboardContent() {
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
     }, [docs]);
-
-    const buildLocalQuickSearchFallback = useCallback((query: string): SearchResultItem[] => {
-        const normalizedQuery = query.trim().toLowerCase();
-        const fallbackDocs = docs
-            .filter(doc => doc.type !== 'folder')
-            .filter(doc => {
-                if (!normalizedQuery) return true;
-                const name = doc.name.toLowerCase();
-                const folder = (doc.folder || '').toLowerCase();
-                return name.includes(normalizedQuery) || folder.includes(normalizedQuery);
-            })
-            .slice(0, normalizedQuery ? 12 : 8);
-
-        return fallbackDocs.map((doc, index) => ({
-            id: `fallback-document:${doc.id}:${index}`,
-            kind: SearchKind.Document,
-            title: doc.name,
-            subtitle: doc.folder || 'Raiz del espacio',
-            preview: doc.mimeType || 'Documento',
-            badge: 'DOC',
-            score: fallbackDocs.length - index,
-            matchedTerms: normalizedQuery ? [normalizedQuery] : [],
-            sourceDoc: {
-                id: doc.id,
-                name: doc.name,
-                type: doc.type,
-                folder: doc.folder,
-                workspaceId: doc.workspaceId,
-                mimeType: doc.mimeType,
-                url: doc.url,
-                storagePath: doc.storagePath,
-                ownerId: doc.ownerId,
-                updatedAt: doc.updatedAt,
-                size: doc.size
-            }
-        }));
-    }, [docs]);
-
-    useEffect(() => {
-        if (!showQuickSearch || !currentWorkspace) {
-            setSemanticSearchLoading(false);
-            return;
-        }
-
-        const controller = new AbortController();
-        const query = deferredQuickSearchQuery.trim();
-        const timeout = setTimeout(() => {
-            setSemanticSearchLoading(true);
-            setSemanticSearchError(null);
-
-            semanticSearchApi(
-                {
-                    query,
-                    workspaceId: currentWorkspace.id,
-                    limit: 18
-                },
-                { signal: controller.signal }
-            )
-                .then(data => {
-                    if (controller.signal.aborted) return;
-                    setSemanticSearchResults(data.results);
-                })
-                .catch(error => {
-                    if (controller.signal.aborted) return;
-                    const aborted = error instanceof DOMException && error.name === 'AbortError';
-                    if (aborted) return;
-                    setSemanticSearchError('Se mostró una búsqueda local de respaldo porque el índice semántico no respondió.');
-                    setSemanticSearchResults(buildLocalQuickSearchFallback(query));
-                })
-                .finally(() => {
-                    if (!controller.signal.aborted) {
-                        setSemanticSearchLoading(false);
-                    }
-                });
-        }, query ? 140 : 0);
-
-        return () => {
-            controller.abort();
-            clearTimeout(timeout);
-        };
-    }, [buildLocalQuickSearchFallback, currentWorkspace, deferredQuickSearchQuery, showQuickSearch]);
-
-    const quickSearchResults = useMemo(() => {
-        if (quickSearchFilter === ALL_SEARCH_RESULT_FILTER) return semanticSearchResults;
-        return semanticSearchResults.filter(result => result.kind === quickSearchFilter);
-    }, [quickSearchFilter, semanticSearchResults]);
-
-    const closeQuickSearch = useCallback(() => {
-        setShowQuickSearch(false);
-        setQuickSearchQuery('');
-        setQuickSearchIndex(0);
-    }, [setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
-
-    const handleQuickSearchSelect = useCallback(async (result: SearchResultItem) => {
-        const docFromState = docs.find(item => item.id === result.sourceDoc.id);
-        const sourceDoc = docFromState ?? result.sourceDoc as DocItem;
-        await openDocumentRef.current(sourceDoc);
-        closeQuickSearch();
-    }, [closeQuickSearch, docs]);
-
-    const handleQuickSearchKeyDown = (e: ReactKeyboardEvent) => {
-        if (e.key === 'ArrowDown' && quickSearchResults.length > 0) {
-            e.preventDefault();
-            setQuickSearchIndex(Math.min(quickSearchIndex + 1, quickSearchResults.length - 1));
-        } else if (e.key === 'ArrowUp' && quickSearchResults.length > 0) {
-            e.preventDefault();
-            setQuickSearchIndex(Math.max(quickSearchIndex - 1, 0));
-        } else if (e.key === 'Enter' && quickSearchResults[quickSearchIndex]) {
-            e.preventDefault();
-            void handleQuickSearchSelect(quickSearchResults[quickSearchIndex]);
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            closeQuickSearch();
-        }
-    };
-
-    useEffect(() => {
-        if (!showQuickSearch) return;
-        if (quickSearchResults.length === 0 && quickSearchIndex !== 0) {
-            setQuickSearchIndex(0);
-            return;
-        }
-        if (quickSearchIndex >= quickSearchResults.length && quickSearchResults.length > 0) {
-            setQuickSearchIndex(quickSearchResults.length - 1);
-        }
-    }, [quickSearchIndex, quickSearchResults, setQuickSearchIndex, showQuickSearch]);
 
     const sidebarFilteredDocs = useMemo(() => {
         const query = deferredSidebarQuery.trim().toLowerCase();
@@ -1274,6 +1149,15 @@ function DashboardContent() {
             dialogResolverRef.current = resolve;
         });
     }, []);
+
+    const { deleteStatus, deletingIds, deleteDocRecords, deleteItems, deleteFolder } = useDeleteDocument({
+        docs,
+        folders,
+        requestDocsRefresh,
+        closeTabById,
+        showDialog,
+        setDocs
+    });
 
     const toggleFavoriteDoc = useCallback(async (doc: DocItem) => {
         setFavoriteDocIds(prev => {
@@ -1929,13 +1813,6 @@ function DashboardContent() {
         }
     }, [folders, activeFolder, folderChildrenMap, setActiveFolderSafe]);
 
-    const scheduleDeleteStatusClear = () => {
-        if (deleteStatusTimer.current) {
-            clearTimeout(deleteStatusTimer.current);
-        }
-        deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
-    };
-
     const handleDocDragStart = (e: ReactDragEvent, docItem: DocItem) => {
         e.dataTransfer.setData('application/x-doc-id', docItem.id);
         e.dataTransfer.setData('text/plain', docItem.id);
@@ -2025,134 +1902,6 @@ function DashboardContent() {
         e.preventDefault();
         setFolderDragOver(null);
         await moveDocumentToFolder(docId, folderName);
-    };
-
-    const isWithinFolder = (candidate: string, folderPath: string) => {
-        if (!candidate) return false;
-        return candidate === folderPath || candidate.startsWith(`${folderPath}/`);
-    };
-
-    const deleteDocRecords = async (uniqueIds: string[], label: string) => {
-        setDeletingIds(prev => {
-            const next = { ...prev };
-            uniqueIds.forEach(id => {
-                next[id] = true;
-            });
-            return next;
-        });
-
-        try {
-            if (deleteStatusTimer.current) {
-                clearTimeout(deleteStatusTimer.current);
-            }
-            setDeleteStatus({ phase: DeletePhase.Deleting, name: label });
-
-            const results = await Promise.all(
-                uniqueIds.map(async id => {
-                    try {
-                        const ok = await deleteDocumentApi(id);
-                        return { id, ok };
-                    } catch {
-                        return { id, ok: false };
-                    }
-                })
-            );
-
-            const failed = results.filter(result => !result.ok).map(result => result.id);
-            const succeeded = results.filter(result => result.ok).map(result => result.id);
-
-            if (succeeded.length > 0) {
-                setDocs(prev => prev.filter(item => !succeeded.includes(item.id)));
-                succeeded.forEach(id => closeTabById(id));
-            }
-            await requestDocsRefresh({ force: true });
-
-            if (failed.length > 0) {
-                console.error('Error deleting', failed);
-                setDeleteStatus({ phase: DeletePhase.Error, name: label, error: 'Error al eliminar' });
-                await showDialog({ type: DialogKind.Error, title: 'Error al eliminar' });
-            } else {
-                setDeleteStatus({ phase: DeletePhase.Done, name: label });
-            }
-            scheduleDeleteStatusClear();
-        } finally {
-            setDeletingIds(prev => {
-                const next = { ...prev };
-                uniqueIds.forEach(id => {
-                    delete next[id];
-                });
-                return next;
-            });
-        }
-    };
-
-    const deleteItems = async ({ docIds, folderPaths }: { docIds: string[]; folderPaths: string[] }) => {
-        const filteredFolderPaths = folderPaths
-            .map(path => normalizePath(path))
-            .filter(path => path && path !== DEFAULT_FOLDER_NAME);
-
-        if (filteredFolderPaths.length !== folderPaths.length) {
-            await showDialog({ type: DialogKind.Info, title: 'No se puede eliminar la carpeta raíz.' });
-        }
-
-        const folderDocIds = new Set<string>();
-        const docIdsFromFolders = new Set<string>();
-
-        filteredFolderPaths.forEach(folderPath => {
-            folders.forEach(folder => {
-                if (folder.docId && isWithinFolder(folder.path, folderPath)) {
-                    folderDocIds.add(folder.docId);
-                }
-            });
-            docs.forEach(doc => {
-                const docFolder = normalizeFolderPath(doc.folder);
-                if (isWithinFolder(docFolder, folderPath)) {
-                    docIdsFromFolders.add(doc.id);
-                }
-            });
-        });
-
-        const allDocIds = Array.from(new Set([...docIds, ...folderDocIds, ...docIdsFromFolders]));
-
-        if (allDocIds.length === 0 && filteredFolderPaths.length === 0) return;
-
-        if (allDocIds.length === 0) {
-            // Carpeta vacía (virtual o sin documentos) – confirmar y refrescar
-            const confirmResult = await showDialog({
-                type: DialogKind.Confirm,
-                title: 'Confirmar eliminación',
-                message: '¿Eliminar la carpeta vacía? Esta acción no se puede deshacer.',
-                confirmLabel: 'Eliminar',
-                cancelLabel: 'Cancelar',
-                danger: true
-            });
-            if (!confirmResult.confirmed) return;
-            // Refrescar documentos para que las carpetas virtuales se recalculen
-            await requestDocsRefresh({ force: true });
-            setDeleteStatus({ phase: DeletePhase.Done, name: 'Carpeta eliminada' });
-            scheduleDeleteStatusClear();
-            return;
-        }
-
-        const label = allDocIds.length === 1 ? 'Elemento' : `${allDocIds.length} elementos`;
-        const confirmResult = await showDialog({
-            type: DialogKind.Confirm,
-            title: 'Confirmar eliminación',
-            message: `¿Eliminar ${label}? Esta acción no se puede deshacer.`,
-            confirmLabel: 'Eliminar',
-            cancelLabel: 'Cancelar',
-            danger: true
-        });
-        if (!confirmResult.confirmed) return;
-        await deleteDocRecords(allDocIds, label);
-    };
-
-    const deleteFolder = async (folder: FolderItem) => {
-        if (folder.path === DEFAULT_FOLDER_NAME || folder.kind === 'system') {
-            await showDialog({ type: DialogKind.Info, title: 'No se puede eliminar la carpeta raíz.' });
-            return;
-        }
-        await deleteItems({ docIds: [], folderPaths: [folder.path] });
     };
 
     const handleDownloadDoc = async (doc: DocItem) => {
@@ -2594,255 +2343,45 @@ function DashboardContent() {
                     </div>
                 </div>
 
-                <AnimatePresence>
-                    {showNewWorkspaceModal && (
-                        <m.div
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            transition={modalFade}
-                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-                            style={{ willChange: 'opacity' }}
-                        >
-                            <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-sm border border-surface-600/50">
-                                <h2 className="text-lg font-bold mb-4 text-white">Nuevo Espacio de Trabajo</h2>
-                                <input
-                                    type="text"
-                                    placeholder="Nombre, ej: Grupo Física"
-                                    value={newWorkspaceName}
-                                    onChange={(e) => setNewWorkspaceName(e.target.value)}
-                                    className="w-full px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg mb-4 text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                    autoFocus
-                                />
-                                <div className="flex gap-2 justify-end">
-                                    <button onClick={() => setShowNewWorkspaceModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:bg-surface-700 rounded-lg">Cancelar</button>
-                                    <button onClick={createWorkspace} disabled={!newWorkspaceName.trim()} className="px-4 py-2 text-sm bg-gradient-mandy text-white rounded-lg hover:opacity-90 disabled:opacity-50">Crear</button>
-                                </div>
-                            </div>
-                        </m.div>
-                    )}
+                <NewWorkspaceModal
+                    isOpen={showNewWorkspaceModal}
+                    onClose={() => setShowNewWorkspaceModal(false)}
+                    workspaceName={newWorkspaceName}
+                    setWorkspaceName={setNewWorkspaceName}
+                    onCreate={createWorkspace}
+                    modalFade={modalFade}
+                />
 
-                    {showMembersModal && currentWorkspace && (
-                        <m.div
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            transition={modalFade}
-                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-                            style={{ willChange: 'opacity' }}
-                        >
-                            <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-md border border-surface-600/50">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-lg font-bold flex items-center gap-2 text-white">
-                                        <Users className="w-5 h-5 text-mandy-400" />
-                                        Miembros de {currentWorkspace.name}
-                                    </h2>
-                                    <button onClick={() => setShowMembersModal(false)} className="p-1 hover:bg-surface-700 rounded-full text-surface-400"><X className="w-4 h-4" /></button>
-                                </div>
+                {currentWorkspace && (
+                    <MembersModal
+                        isOpen={showMembersModal}
+                        onClose={() => setShowMembersModal(false)}
+                        currentWorkspace={currentWorkspace}
+                        user={user}
+                        memberProfiles={memberProfiles}
+                        inviteEmail={inviteEmail}
+                        setInviteEmail={setInviteEmail}
+                        inviteMember={inviteMember}
+                        removeMember={removeMember}
+                        modalFade={modalFade}
+                    />
+                )}
 
-                                <div className="mb-6">
-                                    <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Invitar por Email</label>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="email"
-                                            placeholder="usuario@ejemplo.com"
-                                            value={inviteEmail}
-                                            onChange={(e) => setInviteEmail(e.target.value)}
-                                            className="flex-1 px-4 py-2 bg-surface-700 border border-surface-600 rounded-lg text-sm text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                        />
-                                        <button onClick={inviteMember} className="bg-gradient-mandy text-white px-4 py-2 rounded-lg text-sm hover:opacity-90">Enviar</button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">Miembros ({currentWorkspace.members.length})</label>
-                                    <div className="max-h-48 overflow-y-auto scrollbar-hide pr-2 space-y-2">
-                                        {currentWorkspace.members.map((uid) => {
-                                            const profile = memberProfiles[uid];
-                                            const email = profile?.email || (uid === user?.uid ? user?.email : null);
-                                            const label = email || profile?.displayName || `UID: ${uid.substring(0, 8)}...`;
-                                            return (
-                                                <div key={uid} className="flex items-center justify-between p-2 bg-surface-700 rounded-lg text-sm">
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <div className="w-8 h-8 bg-mandy-500/15 text-mandy-400 rounded-full flex items-center justify-center text-xs font-bold">
-                                                            U
-                                                        </div>
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-surface-200 text-sm truncate" title={email || uid}>{label}</span>
-                                                            {!email && profile?.displayName && (
-                                                                <span className="text-[10px] text-surface-500 font-mono truncate">{uid.substring(0, 8)}...</span>
-                                                            )}
-                                                        </div>
-                                                        {uid === currentWorkspace.ownerId && <span className="bg-accent-purple/20 text-accent-purple-light text-[10px] px-1.5 py-0.5 rounded font-bold">ADMIN</span>}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Shield className={`w-3 h-3 ${uid === currentWorkspace.ownerId ? 'text-mandy-400' : 'text-surface-600'}`} />
-                                                        {user && currentWorkspace.ownerId === user.uid && uid !== user.uid && (
-                                                            <button
-                                                                onClick={() => removeMember(uid)}
-                                                                className="p-1 hover:bg-surface-600 text-surface-400 hover:text-red-400 rounded transition-colors"
-                                                                title="Eliminar miembro"
-                                                            >
-                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        </m.div>
-                    )}
-
-                    {showPasswordModal && (
-                        <m.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={modalFade}
-                            className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-                            style={{ willChange: 'opacity' }}
-                            onClick={() => setShowPasswordModal(false)}
-                        >
-                            <m.div
-                                initial={{ scale: 0.9, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.9, opacity: 0 }}
-                                transition={modalPop}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-surface-800 rounded-2xl border border-surface-600/50 p-6 w-full max-w-md shadow-xl transform-gpu"
-                                style={{ willChange: 'transform, opacity' }}
-                            >
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                        <Key className="w-5 h-5 text-mandy-400" />
-                                        Cambiar Contraseña
-                                    </h2>
-                                    <button onClick={() => setShowPasswordModal(false)} className="p-1 hover:bg-surface-700 rounded-full text-surface-400">
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-
-                                {passwordSuccess ? (
-                                    <div className="text-center py-8">
-                                        <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                            <Check className="w-8 h-8 text-green-400" />
-                                        </div>
-                                        <h3 className="text-lg font-semibold text-white mb-2">¡Contraseña actualizada!</h3>
-                                        <p className="text-surface-400 text-sm">Tu contraseña ha sido cambiada exitosamente.</p>
-                                        <button
-                                            onClick={() => setShowPasswordModal(false)}
-                                            className="mt-6 px-6 py-2 bg-gradient-mandy text-white rounded-lg hover:opacity-90"
-                                        >
-                                            Cerrar
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <form
-                                        onSubmit={async (e) => {
-                                            e.preventDefault();
-                                            setPasswordError('');
-
-                                            if (passwordForm.new !== passwordForm.confirm) {
-                                                setPasswordError('Las contraseñas nuevas no coinciden');
-                                                return;
-                                            }
-
-                                            if (passwordForm.new.length < 6) {
-                                                setPasswordError('La nueva contraseña debe tener al menos 6 caracteres');
-                                                return;
-                                            }
-
-                                            setIsChangingPassword(true);
-                                            try {
-                                                await changePassword(passwordForm.current, passwordForm.new);
-                                                setPasswordSuccess(true);
-                                            } catch (error: unknown) {
-                                                setPasswordError(getErrorMessage(error, 'Error al cambiar la contraseña'));
-                                            } finally {
-                                                setIsChangingPassword(false);
-                                            }
-                                        }}
-                                        className="space-y-4"
-                                    >
-                                        <div>
-                                            <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
-                                                Contraseña Actual
-                                            </label>
-                                            <div className="relative">
-                                                <input
-                                                    type="password"
-                                                    value={passwordForm.current}
-                                                    onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
-                                                    className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                                    placeholder="••••••••"
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
-                                                Nueva Contraseña
-                                            </label>
-                                            <input
-                                                type="password"
-                                                value={passwordForm.new}
-                                                onChange={(e) => setPasswordForm({ ...passwordForm, new: e.target.value })}
-                                                className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                                placeholder="Mínimo 6 caracteres"
-                                                required
-                                                minLength={6}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2 block">
-                                                Confirmar Nueva Contraseña
-                                            </label>
-                                            <input
-                                                type="password"
-                                                value={passwordForm.confirm}
-                                                onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-                                                className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                                placeholder="Repite la nueva contraseña"
-                                                required
-                                            />
-                                        </div>
-
-                                        {passwordError && (
-                                            <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                                                {passwordError}
-                                            </div>
-                                        )}
-
-                                        <div className="flex gap-3 pt-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowPasswordModal(false)}
-                                                className="flex-1 px-4 py-3 bg-surface-700 text-surface-300 rounded-lg hover:bg-surface-600 transition"
-                                            >
-                                                Cancelar
-                                            </button>
-                                            <button
-                                                type="submit"
-                                                disabled={isChangingPassword}
-                                                className="flex-1 px-4 py-3 bg-gradient-mandy text-white rounded-lg hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                                            >
-                                                {isChangingPassword ? (
-                                                    <>
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                        Cambiando...
-                                                    </>
-                                                ) : (
-                                                    'Cambiar Contraseña'
-                                                )}
-                                            </button>
-                                        </div>
-                                    </form>
-                                )}
-                            </m.div>
-                        </m.div>
-                    )}
-                </AnimatePresence>
+                <ChangePasswordModal
+                    isOpen={showPasswordModal}
+                    onClose={() => setShowPasswordModal(false)}
+                    passwordForm={passwordForm}
+                    setPasswordForm={setPasswordForm}
+                    passwordError={passwordError}
+                    setPasswordError={setPasswordError}
+                    passwordSuccess={passwordSuccess}
+                    setPasswordSuccess={setPasswordSuccess}
+                    isChangingPassword={isChangingPassword}
+                    setIsChangingPassword={setIsChangingPassword}
+                    changePassword={changePassword}
+                    modalFade={modalFade}
+                    modalPop={modalPop}
+                />
 
                 <PricingModal
                     isOpen={showPricingModal}

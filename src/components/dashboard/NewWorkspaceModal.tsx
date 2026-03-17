@@ -17,7 +17,7 @@ export default function NewWorkspaceModal({
     workspaceName,
     setWorkspaceName,
     onCreate,
-    modalFade,
+    modalFade
 }: NewWorkspaceModalProps) {
     return (
         <AnimatePresence>

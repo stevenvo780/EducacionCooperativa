@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { semanticSearchApi } from '@/services/searchApi';
 import { ALL_SEARCH_RESULT_FILTER, SearchKind, type SearchResultFilter, type SearchResultItem } from '@/lib/search/types';
 import type { DocItem } from '@/components/dashboard/types';
@@ -40,7 +39,7 @@ export function useQuickSearch({
     setShowQuickSearch,
     setQuickSearchQuery,
     setQuickSearchIndex,
-    onSelectDoc,
+    onSelectDoc
 }: UseQuickSearchOptions): UseQuickSearchResult {
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
@@ -182,6 +181,6 @@ export function useQuickSearch({
         quickSearchResults,
         closeQuickSearch,
         handleQuickSearchSelect,
-        handleQuickSearchKeyDown,
+        handleQuickSearchKeyDown
     };
 }

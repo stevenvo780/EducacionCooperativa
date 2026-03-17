@@ -4,6 +4,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Play, RotateCcw, Trash2, ChevronDown, Zap, BookOpen, Terminal, AlertTriangle, List, Info } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
+import STCodeEditor from '@/components/editor/STCodeEditor';
 
 // ── Constantes ──────────────────────────────────────────────
 
@@ -291,7 +292,6 @@ export default function STRunner({
   const [code, setCode] = useState(initialCode || DEFAULT_SCRIPT);
   const [replInput, setReplInput] = useState('');
   const [showExamples, setShowExamples] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const replInputRef = useRef<HTMLInputElement>(null);
   const [replHistory, setReplHistory] = useState<string[]>([]);
   const [replHistoryIdx, setReplHistoryIdx] = useState(-1);
@@ -519,14 +519,12 @@ export default function STRunner({
           /* Script mode: editor arriba, output con tabs abajo */
           <>
             <div className="flex-shrink-0 border-b border-slate-800" style={{ height: '45%', minHeight: 120 }}>
-              <textarea
-                ref={textareaRef}
+              <STCodeEditor
                 value={code}
-                onChange={e => setCode(e.target.value)}
+                onChange={setCode}
                 onKeyDown={handleCodeKeyDown}
-                className="w-full h-full p-3 bg-slate-950 text-slate-200 font-mono text-sm resize-none focus:outline-none"
-                spellCheck={false}
                 placeholder="// Escribe tu script ST aquí..."
+                className="bg-slate-950"
               />
             </div>
             {/* Output tabs */}
