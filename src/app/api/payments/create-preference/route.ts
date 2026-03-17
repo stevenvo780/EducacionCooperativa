@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       // No tiene plan activo — OK poner pending
       await adminDb.collection('subscriptions').doc(auth.uid).set({
         userId: auth.uid,
-        planId: planId,
+        planId,
         status: 'pending',
         mpPreferenceId: preference.id,
         createdAt: new Date().toISOString(),

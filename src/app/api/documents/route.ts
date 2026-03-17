@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
         if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
              const body = await req.json();
-             return NextResponse.json({ id: 'mock-doc-' + Date.now(), status: 'success' });
+             return NextResponse.json({ id: `mock-doc-${Date.now()}`, status: 'success' });
         }
 
         const body = await req.json();

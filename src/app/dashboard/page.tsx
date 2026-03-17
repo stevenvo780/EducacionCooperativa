@@ -1,8 +1,20 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue, Suspense } from 'react';
-import type React from 'react';
-import type { ReactNode } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type InputHTMLAttributes,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode
+} from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal, type TerminalSession } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -1553,7 +1565,7 @@ function DashboardContent() {
 
             childrenToUpdate = docsRef.current.filter(d => {
                 const f = normalizeFolderPath(d.folder);
-                return f === oldFullPath || f.startsWith(oldFullPath + '/');
+                return f === oldFullPath || f.startsWith(`${oldFullPath}/`);
             });
         }
 
@@ -1566,7 +1578,7 @@ function DashboardContent() {
                 let newFolder = oldFolder;
                 if (oldFolder === oldFullPath) {
                     newFolder = newFullPath;
-                } else if (oldFolder.startsWith(oldFullPath + '/')) {
+                } else if (oldFolder.startsWith(`${oldFullPath}/`)) {
                     newFolder = newFullPath + oldFolder.substring(oldFullPath.length);
                 }
                 return { ...item, folder: newFolder };
@@ -1585,7 +1597,7 @@ function DashboardContent() {
                     let newFolder = oldFolder;
                     if (oldFolder === oldFullPath) {
                         newFolder = newFullPath;
-                    } else if (oldFolder.startsWith(oldFullPath + '/')) {
+                    } else if (oldFolder.startsWith(`${oldFullPath}/`)) {
                         newFolder = newFullPath + oldFolder.substring(oldFullPath.length);
                     }
                     return updateDocumentApi(child.id, { folder: newFolder });
@@ -1854,8 +1866,8 @@ function DashboardContent() {
         setIsCreating(true);
         try {
             const data = await createDocumentApi({
-                name: name,
-                content: '# ' + name,
+                name,
+                content: `# ${name}`,
                 type: 'text',
                 ownerId: user.uid,
                 workspaceId: docWorkspaceId,
@@ -1867,7 +1879,7 @@ function DashboardContent() {
             await requestDocsRefresh();
             openDocument({
                 id: docRef.id,
-                name: name,
+                name,
                 type: 'text',
                 ownerId: user.uid,
                 updatedAt: { seconds: Date.now() / 1000 },
@@ -2225,7 +2237,7 @@ function DashboardContent() {
         // Collect all docs in this folder and subfolders
         const folderDocs = docs.filter(d => {
             const docFolder = normalizeFolderPath(d.folder);
-            return docFolder === folderPath || docFolder.startsWith(folderPath + '/');
+            return docFolder === folderPath || docFolder.startsWith(`${folderPath}/`);
         });
         if (folderDocs.length === 0) {
             showDialog({ type: 'info', title: 'Carpeta vacía', message: 'No hay archivos para descargar en esta carpeta.' });
@@ -2239,7 +2251,7 @@ function DashboardContent() {
                     const { blob } = await downloadDocumentBlobApi(doc.id);
                     // Build relative path inside zip
                     const docFolder = normalizeFolderPath(doc.folder);
-                    const relativePath = docFolder.startsWith(folderPath + '/')
+                    const relativePath = docFolder.startsWith(`${folderPath}/`)
                         ? docFolder.slice(folderPath.length + 1)
                         : '';
                     const fullPath = relativePath ? `${relativePath}/${doc.name}` : doc.name;

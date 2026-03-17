@@ -1,7 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type React from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type RefObject
+} from 'react';
 import type { DocItem, DialogConfig, DialogResult, UploadStatus, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
@@ -14,8 +21,8 @@ interface UseDashboardUploadsParams {
   currentWorkspace: Workspace | null;
   activeFolder: string;
   rootFolderPath: string;
-  fileInputRef: React.RefObject<HTMLInputElement>;
-  folderInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: RefObject<HTMLInputElement>;
+  folderInputRef: RefObject<HTMLInputElement>;
   fetchDocs: (options?: { showLoading?: boolean }) => Promise<void> | void;
   openDocument: (doc: DocItem) => void;
   showDialog: (config: DialogConfig) => Promise<DialogResult>;
@@ -124,7 +131,7 @@ export const useDashboardUploads = ({
     return [];
   }, [readAllEntries]);
 
-  const collectDroppedFiles = useCallback(async (e: React.DragEvent) => {
+  const collectDroppedFiles = useCallback(async (e: DragEvent) => {
     const items = Array.from(e.dataTransfer.items ?? []);
     if (items.length === 0) {
       return { files: Array.from(e.dataTransfer.files ?? []), preservePaths: false };
@@ -201,7 +208,7 @@ export const useDashboardUploads = ({
 
           const data = await createDocumentApi({
             name: file.name,
-            content: content,
+            content,
             type: 'text',
             mimeType: file.type || 'text/markdown',
             ownerId: user.uid,
@@ -310,7 +317,7 @@ export const useDashboardUploads = ({
     showDialog
   ]);
 
-  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     const targetFolder = uploadTargetFolder ?? DEFAULT_FOLDER_NAME;
@@ -319,7 +326,7 @@ export const useDashboardUploads = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [uploadTargetFolder, uploadFiles, fileInputRef]);
 
-  const handleFolderUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFolderUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     const targetFolder = uploadTargetFolder ?? activeFolder ?? rootFolderPath;
@@ -328,13 +335,13 @@ export const useDashboardUploads = ({
     if (folderInputRef.current) folderInputRef.current.value = '';
   }, [uploadTargetFolder, activeFolder, rootFolderPath, uploadFiles, folderInputRef]);
 
-  const isFileDrag = useCallback((e: React.DragEvent) => {
+  const isFileDrag = useCallback((e: DragEvent) => {
     const types = Array.from(e.dataTransfer?.types ?? []);
     if (types.includes('Files')) return true;
     return Array.from(e.dataTransfer?.items ?? []).some(item => item.kind === 'file');
   }, []);
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+  const handleDragEnter = useCallback((e: DragEvent) => {
     if (!isFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -342,7 +349,7 @@ export const useDashboardUploads = ({
     setIsDragActive(true);
   }, [isFileDrag]);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: DragEvent) => {
     if (!isDragActive) return;
     e.preventDefault();
     e.stopPropagation();
@@ -353,14 +360,14 @@ export const useDashboardUploads = ({
     }
   }, [isDragActive]);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: DragEvent) => {
     if (!isFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
   }, [isFileDrag]);
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: DragEvent) => {
     if (!isFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -372,7 +379,7 @@ export const useDashboardUploads = ({
     await uploadFiles(files, targetFolder, { preservePaths });
   }, [collectDroppedFiles, isFileDrag, uploadFiles, activeFolder]);
 
-  const uploadDroppedFilesToFolder = useCallback(async (e: React.DragEvent, targetFolder: string) => {
+  const uploadDroppedFilesToFolder = useCallback(async (e: DragEvent, targetFolder: string) => {
     const { files, preservePaths } = await collectDroppedFiles(e);
     if (files.length === 0) return false;
     e.preventDefault();

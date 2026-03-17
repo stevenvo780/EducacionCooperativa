@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
             userEmail: email
         });
 
-        return NextResponse.json({ uid: userId, email: email, customToken }, { status: 201 });
+        return NextResponse.json({ uid: userId, email, customToken }, { status: 201 });
 
     } catch (error: any) {
         console.error('Error creating user (custom auth):', error);

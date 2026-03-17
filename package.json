@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test:e2e": "playwright test",
-    "lint": "next lint",
+    "lint": "next lint --dir src --dir tests",
     "lint:all": "npm run lint && npm --prefix services/hub run lint && npm --prefix services/worker run lint"
   },
   "dependencies": {

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         const docRef = await adminDb.collection('documents').add({
             name: originalName || fileName,
             type: 'file',
-            url: url,
+            url,
             mimeType: mimeType || 'application/octet-stream',
             storagePath,
             ownerId: auth.uid,

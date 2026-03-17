@@ -164,7 +164,7 @@ export class TerminalController {
     term.onData((data: string) => {
       if (this.socket?.connected) {
         this.socket.emit('execute', {
-          sessionId: sessionId,
+          sessionId,
           command: data
         });
       }
