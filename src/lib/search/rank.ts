@@ -1,4 +1,4 @@
-import { SEARCH_KIND_BADGES, type SearchResultItem, type SearchResultKind, type SearchSourceDocument } from '@/lib/search/types';
+import { SEARCH_KIND_BADGES, SearchKind, type SearchResultItem, type SearchResultKind, type SearchSourceDocument } from '@/lib/search/types';
 
 export interface SearchableDocument extends SearchSourceDocument {
   content?: string;
@@ -294,11 +294,11 @@ const buildDocumentResult = (doc: SearchableDocument, terms: SearchTerms): Searc
   if (!terms.normalizedQuery) {
     return {
       id: `document:${doc.id}`,
-      kind: 'document',
+      kind: SearchKind.Document,
       title: doc.name,
       subtitle: doc.folder || 'Raiz del espacio',
       preview: doc.mimeType || 'Documento',
-      badge: SEARCH_KIND_BADGES.document,
+      badge: SEARCH_KIND_BADGES[SearchKind.Document],
       score: Math.max(1, getTimestampValue(doc.updatedAt) / 1_000_000_000_000),
       matchedTerms: [],
       sourceDoc: makeSourceDoc(doc)
@@ -332,11 +332,11 @@ const buildDocumentResult = (doc: SearchableDocument, terms: SearchTerms): Searc
 
   return {
     id: `document:${doc.id}`,
-    kind: 'document',
+    kind: SearchKind.Document,
     title: doc.name,
     subtitle: doc.folder || 'Raiz del espacio',
     preview: extractSnippet(doc.content ?? '', terms) || doc.mimeType || 'Documento',
-    badge: SEARCH_KIND_BADGES.document,
+    badge: SEARCH_KIND_BADGES[SearchKind.Document],
     score,
     matchedTerms: unique([...nameMatch.matchedTerms, ...folderMatch.matchedTerms, ...contentMatch.matchedTerms]),
     sourceDoc: makeSourceDoc(doc)
@@ -344,7 +344,7 @@ const buildDocumentResult = (doc: SearchableDocument, terms: SearchTerms): Searc
 };
 
 const buildEntityResult = (
-  kind: Extract<SearchResultKind, 'concept' | 'author' | 'work'>,
+  kind: SearchKind.Concept | SearchKind.Author | SearchKind.Work,
   value: string,
   doc: SearchableDocument,
   terms: SearchTerms,
@@ -391,11 +391,11 @@ const buildFragmentResult = (doc: SearchableDocument, terms: SearchTerms): Searc
 
   return {
     id: `fragment:${doc.id}:${normalizeText(snippet).slice(0, 32).replace(/\s+/g, '-')}`,
-    kind: 'fragment',
+    kind: SearchKind.Fragment,
     title: doc.name,
     subtitle: `Fragmento en ${doc.folder || 'raiz del espacio'}`,
     preview: snippet,
-    badge: SEARCH_KIND_BADGES.fragment,
+    badge: SEARCH_KIND_BADGES[SearchKind.Fragment],
     score: match.score + 0.4,
     matchedTerms: match.matchedTerms,
     sourceDoc: makeSourceDoc(doc)
@@ -403,11 +403,11 @@ const buildFragmentResult = (doc: SearchableDocument, terms: SearchTerms): Searc
 };
 
 const kindOrder: Record<SearchResultKind, number> = {
-  document: 0,
-  concept: 1,
-  fragment: 2,
-  author: 3,
-  work: 4
+  [SearchKind.Document]: 0,
+  [SearchKind.Concept]: 1,
+  [SearchKind.Fragment]: 2,
+  [SearchKind.Author]: 3,
+  [SearchKind.Work]: 4
 };
 
 export const buildSemanticSearchResults = (params: {
@@ -432,17 +432,17 @@ export const buildSemanticSearchResults = (params: {
     const signals = extractSignals(doc, terms);
 
     signals.concepts.forEach(concept => {
-      const result = buildEntityResult('concept', concept, doc, terms, 'Concepto en');
+      const result = buildEntityResult(SearchKind.Concept, concept, doc, terms, 'Concepto en');
       if (result) rawResults.push(result);
     });
 
     signals.authors.forEach(author => {
-      const result = buildEntityResult('author', author, doc, terms, 'Autor en');
+      const result = buildEntityResult(SearchKind.Author, author, doc, terms, 'Autor en');
       if (result) rawResults.push(result);
     });
 
     signals.works.forEach(work => {
-      const result = buildEntityResult('work', work, doc, terms, 'Obra en');
+      const result = buildEntityResult(SearchKind.Work, work, doc, terms, 'Obra en');
       if (result) rawResults.push(result);
     });
 

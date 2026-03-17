@@ -11,9 +11,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { processSyncQueue, type SyncProgress } from '@/lib/offlineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import {
-  getSyncQueueCount,
+  clearCompletedSync,
   getFailedSyncItems,
-  clearCompletedSync
+  getSyncQueueCount,
+  SyncQueueStatus
 } from '@/lib/offlineStorage';
 
 export interface OfflineSyncState {
@@ -170,7 +171,7 @@ export function useOfflineSync() {
       const failed = await getFailedSyncItems();
       const { updateSyncItem } = await import('@/lib/offlineStorage');
       for (const item of failed) {
-        await updateSyncItem({ ...item, status: 'pending', retries: 0, error: undefined });
+        await updateSyncItem({ ...item, status: SyncQueueStatus.Pending, retries: 0, error: undefined });
       }
       await refreshCounts();
       await syncNow();

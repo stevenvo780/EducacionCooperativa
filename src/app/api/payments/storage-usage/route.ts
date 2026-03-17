@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
-import { getStorageLimitMB, type PlanId } from '@/types/subscription';
+import { Plan, SubscriptionStatus, getStorageLimitMB, type PlanId } from '@/types/subscription';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -15,10 +15,10 @@ export async function GET(req: NextRequest) {
 
     // Get user's current plan
     const subSnap = await adminDb.collection('subscriptions').doc(auth.uid).get();
-    let planId: PlanId = 'free';
+    let planId: PlanId = Plan.Free;
     if (subSnap.exists) {
       const subData = subSnap.data();
-      if (subData?.status === 'active' && subData?.planId) {
+      if (subData?.status === SubscriptionStatus.Active && subData?.planId) {
         planId = subData.planId as PlanId;
       }
     }

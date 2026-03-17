@@ -34,7 +34,19 @@ export interface CachedContent {
   updatedAt: number;
 }
 
-export type SyncOperation = 'create' | 'update' | 'delete' | 'rename' | 'move';
+export enum SyncOperation {
+  Create = 'create',
+  Update = 'update',
+  Delete = 'delete',
+  Rename = 'rename',
+  Move = 'move'
+}
+
+export enum SyncQueueStatus {
+  Pending = 'pending',
+  Processing = 'processing',
+  Failed = 'failed'
+}
 
 export interface SyncQueueItem {
   id?: number;
@@ -42,7 +54,7 @@ export interface SyncQueueItem {
   docId: string;
   payload: Record<string, unknown>;
   timestamp: number;
-  status: 'pending' | 'processing' | 'failed';
+  status: SyncQueueStatus;
   retries: number;
   error?: string;
 }
@@ -248,7 +260,7 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
     const transaction = db.transaction(STORE_QUEUE, 'readonly');
     const store = transaction.objectStore(STORE_QUEUE);
     const index = store.index('status');
-    const request = index.getAll('pending');
+    const request = index.getAll(SyncQueueStatus.Pending);
     request.onsuccess = () => {
       const items = (request.result as SyncQueueItem[]).sort((a, b) => a.timestamp - b.timestamp);
       resolve(items);
@@ -266,7 +278,7 @@ export async function getFailedSyncItems(): Promise<SyncQueueItem[]> {
     const transaction = db.transaction(STORE_QUEUE, 'readonly');
     const store = transaction.objectStore(STORE_QUEUE);
     const index = store.index('status');
-    const request = index.getAll('failed');
+    const request = index.getAll(SyncQueueStatus.Failed);
     request.onsuccess = () => resolve(request.result as SyncQueueItem[]);
     request.onerror = () => reject(request.error);
   });
@@ -302,7 +314,7 @@ export async function clearCompletedSync(): Promise<void> {
   const transaction = db.transaction(STORE_QUEUE, 'readwrite');
   const store = transaction.objectStore(STORE_QUEUE);
   for (const item of all) {
-    if (item.status !== 'pending' && item.status !== 'processing' && item.id !== null && item.id !== undefined) {
+    if (item.status !== SyncQueueStatus.Pending && item.status !== SyncQueueStatus.Processing && item.id !== null && item.id !== undefined) {
       store.delete(item.id);
     }
   }
@@ -361,6 +373,6 @@ export async function getOfflineStorageStats(): Promise<{
   return {
     docCount: docs.length,
     contentCount: content.length,
-    queueCount: queue.filter((q) => q.status === 'pending').length
+    queueCount: queue.filter((q) => q.status === SyncQueueStatus.Pending).length
   };
 }

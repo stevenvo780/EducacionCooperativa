@@ -1,4 +1,28 @@
-export type PlanId = 'free' | 'basic' | 'pro' | 'enterprise';
+export enum Plan {
+  Free = 'free',
+  Basic = 'basic',
+  Pro = 'pro',
+  Enterprise = 'enterprise'
+}
+
+export type PlanId = `${Plan}`;
+
+export const PLAN_IDS = Object.values(Plan) as PlanId[];
+export const PLAN_ORDER = [Plan.Free, Plan.Basic, Plan.Pro, Plan.Enterprise] as const satisfies readonly PlanId[];
+
+const PLAN_ID_SET = new Set<PlanId>(PLAN_IDS);
+
+export const isPlanId = (value: string): value is PlanId => PLAN_ID_SET.has(value as PlanId);
+
+export enum SubscriptionStatus {
+  Active = 'active',
+  Pending = 'pending',
+  Cancelled = 'cancelled',
+  Expired = 'expired',
+  Free = 'free'
+}
+
+export type SubscriptionStatusId = `${SubscriptionStatus}`;
 
 export interface PlanConfig {
   id: PlanId;
@@ -13,8 +37,8 @@ export interface PlanConfig {
 }
 
 export const PLANS: Record<PlanId, PlanConfig> = {
-  free: {
-    id: 'free',
+  [Plan.Free]: {
+    id: Plan.Free,
     name: 'Gratuito',
     price: 0,
     currency: 'COP',
@@ -29,8 +53,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     contactRequired: false,
     storageLimitMB: 50
   },
-  basic: {
-    id: 'basic',
+  [Plan.Basic]: {
+    id: Plan.Basic,
     name: 'Básico',
     price: 30000,
     currency: 'COP',
@@ -46,8 +70,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     contactRequired: false,
     storageLimitMB: 1024
   },
-  pro: {
-    id: 'pro',
+  [Plan.Pro]: {
+    id: Plan.Pro,
     name: 'Pro',
     price: 50000,
     currency: 'COP',
@@ -63,8 +87,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     contactRequired: false,
     storageLimitMB: 1024
   },
-  enterprise: {
-    id: 'enterprise',
+  [Plan.Enterprise]: {
+    id: Plan.Enterprise,
     name: 'Enterprise',
     price: 150000,
     currency: 'COP',
@@ -87,7 +111,7 @@ export interface UserSubscription {
   id?: string;
   userId: string;
   planId: PlanId;
-  status: 'active' | 'pending' | 'cancelled' | 'expired' | 'free';
+  status: SubscriptionStatusId;
   mpPaymentId?: string;
   mpPreferenceId?: string;
   mpMerchantOrderId?: string;
@@ -102,11 +126,11 @@ export function canAccessTerminals(planId: PlanId): boolean {
 }
 
 export function getPlanById(planId: PlanId): PlanConfig {
-  return PLANS[planId] ?? PLANS.free;
+  return PLANS[planId] ?? PLANS[Plan.Free];
 }
 
 export function getStorageLimitMB(planId: PlanId): number {
-  return PLANS[planId]?.storageLimitMB ?? PLANS.free.storageLimitMB;
+  return PLANS[planId]?.storageLimitMB ?? PLANS[Plan.Free].storageLimitMB;
 }
 
 export function formatStorageSize(mb: number): string {
