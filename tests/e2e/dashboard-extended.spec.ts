@@ -60,7 +60,8 @@ const clickExplorerToolbarAction = async (page: Page, label: 'Subir archivo' | '
 };
 
 const openExplorerFolder = async (page: Page, name: string) => {
-  await fileExplorerContent(page).getByText(name, { exact: true }).first().dblclick();
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.getByRole('button', { name: new RegExp(`^${escapedName}(?:\\s|$)`) }).first().click();
 };
 
 test.beforeEach(async ({ page }) => {

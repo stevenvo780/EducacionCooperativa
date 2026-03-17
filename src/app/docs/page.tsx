@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, Terminal, Server, Download, Settings, Users, RefreshCw, Shield, HardDrive, BookOpen, ChevronDown, ChevronRight, Copy, Check, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Terminal, Server, Download, Settings, Users, RefreshCw, Shield, HardDrive, BookOpen, ChevronDown, ChevronRight, Copy, Check, ExternalLink, Columns, PenTool, Layout, WifiOff, FileSpreadsheet, KanbanSquare } from 'lucide-react';
 import Link from 'next/link';
 
 function CopyBlock({ code, label }: { code: string; label?: string }) {
@@ -68,15 +68,15 @@ function CommandRef({ cmd, desc, example }: { cmd: string; desc: string; example
 export default function DocsPage() {
   const sections = [
     { id: 'overview', label: 'Visión General' },
-    { id: 'install', label: 'Instalación' },
-    { id: 'commands', label: 'Comandos' },
-    { id: 'config', label: 'Configuración' },
-    { id: 'architecture', label: 'Arquitectura' },
-    { id: 'persistence', label: 'Persistencia' },
-    { id: 'troubleshooting', label: 'Solución de Problemas' },
-    { id: 'shared', label: 'Espacios Compartidos' },
-    { id: 'security', label: 'Seguridad' },
-    { id: 'updates', label: 'Actualización' }
+    { id: 'workspaces', label: 'Espacios & Gestión' },
+    { id: 'editor', label: 'Editor Semántico' },
+    { id: 'spreadsheet', label: 'Hojas de Cálculo' },
+    { id: 'st-lang', label: 'Lenguaje ST' },
+    { id: 'ui-layout', label: 'Interfaz & Layout' },
+    { id: 'offline', label: 'Soporte Offline' },
+    { id: 'worker-arch', label: 'Arquitectura Worker' },
+    { id: 'worker-install', label: 'Instalación Worker' },
+    { id: 'worker-cmds', label: 'Comandos Worker' }
   ];
 
   return (
@@ -89,10 +89,10 @@ export default function DocsPage() {
           </Link>
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-mandy-400" />
-            <h1 className="text-lg font-bold text-white">Documentación — Edu Worker</h1>
+            <h1 className="text-lg font-bold text-white">Documentación de la Plataforma</h1>
           </div>
           <div className="flex-1" />
-          <span className="text-xs bg-mandy-500/20 text-mandy-400 px-2 py-0.5 rounded-full border border-mandy-500/30 font-mono">v1.0.10</span>
+          <span className="text-xs bg-mandy-500/20 text-mandy-400 px-2 py-0.5 rounded-full border border-mandy-500/30 font-mono">v2.0.0</span>
         </div>
       </header>
 
@@ -111,381 +111,266 @@ export default function DocsPage() {
         <div className="flex-1 space-y-4 min-w-0">
           {/* Hero */}
           <div className="bg-gradient-to-br from-mandy-500/10 via-surface-800/50 to-surface-900 border border-mandy-500/20 rounded-2xl p-8 mb-8">
-            <h2 className="text-3xl font-bold text-white mb-3">Edu Worker</h2>
+            <h2 className="text-3xl font-bold text-white mb-3">Plataforma Ágora</h2>
             <p className="text-surface-400 max-w-2xl leading-relaxed">
-              Edu Worker es el componente que ejecuta terminales de trabajo aisladas en contenedores Docker.
-              Cada espacio de trabajo obtiene su propio contenedor con acceso a herramientas de IA (Codex, Gemini),
-              sincronización en tiempo real con Firebase y terminal interactiva vía web.
+              Entorno colaborativo distribuido diseñado para la educación, investigación y desarrollo. 
+              Integra edición semántica, ejecución remota en contenedores (Edu Worker), herramientas de lógica formal (Lenguaje ST) y tableros de gestión, todo sincronizado en tiempo real.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
+              <span className="text-xs bg-surface-700/50 px-3 py-1.5 rounded-full text-surface-300 border border-surface-600/50">React / Next.js</span>
+              <span className="text-xs bg-surface-700/50 px-3 py-1.5 rounded-full text-surface-300 border border-surface-600/50">PWA Offline</span>
               <span className="text-xs bg-surface-700/50 px-3 py-1.5 rounded-full text-surface-300 border border-surface-600/50">Docker</span>
-              <span className="text-xs bg-surface-700/50 px-3 py-1.5 rounded-full text-surface-300 border border-surface-600/50">Ubuntu/Debian</span>
               <span className="text-xs bg-surface-700/50 px-3 py-1.5 rounded-full text-surface-300 border border-surface-600/50">Firebase</span>
               <span className="text-xs bg-surface-700/50 px-3 py-1.5 rounded-full text-surface-300 border border-surface-600/50">Socket.io</span>
-              <span className="text-xs bg-surface-700/50 px-3 py-1.5 rounded-full text-surface-300 border border-surface-600/50">xterm.js</span>
             </div>
           </div>
 
           {/* Sections */}
           <Section id="overview" icon={Server} title="Visión General" defaultOpen={true}>
-            <p>El sistema tiene 3 componentes principales:</p>
+            <p>La arquitectura del sistema está compuesta por tres pilares:</p>
             <div className="grid gap-3 sm:grid-cols-3 mt-3">
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h4 className="font-bold text-emerald-400 text-sm mb-1">🌐 Frontend</h4>
-                <p className="text-xs text-surface-400">Next.js en Vercel. Editor, terminal web (xterm.js), explorador de archivos.</p>
+                <h4 className="font-bold text-emerald-400 text-sm mb-1">🌐 Frontend (Web)</h4>
+                <p className="text-xs text-surface-400">Aplicación web PWA. Contiene el editor semántico, gestor de archivos, tableros Kanban y terminal interactiva (xterm.js).</p>
               </div>
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h4 className="font-bold text-blue-400 text-sm mb-1">🔗 Hub</h4>
-                <p className="text-xs text-surface-400">Node.js + Socket.io. Coordina workers, sesiones de terminal, y retransmite output.</p>
+                <h4 className="font-bold text-blue-400 text-sm mb-1">🔗 Hub (Node)</h4>
+                <p className="text-xs text-surface-400">Coordinador Socket.io. Gestiona las sesiones de terminal y enruta el tráfico entre los usuarios y los workers remotos.</p>
               </div>
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h4 className="font-bold text-mandy-400 text-sm mb-1">⚙️ Worker</h4>
-                <p className="text-xs text-surface-400">Contenedor Docker con Ubuntu. Ejecuta comandos, sincroniza archivos con Firebase.</p>
+                <h4 className="font-bold text-mandy-400 text-sm mb-1">⚙️ Worker (Docker)</h4>
+                <p className="text-xs text-surface-400">Agente de ejecución remoto. Proporciona un entorno aislado (Ubuntu) por workspace, sincronizando archivos automáticamente.</p>
               </div>
-            </div>
-            <p className="mt-3">
-              El <strong className="text-white">worker</strong> se instala en cualquier máquina Linux con Docker.
-              Se conecta al Hub vía Socket.io, recibe comandos de la terminal web, y sincroniza el directorio <code className="text-mandy-300">/workspace</code> con Firebase Storage.
-            </p>
-            <div className="bg-surface-950/50 border border-surface-700/30 rounded-lg p-4 mt-3 font-mono text-xs text-surface-400 leading-loose">
-              <span className="text-blue-400">Browser</span> → <span className="text-emerald-400">Hub (Socket.io)</span> → <span className="text-mandy-400">Worker (Docker)</span> → <span className="text-amber-400">Firebase Storage</span>
             </div>
           </Section>
 
-          <Section id="install" icon={Download} title="Instalación">
-            <h4 className="font-bold text-white">Requisitos</h4>
-            <ul className="list-disc list-inside space-y-1 text-surface-400">
-              <li>Ubuntu 20.04+ / Debian 11+</li>
-              <li>Docker instalado (<code className="text-mandy-300">docker.io</code> o <code className="text-mandy-300">docker-ce</code>)</li>
-              <li>Acceso a internet (para descargar la imagen Docker)</li>
-              <li>Al menos 2 GB de RAM disponible</li>
-            </ul>
-
-            <h4 className="font-bold text-white mt-5">Instalación rápida (una línea)</h4>
-            <CopyBlock
-              label="Descargar e instalar"
-              code={`curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb`}
-            />
-
-            <h4 className="font-bold text-white mt-5">Instalación paso a paso</h4>
-            <CopyBlock label="1. Descargar el paquete" code="curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb" />
-            <CopyBlock label="2. Instalar" code="sudo apt install -y /tmp/edu-worker.deb" />
-            <CopyBlock label="3. Agregar un workspace" code={`sudo edu-worker-manager add <workspace-id> --name "Mi Espacio"`} />
-            <CopyBlock label="4. Verificar" code="sudo edu-worker-manager status" />
-
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mt-3 flex gap-3">
-              <span className="text-amber-400 text-lg">⚠️</span>
-              <div>
-                <p className="text-amber-300 text-sm font-semibold">Nota sobre credenciales</p>
-                <p className="text-amber-200/70 text-xs mt-1">
-                  El archivo <code>/etc/edu-worker/worker.env</code> contiene las claves de Firebase y del Hub.
-                  El instalador lo configura con valores por defecto. Si necesitas cambiarlos, edita ese archivo y luego <code>sudo edu-worker-manager restart all</code>.
+          <Section id="workspaces" icon={Users} title="Espacios de Trabajo & Gestión">
+            <p className="text-surface-400">
+              La plataforma organiza la información en <strong>Espacios de Trabajo (Workspaces)</strong>, que pueden ser Personales o Compartidos.
+            </p>
+            <div className="space-y-4 mt-4">
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
+                <h5 className="font-bold text-blue-400 text-sm mb-2">Explorador de Archivos</h5>
+                <ul className="list-disc list-inside text-xs text-surface-400 space-y-1">
+                  <li><strong>Drag & Drop:</strong> Arrastra archivos y carpetas para moverlos.</li>
+                  <li><strong>Favoritos:</strong> Fija documentos importantes en la parte superior.</li>
+                  <li><strong>Búsqueda Rápida (Ctrl+P):</strong> Búsqueda semántica global en todo el workspace.</li>
+                  <li>Soporte para carpetas anidadas y renombrado en línea.</li>
+                </ul>
+              </div>
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
+                <h5 className="font-bold text-amber-400 text-sm mb-2">Tableros Kanban</h5>
+                <p className="text-xs text-surface-400 mb-2">
+                  Cada workspace incluye un tablero para gestión de tareas estilo Kanban.
                 </p>
-              </div>
-            </div>
-          </Section>
-
-          <Section id="commands" icon={Terminal} title="Referencia de Comandos">
-            <p>Todos los comandos se ejecutan con <code className="text-mandy-300">sudo edu-worker-manager &lt;comando&gt;</code>.</p>
-            <div className="space-y-3 mt-3">
-              <CommandRef
-                cmd="add <id> [opciones]"
-                desc="Registra un nuevo workspace y arranca su contenedor. Crea la configuración en /etc/edu-worker/workers.d/ y el directorio de datos."
-                example={`# Workspace compartido
-sudo edu-worker-manager add Vt9HeKs --name "Griego"
-
-# Workspace personal
-sudo edu-worker-manager add myUserId --personal --name "Mi Espacio"
-
-# O con --type
-sudo edu-worker-manager add myUserId --type personal --name "Mi Espacio"`}
-              />
-              <CommandRef
-                cmd="remove <id>"
-                desc="Detiene el contenedor, lo elimina, y borra la configuración. Los datos del workspace se conservan en disco."
-                example="sudo edu-worker-manager remove Vt9HeKs"
-              />
-              <CommandRef
-                cmd="start <id|all>"
-                desc="Inicia el contenedor de un workspace (o todos). Si el contenedor ya existe, lo recrea."
-                example={`sudo edu-worker-manager start Vt9HeKs
-sudo edu-worker-manager start all`}
-              />
-              <CommandRef
-                cmd="stop <id|all>"
-                desc="Detiene el contenedor de un workspace (o todos) sin eliminarlo."
-                example="sudo edu-worker-manager stop all"
-              />
-              <CommandRef
-                cmd="restart <id|all>"
-                desc="Detiene y vuelve a iniciar el contenedor. Útil tras cambios de configuración."
-                example="sudo edu-worker-manager restart all"
-              />
-              <CommandRef
-                cmd="update [id|all]"
-                desc="Descarga la última versión de la imagen Docker y reinicia los contenedores. Equivale a docker pull + restart."
-                example="sudo edu-worker-manager update all"
-              />
-              <CommandRef
-                cmd="resync <id|all>"
-                desc="Fuerza una re-sincronización completa reiniciando el worker sin descargar nueva imagen."
-                example="sudo edu-worker-manager resync all"
-              />
-              <CommandRef
-                cmd="status"
-                desc="Muestra el estado de todos los workers: ID, nombre, tipo (personal/shared), estado (running/stopped), y si el listener de RTDB está activo."
-                example="sudo edu-worker-manager status"
-              />
-              <CommandRef
-                cmd="ids"
-                desc="Lista los workspace IDs registrados con sus nombres y tipo. Útil para copiar IDs."
-                example="sudo edu-worker-manager ids"
-              />
-              <CommandRef
-                cmd="logs <id> [-f]"
-                desc="Muestra los logs del contenedor. Con -f sigue en tiempo real (como tail -f)."
-                example={`sudo edu-worker-manager logs Vt9HeKs
-sudo edu-worker-manager logs Vt9HeKs -f`}
-              />
-            </div>
-          </Section>
-
-          <Section id="config" icon={Settings} title="Configuración">
-            <h4 className="font-bold text-white">Archivos de configuración</h4>
-            <div className="space-y-3 mt-3">
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <code className="text-mandy-400 text-sm">/etc/edu-worker/worker.env</code>
-                <p className="text-xs text-surface-400 mt-2">Configuración global. Variables de entorno compartidas por todos los workers:</p>
-                <CopyBlock code={`# Secreto para autenticación entre worker y hub
-WORKER_SECRET=<hash>
-
-# Configuración de Firebase (JSON compacto)
-FIREBASE_CONFIG={"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","databaseURL":"..."}
-
-# Bucket de Firebase Storage (opcional, se infiere del config)
-FIREBASE_BUCKET=mi-proyecto.firebasestorage.app
-
-# URL del Hub (servidor central Socket.io)
-NEXUS_URL=http://mi-hub:3010
-
-# Ruta base para datos persistentes
-BASE_MOUNT_PATH=/home/usuario/edu-worker
-
-# Imagen Docker a usar
-WORKER_IMAGE=stevenvo780/edu-worker:latest`} />
-              </div>
-
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <code className="text-mandy-400 text-sm">/etc/edu-worker/workers.d/*.conf</code>
-                <p className="text-xs text-surface-400 mt-2">Un archivo por workspace. Creado automáticamente con <code>add</code>:</p>
-                <CopyBlock code={`WORKSPACE_ID="Vt9HeKs"
-WORKSPACE_NAME="Griego"
-WORKSPACE_TYPE="shared"
-WORKER_TOKEN="Vt9HeKs"
-MOUNT_PATH="/home/usuario/edu-worker/workspaces/Vt9HeKs"`} />
-              </div>
-
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <code className="text-mandy-400 text-sm">/etc/edu-worker/serviceAccountKey.json</code>
-                <p className="text-xs text-surface-400 mt-2">Credenciales de servicio de Firebase. Usado por el sync agent dentro del contenedor para sincronizar archivos.</p>
-              </div>
-            </div>
-          </Section>
-
-          <Section id="architecture" icon={Server} title="Arquitectura del Worker">
-            <h4 className="font-bold text-white">Dentro del contenedor</h4>
-            <p className="mt-2">Cada contenedor Docker ejecuta:</p>
-            <ul className="list-disc list-inside space-y-2 text-surface-400 mt-2">
-              <li><strong className="text-white">sync_agent.js</strong> — Observa cambios en <code className="text-mandy-300">/workspace</code> con chokidar, sincroniza a Firebase Storage, y escucha cambios remotos via Firestore/RTDB</li>
-              <li><strong className="text-white">Socket.io client</strong> — Se conecta al Hub, recibe comandos de terminal (<code className="text-mandy-300">execute</code>), envía output de vuelta</li>
-              <li><strong className="text-white">node-pty</strong> — Crea pseudo-terminales para ejecutar bash con PTY real (soporta colores, vim, htop, etc.)</li>
-            </ul>
-
-            <h4 className="font-bold text-white mt-5">Flujo de una sesión de terminal</h4>
-            <div className="bg-surface-950/50 border border-surface-700/30 rounded-lg p-4 mt-2 text-xs font-mono space-y-1 text-surface-400">
-              <p><span className="text-blue-400">1.</span> Usuario crea sesión → Hub genera ID → Worker crea PTY (bash)</p>
-              <p><span className="text-blue-400">2.</span> Usuario escribe → Hub reenvía → Worker ejecuta en PTY</p>
-              <p><span className="text-blue-400">3.</span> PTY produce output → Worker envía → Hub retransmite → xterm.js</p>
-              <p><span className="text-blue-400">4.</span> Archivos cambian en /workspace → sync_agent detecta → sube a Firebase</p>
-              <p><span className="text-blue-400">5.</span> Otro usuario cambia archivo en web → Firebase → RTDB notifica → sync_agent descarga</p>
-            </div>
-
-            <h4 className="font-bold text-white mt-5">Estructura de red</h4>
-            <p className="text-surface-400 mt-2">
-              El worker usa <code className="text-mandy-300">--network=host</code> para conectarse al Hub directamente.
-              No se exponen puertos adicionales. La comunicación es 100% outbound (el worker inicia la conexión).
-            </p>
-          </Section>
-
-          <Section id="persistence" icon={HardDrive} title="Persistencia de Datos">
-            <p>El worker monta dos volúmenes desde el host al contenedor:</p>
-            <div className="space-y-3 mt-3">
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <div className="flex items-center gap-2">
-                  <code className="text-emerald-400 text-sm">/workspace</code>
-                  <span className="text-xs text-surface-500">→</span>
-                  <code className="text-surface-400 text-xs">BASE_MOUNT_PATH/workspaces/&lt;id&gt;</code>
-                </div>
-                <p className="text-xs text-surface-400 mt-2">Archivos del workspace. Se sincronizan con Firebase Storage. Es la carpeta de trabajo principal.</p>
-              </div>
-
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <div className="flex items-center gap-2">
-                  <code className="text-emerald-400 text-sm">/home/estudiante</code>
-                  <span className="text-xs text-surface-500">→</span>
-                  <code className="text-surface-400 text-xs">BASE_MOUNT_PATH/home/&lt;id&gt;</code>
-                </div>
-                <p className="text-xs text-surface-400 mt-2">Home completo del usuario. Persiste entre reinicios. Incluye:</p>
-                <ul className="list-disc list-inside text-xs text-surface-500 mt-1 space-y-0.5">
-                  <li><code>.codex/</code> — Configuración de OpenAI Codex</li>
-                  <li><code>.gemini/</code> — Configuración de Google Gemini</li>
-                  <li><code>.ssh/</code> — Llaves SSH</li>
-                  <li><code>.gitconfig</code> — Configuración de Git</li>
-                  <li><code>.npm/</code>, <code>.cache/</code> — Cachés de paquetes</li>
-                  <li><code>.bash_history</code> — Historial de comandos</li>
-                  <li>Cualquier herramienta instalada en el futuro</li>
+                <ul className="list-disc list-inside text-xs text-surface-400 space-y-1">
+                  <li>Columnas personalizables (Por hacer, En progreso, Completado).</li>
+                  <li>Creación rápida de tareas y arrastrar y soltar entre columnas.</li>
+                  <li><strong>Integración Semántica:</strong> Puedes crear tareas directamente seleccionando texto en el Editor Markdown.</li>
                 </ul>
               </div>
             </div>
-
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 mt-3 flex gap-3">
-              <span className="text-emerald-400 text-lg">💡</span>
-              <p className="text-emerald-200/80 text-xs">
-                <strong className="text-emerald-300">Al reiniciar o actualizar un worker</strong>, todo el home y el workspace se preservan.
-                Solo se recrea el contenedor con la imagen más reciente.
-              </p>
-            </div>
           </Section>
 
-          <Section id="troubleshooting" icon={RefreshCw} title="Solución de Problemas">
-            <div className="space-y-4">
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-amber-400 text-sm">Worker aparece como &quot;offline&quot; en la web</h5>
-                <ol className="list-decimal list-inside text-xs text-surface-400 mt-2 space-y-1">
-                  <li>Verifica que el contenedor esté corriendo: <code className="text-mandy-300">sudo edu-worker-manager status</code></li>
-                  <li>Revisa logs: <code className="text-mandy-300">sudo edu-worker-manager logs &lt;id&gt; -f</code></li>
-                  <li>Busca errores de conexión al Hub (timeout, ECONNREFUSED)</li>
-                  <li>Verifica que <code className="text-mandy-300">NEXUS_URL</code> en worker.env sea correcto</li>
-                  <li>Reinicia: <code className="text-mandy-300">sudo edu-worker-manager restart &lt;id&gt;</code></li>
-                </ol>
-              </div>
-
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-amber-400 text-sm">Archivos no se sincronizan</h5>
-                <ol className="list-decimal list-inside text-xs text-surface-400 mt-2 space-y-1">
-                  <li>Verifica en logs que el sync agent esté activo: busca &quot;✅ Listener de RTDB activo&quot;</li>
-                  <li>Fuerza resync: <code className="text-mandy-300">sudo edu-worker-manager resync &lt;id&gt;</code></li>
-                  <li>Si sigue fallando, revisa <code className="text-mandy-300">serviceAccountKey.json</code> y <code className="text-mandy-300">FIREBASE_CONFIG</code></li>
-                </ol>
-              </div>
-
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-amber-400 text-sm">Error: &quot;WORKER_SECRET not set&quot;</h5>
-                <p className="text-xs text-surface-400 mt-2">
-                  Asegúrate de ejecutar con <code className="text-mandy-300">sudo</code>. El archivo <code>/etc/edu-worker/worker.env</code>
-                  tiene permisos 600 y solo es legible por root.
-                </p>
-              </div>
-
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-amber-400 text-sm">Terminal funciona pero no envía output</h5>
-                <ol className="list-decimal list-inside text-xs text-surface-400 mt-2 space-y-1">
-                  <li>Puede ser un problema de red entre worker y Hub</li>
-                  <li>Verifica en la consola del navegador (F12) que no hay errores de WebSocket</li>
-                  <li>El Hub debe ser accesible desde la máquina del worker en el puerto configurado</li>
-                </ol>
-              </div>
-
-              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-amber-400 text-sm">Container se reinicia constantemente</h5>
-                <ol className="list-decimal list-inside text-xs text-surface-400 mt-2 space-y-1">
-                  <li>Revisa logs: <code className="text-mandy-300">docker logs edu-worker-&lt;id&gt; --tail 50</code></li>
-                  <li>Causa común: <code>serviceAccountKey.json</code> inválido o vacío</li>
-                  <li>Otra causa: imagen Docker corrupta → <code className="text-mandy-300">sudo edu-worker-manager update &lt;id&gt;</code></li>
-                </ol>
-              </div>
-            </div>
-          </Section>
-
-          <Section id="shared" icon={Users} title="Espacios Compartidos">
-            <p>
-              Los workspaces compartidos permiten que múltiples usuarios trabajen en el mismo espacio.
-              Un administrador crea el workspace desde la web y comparte el ID.
-            </p>
-
-            <h4 className="font-bold text-white mt-4">Configurar worker para workspace compartido</h4>
-            <CopyBlock code={`# El workspace-id se obtiene desde la web (botón Copiar ID en el menú de workspaces)
-sudo edu-worker-manager add AbC123dEf --name "Proyecto Filosofía"`} />
-
-            <h4 className="font-bold text-white mt-4">Terminal compartida</h4>
+          <Section id="editor" icon={PenTool} title="Editor Markdown Semántico">
             <p className="text-surface-400">
-              Cuando hay una sesión de terminal activa, todos los miembros del workspace la ven en tiempo real.
-              El sistema funciona como <strong className="text-white">tmux</strong>:
+              El <strong>MosaicEditor</strong> es un editor de texto enriquecido diseñado para la gestión del conocimiento.
             </p>
-            <ul className="list-disc list-inside text-surface-400 mt-2 space-y-1">
-              <li>El <strong className="text-white">creador</strong> de la sesión controla el tamaño de la terminal</li>
-              <li>Los <strong className="text-white">espectadores</strong> tienen su propio viewport (pueden redimensionar su ventana sin afectar al creador)</li>
-              <li>Todos pueden escribir comandos</li>
-              <li>El output se transmite en tiempo real a todos</li>
+            <div className="space-y-4 mt-4">
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
+                <h5 className="font-bold text-mandy-400 text-sm mb-2">Características Principales</h5>
+                <ul className="list-disc list-inside text-xs text-surface-400 space-y-1">
+                  <li><strong>Modos de vista:</strong> Visual (WYSIWYG), Código Raw y Vista Previa.</li>
+                  <li>Soporte nativo para <strong>LaTeX</strong> (inline y bloques) y diagramas <strong>Mermaid</strong>.</li>
+                  <li><strong>Galería de Snippets:</strong> Inserta plantillas predefinidas rápidamente.</li>
+                  <li>Menú de "Más opciones" (3 puntos) para configuraciones avanzadas.</li>
+                </ul>
+              </div>
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
+                <h5 className="font-bold text-emerald-400 text-sm mb-2">Panel Semántico Contextual</h5>
+                <p className="text-xs text-surface-400 mb-2">
+                  Al seleccionar texto en el editor, aparece un menú flotante inteligente que permite:
+                </p>
+                <ul className="list-disc list-inside text-xs text-surface-400 space-y-1">
+                  <li><strong>Definir Concepto:</strong> Extrae el texto como un concepto clave del workspace.</li>
+                  <li><strong>Marcar Evidencia / Fijar Fragmento:</strong> Guarda citas importantes.</li>
+                  <li><strong>Enviar a Tarea:</strong> Convierte la selección en una tarjeta del Kanban.</li>
+                  <li><strong>Relacionar:</strong> Vincula el texto con documentos internos o conceptos existentes.</li>
+                </ul>
+              </div>
+            </div>
+          </Section>
+
+          <Section id="spreadsheet" icon={FileSpreadsheet} title="Visor de Hojas de Cálculo">
+            <p className="text-surface-400">
+              Visualiza y analiza datos directamente en la plataforma sin salir del entorno.
+            </p>
+            <ul className="list-disc list-inside text-xs text-surface-400 mt-2 space-y-1">
+              <li>Formatos soportados: <strong>XLSX, XLS, CSV, TSV</strong>.</li>
+              <li>Soporte para múltiples hojas (pestañas en la parte inferior).</li>
+              <li>Búsqueda global dentro de la hoja activa.</li>
+              <li>Ordenamiento por columnas (ascendente/descendente).</li>
+              <li>Paginación automática para grandes conjuntos de datos.</li>
             </ul>
           </Section>
 
-          <Section id="security" icon={Shield} title="Seguridad">
-            <div className="space-y-3">
+          <Section id="st-lang" icon={BookOpen} title="Lenguaje ST (Lógica Formal)">
+            <p className="text-surface-400">
+              ST es un motor de ejecución de lógica formal integrado en la plataforma. Permite declarar axiomas, derivar teoremas y verificar la validez de fórmulas en diversos sistemas lógicos.
+            </p>
+
+            <h4 className="font-bold text-white mt-5">Tutorial Paso a Paso</h4>
+            <div className="space-y-4 mt-3">
+              <div className="border-l-2 border-mandy-500 pl-4 py-1">
+                <p className="text-white font-semibold text-sm">1. Definir el Sistema Lógico</p>
+                <p className="text-xs text-surface-400 mt-1">Usa <code className="text-mandy-300">logic</code> para establecer el contexto (ej: classical.propositional).</p>
+                <CopyBlock code="logic classical.propositional" />
+              </div>
+
+              <div className="border-l-2 border-mandy-500 pl-4 py-1">
+                <p className="text-white font-semibold text-sm">2. Declarar Axiomas</p>
+                <p className="text-xs text-surface-400 mt-1">Nombra tus premisas básicas con <code className="text-mandy-300">axiom</code>.</p>
+                <CopyBlock code={`axiom premisa1 : P -> Q\naxiom premisa2 : P`} />
+              </div>
+
+              <div className="border-l-2 border-mandy-500 pl-4 py-1">
+                <p className="text-white font-semibold text-sm">3. Derivar Resultados</p>
+                <p className="text-xs text-surface-400 mt-1">Obtén conclusiones usando reglas de inferencia o derivaciones directas.</p>
+                <CopyBlock code="derive Q from {premisa1, premisa2}" />
+              </div>
+
+              <div className="border-l-2 border-mandy-500 pl-4 py-1">
+                <p className="text-white font-semibold text-sm">4. Verificación y Tablas de Verdad</p>
+                <p className="text-xs text-surface-400 mt-1">Comprueba si una fórmula es una tautología o genera su tabla de verdad.</p>
+                <CopyBlock code={`check valid ((P -> Q) -> (!Q -> !P))\ntruth_table (P & Q)`} />
+              </div>
+            </div>
+
+            <h4 className="font-bold text-white mt-6">STRunner & Editor</h4>
+            <p className="text-xs text-surface-400 mt-2 leading-relaxed">
+              Usa la herramienta <strong>STRunner</strong> (ícono de Rayo) para scripts rápidos o el editor de archivos <strong>.st</strong> para proyectos extensos. 
+              <strong>Novedad:</strong> El panel de salida del STRunner es redimensionable y se puede ocultar para ampliar el área de código.
+            </p>
+
+            <div className="bg-surface-950/50 border border-surface-700/30 rounded-lg p-4 mt-4">
+              <h5 className="text-emerald-400 text-xs font-bold uppercase mb-2">Ejemplo Completo</h5>
+              <pre className="text-xs font-mono text-surface-300 leading-relaxed">
+{`// Script de prueba ST
+logic classical.propositional
+
+axiom a1 : A | B
+axiom a2 : !A
+
+// Derivación por Silogismo Disyuntivo
+derive B from {a1, a2}
+
+// Verificar Ley de De Morgan
+check valid !(P & Q) <-> (!P | !Q)`}
+              </pre>
+            </div>
+          </Section>
+
+          <Section id="ui-layout" icon={Layout} title="Interfaz Dinámica (Layout)">
+            <p className="text-surface-400">
+              El entorno de trabajo es completamente moldeable gracias a la integración de vistas en mosaico y paneles ajustables.
+            </p>
+            <div className="space-y-4 mt-4">
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-white text-sm">Aislamiento</h5>
-                <p className="text-xs text-surface-400 mt-1">
-                  Cada workspace corre en su propio contenedor Docker con usuario no-root (<code className="text-mandy-300">estudiante</code>, uid 1000).
-                  No tiene acceso al sistema host ni a otros contenedores.
+                <h5 className="font-bold text-blue-400 text-sm mb-2">Mosaicos (MosaicLayout)</h5>
+                <p className="text-xs text-surface-400">
+                  Arrastra las pestañas para dividir la pantalla horizontal o verticalmente. Puedes tener el editor, la terminal y el tablero Kanban visibles simultáneamente.
                 </p>
               </div>
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-white text-sm">Autenticación</h5>
-                <p className="text-xs text-surface-400 mt-1">
-                  El worker se autentica con el Hub usando un <code className="text-mandy-300">WORKER_SECRET</code> compartido.
-                  Las acciones de terminal requieren un token JWT de Firebase válido.
-                </p>
+                <h5 className="font-bold text-emerald-400 text-sm mb-2">Redimensionamiento y Pantalla Completa</h5>
+                <ul className="list-disc list-inside text-xs text-surface-400 space-y-1">
+                  <li><strong>Barra lateral:</strong> Arrastra el borde derecho del explorador de archivos para cambiar su anchura dinámicamente.</li>
+                  <li><strong>Maximizar:</strong> Cada panel del mosaico tiene un botón para expandirlo a pantalla completa (Fullscreen API), aislando tu atención en una sola tarea.</li>
+                </ul>
               </div>
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4">
-                <h5 className="font-bold text-white text-sm">Permisos de archivo</h5>
-                <p className="text-xs text-surface-400 mt-1">
-                  <code className="text-mandy-300">/etc/edu-worker/worker.env</code> y <code className="text-mandy-300">serviceAccountKey.json</code> tienen permisos 600 (solo root).
-                  Los comandos de <code className="text-mandy-300">edu-worker-manager</code> requieren sudo.
+                <h5 className="font-bold text-purple-400 text-sm mb-2">Modo Zen</h5>
+                <p className="text-xs text-surface-400">
+                  Activa el Modo Zen desde la cabecera para ocultar automáticamente la barra lateral y superior, creando un entorno de escritura libre de distracciones.
                 </p>
               </div>
             </div>
           </Section>
 
-          <Section id="updates" icon={RefreshCw} title="Actualización">
-            <h4 className="font-bold text-white">Actualizar el paquete .deb</h4>
-            <CopyBlock code={`curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb
-sudo apt install -y /tmp/edu-worker.deb`} />
-            <p className="text-surface-400 text-xs mt-1">Esto actualiza <code>edu-worker-manager</code> y los scripts. No toca los contenedores activos.</p>
-
-            <h4 className="font-bold text-white mt-5">Actualizar la imagen Docker (los contenedores)</h4>
-            <CopyBlock code="sudo edu-worker-manager update all" />
-            <p className="text-surface-400 text-xs mt-1">
-              Descarga la última versión de <code className="text-mandy-300">stevenvo780/edu-worker:latest</code> y reinicia todos los contenedores.
-              Los datos persisten (home y workspace se montan desde el host).
+          <Section id="offline" icon={WifiOff} title="Soporte Offline (PWA)">
+            <p className="text-surface-400">
+              La plataforma está diseñada para funcionar incluso sin conexión a internet.
             </p>
+            <ul className="list-disc list-inside text-xs text-surface-400 mt-3 space-y-2">
+              <li><strong>Modo Desconectado:</strong> Un indicador visual te notificará cuando pierdas la conexión.</li>
+              <li><strong>Edición Local:</strong> Puedes seguir editando documentos y gestionando tareas de forma local usando almacenamiento interno (IndexedDB).</li>
+              <li><strong>Sincronización Automática:</strong> Al recuperar la conexión, el sistema detecta los cambios y los sincroniza silenciosamente con Firebase, previniendo conflictos de edición.</li>
+            </ul>
+          </Section>
 
-            <h4 className="font-bold text-white mt-5">Actualización completa</h4>
-            <CopyBlock code={`# 1. Actualizar el paquete
-curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb
+          <Section id="worker-arch" icon={Server} title="Arquitectura del Edu Worker">
+            <h4 className="font-bold text-white">Dentro del contenedor</h4>
+            <p className="mt-2 text-surface-400">Cada contenedor Docker ejecuta:</p>
+            <ul className="list-disc list-inside space-y-2 text-surface-400 mt-2">
+              <li><strong className="text-white">sync_agent.js</strong> — Observa cambios en <code className="text-mandy-300">/workspace</code> con chokidar, sincroniza a Firebase Storage, y escucha cambios remotos via Firestore/RTDB.</li>
+              <li><strong className="text-white">Socket.io client</strong> — Se conecta al Hub, recibe comandos de terminal (<code className="text-mandy-300">execute</code>), envía output de vuelta.</li>
+              <li><strong className="text-white">node-pty</strong> — Crea pseudo-terminales para ejecutar bash con PTY real (soporta colores, vim, htop, etc.).</li>
+            </ul>
 
-# 2. Actualizar la imagen Docker y reiniciar
-sudo edu-worker-manager update all
+            <h4 className="font-bold text-white mt-5">Estructura de red y Persistencia</h4>
+            <p className="text-surface-400 mt-2 text-sm">
+              El worker usa <code className="text-mandy-300">--network=host</code> para conectarse al Hub. La persistencia se logra montando volúmenes locales en el contenedor:
+            </p>
+            <div className="bg-surface-800/60 border border-surface-700/40 rounded-lg p-4 mt-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <code className="text-emerald-400 text-sm">/workspace</code> <span className="text-xs text-surface-500">→</span> <code className="text-surface-400 text-xs">BASE/workspaces/&lt;id&gt;</code>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="text-emerald-400 text-sm">/home/estudiante</code> <span className="text-xs text-surface-500">→</span> <code className="text-surface-400 text-xs">BASE/home/&lt;id&gt;</code>
+                </div>
+            </div>
+            <p className="text-xs text-surface-500 mt-2">
+              Esto garantiza que configuraciones de SSH, Git, cachés de npm y el historial de bash sobrevivan a reinicios del contenedor.
+            </p>
+          </Section>
 
-# 3. Verificar
-sudo edu-worker-manager status`} />
+          <Section id="worker-install" icon={Download} title="Instalación del Worker">
+            <h4 className="font-bold text-white">Requisitos</h4>
+            <ul className="list-disc list-inside space-y-1 text-surface-400">
+              <li>Ubuntu 20.04+ / Debian 11+ con Docker instalado</li>
+              <li>Acceso a internet (para descargar la imagen Docker)</li>
+            </ul>
+
+            <h4 className="font-bold text-white mt-5">Instalación rápida</h4>
+            <CopyBlock
+              label="Descargar e instalar el gestor CLI"
+              code={`curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb`}
+            />
+
+            <h4 className="font-bold text-white mt-5">Configuración Inicial</h4>
+            <p className="text-surface-400 text-xs mb-2">El archivo <code>/etc/edu-worker/worker.env</code> requiere configuración de Firebase y secretos compartidos.</p>
+            <CopyBlock label="Añadir un nuevo entorno de workspace" code={`sudo edu-worker-manager add <workspace-id> --name "Mi Espacio"`} />
+          </Section>
+
+          <Section id="worker-cmds" icon={Terminal} title="Comandos CLI (edu-worker-manager)">
+            <p className="text-surface-400 mb-3">Ejecutados mediante <code className="text-mandy-300">sudo edu-worker-manager &lt;comando&gt;</code></p>
+            <div className="space-y-3">
+              <CommandRef cmd="add <id> [--personal|--shared]" desc="Registra un workspace, crea el volumen y arranca el contenedor." />
+              <CommandRef cmd="remove <id>" desc="Detiene y elimina el contenedor. Los datos del workspace se conservan en disco." />
+              <CommandRef cmd="start | stop | restart <id|all>" desc="Controla el ciclo de vida de los contenedores Docker." />
+              <CommandRef cmd="update [id|all]" desc="Descarga la última imagen stevenvo780/edu-worker y recrea los contenedores." />
+              <CommandRef cmd="resync <id|all>" desc="Fuerza la resincronización de Firebase reiniciando el servicio interno del worker." />
+              <CommandRef cmd="status" desc="Muestra tabla de workers activos, IDs, y estado del listener de sincronización." />
+              <CommandRef cmd="logs <id> [-f]" desc="Muestra logs del contenedor (soporta tail -f)." />
+            </div>
           </Section>
 
           {/* Footer */}
           <div className="mt-12 pt-6 border-t border-surface-700/40 text-center text-xs text-surface-500">
-            <p>Edu Worker v1.0.10 — Agora Collaborative Learning Platform</p>
+            <p>Plataforma Ágora — Documentación Oficial</p>
             <p className="mt-1">
               <a href="https://github.com/stevenvo780/EducacionCooperativa" target="_blank" rel="noopener noreferrer" className="text-mandy-400 hover:text-mandy-300 transition inline-flex items-center gap-1">
-                GitHub <ExternalLink className="w-3 h-3" />
+                GitHub Repository <ExternalLink className="w-3 h-3" />
               </a>
             </p>
           </div>

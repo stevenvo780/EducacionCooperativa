@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
@@ -218,6 +218,14 @@ interface STRunnerProps {
   onExecute?: (code: string, result: STEvalResult) => void;
   /** Clase CSS extra */
   className?: string;
+  /** Modo editor de archivo: permite guardar y manejar cambios externos */
+  fileMode?: {
+    docName: string;
+    isDirty: boolean;
+    isSaving: boolean;
+    onSave: () => void;
+    onContentChange: (content: string) => void;
+  };
 }
 
 export default function STRunner({
@@ -225,15 +233,27 @@ export default function STRunner({
   initialMode = 'script',
   height = '100%',
   onExecute,
-  className = ''
+  className = '',
+  fileMode
 }: STRunnerProps) {
   const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles, isRunning, getSymbols, lastDiagnostics } =
     useSTInterpreter();
 
   const [mode, setMode] = useState<STRunnerMode>(initialMode);
-  const [code, setCode] = useState(initialCode || DEFAULT_SCRIPT);
-  const [replInput, setReplInput] = useState('');
+  const [internalCode, setInternalCode] = useState(initialCode || DEFAULT_SCRIPT);
+  
+  // Use fileMode content if available, otherwise internal
+  const code = fileMode ? initialCode || '' : internalCode;
+  const setCode = (val: string) => {
+    if (fileMode) {
+      fileMode.onContentChange(val);
+    } else {
+      setInternalCode(val);
+    }
+  };
+
   const replInputRef = useRef<HTMLInputElement>(null);
+  const [replInput, setReplInput] = useState('');
   const [replHistory, setReplHistory] = useState<string[]>([]);
   const [replHistoryIdx, setReplHistoryIdx] = useState(-1);
   const [activeTab, setActiveTab] = useState<OutputTab>('output');
@@ -354,6 +374,10 @@ export default function STRunner({
         e.preventDefault();
         handleRun();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && fileMode) {
+        e.preventDefault();
+        fileMode.onSave();
+      }
       // Tab → 2 espacios
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -406,36 +430,56 @@ export default function STRunner({
     >
       {/* ── Toolbar ── */}
       <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 flex-shrink-0">
-        {/* Mode toggle */}
-        <div className="flex bg-slate-800 rounded-md p-0.5">
-          <button
-            onClick={() => setMode('script')}
-            className={`px-3 py-1 text-xs rounded ${
-              mode === 'script'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5 inline mr-1" />
-            Script
-          </button>
-          <button
-            onClick={() => setMode('repl')}
-            className={`px-3 py-1 text-xs rounded ${
-              mode === 'repl'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5 inline mr-1" />
-            REPL
-          </button>
-        </div>
+        {fileMode ? (
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-xs text-slate-400 font-mono truncate max-w-[200px]" title={fileMode.docName}>
+              {fileMode.docName}
+            </span>
+            <button
+              onClick={fileMode.onSave}
+              disabled={fileMode.isSaving || !fileMode.isDirty}
+              className={`flex items-center gap-1.5 px-2 py-1 text-[10px] rounded transition ${
+                fileMode.isDirty
+                  ? 'bg-sky-600/20 text-sky-400 hover:bg-sky-600/30'
+                  : 'bg-slate-800 text-slate-500 cursor-default'
+              }`}
+              title="Guardar (Ctrl+S)"
+            >
+              {fileMode.isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+              {fileMode.isSaving ? '...' : fileMode.isDirty ? 'Guardar' : 'Guardado'}
+            </button>
+          </div>
+        ) : (
+          <div className="flex bg-slate-800 rounded-md p-0.5">
+            <button
+              onClick={() => setMode('script')}
+              className={`px-3 py-1 text-xs rounded ${
+                mode === 'script'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 inline mr-1" />
+              Script
+            </button>
+            <button
+              onClick={() => setMode('repl')}
+              className={`px-3 py-1 text-xs rounded ${
+                mode === 'repl'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5 inline mr-1" />
+              REPL
+            </button>
+          </div>
+        )}
 
         <div className="flex-1" />
 
         {/* Actions */}
-        {mode === 'script' && (
+        {(mode === 'script' || !!fileMode) && (
           <button
             onClick={handleRun}
             disabled={isRunning}
