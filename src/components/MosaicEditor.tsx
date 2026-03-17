@@ -51,6 +51,7 @@ import remarkGfm from 'remark-gfm';
 import MermaidDiagram from '@/components/MermaidDiagram';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { normalizePath } from '@/lib/folder-utils';
 
 type ViewMode = 'edit' | 'split' | 'preview' | 'raw';
 
@@ -90,6 +91,12 @@ type QuickInsert = {
   title: string;
   description: string;
   markdown: string;
+};
+
+type MarkdownDocMeta = {
+  workspaceId: string | null;
+  folder: string;
+  name: string;
 };
 
 const TOOLBAR_VISIBILITY_STORAGE_KEY = 'agora.editor.toolbar.visibility.v2';
@@ -202,7 +209,38 @@ function unescapeLatex(md: string): string {
   return result;
 }
 
-const MarkdownPreview = React.memo(({ content }: { content: string }) => {
+const stripQueryAndHash = (href: string) => href.split('#')[0]?.split('?')[0] ?? href;
+
+const isExternalMarkdownHref = (href: string) => /^(https?:|mailto:|tel:|data:)/i.test(href);
+
+const normalizeRelativeMarkdownPath = (value: string) => {
+  const parts = value.split('/');
+  const normalized: string[] = [];
+
+  for (const rawPart of parts) {
+    const part = rawPart.trim();
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      normalized.pop();
+      continue;
+    }
+    normalized.push(part);
+  }
+
+  return normalized.join('/');
+};
+
+const ensureMarkdownCandidateNames = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const candidates = new Set<string>([trimmed]);
+  if (!/\.[a-z0-9]+$/i.test(trimmed)) {
+    candidates.add(`${trimmed}.md`);
+  }
+  return Array.from(candidates);
+};
+
+const MarkdownPreview = React.memo(({ content, onOpenInternalLink }: { content: string; onOpenInternalLink?: (href: string) => Promise<boolean> }) => {
   const processed = useMemo(() => unescapeLatex(content), [content]);
   return (
   <div className="markdown-preview-container overflow-auto h-full">
@@ -233,6 +271,29 @@ const MarkdownPreview = React.memo(({ content }: { content: string }) => {
             );
           }
           return <code className={className} {...props}>{children}</code>;
+        },
+        a({ href, children, ...props }) {
+          const isExternal = !href || href.startsWith('#') || isExternalMarkdownHref(href);
+          return (
+            <a
+              href={href}
+              {...props}
+              target={isExternal ? '_blank' : undefined}
+              rel={isExternal ? 'noreferrer noopener' : undefined}
+              onClick={async (event) => {
+                props.onClick?.(event);
+                if (event.defaultPrevented || !href || !onOpenInternalLink) return;
+                if (href.startsWith('#') || isExternalMarkdownHref(href)) return;
+                event.preventDefault();
+                const opened = await onOpenInternalLink(href);
+                if (!opened) {
+                  window.location.assign(href);
+                }
+              }}
+            >
+              {children}
+            </a>
+          );
         }
       }}
     >
@@ -407,6 +468,7 @@ export default function MosaicEditor({
   const isNormalizingRef = useRef(false);
   const saveRequestIdRef = useRef(0);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
+  const currentDocMetaRef = useRef<MarkdownDocMeta>({ workspaceId: null, folder: '', name: '' });
   const [showCompactMenu, setShowCompactMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
@@ -471,6 +533,7 @@ export default function MosaicEditor({
     setFileName('');
     setFileMime('');
     setEditorContent('');
+    currentDocMetaRef.current = { workspaceId: null, folder: '', name: '' };
     hasLoadedRef.current = true;
   }, [setEditorContent]);
 
@@ -506,7 +569,15 @@ export default function MosaicEditor({
     const mimeType = data.mimeType ?? '';
     const url = data.url ?? null;
     const storagePath = data.storagePath ?? null;
+    const folder = typeof data.folder === 'string' ? data.folder : '';
+    const workspaceId = typeof data.workspaceId === 'string' ? data.workspaceId : null;
     const isMarkdown = isMarkdownMime(mimeType) || isMarkdownName(name);
+
+    currentDocMetaRef.current = {
+      workspaceId,
+      folder,
+      name
+    };
 
     if (type === 'file' && !isMarkdown) {
       setDocType('file');
@@ -795,6 +866,64 @@ export default function MosaicEditor({
     }
 
     setViewMode(nextMode);
+  }, []);
+
+  const openInternalMarkdownLink = useCallback(async (href: string) => {
+    const cleanedHref = decodeURIComponent(stripQueryAndHash(href)).trim();
+    if (!cleanedHref || cleanedHref.startsWith('#') || isExternalMarkdownHref(cleanedHref)) {
+      return false;
+    }
+
+    const currentMeta = currentDocMetaRef.current;
+    if (!currentMeta.workspaceId) {
+      return false;
+    }
+
+    try {
+      const search = new URLSearchParams({
+        workspaceId: currentMeta.workspaceId,
+        view: 'list',
+        excludeContent: 'true'
+      });
+      const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
+      if (!res.ok) return false;
+
+      const docs = await res.json() as Array<{ id: string; name?: string; folder?: string; type?: string }>;
+      const currentFolder = normalizePath(currentMeta.folder);
+      const resolvedPath = cleanedHref.startsWith('/')
+        ? normalizeRelativeMarkdownPath(cleanedHref)
+        : normalizeRelativeMarkdownPath(currentFolder ? `${currentFolder}/${cleanedHref}` : cleanedHref);
+      const basePath = normalizeRelativeMarkdownPath(cleanedHref);
+      const candidatePaths = new Set<string>([
+        ...ensureMarkdownCandidateNames(resolvedPath),
+        ...ensureMarkdownCandidateNames(basePath)
+      ]);
+      const candidateNames = new Set<string>([
+        ...ensureMarkdownCandidateNames(basePath.split('/').pop() || ''),
+        ...ensureMarkdownCandidateNames(resolvedPath.split('/').pop() || '')
+      ]);
+
+      const matchedDoc = docs.find((doc) => {
+        if (!doc || doc.type === 'folder') return false;
+        const docName = typeof doc.name === 'string' ? doc.name : '';
+        const docFolder = normalizePath(typeof doc.folder === 'string' ? doc.folder : '');
+        const docPath = normalizeRelativeMarkdownPath(docFolder ? `${docFolder}/${docName}` : docName);
+        return candidatePaths.has(docPath) || candidateNames.has(docName) || doc.id === cleanedHref;
+      });
+
+      if (!matchedDoc) return false;
+
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'agora-open-doc', docId: matchedDoc.id }, window.location.origin);
+        return true;
+      }
+
+      window.location.assign(`/editor/${encodeURIComponent(matchedDoc.id)}`);
+      return true;
+    } catch (error) {
+      console.error('Error opening internal markdown link:', error);
+      return false;
+    }
   }, []);
 
   const insertSnippet = useCallback((snippet: string) => {
@@ -1285,7 +1414,7 @@ export default function MosaicEditor({
               </button>
               <span className="text-[11px] text-slate-500">Vista previa — LaTeX, Mermaid y tablas se renderizan aquí</span>
             </div>
-            <MarkdownPreview content={statsContent || contentRef.current} />
+            <MarkdownPreview content={statsContent || contentRef.current} onOpenInternalLink={openInternalMarkdownLink} />
           </>
         ) : viewMode === 'raw' ? (
           <>

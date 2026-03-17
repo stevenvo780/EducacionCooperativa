@@ -321,6 +321,7 @@ function DashboardContent() {
     const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
     const [isZenMode, setIsZenMode] = useState(false);
     const zenRestoreRef = useRef({ sidebar: false, header: false });
+    const openDocumentRef = useRef<(doc: DocItem) => Promise<void> | void>(() => {});
     const resolveActiveFolder = useCallback((path?: string) => {
         if (path === ROOT_FOLDER_PATH) return ROOT_FOLDER_PATH;
         return normalizeFolderPath(path);
@@ -649,6 +650,23 @@ function DashboardContent() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [showQuickSearch, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
 
+    useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+
+            const data = event.data as { type?: string; docId?: string } | null;
+            if (!data || data.type !== 'agora-open-doc' || typeof data.docId !== 'string') return;
+
+            const doc = docs.find(item => item.id === data.docId);
+            if (!doc) return;
+
+            void openDocumentRef.current(doc);
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, [docs]);
+
     const quickSearchResults = useMemo(() => {
         const query = deferredQuickSearchQuery.trim().toLowerCase();
         if (!query) return deferredDocs.slice(0, 10);
@@ -976,6 +994,7 @@ function DashboardContent() {
         setShowMobileSidebar(false);
         setSelectedDocId(doc.id);
     };
+    openDocumentRef.current = openDocument;
 
     const handleDropDocOnTile = useCallback(async (droppedDocId: string, targetTileId: string, position: 'left' | 'right' | 'top' | 'bottom' | 'replace') => {
         if (droppedDocId === targetTileId) return;
