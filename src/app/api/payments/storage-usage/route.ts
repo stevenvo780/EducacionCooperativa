@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
-import { adminStorage, adminDb } from '@/lib/firebase-admin';
+import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
+import { calculateOwnedStorageUsageBytes } from '@/lib/storage-usage';
 import { Plan, SubscriptionStatus, getStorageLimitMB, type PlanId } from '@/types/subscription';
 
 export const dynamic = 'force-dynamic';
@@ -26,16 +27,7 @@ export async function GET(req: NextRequest) {
 
     const limitMB = getStorageLimitMB(planId);
 
-    // Calculate total storage used by listing files in user's prefix
-    const bucket = adminStorage.bucket();
-    const prefix = `users/${auth.uid}/`;
-    const [files] = await bucket.getFiles({ prefix });
-
-    let totalBytes = 0;
-    for (const file of files) {
-      const [metadata] = await file.getMetadata();
-      totalBytes += parseInt(metadata.size as string, 10) || 0;
-    }
+    const totalBytes = await calculateOwnedStorageUsageBytes(auth.uid);
 
     const usedMB = Math.round((totalBytes / (1024 * 1024)) * 100) / 100;
 

@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
         if (!exists) {
             return NextResponse.json({ error: 'File not found in storage' }, { status: 404 });
         }
+        const [metadata] = await fileRef.getMetadata();
+        const size = parseInt(String(metadata.size || '0'), 10) || 0;
 
         // Generate permanent signed URL
         const [url] = await fileRef.getSignedUrl({
@@ -75,6 +77,7 @@ export async function POST(req: NextRequest) {
             url,
             mimeType: mimeType || 'application/octet-stream',
             storagePath,
+            size,
             ownerId: auth.uid,
             workspaceId,
             folder,
@@ -93,6 +96,7 @@ export async function POST(req: NextRequest) {
             ownerId: auth.uid,
             folder,
             workspaceId,
+            size,
             updatedAt: { seconds: Date.now() / 1000 }
         });
 

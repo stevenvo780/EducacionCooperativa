@@ -86,10 +86,10 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
             try {
                 const range = document.createRange();
                 const startOffset = Math.min(pos.offset, pos.node.textContent?.length || 0);
-                const endOffset = d.endColumn 
+                const endOffset = d.endColumn
                     ? Math.min(pos.offset + (d.endColumn - d.column), pos.node.textContent?.length || 0)
                     : Math.min(startOffset + 1, pos.node.textContent?.length || 0);
-                
+
                 range.setStart(pos.node, startOffset);
                 range.setEnd(pos.node, endOffset);
 
@@ -100,9 +100,9 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
                 Array.from(rects).forEach(rect => {
                     const underline = document.createElement('div');
                     underline.className = 'mdx-linter-marker group pointer-events-auto';
-                    
-                    const borderColor = d.severity === 'error' ? '#ef4444' : 
-                                       d.severity === 'warning' ? '#f59e0b' : 
+
+                    const borderColor = d.severity === 'error' ? '#ef4444' :
+                                       d.severity === 'warning' ? '#f59e0b' :
                                        '#3b82f6';
 
                     underline.style.position = 'absolute';
@@ -117,7 +117,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
                     // Tooltip Root
                     const tooltip = document.createElement('div');
                     tooltip.className = 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded shadow-xl p-2 z-[100] min-w-[200px] max-w-[300px] pointer-events-none';
-                    
+
                     const header = document.createElement('div');
                     header.className = 'flex items-center gap-2 mb-1';
                     header.innerHTML = `
@@ -128,7 +128,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
                         }">${d.severity}</span>
                         <span class="text-[10px] text-slate-500 ml-auto">${d.source}</span>
                     `;
-                    
+
                     const msg = document.createElement('div');
                     msg.className = 'text-xs text-slate-200 leading-relaxed';
                     msg.innerText = d.message;

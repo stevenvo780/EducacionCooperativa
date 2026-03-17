@@ -465,7 +465,6 @@ const HeaderBar = ({
           {isCreatingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
         </button>
 
-
       </div>
 
       {/* ── Right: Status + Controls ── */}

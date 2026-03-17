@@ -1185,8 +1185,8 @@ function DashboardContent() {
             >
                 {/* Global overlay during sidebar resizing to prevent iframe interference */}
                 {isResizingSidebar && (
-                    <div 
-                        className="fixed inset-0 z-[100] cursor-col-resize" 
+                    <div
+                        className="fixed inset-0 z-[100] cursor-col-resize"
                         onMouseUp={stopResizingSidebar}
                     />
                 )}

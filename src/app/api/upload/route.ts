@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
             url,
             mimeType: file.type,
             storagePath: filename,
+            size: file.size,
             ownerId,
             workspaceId,
             folder,
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
             mimeType: file.type,
             ownerId,
             folder,
+            size: file.size,
             updatedAt: { seconds: Date.now() / 1000 }
         });
 

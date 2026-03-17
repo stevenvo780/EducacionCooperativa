@@ -9,3 +9,16 @@ export { stLintExtensions, dispatchDiagnostics } from './st-lint';
 export { stHoverTooltip } from './st-hover';
 export { stKeymap } from './st-keymap';
 export { stRainbowParens } from './st-rainbow-parens';
+export {
+  type EditorFeature,
+  type EditorConfig,
+  type EditorCompartments,
+  DEFAULT_CONFIG,
+  loadConfig,
+  saveConfig,
+  createCompartments,
+  buildCompartmentExtensions,
+  reconfigureFeature,
+  FEATURE_LABELS,
+  ALL_FEATURES
+} from './st-editor-config';
