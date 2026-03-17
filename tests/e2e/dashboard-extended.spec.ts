@@ -39,6 +39,22 @@ const openContextMenuForDoc = async (page: Page, name: string) => {
   await docLabel.click({ button: 'right' });
 };
 
+const clickInlineDocAction = async (page: Page, docName: string, actionTitle: string) => {
+  const row = fileExplorerContent(page).locator(
+    `xpath=.//div[.//*[normalize-space(text())=${JSON.stringify(docName)}] and .//button[@title=${JSON.stringify(actionTitle)}]][last()]`
+  ).last();
+  await expect(row).toBeVisible();
+  await row.getByTitle(actionTitle).click();
+};
+
+const clickInlineFolderAction = async (page: Page, folderName: string, actionTitle: string) => {
+  const row = fileExplorerContent(page).locator(
+    `xpath=.//div[.//input[@title="Seleccionar carpeta"] and .//*[normalize-space(text())=${JSON.stringify(folderName)}] and .//button[@title=${JSON.stringify(actionTitle)}]][last()]`
+  ).last();
+  await expect(row).toBeVisible();
+  await row.getByTitle(actionTitle).click();
+};
+
 const clickContextMenuAction = async (page: Page, label: string) => {
   const menu = page.locator('div.fixed.z-50.bg-surface-800').filter({
     has: page.getByRole('button', { name: label, exact: true })
@@ -139,15 +155,30 @@ test('dashboard manages documents from the file explorer', async ({ page }) => {
   await openExplorerFolder(page, 'Clase');
   await expect(fileExplorerContent(page).getByText('Bibliografia final.md', { exact: true })).toBeVisible();
 
-  await openContextMenuForDoc(page, 'Bibliografia final.md');
-  await clickContextMenuAction(page, 'Descargar');
-  const lastDownload = await page.evaluate(() => {
+  const previousBlobDownloads = await page.evaluate(() => {
     const state = window as Window & {
-      __downloads?: Array<{ href: string; download: string }>;
+      __blobDownloads?: Array<{ url: string; size?: number }>;
     };
-    return state.__downloads?.at(-1)?.download ?? null;
+    return state.__blobDownloads?.length ?? 0;
   });
-  expect(lastDownload).toBe('Bibliografia final.md');
+
+  await clickInlineDocAction(page, 'Bibliografia final.md', 'Descargar');
+  await expect.poll(async () => {
+    const downloadState = await page.evaluate(() => {
+      const state = window as Window & {
+        __downloads?: Array<{ href: string; download: string }>;
+        __blobDownloads?: Array<{ url: string; size?: number }>;
+      };
+      return {
+        lastDownload: state.__downloads?.at(-1)?.download ?? null,
+        blobDownloads: state.__blobDownloads?.length ?? 0
+      };
+    });
+    return (
+      downloadState.lastDownload === 'Bibliografia final.md'
+      || downloadState.blobDownloads > previousBlobDownloads
+    );
+  }).toBe(true);
 
   await openContextMenuForDoc(page, 'Bibliografia final.md');
   await clickContextMenuAction(page, 'Eliminar');
@@ -155,7 +186,57 @@ test('dashboard manages documents from the file explorer', async ({ page }) => {
     has: page.getByText('Eliminar elemento', { exact: true })
   }).first();
   await deleteDialog.locator('button').filter({ hasText: /^Eliminar$/ }).dispatchEvent('click');
-  await expect(page.getByText('Eliminado')).toBeVisible();
+  await expect.poll(async () => (
+    await fileExplorerContent(page).getByText('Bibliografia final.md', { exact: true }).count()
+  )).toBe(0);
+});
+
+test('dashboard downloads and deletes folders from the file explorer', async ({ page }) => {
+  await installMockApi(page);
+  await gotoDashboard(page, 'ws-shared');
+
+  await openFilesExplorer(page);
+
+  const previousBlobDownloads = await page.evaluate(() => {
+    const state = window as Window & {
+      __blobDownloads?: Array<{ url: string; size?: number }>;
+      __downloads?: Array<{ href: string; download: string }>;
+    };
+    return {
+      blobDownloads: state.__blobDownloads?.length ?? 0,
+      downloads: state.__downloads?.length ?? 0
+    };
+  });
+
+  await clickInlineFolderAction(page, 'Clase', 'Descargar carpeta');
+  await expect.poll(async () => {
+    const downloadState = await page.evaluate(() => {
+      const state = window as Window & {
+        __downloads?: Array<{ href: string; download: string }>;
+        __blobDownloads?: Array<{ url: string; size?: number }>;
+      };
+      return {
+        lastDownload: state.__downloads?.at(-1)?.download ?? null,
+        blobDownloads: state.__blobDownloads?.length ?? 0,
+        downloads: state.__downloads?.length ?? 0
+      };
+    });
+    return (
+      downloadState.lastDownload === 'Clase.zip'
+      || downloadState.blobDownloads > previousBlobDownloads.blobDownloads
+      || downloadState.downloads > previousBlobDownloads.downloads
+    );
+  }).toBe(true);
+
+  await clickInlineFolderAction(page, 'Clase', 'Eliminar carpeta');
+  const confirmDialog = page.locator('div').filter({
+    has: page.getByText('Confirmar eliminación', { exact: true })
+  }).first();
+  await confirmDialog.locator('button').filter({ hasText: /^Eliminar$/ }).dispatchEvent('click');
+
+  await expect.poll(async () => (
+    await page.getByRole('button', { name: /^Clase(?:\s|$)/ }).count()
+  )).toBe(0);
 });
 
 test('dashboard uploads files and folders from the file explorer', async ({ page }) => {

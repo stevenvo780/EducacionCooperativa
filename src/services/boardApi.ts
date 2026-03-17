@@ -1,4 +1,5 @@
 import { db, auth } from '@/lib/firebase';
+import { authFetch } from '@/services/apiClient';
 import { 
   collection, 
   doc, 
@@ -17,10 +18,19 @@ import {
 import type { BoardCard, BoardColumn, BoardData } from '@/components/dashboard/types';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const useHttpBoardApi = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+
 const resolveBoardId = (workspaceId: string) => {
   const user = auth().currentUser;
   if (!user && isPersonalWorkspaceId(workspaceId)) throw new Error('User not authenticated');
   return isPersonalWorkspaceId(workspaceId) ? `${PERSONAL_WORKSPACE_ID}:${user?.uid}` : workspaceId;
+};
+
+const assertOk = (res: Response, fallbackMessage: string) => {
+  if (!res.ok) {
+    throw new Error(fallbackMessage);
+  }
 };
 
 const DEFAULT_COLUMNS = ['Por hacer', 'En progreso', 'Hecho'];
@@ -55,6 +65,13 @@ const ensureBoardExists = async (boardId: string, workspaceId: string) => {
 };
 
 export const fetchBoardApi = async (params: { workspaceId: string }): Promise<BoardData> => {
+  if (useHttpBoardApi) {
+    const search = new URLSearchParams({ workspaceId: params.workspaceId });
+    const res = await authFetch(`/api/boards?${search.toString()}`, { cache: 'no-store' });
+    assertOk(res, 'Failed to fetch board');
+    return res.json() as Promise<BoardData>;
+  }
+
   const boardId = resolveBoardId(params.workspaceId);
   
   // Ensure board exists (creates it if offline creation is allowed/compatible or if we are online)
@@ -89,6 +106,20 @@ export const fetchBoardApi = async (params: { workspaceId: string }): Promise<Bo
 };
 
 export const createBoardColumnApi = async (params: { workspaceId: string; name: string }): Promise<BoardColumn> => {
+  if (useHttpBoardApi) {
+    const res = await authFetch('/api/boards', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        type: 'column',
+        name: params.name
+      })
+    });
+    assertOk(res, 'Failed to create board column');
+    return res.json() as Promise<BoardColumn>;
+  }
+
   const boardId = resolveBoardId(params.workspaceId);
   const boardRef = doc(db(), 'boards', boardId);
   
@@ -112,6 +143,24 @@ export const createBoardColumnApi = async (params: { workspaceId: string; name: 
 };
 
 export const updateBoardColumnApi = async (params: { workspaceId: string; columnId: string; name?: string; order?: number }) => {
+  if (useHttpBoardApi) {
+    const res = await authFetch('/api/boards', {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        type: 'column',
+        id: params.columnId,
+        data: {
+          ...(params.name !== undefined ? { name: params.name } : {}),
+          ...(params.order !== undefined ? { order: params.order } : {})
+        }
+      })
+    });
+    assertOk(res, 'Failed to update board column');
+    return;
+  }
+
   const boardId = resolveBoardId(params.workspaceId);
   const colRef = doc(db(), 'boards', boardId, 'columns', params.columnId);
   
@@ -123,6 +172,20 @@ export const updateBoardColumnApi = async (params: { workspaceId: string; column
 };
 
 export const deleteBoardColumnApi = async (params: { workspaceId: string; columnId: string }) => {
+  if (useHttpBoardApi) {
+    const res = await authFetch('/api/boards', {
+      method: 'DELETE',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        type: 'column',
+        id: params.columnId
+      })
+    });
+    assertOk(res, 'Failed to delete board column');
+    return;
+  }
+
   const boardId = resolveBoardId(params.workspaceId);
   const colRef = doc(db(), 'boards', boardId, 'columns', params.columnId);
   await deleteDoc(colRef);
@@ -139,6 +202,27 @@ export const createBoardCardApi = async (params: {
   sourceFragment?: string;
   sourcePath?: string;
 }): Promise<BoardCard> => {
+  if (useHttpBoardApi) {
+    const res = await authFetch('/api/boards', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        type: 'card',
+        columnId: params.columnId,
+        title: params.title,
+        description: params.description,
+        ownerId: params.ownerId,
+        sourceDocId: params.sourceDocId,
+        sourceDocName: params.sourceDocName,
+        sourceFragment: params.sourceFragment,
+        sourcePath: params.sourcePath
+      })
+    });
+    assertOk(res, 'Failed to create board card');
+    return res.json() as Promise<BoardCard>;
+  }
+
   const boardId = resolveBoardId(params.workspaceId);
   const cardData = {
     columnId: params.columnId,
@@ -174,6 +258,30 @@ export const updateBoardCardApi = async (params: {
   sourceFragment?: string;
   sourcePath?: string;
 }) => {
+  if (useHttpBoardApi) {
+    const res = await authFetch('/api/boards', {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        type: 'card',
+        id: params.cardId,
+        data: {
+          ...(params.title !== undefined ? { title: params.title } : {}),
+          ...(params.description !== undefined ? { description: params.description } : {}),
+          ...(params.columnId !== undefined ? { columnId: params.columnId } : {}),
+          ...(params.order !== undefined ? { order: params.order } : {}),
+          ...(params.sourceDocId !== undefined ? { sourceDocId: params.sourceDocId } : {}),
+          ...(params.sourceDocName !== undefined ? { sourceDocName: params.sourceDocName } : {}),
+          ...(params.sourceFragment !== undefined ? { sourceFragment: params.sourceFragment } : {}),
+          ...(params.sourcePath !== undefined ? { sourcePath: params.sourcePath } : {})
+        }
+      })
+    });
+    assertOk(res, 'Failed to update board card');
+    return;
+  }
+
   const boardId = resolveBoardId(params.workspaceId);
   const cardRef = doc(db(), 'boards', boardId, 'cards', params.cardId);
 
@@ -191,8 +299,21 @@ export const updateBoardCardApi = async (params: {
 };
 
 export const deleteBoardCardApi = async (params: { workspaceId: string; cardId: string }) => {
+  if (useHttpBoardApi) {
+    const res = await authFetch('/api/boards', {
+      method: 'DELETE',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        workspaceId: params.workspaceId,
+        type: 'card',
+        id: params.cardId
+      })
+    });
+    assertOk(res, 'Failed to delete board card');
+    return;
+  }
+
   const boardId = resolveBoardId(params.workspaceId);
   const cardRef = doc(db(), 'boards', boardId, 'cards', params.cardId);
   await deleteDoc(cardRef);
 };
-

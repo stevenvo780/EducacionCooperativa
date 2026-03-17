@@ -260,6 +260,7 @@ export const updateDocumentApi = (docId: string, payload: Record<string, unknown
 
   // Cancel any pending debounced update for this doc
   const existing = _pendingDocUpdates.get(docId);
+  const nextPayload = existing ? { ...existing.payload, ...payload } : payload;
   if (existing) {
     clearTimeout(existing.timer);
     // Resolve previous caller early — a newer update supersedes it
@@ -273,7 +274,7 @@ export const updateDocumentApi = (docId: string, payload: Record<string, unknown
         const res = await authFetch(`/api/documents/${docId}`, {
           method: 'PUT',
           headers: JSON_HEADERS,
-          body: JSON.stringify(payload)
+          body: JSON.stringify(nextPayload)
         });
         assertOk(res, 'Failed to update document');
         resolve();
@@ -281,7 +282,7 @@ export const updateDocumentApi = (docId: string, payload: Record<string, unknown
         reject(err);
       }
     }, UPDATE_DEBOUNCE_MS);
-    _pendingDocUpdates.set(docId, { payload, timer, resolve, reject });
+    _pendingDocUpdates.set(docId, { payload: nextPayload, timer, resolve, reject });
   });
 };
 

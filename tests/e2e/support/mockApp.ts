@@ -35,12 +35,43 @@ type MockProfile = {
   displayName?: string | null;
 };
 
+type MockBoardColumn = {
+  id: string;
+  name: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MockBoardCard = {
+  id: string;
+  title: string;
+  description?: string;
+  columnId: string;
+  order: number;
+  ownerId?: string | null;
+  sourceDocId?: string | null;
+  sourceDocName?: string | null;
+  sourceFragment?: string | null;
+  sourcePath?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MockBoardState = {
+  boardId: string;
+  workspaceId: string;
+  columns: MockBoardColumn[];
+  cards: MockBoardCard[];
+};
+
 type MockAppState = {
   user: typeof TEST_USER;
   role: string;
   workspaces: MockWorkspace[];
   invites: MockWorkspace[];
   docsByWorkspace: Record<string, MockDoc[]>;
+  boardsByWorkspace: Record<string, MockBoardState>;
   userProfiles: Record<string, MockProfile>;
   subscription: {
     userId: string;
@@ -63,6 +94,7 @@ type MockAppState = {
   changePasswordShouldFail: boolean;
   nextWorkspaceId: number;
   nextDocId: number;
+  nextBoardId: number;
 };
 
 type MockOptions = Partial<Pick<MockAppState, 'loginShouldFail' | 'registerShouldFail' | 'changePasswordShouldFail' | 'role'>> & {
@@ -154,6 +186,7 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
       }
     ]
   },
+  boardsByWorkspace: {},
   userProfiles: {
     [TEST_USER.uid]: {
       uid: TEST_USER.uid,
@@ -186,8 +219,46 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
   registerShouldFail: options.registerShouldFail ?? false,
   changePasswordShouldFail: options.changePasswordShouldFail ?? false,
   nextWorkspaceId: 1,
-  nextDocId: 1
+  nextDocId: 1,
+  nextBoardId: 1
 });
+
+const createDefaultBoardColumns = (state: MockAppState) => ([
+  {
+    id: `board-col-${state.nextBoardId++}`,
+    name: 'Por hacer',
+    order: 1000,
+    createdAt: ISO_DATE,
+    updatedAt: ISO_DATE
+  },
+  {
+    id: `board-col-${state.nextBoardId++}`,
+    name: 'En progreso',
+    order: 2000,
+    createdAt: ISO_DATE,
+    updatedAt: ISO_DATE
+  },
+  {
+    id: `board-col-${state.nextBoardId++}`,
+    name: 'Hecho',
+    order: 3000,
+    createdAt: ISO_DATE,
+    updatedAt: ISO_DATE
+  }
+]);
+
+const ensureBoard = (state: MockAppState, workspaceId: string) => {
+  if (!state.boardsByWorkspace[workspaceId]) {
+    state.boardsByWorkspace[workspaceId] = {
+      boardId: `board-${workspaceId}`,
+      workspaceId,
+      columns: createDefaultBoardColumns(state),
+      cards: []
+    };
+  }
+
+  return state.boardsByWorkspace[workspaceId];
+};
 
 const json = async (route: Route, data: unknown, status = 200) => {
   await route.fulfill({
@@ -346,6 +417,25 @@ export const installBrowserStubs = async (page: Page) => {
       return defaultValue ?? null;
     }) as typeof window.prompt;
 
+    window.confirm = (() => {
+      const state = window as Window & {
+        __confirmResponses?: boolean[];
+        __nextConfirmResponse?: boolean;
+      };
+
+      if (Array.isArray(state.__confirmResponses) && state.__confirmResponses.length > 0) {
+        return state.__confirmResponses.shift() ?? true;
+      }
+
+      if (typeof state.__nextConfirmResponse === 'boolean') {
+        const next = state.__nextConfirmResponse;
+        delete state.__nextConfirmResponse;
+        return next;
+      }
+
+      return true;
+    }) as typeof window.confirm;
+
     URL.createObjectURL = ((blob: Blob | MediaSource) => {
       const fakeUrl = `blob:mock-${downloadCounter++}`;
       const state = window as Window & {
@@ -466,6 +556,7 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       };
       state.workspaces.push(workspace);
       state.docsByWorkspace[id] = [];
+      ensureBoard(state, id);
       await json(route, workspace);
       return;
     }
@@ -525,6 +616,7 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
         if (!state.docsByWorkspace[acceptedWorkspace.id]) {
           state.docsByWorkspace[acceptedWorkspace.id] = [];
         }
+        ensureBoard(state, acceptedWorkspace.id);
         await json(route, { ok: true });
         return;
       }
@@ -534,7 +626,133 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       const workspaceId = pathname.split('/').pop() ?? '';
       state.workspaces = state.workspaces.filter((item) => item.id !== workspaceId);
       delete state.docsByWorkspace[workspaceId];
+      delete state.boardsByWorkspace[workspaceId];
       await json(route, { ok: true });
+      return;
+    }
+
+    if (pathname === '/api/boards' && method === 'GET') {
+      const workspaceId = searchParams.get('workspaceId') ?? PERSONAL_WORKSPACE_ID;
+      const board = ensureBoard(state, workspaceId);
+      const columns = [...board.columns].sort((left, right) => left.order - right.order);
+      const cards = [...board.cards].sort((left, right) => left.order - right.order);
+      await json(route, { ...board, columns, cards });
+      return;
+    }
+
+    if (pathname === '/api/boards' && method === 'POST') {
+      const body = parseBody(route);
+      const workspaceId = body.workspaceId ?? PERSONAL_WORKSPACE_ID;
+      const board = ensureBoard(state, workspaceId);
+
+      if (body.type === 'column') {
+        const maxOrder = board.columns.reduce((current, column) => Math.max(current, column.order), 0);
+        const column: MockBoardColumn = {
+          id: `board-col-${state.nextBoardId++}`,
+          name: String(body.name ?? '').trim() || 'Sin titulo',
+          order: typeof body.order === 'number' ? body.order : maxOrder + 1000,
+          createdAt: ISO_DATE,
+          updatedAt: ISO_DATE
+        };
+        board.columns.push(column);
+        await json(route, column);
+        return;
+      }
+
+      if (body.type === 'card') {
+        const columnId = String(body.columnId ?? '').trim();
+        if (!columnId) {
+          await json(route, { error: 'columnId is required' }, 400);
+          return;
+        }
+        const cardsInColumn = board.cards.filter((card) => card.columnId === columnId);
+        const maxOrder = cardsInColumn.reduce((current, card) => Math.max(current, card.order), 0);
+        const card: MockBoardCard = {
+          id: `board-card-${state.nextBoardId++}`,
+          title: String(body.title ?? '').trim() || 'Nueva tarjeta',
+          description: typeof body.description === 'string' ? body.description : undefined,
+          columnId,
+          order: typeof body.order === 'number' ? body.order : maxOrder + 1000,
+          ownerId: state.user.uid,
+          sourceDocId: typeof body.sourceDocId === 'string' ? body.sourceDocId : null,
+          sourceDocName: typeof body.sourceDocName === 'string' ? body.sourceDocName : null,
+          sourceFragment: typeof body.sourceFragment === 'string' ? body.sourceFragment : null,
+          sourcePath: typeof body.sourcePath === 'string' ? body.sourcePath : null,
+          createdAt: ISO_DATE,
+          updatedAt: ISO_DATE
+        };
+        board.cards.push(card);
+        await json(route, card);
+        return;
+      }
+
+      await json(route, { error: 'Invalid type' }, 400);
+      return;
+    }
+
+    if (pathname === '/api/boards' && method === 'PATCH') {
+      const body = parseBody(route);
+      const workspaceId = body.workspaceId ?? PERSONAL_WORKSPACE_ID;
+      const board = ensureBoard(state, workspaceId);
+      const id = String(body.id ?? '');
+      const data = body.data ?? {};
+
+      if (body.type === 'column') {
+        const column = board.columns.find((item) => item.id === id);
+        if (!column) {
+          await json(route, { error: 'Column not found' }, 404);
+          return;
+        }
+        if (typeof data.name === 'string') column.name = data.name.trim() || column.name;
+        if (typeof data.order === 'number') column.order = data.order;
+        column.updatedAt = ISO_DATE;
+        await json(route, { ok: true });
+        return;
+      }
+
+      if (body.type === 'card') {
+        const card = board.cards.find((item) => item.id === id);
+        if (!card) {
+          await json(route, { error: 'Card not found' }, 404);
+          return;
+        }
+        if (typeof data.title === 'string') card.title = data.title.trim() || card.title;
+        if (typeof data.description === 'string') card.description = data.description;
+        if (typeof data.columnId === 'string') card.columnId = data.columnId.trim() || card.columnId;
+        if (typeof data.order === 'number') card.order = data.order;
+        if (typeof data.sourceDocId === 'string' || data.sourceDocId === null) card.sourceDocId = data.sourceDocId ?? null;
+        if (typeof data.sourceDocName === 'string' || data.sourceDocName === null) card.sourceDocName = data.sourceDocName ?? null;
+        if (typeof data.sourceFragment === 'string' || data.sourceFragment === null) card.sourceFragment = data.sourceFragment ?? null;
+        if (typeof data.sourcePath === 'string' || data.sourcePath === null) card.sourcePath = data.sourcePath ?? null;
+        card.updatedAt = ISO_DATE;
+        await json(route, { ok: true });
+        return;
+      }
+
+      await json(route, { error: 'Invalid type' }, 400);
+      return;
+    }
+
+    if (pathname === '/api/boards' && method === 'DELETE') {
+      const body = parseBody(route);
+      const workspaceId = body.workspaceId ?? PERSONAL_WORKSPACE_ID;
+      const board = ensureBoard(state, workspaceId);
+      const id = String(body.id ?? '');
+
+      if (body.type === 'column') {
+        board.columns = board.columns.filter((item) => item.id !== id);
+        board.cards = board.cards.filter((item) => item.columnId !== id);
+        await json(route, { ok: true });
+        return;
+      }
+
+      if (body.type === 'card') {
+        board.cards = board.cards.filter((item) => item.id !== id);
+        await json(route, { ok: true });
+        return;
+      }
+
+      await json(route, { error: 'Invalid type' }, 400);
       return;
     }
 
