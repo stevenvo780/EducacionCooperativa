@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info } from 'lucide-react';
+import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
@@ -238,6 +238,46 @@ export default function STRunner({
   const [replHistoryIdx, setReplHistoryIdx] = useState(-1);
   const [activeTab, setActiveTab] = useState<OutputTab>('output');
   const [currentSymbols, setCurrentSymbols] = useState<SymbolInfo[]>([]);
+  const [outputHeight, setOutputHeight] = useState(300); // Height of the output panel in pixels
+  const [showOutput, setShowOutput] = useState(true);
+  const [isResizingOutput, setIsResizingOutput] = useState(false);
+
+  const startResizingOutput = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingOutput(true);
+  }, []);
+
+  const stopResizingOutput = useCallback(() => {
+    setIsResizingOutput(false);
+  }, []);
+
+  const resizeOutput = useCallback((e: MouseEvent) => {
+    if (isResizingOutput) {
+      // Invert Y calculation since panel is at the bottom
+      const container = document.querySelector('.st-runner-body');
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const newHeight = rect.bottom - e.clientY;
+        if (newHeight >= 100 && newHeight <= rect.height - 100) {
+          setOutputHeight(newHeight);
+        }
+      }
+    }
+  }, [isResizingOutput]);
+
+  useEffect(() => {
+    if (isResizingOutput) {
+      window.addEventListener('mousemove', resizeOutput);
+      window.addEventListener('mouseup', stopResizingOutput);
+    } else {
+      window.removeEventListener('mousemove', resizeOutput);
+      window.removeEventListener('mouseup', stopResizingOutput);
+    }
+    return () => {
+      window.removeEventListener('mousemove', resizeOutput);
+      window.removeEventListener('mouseup', stopResizingOutput);
+    };
+  }, [isResizingOutput, resizeOutput, stopResizingOutput]);
 
   // ── Ejecutar script completo ──
   const handleRun = useCallback(() => {
@@ -425,72 +465,102 @@ export default function STRunner({
       </div>
 
       {/* ── Body ── */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 overflow-hidden st-runner-body relative">
+        {/* Global overlay during output resizing to prevent iframe interference */}
+        {isResizingOutput && (
+          <div 
+            className="fixed inset-0 z-[100] cursor-row-resize" 
+            onMouseUp={stopResizingOutput}
+          />
+        )}
         {mode === 'script' ? (
           /* Script mode: editor arriba, output con tabs abajo */
           <>
-            <div className="flex-shrink-0 border-b border-slate-800" style={{ height: '45%', minHeight: 120 }}>
+            <div className="flex-1 min-h-[100px] border-b border-slate-800 relative">
               <STCodeEditor
                 value={code}
                 onChange={setCode}
                 onKeyDown={handleCodeKeyDown}
                 placeholder="// Escribe tu script ST aquí..."
-                className="bg-slate-950"
+                className="bg-slate-950 h-full"
               />
             </div>
-            {/* Output tabs */}
-            <div className="flex items-center gap-0 bg-slate-900 border-b border-slate-800 flex-shrink-0 px-1">
-              <button
-                onClick={() => setActiveTab('output')}
-                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
-                  activeTab === 'output'
-                    ? 'border-indigo-500 text-white'
-                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                <Terminal className="w-3 h-3 inline mr-1" />
-                Salida
-              </button>
-              <button
-                onClick={() => setActiveTab('problems')}
-                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
-                  activeTab === 'problems'
-                    ? 'border-amber-500 text-white'
-                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                <AlertTriangle className="w-3 h-3 inline mr-1" />
-                Problemas
-                {lastDiagnostics.length > 0 && (
-                  <span className={`ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
-                    lastDiagnostics.some(d => d.severity === 'error')
-                      ? 'bg-red-500/30 text-red-400'
-                      : 'bg-amber-500/30 text-amber-400'
-                  }`}>
-                    {lastDiagnostics.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('symbols')}
-                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
-                  activeTab === 'symbols'
-                    ? 'border-emerald-500 text-white'
-                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                <List className="w-3 h-3 inline mr-1" />
-                Símbolos
-                {currentSymbols.length > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-emerald-500/30 text-emerald-400">
-                    {currentSymbols.length}
-                  </span>
-                )}
-              </button>
+
+            {/* Resize Handle and Tabs */}
+            <div className="flex flex-col flex-shrink-0 bg-slate-900 border-t border-slate-800">
+              {/* Actual resize handle bar */}
+              <div 
+                onMouseDown={startResizingOutput}
+                className={`h-1 cursor-row-resize hover:bg-indigo-500/50 transition-colors ${isResizingOutput ? 'bg-indigo-500' : 'bg-transparent'}`}
+                title="Redimensionar salida"
+              />
+              
+              <div className="flex items-center gap-0 border-b border-slate-800 px-1">
+                <button
+                  onClick={() => setActiveTab('output')}
+                  className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                    activeTab === 'output'
+                      ? 'border-indigo-500 text-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <Terminal className="w-3 h-3 inline mr-1" />
+                  Salida
+                </button>
+                <button
+                  onClick={() => setActiveTab('problems')}
+                  className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                    activeTab === 'problems'
+                      ? 'border-amber-500 text-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <AlertTriangle className="w-3 h-3 inline mr-1" />
+                  Problemas
+                  {lastDiagnostics.length > 0 && (
+                    <span className={`ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
+                      lastDiagnostics.some(d => d.severity === 'error')
+                        ? 'bg-red-500/30 text-red-400'
+                        : 'bg-amber-500/30 text-amber-400'
+                    }`}>
+                      {lastDiagnostics.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('symbols')}
+                  className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                    activeTab === 'symbols'
+                      ? 'border-emerald-500 text-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <List className="w-3 h-3 inline mr-1" />
+                  Símbolos
+                  {currentSymbols.length > 0 && (
+                    <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-emerald-500/30 text-emerald-400">
+                      {currentSymbols.length}
+                    </span>
+                  )}
+                </button>
+                <div className="flex-1" />
+                <button
+                  onClick={() => setShowOutput(prev => !prev)}
+                  className="px-3 py-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+                  title={showOutput ? "Ocultar panel" : "Mostrar panel"}
+                >
+                  {showOutput ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-            {activeTab === 'output' && <HistoryPanel entries={history} />}
-            {activeTab === 'problems' && <ProblemsPanel diagnostics={lastDiagnostics} />}
-            {activeTab === 'symbols' && <SymbolsPanel symbolsList={currentSymbols} />}
+
+            {showOutput && (
+              <div style={{ height: outputHeight }} className="flex flex-col bg-slate-900/50 overflow-hidden flex-shrink-0">
+                {activeTab === 'output' && <HistoryPanel entries={history} />}
+                {activeTab === 'problems' && <ProblemsPanel diagnostics={lastDiagnostics} />}
+                {activeTab === 'symbols' && <SymbolsPanel symbolsList={currentSymbols} />}
+              </div>
+            )}
           </>
         ) : (
           /* REPL mode: output arriba, input abajo */

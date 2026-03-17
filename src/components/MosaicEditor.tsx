@@ -144,6 +144,16 @@ export default function MosaicEditor({
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const toggleCompactMenu = useCallback(() => {
+    if (!showCompactMenu && menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setShowCompactMenu(prev => !prev);
+  }, [showCompactMenu]);
 
   const semanticStoreContext = useMemo(() => ({
     workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID,
@@ -192,8 +202,8 @@ export default function MosaicEditor({
         && (
           fullscreenElement === document.documentElement
           || fullscreenElement === document.body
-          || fullscreenElement === editorShellRef.current
-          || fullscreenElement === frameElement
+          || (editorShellRef.current && (fullscreenElement === editorShellRef.current || fullscreenElement.contains(editorShellRef.current)))
+          || (frameElement && (fullscreenElement === frameElement || fullscreenElement.contains(frameElement)))
         )
       ));
     };
@@ -1072,18 +1082,27 @@ export default function MosaicEditor({
   const toggleFullscreen = useCallback(async () => {
     if (typeof document === 'undefined') return;
 
-    const target = document.documentElement;
-
-    if (!target) return;
-
-    try {
-      if (document.fullscreenElement) {
+    if (document.fullscreenElement) {
+      try {
         await document.exitFullscreen();
-      } else {
-        await target.requestFullscreen();
+      } catch (err) {
+        console.error('Error exiting fullscreen:', err);
       }
-    } catch (error) {
-      console.error('Error toggling fullscreen editor:', error);
+    } else {
+      const target = editorShellRef.current;
+      if (target) {
+        try {
+          await target.requestFullscreen();
+        } catch (error) {
+          console.error('Error toggling fullscreen editor:', error);
+          // Fallback to document if editor shell fails
+          try {
+            await document.documentElement.requestFullscreen();
+          } catch (e2) {
+            console.error('Critical fullscreen error:', e2);
+          }
+        }
+      }
     }
   }, []);
 
@@ -1191,8 +1210,9 @@ export default function MosaicEditor({
         {/* ── Custom controls ── */}
         <div className="relative shrink-0" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <button
+            ref={menuBtnRef}
             type="button"
-            onClick={() => setShowCompactMenu(c => !c)}
+            onClick={toggleCompactMenu}
             className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
             title="Más opciones"
             aria-label="Más opciones del editor"
@@ -1239,14 +1259,14 @@ export default function MosaicEditor({
             {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
         </div>
-        {showCompactMenu && ReactDOM.createPortal(
+        {showCompactMenu && menuPos && ReactDOM.createPortal(
           <div
             className="table-grid-popover"
             style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99998 }}
             onClick={() => setShowCompactMenu(false)}
           >
             <div
-              style={{ position: 'fixed', top: 34, left: 8, zIndex: 99999 }}
+              style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 99999 }}
               className="min-w-[200px] rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-2xl shadow-black/60"
               onClick={(e) => e.stopPropagation()}
             >

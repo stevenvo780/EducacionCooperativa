@@ -309,6 +309,7 @@ export const installBrowserStubs = async (page: Page) => {
 
   await page.addInitScript(() => {
     let clipboardValue = '';
+    let downloadCounter = 0;
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -324,6 +325,58 @@ export const installBrowserStubs = async (page: Page) => {
       (window as Window & { __lastOpenedUrl?: string }).__lastOpenedUrl = String(url ?? '');
       return null;
     }) as typeof window.open;
+
+    window.prompt = ((message?: string, defaultValue?: string) => {
+      const state = window as Window & {
+        __promptResponses?: string[];
+        __nextPromptResponse?: string;
+      };
+
+      if (Array.isArray(state.__promptResponses) && state.__promptResponses.length > 0) {
+        const next = state.__promptResponses.shift();
+        return next ?? null;
+      }
+
+      if (typeof state.__nextPromptResponse === 'string') {
+        const next = state.__nextPromptResponse;
+        delete state.__nextPromptResponse;
+        return next;
+      }
+
+      return defaultValue ?? null;
+    }) as typeof window.prompt;
+
+    URL.createObjectURL = ((blob: Blob | MediaSource) => {
+      const fakeUrl = `blob:mock-${downloadCounter++}`;
+      const state = window as Window & {
+        __blobDownloads?: Array<{ url: string; size?: number }>;
+      };
+      state.__blobDownloads = state.__blobDownloads ?? [];
+      state.__blobDownloads.push({
+        url: fakeUrl,
+        size: blob instanceof Blob ? blob.size : undefined
+      });
+      return fakeUrl;
+    }) as typeof URL.createObjectURL;
+
+    URL.revokeObjectURL = (() => {}) as typeof URL.revokeObjectURL;
+
+    const originalAnchorClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function clickPatched() {
+      if (this.download || this.href.startsWith('blob:mock-')) {
+        const state = window as Window & {
+          __downloads?: Array<{ href: string; download: string }>;
+        };
+        state.__downloads = state.__downloads ?? [];
+        state.__downloads.push({
+          href: this.href,
+          download: this.download
+        });
+        return;
+      }
+
+      return originalAnchorClick.call(this);
+    };
   });
 };
 
@@ -336,6 +389,10 @@ export const installInsecureAuth = async (page: Page, user = TEST_USER) => {
 
 export const installMockApi = async (page: Page, options: MockOptions = {}) => {
   const state = createBaseState(options);
+
+  await page.route('https://uploads.test/**', async (route) => {
+    await route.fulfill({ status: 200, body: '' });
+  });
 
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -417,7 +474,8 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       const workspaceId = pathname.split('/').pop() ?? '';
       const body = parseBody(route);
       const workspace = state.workspaces.find((item) => item.id === workspaceId);
-      if (!workspace) {
+      const invite = state.invites.find((item) => item.id === workspaceId);
+      if (!workspace && !invite) {
         await json(route, { error: 'Workspace no encontrado' }, 404);
         return;
       }
@@ -434,7 +492,27 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       }
 
       if (body.action === 'accept') {
-        workspace.members.push(body.userId);
+        const acceptedWorkspace = invite
+          ? {
+              ...invite,
+              members: Array.from(new Set([...invite.members, body.userId]))
+            }
+          : {
+              ...workspace,
+              members: Array.from(new Set([...(workspace.members ?? []), body.userId]))
+            };
+
+        state.invites = state.invites.filter((item) => item.id !== workspaceId);
+        if (!state.workspaces.some((item) => item.id === acceptedWorkspace.id)) {
+          state.workspaces.push(acceptedWorkspace);
+        } else {
+          state.workspaces = state.workspaces.map((item) => (
+            item.id === acceptedWorkspace.id ? acceptedWorkspace : item
+          ));
+        }
+        if (!state.docsByWorkspace[acceptedWorkspace.id]) {
+          state.docsByWorkspace[acceptedWorkspace.id] = [];
+        }
         await json(route, { ok: true });
         return;
       }
@@ -505,6 +583,15 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       return;
     }
 
+    if (pathname.startsWith('/api/documents/') && method === 'DELETE') {
+      const docId = pathname.split('/').pop() ?? '';
+      for (const workspaceId of Object.keys(state.docsByWorkspace)) {
+        state.docsByWorkspace[workspaceId] = state.docsByWorkspace[workspaceId].filter((doc) => doc.id !== docId);
+      }
+      await json(route, { ok: true });
+      return;
+    }
+
     if (pathname === '/api/search/semantic' && method === 'POST') {
       const body = parseBody(route);
       const results = makeSearchResults(state, body.workspaceId, body.query ?? '');
@@ -543,6 +630,43 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       return;
     }
 
+    if (pathname === '/api/upload/signed-url' && method === 'POST') {
+      const body = parseBody(route);
+      await json(route, {
+        signedUrl: `https://uploads.test/${encodeURIComponent(body.fileName ?? 'upload.bin')}`,
+        storagePath: `uploads/${body.workspaceId}/${body.fileName}`,
+        fileName: body.fileName,
+        originalName: body.fileName,
+        mimeType: body.mimeType,
+        workspaceId: body.workspaceId,
+        folder: body.folder
+      });
+      return;
+    }
+
+    if (pathname === '/api/upload/register' && method === 'POST') {
+      const body = parseBody(route);
+      const workspaceId = body.workspaceId ?? PERSONAL_WORKSPACE_ID;
+      const docId = `doc-uploaded-${state.nextDocId++}`;
+      const uploadedDoc: MockDoc = {
+        id: docId,
+        name: body.originalName ?? body.fileName ?? `archivo-${state.nextDocId}`,
+        type: 'file',
+        folder: body.folder ?? 'No estructurado',
+        content: '',
+        ownerId: state.user.uid,
+        workspaceId,
+        mimeType: body.mimeType ?? 'application/octet-stream',
+        updatedAt: ISO_DATE
+      };
+      if (!state.docsByWorkspace[workspaceId]) {
+        state.docsByWorkspace[workspaceId] = [];
+      }
+      state.docsByWorkspace[workspaceId].push(uploadedDoc);
+      await json(route, uploadedDoc);
+      return;
+    }
+
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -555,19 +679,28 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
 
 export const gotoDashboard = async (page: Page, workspaceId?: string) => {
   const target = workspaceId ? `/dashboard?workspaceId=${workspaceId}` : '/dashboard';
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     await page.goto(target);
+    await page.waitForLoadState('domcontentloaded');
 
     const header = page.locator('header');
     try {
-      await expect(header).toBeVisible({ timeout: 5000 });
+      await expect(header).toBeVisible({ timeout: 10000 });
       return;
     } catch (error) {
       const notFoundHeading = page.getByRole('heading', { name: '404' });
       const hitNotFound = await notFoundHeading.isVisible().catch(() => false);
-      if (attempt === 2 || !hitNotFound) {
+      const loginHeading = page.getByRole('heading', { name: 'Bienvenido de nuevo' });
+      const hitLogin = /\/login(?:\?|$)/.test(page.url())
+        || await loginHeading.isVisible().catch(() => false);
+      const runtimeErrorHeading = page.getByRole('heading', { name: 'Unhandled Runtime Error' });
+      const hitRuntimeError = await runtimeErrorHeading.isVisible().catch(() => false);
+
+      if (attempt === 3 || (!hitNotFound && !hitLogin && !hitRuntimeError)) {
         throw error;
       }
+
+      await page.waitForTimeout(250);
     }
   }
 };

@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown, Check, XCircle } from 'lucide-react';
+import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown, Check, XCircle, Maximize2, Minimize2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -153,10 +153,45 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const [editingTitleDocId, setEditingTitleDocId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
+  const [fullscreenDocId, setFullscreenDocId] = useState<string | null>(null);
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
   const mosaicContainerRef = useRef<HTMLDivElement | null>(null);
+  const tileRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { menu: tabContextMenu, close: closeTabContextMenu, getTriggerProps: getTabContextTriggerProps } = useContextMenu<string>();
+
+  // Browser Fullscreen API sync
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setFullscreenDocId(null);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async (docId: string) => {
+    if (typeof document === 'undefined') return;
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      // setFullscreenDocId(null) is handled by event listener
+    } else {
+      const element = tileRefs.current[docId];
+      if (element) {
+        try {
+          await element.requestFullscreen();
+          setFullscreenDocId(docId);
+        } catch (err) {
+          console.error('Error entering fullscreen:', err);
+        }
+      }
+    }
+  }, []);
 
   // Detect global drag of documents to show overlay over iframes
   useEffect(() => {
@@ -363,6 +398,13 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           </>
         )}
         <button
+          onClick={() => toggleFullscreen(doc.id)}
+          className="p-1 rounded text-surface-400 hover:bg-surface-700 hover:text-white transition"
+          title={fullscreenDocId === doc.id ? "Salir de pantalla completa" : "Pantalla completa"}
+        >
+          {fullscreenDocId === doc.id ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+        </button>
+        <button
           onClick={() => onCloseTab(doc.id)}
           className="p-1 rounded text-surface-400 hover:bg-mandy-600/20 hover:text-mandy-300 transition"
           title="Cerrar"
@@ -371,7 +413,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </button>
       </div>
     );
-  }, [onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
+  }, [onCloseTab, docSearchTerms, docSearchStates, handleSearchChange, toggleFullscreen, fullscreenDocId]);
 
   const closeOtherTabs = useCallback((keepDocId: string) => {
     const otherIds = openTabs.filter(t => t.id !== keepDocId).map(t => t.id);
@@ -557,6 +599,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           renderToolbar={() => renderWindowToolbar(doc, mode)}
         >
             <div
+                ref={(el) => { tileRefs.current[doc.id] = el; }}
                 className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
                 onMouseDownCapture={() => {
                   onActivateTab?.(doc.id);

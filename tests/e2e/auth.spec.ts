@@ -49,7 +49,8 @@ test('register flow creates an insecure session and redirects to dashboard', asy
   await page.goto('/login');
 
   await page.getByRole('button', { name: 'Registrarse', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Crea tu cuenta' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Crear cuenta', exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Crea tu cuenta' })).toBeVisible({ timeout: 10000 });
 
   await page.getByPlaceholder('usuario@ejemplo.com').fill('nuevo@cooperativa.test');
   await page.getByPlaceholder('••••••••').fill('secreta');

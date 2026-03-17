@@ -285,7 +285,41 @@ function DashboardContent() {
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
+    const [isResizingSidebar, setIsResizingSidebar] = useState(false);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+    const startResizingSidebar = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsResizingSidebar(true);
+    }, []);
+
+    const stopResizingSidebar = useCallback(() => {
+        setIsResizingSidebar(false);
+    }, []);
+
+    const resizeSidebar = useCallback((e: MouseEvent) => {
+        if (isResizingSidebar) {
+            const newWidth = e.clientX;
+            if (newWidth >= 160 && newWidth <= 600) {
+                setSidebarWidth(newWidth);
+            }
+        }
+    }, [isResizingSidebar]);
+
+    useEffect(() => {
+        if (isResizingSidebar) {
+            window.addEventListener('mousemove', resizeSidebar);
+            window.addEventListener('mouseup', stopResizingSidebar);
+        } else {
+            window.removeEventListener('mousemove', resizeSidebar);
+            window.removeEventListener('mouseup', stopResizingSidebar);
+        }
+        return () => {
+            window.removeEventListener('mousemove', resizeSidebar);
+            window.removeEventListener('mouseup', stopResizingSidebar);
+        };
+    }, [isResizingSidebar, resizeSidebar, stopResizingSidebar]);
+
     const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
     const [isZenMode, setIsZenMode] = useState(false);
     const zenRestoreRef = useRef({ sidebar: false, header: false });
@@ -1124,6 +1158,16 @@ function DashboardContent() {
         );
     }
 
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        document.body.classList.toggle('sidebar-resizing-active', isResizingSidebar);
+        if (isResizingSidebar) {
+            document.body.style.cursor = 'col-resize';
+        } else {
+            document.body.style.cursor = '';
+        }
+    }, [isResizingSidebar]);
+
     return (
         <LazyMotion features={domAnimation}>
             <div
@@ -1133,6 +1177,13 @@ function DashboardContent() {
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
             >
+                {/* Global overlay during sidebar resizing to prevent iframe interference */}
+                {isResizingSidebar && (
+                    <div 
+                        className="fixed inset-0 z-[100] cursor-col-resize" 
+                        onMouseUp={stopResizingSidebar}
+                    />
+                )}
                 <QuickSearchModal
                     open={showQuickSearch}
                     query={quickSearchQuery}
@@ -1300,6 +1351,15 @@ function DashboardContent() {
                         onFolderDrop={handleFolderDrop}
                         onFolderDragLeave={handleFolderDragLeave}
                     />
+
+                    {/* Resize Handle */}
+                    {!isSidebarCollapsed && (
+                        <div
+                            onMouseDown={startResizingSidebar}
+                            className={`hidden md:block w-1.5 h-full cursor-col-resize absolute z-50 hover:bg-mandy-500/40 transition-colors ${isResizingSidebar ? 'bg-mandy-500' : 'bg-transparent'}`}
+                            style={{ left: sidebarWidth - 3 }}
+                        />
+                    )}
 
                     <div
                         className="flex-1 flex flex-col bg-surface-900 overflow-hidden relative"
@@ -1470,6 +1530,13 @@ function DashboardContent() {
                     userEmail={userEmail}
                     endDate={subscriptionEndDate}
                 />
+                <style jsx global>{`
+                    body.sidebar-resizing-active,
+                    body.sidebar-resizing-active * {
+                        user-select: none !important;
+                        cursor: col-resize !important;
+                    }
+                `}</style>
             </div>
         </LazyMotion>
     );
