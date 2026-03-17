@@ -55,8 +55,8 @@ export async function POST(req: NextRequest) {
 
         // Generate permanent signed URL
         const [url] = await fileRef.getSignedUrl({
-            action: 'read',
-            expires: Date.now() + 15 * 60 * 1000 // 15 mins (Fixed from permanent)
+            action: 'read' as const,
+            expires: Date.now() + 60 * 60 * 1000 // 1 hour (refreshed on every GET)
         });
 
         const docRef = await adminDb.collection('documents').add({

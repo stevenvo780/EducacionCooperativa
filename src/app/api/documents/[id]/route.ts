@@ -152,8 +152,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
                 const bucket = adminStorage.bucket();
                 if (bucket?.name) {
                     const [url] = await bucket.file(storagePath).getSignedUrl({
-                        action: 'read',
-                        expires: Date.now() + 15 * 60 * 1000
+                        action: 'read' as const,
+                        expires: Date.now() + 60 * 60 * 1000 // 1 hour
                     });
                     updateData.url = url;
                 }
@@ -198,10 +198,29 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         if (!docSnap.exists) {
              return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
-        const data = docSnap.data();
+        const data = docSnap.data() ?? {};
         if (!(await canAccessDoc(data as Record<string, unknown> | undefined, auth.uid))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
+
+        // Refresh signed URL for file-type documents so viewers never get ExpiredToken errors
+        if (data.type === 'file' && typeof data.storagePath === 'string') {
+            try {
+                const bucket = adminStorage.bucket();
+                if (bucket?.name) {
+                    const [freshUrl] = await bucket.file(data.storagePath).getSignedUrl({
+                        action: 'read' as const,
+                        expires: Date.now() + 60 * 60 * 1000 // 1 hour
+                    });
+                    data.url = freshUrl;
+                    // Update Firestore in background so subsequent reads are fast if within the hour
+                    adminDb.collection('documents').doc(id).update({ url: freshUrl }).catch(() => {});
+                }
+            } catch (e) {
+                console.warn('Failed to refresh signed URL on GET:', e);
+            }
+        }
+
         return NextResponse.json({ id: docSnap.id, ...data });
     } catch (error: any) {
         console.error('Error fetching document:', error);
