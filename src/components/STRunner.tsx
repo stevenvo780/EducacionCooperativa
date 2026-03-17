@@ -5,6 +5,7 @@ import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, 
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
+import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 
 // ── Constantes ──────────────────────────────────────────────
 
@@ -43,24 +44,7 @@ function StatusBadge({ ok }: { ok: boolean }) {
   );
 }
 
-function OutputLine({ line }: { line: string }) {
-  // Colorear según prefijo
-  let className = 'text-slate-300';
-  if (line.startsWith('✓')) className = 'text-emerald-400';
-  else if (line.startsWith('✗')) className = 'text-red-400';
-  else if (line.startsWith('◎')) className = 'text-blue-400';
-  else if (line.startsWith('⊘')) className = 'text-amber-400';
-  else if (line.startsWith('?')) className = 'text-yellow-400';
-  else if (line.startsWith('⚠')) className = 'text-orange-400';
-  else if (line.startsWith('→')) className = 'text-cyan-400 font-semibold';
-  else if (line.startsWith('  Prueba:')) className = 'text-purple-400';
-  else if (line.startsWith('    ')) className = 'text-slate-400 font-mono text-xs';
-  else if (line.includes('---') || line.includes('-+-')) className = 'text-slate-600';
-
-  return <div className={className}>{line}</div>;
-}
-
-function HistoryPanel({ entries }: { entries: STHistoryEntry[] }) {
+function HistoryPanel({ entries, viewMode }: { entries: STHistoryEntry[]; viewMode: OutputViewMode }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,16 +70,8 @@ function HistoryPanel({ entries }: { entries: STHistoryEntry[] }) {
             </code>
             <StatusBadge ok={entry.result.ok} />
           </div>
-          <div className="p-3 bg-slate-900/50 font-mono text-sm space-y-0.5">
-            {entry.result.stdout &&
-              entry.result.stdout.split('\n').map((line, i) => (
-                <OutputLine key={i} line={line} />
-              ))}
-            {entry.result.stderr && (
-              <div className="text-red-400 text-xs mt-1 whitespace-pre-wrap">
-                {entry.result.stderr}
-              </div>
-            )}
+          <div className="p-3 bg-slate-900/50 text-sm">
+            <OutputViewer result={entry.result} mode={viewMode} />
           </div>
         </div>
       ))}
@@ -258,6 +234,7 @@ export default function STRunner({
   const [replHistoryIdx, setReplHistoryIdx] = useState(-1);
   const [activeTab, setActiveTab] = useState<OutputTab>('output');
   const [currentSymbols, setCurrentSymbols] = useState<SymbolInfo[]>([]);
+  const [viewMode, setViewMode] = useState<OutputViewMode>('steps');
   const [outputHeight, setOutputHeight] = useState(300); // Height of the output panel in pixels
   const [showOutput, setShowOutput] = useState(true);
   const [isResizingOutput, setIsResizingOutput] = useState(false);
@@ -588,6 +565,9 @@ export default function STRunner({
                   )}
                 </button>
                 <div className="flex-1" />
+                {activeTab === 'output' && (
+                  <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                )}
                 <button
                   onClick={() => setShowOutput(prev => !prev)}
                   className="px-3 py-1.5 text-slate-500 hover:text-slate-300 transition-colors"
@@ -600,7 +580,7 @@ export default function STRunner({
 
             {showOutput && (
               <div style={{ height: outputHeight }} className="flex flex-col bg-slate-900/50 overflow-hidden flex-shrink-0">
-                {activeTab === 'output' && <HistoryPanel entries={history} />}
+                {activeTab === 'output' && <HistoryPanel entries={history} viewMode={viewMode} />}
                 {activeTab === 'problems' && <ProblemsPanel diagnostics={lastDiagnostics} />}
                 {activeTab === 'symbols' && <SymbolsPanel symbolsList={currentSymbols} />}
               </div>
@@ -609,9 +589,10 @@ export default function STRunner({
         ) : (
           /* REPL mode: output arriba, input abajo */
           <>
-            <HistoryPanel entries={history} />
+            <HistoryPanel entries={history} viewMode={viewMode} />
             {theoryInfo}
             <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-t border-slate-800 flex-shrink-0">
+              <ViewModeToggle mode={viewMode} onChange={setViewMode} />
               <span className="text-emerald-400 font-mono text-sm">st&gt;</span>
               <input
                 ref={replInputRef}
