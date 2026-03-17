@@ -651,7 +651,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [
     tabById, docById, docModes, nexusUrl, renderToolbarControls, renderWindowToolbar, docSearchTerms, dragOverInfo, isDraggingDoc,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
-    onSelectDoc, onActivateTab, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
+    onSelectDoc, onActivateTab, onCreateFile, onCreateStFile, onCreateFolder, onUploadFile, onUploadFolder,
     handleTileDragOver, handleTileDragLeave, handleTileDrop,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, favoriteDocIds, onToggleFavorite, onDownloadFolder,
     onReorderDocs, onReorderFolders,
