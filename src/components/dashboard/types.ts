@@ -13,10 +13,17 @@ export interface Workspace {
   type: WorkspaceTypeId;
 }
 
-export type DialogKind = 'info' | 'error' | 'confirm' | 'input';
+export enum DialogKind {
+  Info = 'info',
+  Error = 'error',
+  Confirm = 'confirm',
+  Input = 'input'
+}
+
+export type DialogKindId = `${DialogKind}`;
 
 export interface DialogConfig {
-  type: DialogKind;
+  type: DialogKindId;
   title: string;
   message?: string;
   placeholder?: string;
@@ -29,17 +36,34 @@ export interface DialogConfig {
 
 export type DialogResult = { confirmed: boolean; value?: string | null };
 
+export enum UploadPhase {
+  Uploading = 'uploading',
+  Converting = 'converting',
+  Done = 'done',
+  Error = 'error'
+}
+
+export type UploadPhaseId = `${UploadPhase}`;
+
 export interface UploadStatus {
   total: number;
   currentIndex: number;
   currentName: string;
   progress: number;
-  phase: 'uploading' | 'converting' | 'done' | 'error';
+  phase: UploadPhaseId;
   error?: string;
 }
 
+export enum DeletePhase {
+  Deleting = 'deleting',
+  Done = 'done',
+  Error = 'error'
+}
+
+export type DeletePhaseId = `${DeletePhase}`;
+
 export interface DeleteStatus {
-  phase: 'deleting' | 'done' | 'error';
+  phase: DeletePhaseId;
   name?: string;
   error?: string;
 }

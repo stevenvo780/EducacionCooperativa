@@ -5,6 +5,7 @@ import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { fetchDocsApi } from '@/services/dashboardApi';
 import { useSyncEvents } from '@/hooks/useSyncEvents';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
 interface SyncRequestOptions {
   delayMs?: number;
@@ -80,7 +81,7 @@ export const useDashboardDocsSync = ({
 
     const fetchPromise = (async () => {
       try {
-        const workspaceId = currentWorkspace.id === personalWorkspaceId ? 'personal' : currentWorkspace.id;
+        const workspaceId = currentWorkspace.id === personalWorkspaceId ? PERSONAL_WORKSPACE_ID : currentWorkspace.id;
         const fetched = await fetchDocsApi({
           workspaceId,
           ownerId: currentWorkspace.id === personalWorkspaceId ? user.uid : undefined,
@@ -176,7 +177,7 @@ export const useDashboardDocsSync = ({
   useSyncEvents({
     workspaceId: currentWorkspace?.id === personalWorkspaceId ? null : currentWorkspace?.id || null,
     userId: user?.uid || null,
-    workspaceType: currentWorkspace?.id === personalWorkspaceId ? 'personal' : 'shared',
+    workspaceType: currentWorkspace?.id === personalWorkspaceId ? WorkspaceType.Personal : WorkspaceType.Shared,
     onEvent: handleSyncEvent,
     enabled: !!currentWorkspace && !!user && isPageVisible
   });
@@ -214,7 +215,7 @@ export const useDashboardDocsSync = ({
     const unsubscribe = onDocChangeCallback((event) => {
       const eventWorkspaceId = event.workspaceId;
       const currentWorkspaceToken = currentWorkspace.id === personalWorkspaceId
-        ? `personal:${user.uid}`
+        ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
         : currentWorkspace.id;
 
       if (eventWorkspaceId === currentWorkspaceToken || eventWorkspaceId === currentWorkspace.id) {

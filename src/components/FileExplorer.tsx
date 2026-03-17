@@ -35,6 +35,7 @@ import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import type { DocumentTypeId } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 export interface DocItem {
   id: string;
@@ -1169,7 +1170,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     <FolderInput className="w-3.5 h-3.5" /> Subir carpeta
                   </button>
                 )}
-                {!isCompact && currentWorkspaceId && currentWorkspaceId !== 'personal' && (
+                {!isCompact && currentWorkspaceId && currentWorkspaceId !== PERSONAL_WORKSPACE_ID && (
                   <>
                     <div className="border-t border-surface-700 my-0.5" />
                     <button
@@ -1221,7 +1222,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 <FolderInput className="w-4 h-4 text-slate-400" />
               </button>
             )}
-            {currentWorkspaceId && currentWorkspaceId !== 'personal' && (
+            {currentWorkspaceId && currentWorkspaceId !== PERSONAL_WORKSPACE_ID && (
               <button
                 onClick={() => navigator.clipboard.writeText(currentWorkspaceId)}
                 className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"

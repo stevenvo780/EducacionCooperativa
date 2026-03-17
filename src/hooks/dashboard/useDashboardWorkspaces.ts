@@ -6,6 +6,7 @@ import type { Workspace } from '@/components/dashboard/types';
 import { fetchWorkspacesApi } from '@/services/dashboardApi';
 import { normalizeWorkspace } from '@/services/dashboardUtils';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
 interface RouterLike {
   replace: (href: string, options?: { scroll?: boolean }) => void;
@@ -57,8 +58,8 @@ export const useDashboardWorkspaces = ({
 
   useEffect(() => {
     if (!user || !currentWorkspace) return;
-    const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === personalWorkspaceId
-      ? `personal:${user.uid}`
+    const workerToken = currentWorkspace.type === WorkspaceType.Personal || currentWorkspace.id === personalWorkspaceId
+      ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
       : currentWorkspace.id;
     if (lastSubscribedWorkspaceRef.current === workerToken) return;
     lastSubscribedWorkspaceRef.current = workerToken;
@@ -84,7 +85,7 @@ export const useDashboardWorkspaces = ({
       name: 'Espacio Personal',
       ownerId: user.uid,
       members: [user.uid],
-      type: 'personal'
+      type: WorkspaceType.Personal
     };
 
     let fetched: Workspace[] = [];

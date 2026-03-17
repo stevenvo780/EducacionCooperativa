@@ -5,6 +5,7 @@ import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { Briefcase, Cloud, CloudOff, Copy, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { isDocUploaded } from '@/services/dashboardDocUtils';
+import { WorkspaceType } from '@/types/workspace';
 
 const DOC_REORDER_TYPE = 'application/x-doc-reorder';
 const FOLDER_REORDER_TYPE = 'application/x-folder-reorder';
@@ -407,7 +408,7 @@ const WorkspaceExplorer = ({
     <div className="flex-1 min-h-0 flex flex-col bg-surface-900">
       <div className="px-6 py-4 border-b border-surface-700/60 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          {currentWorkspace?.type === 'personal' ? <User className="w-6 h-6 text-surface-400" /> : <Briefcase className="w-6 h-6 text-mandy-400" />}
+          {currentWorkspace?.type === WorkspaceType.Personal ? <User className="w-6 h-6 text-surface-400" /> : <Briefcase className="w-6 h-6 text-mandy-400" />}
           <div className="flex flex-col">
             <span className="text-lg font-bold text-white">{currentWorkspace?.name}</span>
             <div className="flex items-center gap-2">
@@ -462,7 +463,7 @@ const WorkspaceExplorer = ({
               onClick={() => onActiveFolderChange(rootFolderPath)}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${activeFolder === rootFolderPath ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
             >
-              {currentWorkspace?.type === 'personal'
+              {currentWorkspace?.type === WorkspaceType.Personal
                 ? <User className={`w-4 h-4 ${activeFolder === rootFolderPath ? 'text-mandy-400' : 'text-surface-500'}`} />
                 : <Briefcase className={`w-4 h-4 ${activeFolder === rootFolderPath ? 'text-mandy-400' : 'text-surface-500'}`} />
               }

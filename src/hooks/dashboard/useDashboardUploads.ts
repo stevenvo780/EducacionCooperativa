@@ -9,13 +9,15 @@ import {
   type DragEvent,
   type RefObject
 } from 'react';
-import type { DocItem, DialogConfig, DialogResult, UploadStatus, Workspace } from '@/components/dashboard/types';
+import { DialogKind, UploadPhase, type DocItem, type DialogConfig, type DialogResult, type UploadStatus, type Workspace } from '@/components/dashboard/types';
 import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
 import { isMarkdownConvertibleFile, isMarkdownDocItem, isMarkdownFile } from '@/services/dashboardDocUtils';
 import { convertToMarkdown, canConvertToMarkdown } from '@/lib/clientMarkdownConversion';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { DocumentType } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 interface UseDashboardUploadsParams {
   user: FirebaseUser | null;
@@ -69,12 +71,12 @@ export const useDashboardUploads = ({
 
   const getUploadContext = useCallback(() => {
     if (!user) return null;
-    const workspaceId = currentWorkspace?.id ?? 'personal';
-    const isPersonal = workspaceId === 'personal';
+    const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+    const isPersonal = isPersonalWorkspaceId(workspaceId);
     const basePath = isPersonal ? `users/${user.uid}` : `workspaces/${workspaceId}`;
 
     return {
-      workspaceId: isPersonal ? 'personal' : workspaceId,
+      workspaceId: isPersonal ? PERSONAL_WORKSPACE_ID : workspaceId,
       storageFolder: `${basePath}/${DEFAULT_FOLDER_NAME}`
     };
   }, [user, currentWorkspace]);
@@ -163,7 +165,7 @@ export const useDashboardUploads = ({
         currentIndex: 0,
         currentName: '',
         progress: 0,
-        phase: 'error',
+        phase: UploadPhase.Error,
         error: `Estos archivos superan 50MB: ${oversized.slice(0, 3).join(', ')}${oversized.length > 3 ? '…' : ''}`
       });
       scheduleUploadStatusClear();
@@ -185,7 +187,7 @@ export const useDashboardUploads = ({
       currentIndex: 0,
       currentName: '',
       progress: 0,
-      phase: 'uploading'
+      phase: UploadPhase.Uploading
     });
     try {
       const createdDocs: DocItem[] = [];
@@ -196,7 +198,7 @@ export const useDashboardUploads = ({
           currentIndex: i + 1,
           currentName: file.name,
           progress: 0,
-          phase: 'uploading',
+          phase: UploadPhase.Uploading,
           error: undefined
         } : prev);
 
@@ -210,7 +212,7 @@ export const useDashboardUploads = ({
           const data = await createDocumentApi({
             name: file.name,
             content,
-            type: 'text',
+            type: DocumentType.Text,
             mimeType: file.type || 'text/markdown',
             ownerId: user.uid,
             workspaceId: context.workspaceId,
@@ -221,7 +223,7 @@ export const useDashboardUploads = ({
           createdDocs.push({
             id: String(data.id),
             name: file.name,
-            type: 'text',
+            type: DocumentType.Text,
             mimeType: file.type || 'text/markdown',
             ownerId: user.uid,
             updatedAt: { seconds: Date.now() / 1000 },
@@ -233,7 +235,7 @@ export const useDashboardUploads = ({
         const formData = new FormData();
         formData.append('file', file);
         formData.append('ownerId', user.uid);
-        formData.append('workspaceId', context.workspaceId || 'personal');
+        formData.append('workspaceId', context.workspaceId || PERSONAL_WORKSPACE_ID);
         formData.append('folder', resolvedFolder);
 
         const newDoc = await uploadFileApi(formData);
@@ -245,7 +247,7 @@ export const useDashboardUploads = ({
           try {
             setUploadStatus(prev => prev ? {
               ...prev,
-              phase: 'converting' as UploadStatus['phase'],
+              phase: UploadPhase.Converting,
               progress: 0
             } : prev);
 
@@ -257,7 +259,7 @@ export const useDashboardUploads = ({
             const mdDoc = await createDocumentApi({
               name: conversion.suggestedName,
               content: conversion.markdown,
-              type: 'text',
+              type: DocumentType.Text,
               mimeType: 'text/markdown',
               ownerId: user.uid,
               workspaceId: context.workspaceId,
@@ -267,7 +269,7 @@ export const useDashboardUploads = ({
             createdDocs.push({
               id: String(mdDoc.id),
               name: conversion.suggestedName,
-              type: 'text',
+              type: DocumentType.Text,
               mimeType: 'text/markdown',
               ownerId: user.uid,
               updatedAt: { seconds: Date.now() / 1000 },
@@ -286,21 +288,21 @@ export const useDashboardUploads = ({
       if (docToOpen) {
         openDocument(docToOpen);
       }
-      setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
+      setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: UploadPhase.Done } : prev);
       scheduleUploadStatusClear();
     } catch (error: unknown) {
       console.error('Upload failed', error);
       const isStorageLimit = getErrorCode(error) === 'STORAGE_LIMIT_EXCEEDED';
       setUploadStatus(prev => prev ? {
         ...prev,
-        phase: 'error',
+        phase: UploadPhase.Error,
         error: isStorageLimit
           ? getErrorMessage(error, 'Límite de almacenamiento alcanzado')
           : 'Error al subir'
       } : prev);
       scheduleUploadStatusClear();
       await showDialog({
-        type: 'error',
+        type: DialogKind.Error,
         title: isStorageLimit
           ? 'Límite de almacenamiento alcanzado'
           : 'Error al subir archivo'

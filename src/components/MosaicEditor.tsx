@@ -67,6 +67,7 @@ import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { normalizePath } from '@/lib/folder-utils';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import {
   attachLinkedDocumentToSelection,
@@ -101,7 +102,7 @@ export default function MosaicEditor({
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState('personal');
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(PERSONAL_WORKSPACE_ID);
   const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>({ concepts: [], fragments: [], relations: [], updatedAt: 0 });
   const [semanticNotice, setSemanticNotice] = useState<string | null>(null);
@@ -144,7 +145,7 @@ export default function MosaicEditor({
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
 
   const semanticStoreContext = useMemo(() => ({
-    workspaceId: currentWorkspaceId || 'personal',
+    workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID,
     userId: user?.uid ?? null
   }), [currentWorkspaceId, user?.uid]);
 
@@ -224,7 +225,7 @@ export default function MosaicEditor({
     setFileUrl(null);
     setFileName('');
     setFileMime('');
-    setCurrentWorkspaceId('personal');
+    setCurrentWorkspaceId(PERSONAL_WORKSPACE_ID);
     setEditorContent('');
     currentDocMetaRef.current = { workspaceId: null, folder: '', name: '' };
     hasLoadedRef.current = true;
@@ -281,7 +282,7 @@ export default function MosaicEditor({
       folder,
       name
     };
-    setCurrentWorkspaceId(workspaceId || 'personal');
+    setCurrentWorkspaceId(workspaceId || PERSONAL_WORKSPACE_ID);
 
     if (type === DocumentType.File && !isMarkdown) {
       setDocType(DocumentType.File);
@@ -684,7 +685,7 @@ export default function MosaicEditor({
           // Search matched workspace, then fallback to all workspaces
           const workspaceIdsToSearch = new Set<string>();
           if (matchedWs) workspaceIdsToSearch.add(matchedWs.id);
-          workspaceIdsToSearch.add('personal');
+          workspaceIdsToSearch.add(PERSONAL_WORKSPACE_ID);
           allWorkspaces.forEach((ws) => workspaceIdsToSearch.add(ws.id));
           // Remove already-searched workspace
           if (currentMeta.workspaceId) workspaceIdsToSearch.delete(currentMeta.workspaceId);
@@ -698,7 +699,7 @@ export default function MosaicEditor({
 
       // 3) If workspaceId was null and href is NOT a workspace path, try personal
       if (!currentMeta.workspaceId && !wsSegments) {
-        const matchedDoc = await findDocInWorkspace('personal', cleanedHref);
+        const matchedDoc = await findDocInWorkspace(PERSONAL_WORKSPACE_ID, cleanedHref);
         if (matchedDoc) return emitOpenDoc(matchedDoc.id);
       }
 
@@ -786,7 +787,7 @@ export default function MosaicEditor({
     text,
     docId: roomId ?? null,
     docName: docName || currentDocMetaRef.current.name || 'Documento',
-    workspaceId: currentWorkspaceId || 'personal'
+    workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID
   }), [currentWorkspaceId, docName, roomId]);
 
   const applySelectionMarkdown = useCallback((markdown: string) => {
@@ -821,7 +822,7 @@ export default function MosaicEditor({
     setLoadingLinkableDocuments(true);
     try {
       const search = new URLSearchParams({
-        workspaceId: currentWorkspaceId || 'personal',
+        workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID,
         view: 'list',
         excludeContent: 'true'
       });
@@ -858,7 +859,7 @@ export default function MosaicEditor({
   const loadLinkedTasks = useCallback(async () => {
     if (!roomId) return;
     try {
-      const workspaceId = currentDocMetaRef.current.workspaceId || 'personal';
+      const workspaceId = currentDocMetaRef.current.workspaceId || PERSONAL_WORKSPACE_ID;
       const boardData = await fetchBoardApi({ workspaceId });
       const tasks = boardData.cards.filter(card => card.sourceDocId === roomId);
       setLinkedTasks(tasks);
@@ -887,7 +888,7 @@ export default function MosaicEditor({
 
     setIsCreatingTask(true);
     try {
-      const workspaceId = currentDocMetaRef.current.workspaceId || 'personal';
+      const workspaceId = currentDocMetaRef.current.workspaceId || PERSONAL_WORKSPACE_ID;
       const boardData = await fetchBoardApi({ workspaceId });
       const firstColumn = boardData.columns.sort((a, b) => a.order - b.order)[0];
 
@@ -928,7 +929,7 @@ export default function MosaicEditor({
 
     setIsCreatingTask(true);
     try {
-      const workspaceId = currentDocMetaRef.current.workspaceId || 'personal';
+      const workspaceId = currentDocMetaRef.current.workspaceId || PERSONAL_WORKSPACE_ID;
       const boardData = await fetchBoardApi({ workspaceId });
       const firstColumn = boardData.columns.sort((a, b) => a.order - b.order)[0];
 
@@ -998,14 +999,14 @@ export default function MosaicEditor({
   const handleCreateTask = useCallback(() => {
     if (!semanticSelection) return;
     void runSemanticAction('create-task', async () => {
-      const board = await fetchBoardApi({ workspaceId: currentWorkspaceId || 'personal' });
+      const board = await fetchBoardApi({ workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID });
       const targetColumn = board.columns.find((column) => /por hacer|to do|todo/i.test(column.name)) ?? board.columns[0];
       if (!targetColumn) {
         throw new Error('No board columns available');
       }
       const title = semanticSelection.text.replace(/\s+/g, ' ').trim().slice(0, 80) || 'Fragmento del editor';
       await createBoardCardApi({
-        workspaceId: currentWorkspaceId || 'personal',
+        workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID,
         columnId: targetColumn.id,
         title,
         description: `Origen: ${docName || 'Documento'}\n\n${semanticSelection.text}`,
@@ -1578,7 +1579,7 @@ export default function MosaicEditor({
         {showSnippetGallery && (
           <div className="snippet-gallery-sidebar w-72 shrink-0 border-r border-slate-700 overflow-y-auto bg-slate-900">
             <SnippetGallery
-              workspaceId={currentDocMetaRef.current.workspaceId || 'personal'}
+              workspaceId={currentDocMetaRef.current.workspaceId || PERSONAL_WORKSPACE_ID}
               onInsert={(md: string) => { insertSnippet(md); }}
               onClose={() => setShowSnippetGallery(false)}
             />

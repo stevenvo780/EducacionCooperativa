@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { BoardCard, BoardColumn } from '@/components/dashboard/types';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 const DEFAULT_COLUMNS = ['Por hacer', 'En progreso', 'Hecho'];
 
@@ -46,10 +47,10 @@ const getMockBoard = (workspaceId: string) => {
 };
 
 const resolveWorkspaceId = (workspaceId: string, uid: string) =>
-  workspaceId === 'personal' ? `personal:${uid}` : workspaceId;
+  isPersonalWorkspaceId(workspaceId) ? `${PERSONAL_WORKSPACE_ID}:${uid}` : workspaceId;
 
 const canAccessWorkspace = async (workspaceId: string, uid: string) => {
-  if (!workspaceId || workspaceId === 'personal') return true;
+  if (isPersonalWorkspaceId(workspaceId)) return true;
   return isWorkspaceMember(workspaceId, uid);
 };
 

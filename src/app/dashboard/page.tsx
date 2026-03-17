@@ -22,7 +22,7 @@ import { Check, ChevronDown, FileText, Folder, Image as ImageIcon, File as FileI
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
-import type { DocItem, FolderItem, ViewMode, Workspace, DialogConfig, DialogResult, DeleteStatus } from '@/components/dashboard/types';
+import { DeletePhase, DialogKind, type DocItem, type FolderItem, type ViewMode, type Workspace, type DialogConfig, type DialogResult, type DeleteStatus } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
@@ -81,13 +81,14 @@ import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces
 import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
 import { semanticSearchApi } from '@/services/searchApi';
 import { ALL_SEARCH_RESULT_FILTER, SearchKind, type SearchResultFilter, type SearchResultItem } from '@/lib/search/types';
+import { PaymentRedirectStatus } from '@/types/payments';
+import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const MosaicLayout = dynamic(() => import('@/components/MosaicLayout'), { ssr: false });
 const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 
-const PERSONAL_WORKSPACE_ID = 'personal';
 const ROOT_FOLDER_PATH = '';
 
 function DashboardContent() {
@@ -188,7 +189,7 @@ function DashboardContent() {
     // Handle payment callback from MercadoPago
     useEffect(() => {
         const paymentStatus = searchParams?.get('payment');
-        if (paymentStatus === 'success' || paymentStatus === 'pending') {
+        if (paymentStatus === PaymentRedirectStatus.Success || paymentStatus === PaymentRedirectStatus.Pending) {
             // First try to verify/activate the payment
             verifyPayment()
                 .then((result) => {
@@ -449,7 +450,7 @@ function DashboardContent() {
     const acceptInvite = async (ws: Workspace) => {
         if (!user || !userEmail) {
             await showDialog({
-                type: 'error',
+                type: DialogKind.Error,
                 title: 'Error',
                 message: 'No se pudo obtener el email del usuario. Por favor, inicia sesión de nuevo.'
             });
@@ -459,13 +460,13 @@ function DashboardContent() {
             await acceptInviteApi({ workspaceId: ws.id, userId: user.uid, email: userEmail });
             await fetchWorkspaces();
             await showDialog({
-                type: 'info',
+                type: DialogKind.Info,
                 title: 'Invitación aceptada',
                 message: '¡Te has unido al espacio!'
             });
         } catch (e) {
             await showDialog({
-                type: 'error',
+                type: DialogKind.Error,
                 title: 'Error al unirse',
                 message: e instanceof Error ? e.message : 'Error desconocido'
             });
@@ -999,8 +1000,8 @@ function DashboardContent() {
 
     const handleRequestNewTerminal = useCallback(() => {
         if (!currentWorkspace || !user) return;
-        const workerToken = currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
-            ? `personal:${user.uid}`
+        const workerToken = currentWorkspace.type === WorkspaceType.Personal || currentWorkspace.id === PERSONAL_WORKSPACE_ID
+            ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
             : currentWorkspace.id;
         const workspaceSessions = getSessionsForWorkspace(workerToken);
         createSession(workerToken, currentWorkspace.type, `Terminal ${workspaceSessions.length + 1}`);

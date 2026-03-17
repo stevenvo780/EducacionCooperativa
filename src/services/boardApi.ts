@@ -15,11 +15,12 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import type { BoardCard, BoardColumn, BoardData } from '@/components/dashboard/types';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 const resolveBoardId = (workspaceId: string) => {
   const user = auth().currentUser;
-  if (!user && workspaceId === 'personal') throw new Error('User not authenticated');
-  return workspaceId === 'personal' ? `personal:${user?.uid}` : workspaceId;
+  if (!user && isPersonalWorkspaceId(workspaceId)) throw new Error('User not authenticated');
+  return isPersonalWorkspaceId(workspaceId) ? `${PERSONAL_WORKSPACE_ID}:${user?.uid}` : workspaceId;
 };
 
 const DEFAULT_COLUMNS = ['Por hacer', 'En progreso', 'Hecho'];
@@ -58,7 +59,7 @@ export const fetchBoardApi = async (params: { workspaceId: string }): Promise<Bo
   
   // Ensure board exists (creates it if offline creation is allowed/compatible or if we are online)
   // Note: offline creation of new boards might be tricky if rules depend on server-side checks not fully replicated, 
-  // but for 'personal' boards it's fine.
+  // but for personal boards it's fine.
   await ensureBoardExists(boardId, params.workspaceId);
 
   const boardRef = doc(db(), 'boards', boardId);
@@ -194,5 +195,4 @@ export const deleteBoardCardApi = async (params: { workspaceId: string; cardId: 
   const cardRef = doc(db(), 'boards', boardId, 'cards', params.cardId);
   await deleteDoc(cardRef);
 };
-
 
