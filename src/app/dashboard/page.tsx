@@ -1717,6 +1717,43 @@ function DashboardContent() {
         }
     };
 
+    const createStDoc = async (folderName?: string) => {
+        const baseName = newDocName.trim() || 'Sin título';
+        const name = baseName.endsWith('.md.st') ? baseName : `${baseName}.md.st`;
+        if (!user) return;
+        const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
+        const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;
+        const stTemplate = `logic classical.propositional\n\n// ${baseName}\n`;
+        setIsCreating(true);
+        try {
+            const data = await createDocumentApi({
+                name,
+                content: stTemplate,
+                type: 'text',
+                ownerId: user.uid,
+                workspaceId: docWorkspaceId,
+                folder: targetFolder
+            });
+            const docRef = { id: String(data.id) };
+
+            setNewDocName('');
+            await requestDocsRefresh();
+            openDocument({
+                id: docRef.id,
+                name,
+                type: 'text',
+                ownerId: user.uid,
+                updatedAt: { seconds: Date.now() / 1000 },
+                folder: targetFolder
+            });
+        } catch (err) {
+            console.error('Error creating ST doc', err);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
     const docsByFolder = useMemo(() => {
         const grouped: Record<string, DocItem[]> = {};
         docs.forEach(docItem => {
@@ -2262,6 +2299,7 @@ function DashboardContent() {
                                     onDropDocOnTile={handleDropDocOnTile}
                                     onDropDocOnEmpty={handleDropDocOnEmpty}
                                     onCreateFile={() => createDoc(undefined, activeFolder)}
+                                    onCreateStFile={() => createStDoc(activeFolder)}
                                     onCreateFolder={() => createFolder()}
                                     onUploadFile={() => {
                                         setUploadTargetFolder(activeFolder);

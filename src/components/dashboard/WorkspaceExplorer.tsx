@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { Briefcase, Cloud, CloudOff, Copy, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
+import { Briefcase, Cloud, CloudOff, Code, Copy, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { isDocUploaded } from '@/services/dashboardDocUtils';
 import { WorkspaceType } from '@/types/workspace';
@@ -87,6 +87,7 @@ interface WorkspaceExplorerProps {
   onActiveFolderChange: (path: string) => void;
   onOpenDocument: (doc: DocItem) => void;
   onCreateDoc: () => void;
+  onCreateStDoc?: () => void;
   onCreateFolder: () => void;
   onUploadFile: () => void;
   onUploadFolder: () => void;
@@ -121,6 +122,7 @@ const WorkspaceExplorer = ({
   onActiveFolderChange,
   onOpenDocument,
   onCreateDoc,
+  onCreateStDoc,
   onCreateFolder,
   onUploadFile,
   onUploadFolder,
@@ -433,6 +435,14 @@ const WorkspaceExplorer = ({
           >
             <Plus className="w-3.5 h-3.5" /> Nuevo Doc
           </button>
+          {onCreateStDoc && (
+            <button
+              onClick={onCreateStDoc}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-emerald-700/50 text-emerald-400 hover:border-emerald-500/50 hover:text-emerald-300 transition"
+            >
+              <Code className="w-3.5 h-3.5" /> Nuevo ST
+            </button>
+          )}
           <button
             onClick={onCreateFolder}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-800 border border-surface-700 text-surface-200 hover:border-mandy-500/50 hover:text-mandy-300 transition"
