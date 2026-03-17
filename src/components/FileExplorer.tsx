@@ -27,7 +27,8 @@ import {
   PanelLeftOpen,
   Loader2,
   Star,
-  X
+  X,
+  Code
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -121,6 +122,7 @@ interface FileExplorerProps {
   folders: FolderItem[];
   onSelectDoc: (doc: DocItem) => void;
   onCreateFile?: () => void;
+  onCreateStFile?: () => void;
   onCreateFolder?: () => void;
   onUploadFile?: () => void;
   onUploadFolder?: () => void;
@@ -148,6 +150,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   folders,
   onSelectDoc,
   onCreateFile,
+  onCreateStFile,
   onCreateFolder,
   onUploadFile,
   onUploadFolder,
@@ -1145,6 +1148,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     <Plus className="w-3.5 h-3.5" /> Nuevo archivo
                   </button>
                 )}
+                {onCreateStFile && (
+                  <button
+                    onClick={() => { onCreateStFile(); setToolbarMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-400 hover:bg-surface-700 transition"
+                  >
+                    <Code className="w-3.5 h-3.5" /> Nuevo archivo ST
+                  </button>
+                )}
                 {onCreateFolder && (
                   <button
                     onClick={() => { onCreateFolder(); setToolbarMenuOpen(false); }}
@@ -1193,6 +1204,15 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 title="Nuevo archivo"
               >
                 <Plus className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+            {onCreateStFile && (
+              <button
+                onClick={onCreateStFile}
+                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                title="Nuevo archivo ST"
+              >
+                <Code className="w-4 h-4 text-emerald-400" />
               </button>
             )}
             {onCreateFolder && (
