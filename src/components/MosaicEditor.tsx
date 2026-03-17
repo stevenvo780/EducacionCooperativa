@@ -1205,7 +1205,39 @@ export default function MosaicEditor({
     };
 
     /**
-     * Build/rebuild all KaTeX overlays for $$...$$ blocks.
+     * Map a character offset within el.textContent to the actual DOM text node
+     * and local offset. Returns null if not found.
+     */
+    const findTextNodeAtOffset = (
+      el: HTMLElement,
+      charOffset: number
+    ): { node: Text; offset: number } | null => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+      let accumulated = 0;
+      let lastNode: Text | null = null;
+      let node = walker.nextNode() as Text | null;
+      while (node) {
+        const len = (node.textContent || '').length;
+        lastNode = node;
+        if (accumulated + len > charOffset) {
+          return { node, offset: charOffset - accumulated };
+        }
+        accumulated += len;
+        // Exact end of this node — return it with offset at the end
+        if (accumulated === charOffset) {
+          return { node, offset: len };
+        }
+        node = walker.nextNode() as Text | null;
+      }
+      // If charOffset equals total text length, return end of last node
+      if (lastNode && accumulated === charOffset) {
+        return { node: lastNode, offset: (lastNode.textContent || '').length };
+      }
+      return null;
+    };
+
+    /**
+     * Build/rebuild all KaTeX overlays for $$...$$ blocks AND $...$ inline math.
      */
     const decorateAll = () => {
       const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement;
@@ -1215,39 +1247,85 @@ export default function MosaicEditor({
 
       const paragraphs = editable.querySelectorAll('p, [data-lexical-paragraph]');
 
-      // Collect current math blocks: { element, latexSrc, rect }
+      // ─── Block math ($$...$$) ───
       type MathBlock = { el: HTMLElement; latex: string; top: number; left: number; width: number; height: number };
       const blocks: MathBlock[] = [];
+      const blockParas = new Set<HTMLElement>();
 
       paragraphs.forEach((p) => {
         const el = p as HTMLElement;
-        // Skip paragraphs in editing mode
         if (el.getAttribute(EDITING_ATTR) === '1') return;
 
         const text = el.textContent || '';
         const match = text.match(/\$\$([\s\S]*?)\$\$/);
         if (!match || !match[1]?.trim()) return;
 
-        // Normalize LaTeX: restore collapsed `\\`, auto-wrap if needed
+        blockParas.add(el);
         const latex = normalizeLatex(match[1]);
-        // Position relative to editable parent
-        const elRect = el.getBoundingClientRect();
-        const parentRect = editable.getBoundingClientRect();
 
         blocks.push({
           el,
           latex,
           top: el.offsetTop,
           left: el.offsetLeft - editable.offsetLeft,
-          width: elRect.width,
-          height: elRect.height
+          width: el.getBoundingClientRect().width,
+          height: el.getBoundingClientRect().height
         });
       });
 
-      // Clear existing overlays
+      // ─── Inline math ($...$) ───
+      type InlineMath = {
+        el: HTMLElement; latex: string;
+        top: number; left: number; width: number; height: number;
+      };
+      const inlines: InlineMath[] = [];
+
+      paragraphs.forEach((p) => {
+        const el = p as HTMLElement;
+        if (el.getAttribute(EDITING_ATTR) === '1') return;
+        // Skip paragraphs that already have block math overlays
+        if (blockParas.has(el)) return;
+
+        const text = el.textContent || '';
+        // Match $...$ but NOT $$. Content must be non-empty and not start/end with space.
+        const inlineRegex = /(?<!\$)\$((?!\$|\s)[^\n$]*?(?<!\s))\$(?!\$)/g;
+        let im;
+        while ((im = inlineRegex.exec(text)) !== null) {
+          const latexSrc = im[1];
+          if (!latexSrc.trim()) continue;
+          const startOff = im.index;
+          const endOff = startOff + im[0].length;
+
+          // Map character offsets → DOM text nodes
+          const startPos = findTextNodeAtOffset(el, startOff);
+          const endPos = findTextNodeAtOffset(el, endOff);
+          if (!startPos || !endPos) continue;
+
+          try {
+            const range = document.createRange();
+            range.setStart(startPos.node, startPos.offset);
+            range.setEnd(endPos.node, endPos.offset);
+            const rect = range.getBoundingClientRect();
+            const editableRect = editable.getBoundingClientRect();
+
+            if (rect.width === 0 || rect.height === 0) continue;
+
+            inlines.push({
+              el,
+              latex: latexSrc,
+              top: rect.top - editableRect.top + editable.scrollTop,
+              left: rect.left - editableRect.left + editable.scrollLeft,
+              width: rect.width,
+              height: rect.height
+            });
+          } catch { /* range error — skip */ }
+        }
+      });
+
+      // ─── Clear existing overlays ───
       container.innerHTML = '';
 
-      // Create overlays
+      // ─── Create block overlays ───
       blocks.forEach(({ el, latex, top, width, height }) => {
         try {
           const html = katex.renderToString(latex, {
@@ -1260,7 +1338,6 @@ export default function MosaicEditor({
           overlay.className = 'katex-block-overlay';
           overlay.innerHTML = html;
 
-          // Position to cover the source paragraph
           overlay.style.position = 'absolute';
           overlay.style.top = `${top}px`;
           overlay.style.left = '0';
@@ -1271,10 +1348,8 @@ export default function MosaicEditor({
           overlay.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            // Hide overlay and mark paragraph as editing
             overlay.style.display = 'none';
             el.setAttribute(EDITING_ATTR, '1');
-            // Focus the paragraph and place cursor near the $$
             el.focus();
             try {
               const range = document.createRange();
@@ -1298,6 +1373,66 @@ export default function MosaicEditor({
           container.appendChild(overlay);
         } catch {
           // KaTeX error — skip this block
+        }
+      });
+
+      // ─── Create inline overlays ───
+      inlines.forEach(({ el, latex, top, left, width, height }) => {
+        try {
+          const html = katex.renderToString(latex, {
+            displayMode: false,
+            throwOnError: false,
+            trust: true
+          });
+
+          const overlay = document.createElement('span');
+          overlay.className = 'katex-inline-overlay';
+          overlay.innerHTML = html;
+
+          overlay.style.position = 'absolute';
+          overlay.style.top = `${top}px`;
+          overlay.style.left = `${left}px`;
+          overlay.style.minWidth = `${width + 8}px`;
+          overlay.style.height = `${height}px`;
+          overlay.style.zIndex = '5';
+
+          overlay.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Hide ALL inline overlays for this paragraph and enter edit mode
+            container.querySelectorAll('.katex-inline-overlay').forEach((ov) => {
+              const ovEl = ov as HTMLElement;
+              if (ovEl.dataset.paraId === String(el.dataset.lexicalKey || el.id || '')) {
+                ovEl.style.display = 'none';
+              }
+            });
+            overlay.style.display = 'none';
+            el.setAttribute(EDITING_ATTR, '1');
+            el.focus();
+            try {
+              const range = document.createRange();
+              const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+              let textNode = walker.nextNode() as Text | null;
+              while (textNode) {
+                const idx = (textNode.textContent || '').indexOf('$');
+                if (idx >= 0) {
+                  range.setStart(textNode, Math.min(idx + 1, textNode.textContent?.length || 0));
+                  range.collapse(true);
+                  const sel = window.getSelection();
+                  sel?.removeAllRanges();
+                  sel?.addRange(range);
+                  break;
+                }
+                textNode = walker.nextNode() as Text | null;
+              }
+            } catch { /* cursor placement best-effort */ }
+          });
+
+          // Tag overlay so we can hide siblings for the same paragraph
+          overlay.dataset.paraId = String(el.dataset.lexicalKey || el.id || '');
+          container.appendChild(overlay);
+        } catch {
+          // KaTeX error — skip
         }
       });
     };
@@ -2984,6 +3119,30 @@ export default function MosaicEditor({
         .katex-block-overlay .katex-display {
           margin: 0;
         }
+
+        /* ─── Inline math overlay ($...$) ─── */
+        .katex-inline-overlay {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #0f172a;
+          border-radius: 3px;
+          padding: 1px 4px;
+          cursor: pointer;
+          pointer-events: auto;
+          animation: katexFadeIn 0.12s ease-out;
+          box-sizing: border-box;
+          white-space: nowrap;
+        }
+        .katex-inline-overlay:hover {
+          background: #1e293b;
+          box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+        }
+        .katex-inline-overlay .katex {
+          color: #93c5fd;
+          font-size: 1.05em;
+        }
+
         /* Paragraph being edited — subtle highlight */
         [data-katex-editing="1"] {
           background: rgba(59, 130, 246, 0.05) !important;
