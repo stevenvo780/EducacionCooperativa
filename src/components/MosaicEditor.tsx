@@ -109,6 +109,7 @@ export default function MosaicEditor({
   const [semanticBusyAction, setSemanticBusyAction] = useState<string | null>(null);
   const [linkableDocuments, setLinkableDocuments] = useState<Array<{ id: string; name: string; folder?: string }>>([]);
   const [loadingLinkableDocuments, setLoadingLinkableDocuments] = useState(false);
+  const [isDocLoading, setIsDocLoading] = useState(false);
 
   // Search state
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
@@ -236,6 +237,7 @@ export default function MosaicEditor({
     if (rawLoadInFlightRef.current || key === lastRawKeyRef.current) return;
     rawLoadInFlightRef.current = true;
     lastRawKeyRef.current = key;
+    setIsDocLoading(true);
     try {
       const res = await authFetch(`/api/documents/${roomId}/raw`, { cache: 'no-store' });
       if (!res.ok) return;
@@ -247,6 +249,7 @@ export default function MosaicEditor({
       console.error('Error loading raw content:', e);
     } finally {
       rawLoadInFlightRef.current = false;
+      setIsDocLoading(false);
     }
   }, [roomId, setEditorContent]);
 
@@ -365,6 +368,7 @@ export default function MosaicEditor({
 
   const loadDoc = useCallback(async () => {
     if (!roomId) return;
+    setIsDocLoading(true);
     try {
       const res = await authFetch(`/api/documents/${roomId}`, { cache: 'no-store' });
       if (!res.ok) {
@@ -377,6 +381,8 @@ export default function MosaicEditor({
       applyDocData(data);
     } catch (e) {
       console.error('Error loading document:', e);
+    } finally {
+      setIsDocLoading(false);
     }
   }, [roomId, applyDocData, hasUnsavedLocalChanges, resetDocState]);
 
@@ -1659,6 +1665,14 @@ export default function MosaicEditor({
               className="mdx-editor-root h-full"
               placeholder="Escribe aquí... Usa Markdown como en Obsidian"
             />
+          )}
+          {isDocLoading && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 backdrop-blur-[2px]">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
+                <span className="text-xs text-slate-400">Cargando documento…</span>
+              </div>
+            </div>
           )}
         </div>
       </div>
