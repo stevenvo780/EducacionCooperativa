@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { 
   ArrowLeft, Terminal, Server, Download, Settings, Users, RefreshCw, 
   Shield, HardDrive, BookOpen, ChevronDown, ChevronRight, Copy, Check, 
-  ExternalLink, Columns, PenTool, Layout, WifiOff, FileSpreadsheet, 
+  ExternalLink, Columns, PenTool, Layout, LayoutGrid, WifiOff, FileSpreadsheet, 
   KanbanSquare, Sparkles, Network, Quote, BookmarkPlus, Briefcase, 
   Zap, FlaskConical, Monitor, Key, LogOut, Crown, Trash2, Plus, 
   FolderPlus, Upload, Search, User, Globe, Lock, Layers

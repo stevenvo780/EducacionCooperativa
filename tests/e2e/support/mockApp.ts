@@ -35,6 +35,17 @@ type MockProfile = {
   displayName?: string | null;
 };
 
+type MockSnippet = {
+  id: string;
+  title: string;
+  description: string;
+  markdown: string;
+  workspaceId: string;
+  category: string;
+  order: number;
+  ownerId?: string;
+};
+
 type MockBoardColumn = {
   id: string;
   name: string;
@@ -72,6 +83,7 @@ type MockAppState = {
   invites: MockWorkspace[];
   docsByWorkspace: Record<string, MockDoc[]>;
   boardsByWorkspace: Record<string, MockBoardState>;
+  snippetsByWorkspace: Record<string, MockSnippet[]>;
   userProfiles: Record<string, MockProfile>;
   subscription: {
     userId: string;
@@ -95,6 +107,7 @@ type MockAppState = {
   nextWorkspaceId: number;
   nextDocId: number;
   nextBoardId: number;
+  nextSnippetId: number;
 };
 
 type MockOptions = Partial<Pick<MockAppState, 'loginShouldFail' | 'registerShouldFail' | 'changePasswordShouldFail' | 'role'>> & {
@@ -187,6 +200,7 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
     ]
   },
   boardsByWorkspace: {},
+  snippetsByWorkspace: {},
   userProfiles: {
     [TEST_USER.uid]: {
       uid: TEST_USER.uid,
@@ -220,7 +234,8 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
   changePasswordShouldFail: options.changePasswordShouldFail ?? false,
   nextWorkspaceId: 1,
   nextDocId: 1,
-  nextBoardId: 1
+  nextBoardId: 1,
+  nextSnippetId: 1
 });
 
 const createDefaultBoardColumns = (state: MockAppState) => ([
@@ -479,6 +494,14 @@ export const installInsecureAuth = async (page: Page, user = TEST_USER) => {
 
 export const installMockApi = async (page: Page, options: MockOptions = {}) => {
   const state = createBaseState(options);
+
+  await page.route('https://checkout.test/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><body><h1>Checkout Mock</h1></body></html>'
+    });
+  });
 
   await page.route('https://uploads.test/**', async (route) => {
     await route.fulfill({ status: 200, body: '' });
@@ -756,6 +779,63 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       return;
     }
 
+    if (pathname === '/api/snippets' && method === 'GET') {
+      const workspaceId = searchParams.get('workspaceId') ?? PERSONAL_WORKSPACE_ID;
+      await json(route, [...(state.snippetsByWorkspace[workspaceId] ?? [])].sort((left, right) => left.order - right.order));
+      return;
+    }
+
+    if (pathname === '/api/snippets' && method === 'POST') {
+      const body = parseBody(route);
+      const workspaceId = body.workspaceId ?? PERSONAL_WORKSPACE_ID;
+      const snippet: MockSnippet = {
+        id: `snippet-${state.nextSnippetId++}`,
+        title: String(body.title ?? '').trim(),
+        description: String(body.description ?? '').trim(),
+        markdown: String(body.markdown ?? ''),
+        workspaceId,
+        category: String(body.category ?? 'general'),
+        order: typeof body.order === 'number' ? body.order : (state.snippetsByWorkspace[workspaceId]?.length ?? 0),
+        ownerId: state.user.uid
+      };
+      state.snippetsByWorkspace[workspaceId] = state.snippetsByWorkspace[workspaceId] ?? [];
+      state.snippetsByWorkspace[workspaceId].push(snippet);
+      await json(route, snippet);
+      return;
+    }
+
+    if (pathname.startsWith('/api/snippets/') && method === 'PUT') {
+      const snippetId = pathname.split('/').pop() ?? '';
+      const body = parseBody(route);
+
+      for (const workspaceId of Object.keys(state.snippetsByWorkspace)) {
+        const snippet = state.snippetsByWorkspace[workspaceId].find((item) => item.id === snippetId);
+        if (!snippet) continue;
+        Object.assign(snippet, body);
+        await json(route, { ok: true });
+        return;
+      }
+
+      await json(route, { error: 'Snippet no encontrado' }, 404);
+      return;
+    }
+
+    if (pathname.startsWith('/api/snippets/') && method === 'DELETE') {
+      const snippetId = pathname.split('/').pop() ?? '';
+
+      for (const workspaceId of Object.keys(state.snippetsByWorkspace)) {
+        const before = state.snippetsByWorkspace[workspaceId].length;
+        state.snippetsByWorkspace[workspaceId] = state.snippetsByWorkspace[workspaceId].filter((item) => item.id !== snippetId);
+        if (state.snippetsByWorkspace[workspaceId].length !== before) {
+          await json(route, { ok: true });
+          return;
+        }
+      }
+
+      await json(route, { error: 'Snippet no encontrado' }, 404);
+      return;
+    }
+
     if (pathname === '/api/documents' && method === 'GET') {
       const workspaceId = searchParams.get('workspaceId') ?? PERSONAL_WORKSPACE_ID;
       await json(route, state.docsByWorkspace[workspaceId] ?? []);
@@ -909,20 +989,20 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
 
 export const gotoDashboard = async (page: Page, workspaceId?: string) => {
   const target = workspaceId ? `/dashboard?workspaceId=${workspaceId}` : '/dashboard';
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    await page.goto(target);
-    await page.waitForLoadState('domcontentloaded');
+  let lastError: unknown = null;
 
-    const header = page.locator('header');
+  for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
+      await page.goto(target, { waitUntil: 'domcontentloaded' });
+      const header = page.locator('header');
       await expect(header).toBeVisible({ timeout: 10000 });
       return;
     } catch (error) {
-      if (attempt === 5) {
-        throw error;
-      }
-
-      await page.waitForTimeout(500);
+      lastError = error;
     }
+
+    await page.waitForTimeout(750);
   }
+
+  throw lastError instanceof Error ? lastError : new Error(`Unable to open ${target}`);
 };

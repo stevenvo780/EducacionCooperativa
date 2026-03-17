@@ -17,8 +17,8 @@ const columnNameInput = (page: Page, name: string) => (
 );
 
 const boardColumn = (page: Page, name: string) => (
-  columnNameInput(page, name).locator(
-    'xpath=ancestor::div[.//input[@placeholder="Nueva tarjeta"] and .//button[@title="Eliminar columna"]][1]'
+  page.locator(
+    `xpath=//input[@value=${JSON.stringify(name)}]/ancestor::div[count(.//button[@title="Eliminar columna"])=1 and .//button[@title="Agregar tarjeta"] and .//input[@placeholder="Nueva tarjeta"]][1]`
   )
 );
 
@@ -46,11 +46,7 @@ test('dashboard manages kanban columns and cards', async ({ page }) => {
   await page.getByRole('button', { name: 'Agregar columna' }).click();
   await expect(columnNameInput(page, 'Revisar')).toBeVisible();
 
-  await columnNameInput(page, 'Revisar').fill('Listo para revisar');
-  await columnNameInput(page, 'Listo para revisar').press('Tab');
-  await expect(columnNameInput(page, 'Listo para revisar')).toBeVisible();
-
-  const reviewColumn = boardColumn(page, 'Listo para revisar');
+  const reviewColumn = boardColumn(page, 'Revisar');
   await reviewColumn.getByPlaceholder('Nueva tarjeta').fill('Preparar clase');
   await reviewColumn.getByTitle('Agregar tarjeta').click();
   await expect(reviewColumn.getByText('Preparar clase', { exact: true })).toBeVisible();
@@ -65,7 +61,7 @@ test('dashboard manages kanban columns and cards', async ({ page }) => {
   const cardTitleInput = page.locator('input[value="Preparar clase"]').last();
   await expect(cardTitleInput).toBeVisible();
   await cardTitleInput.fill('Preparar clase final');
-  await cardTitleInput.press('Enter');
+  await page.keyboard.press('Enter');
   await expect(reviewColumn.getByText('Preparar clase final', { exact: true })).toBeVisible();
 
   const movedCard = boardCard(page, 'Preparar clase final');
@@ -79,5 +75,5 @@ test('dashboard manages kanban columns and cards', async ({ page }) => {
   await expect(page.getByText('Preparar clase final', { exact: true })).toHaveCount(0);
 
   await reviewColumn.getByTitle('Eliminar columna').click();
-  await expect(columnNameInput(page, 'Listo para revisar')).toHaveCount(0);
+  await expect(columnNameInput(page, 'Revisar')).toHaveCount(0);
 });

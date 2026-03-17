@@ -40,7 +40,7 @@ test('login with email reaches the mocked dashboard', async ({ page }) => {
     .poll(() => page.evaluate(() => window.localStorage.getItem('agora_user')))
     .not.toBeNull();
   await gotoDashboard(page);
-  await expect(page.getByRole('button', { name: /Espacio Personal/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Espacio Personal', exact: true })).toBeVisible();
   await expect(page.getByText('Documento inicial.md')).toBeVisible();
 });
 
@@ -57,5 +57,5 @@ test('register flow creates an insecure session and redirects to dashboard', asy
   await page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
 
   await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByRole('button', { name: /Espacio Personal/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Espacio Personal', exact: true })).toBeVisible();
 });
