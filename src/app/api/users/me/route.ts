@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getErrorMessage } from '@/lib/error-utils';
 import { requireAuth, getUserRole } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,8 @@ export async function GET(req: NextRequest) {
       email: auth.email ?? null,
       role: role ?? 'user'
     });
-  } catch (error: any) {
-    console.error('Error fetching current user:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error fetching current user:', getErrorMessage(error));
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

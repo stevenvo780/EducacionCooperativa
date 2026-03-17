@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { adminDb } from '@/lib/firebase-admin';
-import type { PlanId } from '@/types/subscription';
+import { getErrorMessage } from '@/lib/error-utils';
+import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
-
-/* eslint-disable no-console */
+import {
+  MercadoPagoPaymentStatus,
+  PaymentRedirectStatus,
+  isPendingMercadoPagoPaymentStatus
+} from '@/types/payments';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
 
@@ -17,13 +21,13 @@ export async function GET(req: NextRequest) {
 
   const appUrl = 'https://agora.humanizar.cloud';
   const redirectUrl = new URL(`${appUrl}/dashboard`);
-  redirectUrl.searchParams.set('payment', 'success');
+  redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Success);
   if (planId) redirectUrl.searchParams.set('plan', planId);
 
   // Verify payment and activate subscription immediately
   try {
     if (paymentId && paymentId !== 'null' && userId && planId) {
-      console.log(`[Callback/Success] Processing payment ${paymentId} for user ${userId}, plan: ${planId}, status: ${collectionStatus}`);
+      console.debug(`[Callback/Success] Processing payment ${paymentId} for user ${userId}, plan: ${planId}, status: ${collectionStatus}`);
 
       const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
       const paymentClient = new Payment(client);
@@ -35,17 +39,17 @@ export async function GET(req: NextRequest) {
       const existingSub = await adminDb.collection('subscriptions').doc(userId).get();
       const existingData = existingSub.exists ? existingSub.data() : null;
 
-      if (payment.status === 'approved') {
+      if (payment.status === MercadoPagoPaymentStatus.Approved) {
         // Deduplicación: si ya se activó con este mismo paymentId, no extender de nuevo
-        if (existingData?.status === 'active' && existingData?.mpPaymentId === String(paymentId)) {
-          console.log(`[Callback/Success] ⏭️ Payment ${paymentId} already processed for user ${userId}, skipping`);
+        if (existingData?.status === SubscriptionStatus.Active && existingData?.mpPaymentId === String(paymentId)) {
+          console.debug(`[Callback/Success] Payment ${paymentId} already processed for user ${userId}, skipping`);
         } else {
           const endDate = await calculateSmartEndDate(userId);
 
           await adminDb.collection('subscriptions').doc(userId).set({
             userId,
             planId: planId as PlanId,
-            status: 'active',
+            status: SubscriptionStatus.Active,
             mpPaymentId: String(paymentId),
             mpMerchantOrderId: payment.order?.id ? String(payment.order.id) : null,
             startDate: now.toISOString(),
@@ -57,33 +61,33 @@ export async function GET(req: NextRequest) {
           await adminDb.collection('users').doc(userId).set({
             subscription: {
               planId: planId as PlanId,
-              status: 'active',
+              status: SubscriptionStatus.Active,
               startDate: now.toISOString(),
               endDate: endDate.toISOString()
             }
           }, { merge: true });
 
-          console.log(`[Callback/Success] ✅ Subscription activated for user ${userId}, plan: ${planId}`);
+          console.debug(`[Callback/Success] Subscription activated for user ${userId}, plan: ${planId}`);
         }
-      } else if (payment.status === 'pending' || payment.status === 'in_process') {
+      } else if (isPendingMercadoPagoPaymentStatus(payment.status)) {
         await adminDb.collection('subscriptions').doc(userId).set({
           userId,
           planId: planId as PlanId,
-          status: 'pending',
+          status: SubscriptionStatus.Pending,
           mpPaymentId: String(paymentId),
           updatedAt: now.toISOString()
         }, { merge: true });
 
-        console.log(`[Callback/Success] ⏳ Payment still pending for user ${userId}`);
-        redirectUrl.searchParams.set('payment', 'pending');
+        console.debug(`[Callback/Success] Payment still pending for user ${userId}`);
+        redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Pending);
       } else {
-        console.log(`[Callback/Success] ⚠️ Unexpected status: ${payment.status} for user ${userId}`);
+        console.warn(`[Callback/Success] Unexpected status: ${payment.status} for user ${userId}`);
       }
     } else {
-      console.log(`[Callback/Success] Missing data - paymentId: ${paymentId}, userId: ${userId}, planId: ${planId}`);
+      console.debug(`[Callback/Success] Missing data - paymentId: ${paymentId}, userId: ${userId}, planId: ${planId}`);
     }
-  } catch (error: any) {
-    console.error('[Callback/Success] Error verifying payment:', error?.message || error);
+  } catch (error: unknown) {
+    console.error('[Callback/Success] Error verifying payment:', getErrorMessage(error));
   }
 
   return NextResponse.redirect(redirectUrl.toString());

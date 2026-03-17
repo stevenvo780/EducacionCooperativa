@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { getErrorMessage } from '@/lib/error-utils';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,7 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const workspaceId = typeof body?.workspaceId === 'string' ? body.workspaceId : 'personal';
+    const workspaceId = typeof body?.workspaceId === 'string' ? body.workspaceId : PERSONAL_WORKSPACE_ID;
     const userIds: string[] = Array.isArray(body?.userIds)
       ? (body.userIds as unknown[]).filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
       : [];
@@ -19,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ users: [] });
     }
 
-    if (workspaceId !== 'personal') {
+    if (!isPersonalWorkspaceId(workspaceId)) {
       const member = await isWorkspaceMember(workspaceId, auth.uid);
       if (!member) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     const uniqueIds = Array.from(new Set<string>(userIds)).slice(0, 200);
-    const filteredIds = workspaceId === 'personal'
+    const filteredIds = isPersonalWorkspaceId(workspaceId)
       ? uniqueIds.filter(id => id === auth.uid)
       : uniqueIds;
 
@@ -47,8 +49,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ users });
-  } catch (error: any) {
-    console.error('Error looking up users:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error looking up users:', getErrorMessage(error));
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

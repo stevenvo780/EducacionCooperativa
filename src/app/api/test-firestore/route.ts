@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { adminDb } from '@/lib/firebase-admin';
+import { getErrorMessage } from '@/lib/error-utils';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 
@@ -29,8 +30,8 @@ export async function GET(req: NextRequest) {
             msg: 'Hello Firestore'
         });
         return NextResponse.json({ status: 'ok', msg: 'Firestore write success' });
-    } catch (error: any) {
-        console.error('Firestore Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Firestore Error:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

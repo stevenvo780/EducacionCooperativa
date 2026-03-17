@@ -10,6 +10,7 @@ import {
   type RefObject
 } from 'react';
 import type { DocItem, DialogConfig, DialogResult, UploadStatus, Workspace } from '@/components/dashboard/types';
+import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
 import { isMarkdownConvertibleFile, isMarkdownDocItem, isMarkdownFile } from '@/services/dashboardDocUtils';
@@ -287,14 +288,14 @@ export const useDashboardUploads = ({
       }
       setUploadStatus(prev => prev ? { ...prev, progress: 100, phase: 'done' } : prev);
       scheduleUploadStatusClear();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload failed', error);
-      const isStorageLimit = error?.code === 'STORAGE_LIMIT_EXCEEDED';
+      const isStorageLimit = getErrorCode(error) === 'STORAGE_LIMIT_EXCEEDED';
       setUploadStatus(prev => prev ? {
         ...prev,
         phase: 'error',
         error: isStorageLimit
-          ? error.message
+          ? getErrorMessage(error, 'Límite de almacenamiento alcanzado')
           : 'Error al subir'
       } : prev);
       scheduleUploadStatusClear();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
-
-/* eslint-disable no-console */
+import { getErrorMessage } from '@/lib/error-utils';
+import { Plan, SubscriptionStatus } from '@/types/subscription';
 
 /**
  * GET /api/cron/check-subscriptions
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
       // Marcar suscripción como expirada
       batch.update(doc.ref, {
-        status: 'expired',
+        status: SubscriptionStatus.Expired,
         updatedAt: nowIso
       });
 
@@ -59,17 +59,17 @@ export async function GET(req: NextRequest) {
       const userRef = adminDb.collection('users').doc(userId);
       batch.set(userRef, {
         subscription: {
-          planId: 'free',
-          status: 'expired'
+          planId: Plan.Free,
+          status: SubscriptionStatus.Expired
         }
       }, { merge: true });
 
-      console.log(`[Cron] Expiring subscription for user ${userId}, plan: ${data.planId}, endDate: ${data.endDate}`);
+      console.debug(`[Cron] Expiring subscription for user ${userId}, plan: ${data.planId}, endDate: ${data.endDate}`);
     }
 
     await batch.commit();
 
-    console.log(`[Cron] ✅ Expired ${expiredUserIds.length} subscriptions`);
+    console.debug(`[Cron] Expired ${expiredUserIds.length} subscriptions`);
 
     return NextResponse.json({
       message: `Expired ${expiredUserIds.length} subscriptions`,
@@ -77,10 +77,10 @@ export async function GET(req: NextRequest) {
       expired: expiredUserIds.length,
       userIds: expiredUserIds
     });
-  } catch (error: any) {
-    console.error('[Cron] Error checking subscriptions:', error?.message || error);
+  } catch (error: unknown) {
+    console.error('[Cron] Error checking subscriptions:', getErrorMessage(error));
     return NextResponse.json(
-      { error: error.message || 'Error checking subscriptions' },
+      { error: getErrorMessage(error, 'Error checking subscriptions') },
       { status: 500 }
     );
   }

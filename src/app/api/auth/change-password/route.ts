@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { hashPassword, verifyPassword } from '@/lib/crypto';
+import { getErrorMessage } from '@/lib/error-utils';
 import { requireAuth } from '@/lib/server-auth';
 
 export async function POST(req: NextRequest) {
@@ -53,10 +54,10 @@ export async function POST(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, message: 'Contraseña actualizada correctamente' });
-    } catch (error: any) {
-        console.error('Error changing password:', error);
+    } catch (error: unknown) {
+        console.error('Error changing password:', getErrorMessage(error));
         return NextResponse.json(
-            { error: error.message || 'Error al cambiar la contraseña' },
+            { error: getErrorMessage(error, 'Error al cambiar la contraseña') },
             { status: 500 }
         );
     }

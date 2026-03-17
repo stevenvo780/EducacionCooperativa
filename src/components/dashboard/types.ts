@@ -1,4 +1,5 @@
 import type { DocItem, FolderItem as MosaicFolderItem, ViewMode } from '@/components/MosaicLayout';
+import type { WorkspaceTypeId } from '@/types/workspace';
 
 export type { DocItem, ViewMode };
 export type FolderItem = MosaicFolderItem;
@@ -9,7 +10,7 @@ export interface Workspace {
   ownerId: string;
   members: string[];
   pendingInvites?: string[];
-  type: 'personal' | 'shared';
+  type: WorkspaceTypeId;
 }
 
 export type DialogKind = 'info' | 'error' | 'confirm' | 'input';

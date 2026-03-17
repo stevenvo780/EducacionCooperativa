@@ -7,6 +7,7 @@ import {
     signOut,
     sendPasswordResetEmail
 } from 'firebase/auth';
+import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomToken } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
@@ -90,7 +91,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (e) {
             setLoading(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const signInWithGoogle = async () => {
@@ -106,14 +106,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (result.user) {
                 router.push('/dashboard');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Google login failed:', error);
-            if (error.code === 'auth/configuration-not-found' ||
-                error.code === 'auth/invalid-api-key' ||
-                error.code === 'auth/api-key-not-valid') {
+            const errorCode = getErrorCode(error);
+            if (errorCode === 'auth/configuration-not-found' ||
+                errorCode === 'auth/invalid-api-key' ||
+                errorCode === 'auth/api-key-not-valid') {
                 throw new Error('Google Sign-In no está configurado correctamente.');
             }
-            throw new Error(error.message || 'Error al iniciar sesión con Google');
+            throw new Error(getErrorMessage(error, 'Error al iniciar sesión con Google'));
         }
     };
 
@@ -255,14 +256,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const firebaseAuth = getAuth();
             await sendPasswordResetEmail(firebaseAuth, email);
-        } catch (error: any) {
-            if (error.code === 'auth/user-not-found') {
+        } catch (error: unknown) {
+            const errorCode = getErrorCode(error);
+            if (errorCode === 'auth/user-not-found') {
                 throw new Error('No existe una cuenta con este correo electrónico');
             }
-            if (error.code === 'auth/invalid-email') {
+            if (errorCode === 'auth/invalid-email') {
                 throw new Error('El correo electrónico no es válido');
             }
-            throw new Error(error.message || 'Error al enviar el correo de recuperación');
+            throw new Error(getErrorMessage(error, 'Error al enviar el correo de recuperación'));
         }
     };
 

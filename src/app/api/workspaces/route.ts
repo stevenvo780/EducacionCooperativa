@@ -1,7 +1,9 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { getErrorMessage } from '@/lib/error-utils';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
+import { WorkspaceType } from '@/types/workspace';
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,9 +31,9 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ workspaces, invites });
-  } catch (error: any) {
-    console.error('Error fetching workspaces:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error fetching workspaces:', getErrorMessage(error));
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
       ownerId: auth.uid,
       members: [auth.uid],
       pendingInvites: [],
-      type: 'shared',
+      type: WorkspaceType.Shared,
       createdAt: FieldValue.serverTimestamp()
     };
 
@@ -66,10 +68,10 @@ export async function POST(req: NextRequest) {
       ownerId: auth.uid,
       members: [auth.uid],
       pendingInvites: [],
-      type: 'shared'
+      type: WorkspaceType.Shared
     });
-  } catch (error: any) {
-    console.error('Error creating workspace:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error creating workspace:', getErrorMessage(error));
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

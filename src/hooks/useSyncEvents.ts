@@ -2,21 +2,15 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { rtdb } from '@/lib/firebase';
+import { getErrorMessage } from '@/lib/error-utils';
 import { ref, onChildAdded, off, push, query, orderByChild, startAt } from 'firebase/database';
-
-export interface SyncEvent {
-  type: 'created' | 'updated' | 'deleted' | 'refresh';
-  path: string;
-  folder?: string;
-  docId?: string;
-  timestamp: number;
-  source: 'worker' | 'frontend';
-}
+import { SyncEventSource, SyncEventType, type SyncEvent } from '@/types/sync';
+import type { WorkspaceTypeId } from '@/types/workspace';
 
 interface UseSyncEventsOptions {
   workspaceId: string | null;
   userId: string | null;
-  workspaceType: 'personal' | 'shared';
+  workspaceType: WorkspaceTypeId;
   onEvent?: (event: SyncEvent) => void;
   enabled?: boolean;
 }
@@ -67,16 +61,16 @@ export function useSyncEvents({
         folder: folder || 'No estructurado',
         docId: docId || null,
         timestamp: Date.now(),
-        source: 'frontend'
+        source: SyncEventSource.Frontend
       });
-    } catch (err) {
-      console.warn('Error publicando evento a RTDB:', err);
+    } catch (error) {
+      console.warn('Error publicando evento a RTDB:', getErrorMessage(error));
     }
   }, [getSyncPath]);
 
   // Solicitar refresh al worker
   const requestRefresh = useCallback(() => {
-    publishEvent('refresh', '', undefined, undefined);
+    publishEvent(SyncEventType.Refresh, '', undefined, undefined);
   }, [publishEvent]);
 
   useEffect(() => {
@@ -101,7 +95,7 @@ export function useSyncEvents({
       if (!event) return;
 
       // Ignorar eventos propios del frontend
-      if (event.source === 'frontend') return;
+      if (event.source === SyncEventSource.Frontend) return;
 
       // Notificar al callback (usando ref para estabilidad)
       onEventRef.current?.(event);
@@ -121,8 +115,6 @@ export function useSyncEvents({
         listenerRef.current = null;
       }
     };
-  // NOTA: onEvent NO está en las dependencias — usamos onEventRef para estabilidad
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, getSyncPath]);
 
   return {

@@ -1,7 +1,9 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue, type CollectionReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isAdminUser, requireAuth } from '@/lib/server-auth';
+import { WorkspaceType } from '@/types/workspace';
 
 const deleteCollectionInBatches = async (collectionRef: CollectionReference, batchLimit = 400) => {
   let lastDoc: QueryDocumentSnapshot | null = null;
@@ -107,9 +109,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (error: any) {
-    console.error('Error updating workspace:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error updating workspace:', getErrorMessage(error));
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -132,7 +134,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
     const data = snap.data() as { ownerId?: string; type?: string } | undefined;
-    if (data?.type === 'personal') {
+    if (data?.type === WorkspaceType.Personal) {
       return NextResponse.json({ error: 'Personal workspace cannot be deleted' }, { status: 400 });
     }
 
@@ -161,13 +163,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
         }
         return count;
       })(),
-      deleteBoardData(id).catch(err => { console.warn('Board cleanup failed for workspace', id, err); return false; }),
+      deleteBoardData(id).catch(error => { console.warn('Board cleanup failed for workspace', id, getErrorMessage(error)); return false; }),
       (async () => {
         const bucket = adminStorage.bucket();
         if (!bucket?.name) return false;
         await bucket.deleteFiles({ prefix: `workspaces/${id}/` });
         return true;
-      })().catch(err => { console.warn('Storage cleanup failed for workspace', id, err); return false; })
+      })().catch(error => { console.warn('Storage cleanup failed for workspace', id, getErrorMessage(error)); return false; })
     ]);
 
     const deletedDocsCount = deletedDocs.status === 'fulfilled' ? deletedDocs.value : 0;
@@ -182,8 +184,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       storageDeleted,
       boardDeleted
     });
-  } catch (error: any) {
-    console.error('Error deleting workspace:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error deleting workspace:', getErrorMessage(error));
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

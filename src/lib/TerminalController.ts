@@ -1,17 +1,26 @@
-/* eslint-disable no-console */
+import type { FitAddon } from '@xterm/addon-fit';
+import type { WebLinksAddon } from '@xterm/addon-web-links';
+import type { Terminal as XTermTerminal } from '@xterm/xterm';
 import { io, Socket } from 'socket.io-client';
+import type { TerminalConnectionStatusId, TerminalSessionCreationPayload, TerminalSessionPayload, WorkerStatus } from '@/types/terminal';
+import type { WorkspaceTypeId } from '@/types/workspace';
+
+type XTermConstructor = new (options?: ConstructorParameters<typeof XTermTerminal>[0]) => XTermTerminal;
+type FitAddonConstructor = new () => FitAddon;
+type WebLinksAddonConstructor = new () => WebLinksAddon;
+type SocketStatus = TerminalConnectionStatusId | 'hub-online' | 'hub-offline';
 
 declare global {
   interface Window {
-    Terminal: any;
-    FitAddon: any;
-    WebLinksAddon: any;
+    Terminal?: XTermConstructor;
+    FitAddon?: { FitAddon: FitAddonConstructor };
+    WebLinksAddon?: { WebLinksAddon: WebLinksAddonConstructor };
   }
 }
 
 export interface TerminalInstance {
-  term: any;
-  fitAddon: any;
+  term: XTermTerminal;
+  fitAddon: FitAddon;
   container: HTMLElement | null;
   resizeObserver: ResizeObserver | null;
   fitTimeout: ReturnType<typeof setTimeout> | null;
@@ -19,8 +28,6 @@ export interface TerminalInstance {
   lastFitAt: number;
   mounted: boolean;
 }
-
-export type WorkerStatus = 'online' | 'offline' | 'unknown';
 
 export interface WorkspaceWorkerStatus {
   workspaceId: string;
@@ -38,7 +45,7 @@ export interface WorkspaceSession {
   id: string;
   workspaceId: string;
   workspaceName?: string;
-  workspaceType?: string;
+  workspaceType?: WorkspaceTypeId;
   ownerUid?: string;
   sessionName?: string;
 }
@@ -56,12 +63,12 @@ export class TerminalController {
   private subscribedWorkspaces: Set<string> = new Set();
   private onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void;
   private onDocChange?: (event: DocChangeEvent) => void;
-  private onWorkspaceSessionsChange?: (data: { workspaceId: string, sessions: WorkspaceSession[] }) => void;
+  private onWorkspaceSessionsChange?: (data: { workspaceId: string; sessions: WorkspaceSession[] }) => void;
   private onRestoreFailed?: (payload: { sessionId: string; reason: string }) => void;
-  private onSessionJoined?: (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => void;
+  private onSessionJoined?: (payload: TerminalSessionPayload) => void;
   private onSessionRenamed?: (payload: { sessionId: string; sessionName: string }) => void;
 
-  public get term(): any {
+  public get term(): XTermTerminal | null {
     if (this.activeSessionId) {
       return this.terminals.get(this.activeSessionId)?.term ?? null;
     }
@@ -74,7 +81,7 @@ export class TerminalController {
 
   private debugLog(...args: unknown[]) {
     if (this.debugEnabled) {
-      console.log(...args);
+      console.debug(...args);
     }
   }
 
@@ -122,7 +129,7 @@ export class TerminalController {
       await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js');
       this.debugLog(`[TerminalController] links addon loaded in ${(performance.now() - linksStart).toFixed(0)}ms`);
 
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       if (!window.Terminal || !window.FitAddon?.FitAddon) {
         throw new Error('xterm globals not found');
@@ -251,7 +258,7 @@ export class TerminalController {
     return true;
   }
 
-  public setWorkspaceSessionsHandler(handler: (data: { workspaceId: string, sessions: WorkspaceSession[] }) => void) {
+  public setWorkspaceSessionsHandler(handler: (data: { workspaceId: string; sessions: WorkspaceSession[] }) => void) {
     this.onWorkspaceSessionsChange = handler;
   }
 
@@ -259,7 +266,7 @@ export class TerminalController {
     this.onRestoreFailed = handler;
   }
 
-  public setSessionJoinedHandler(handler: (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => void) {
+  public setSessionJoinedHandler(handler: (payload: TerminalSessionPayload) => void) {
     this.onSessionJoined = handler;
   }
 
@@ -267,11 +274,11 @@ export class TerminalController {
     token: string,
     uid: string,
     sessionId: string | null,
-    onStatusChange?: (status: string) => void,
+    onStatusChange?: (status: SocketStatus) => void,
     onSessionEnded?: (payload: { sessionId: string; reason?: string }) => void,
     onWorkerStatusChange?: (status: WorkspaceWorkerStatus) => void,
     onDocChange?: (event: DocChangeEvent) => void,
-    onSessionCreated?: (payload: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => void
+    onSessionCreated?: (payload: TerminalSessionCreationPayload) => void
   ) {
     if (this.socket) this.socket.disconnect();
 
@@ -310,9 +317,9 @@ export class TerminalController {
       onStatusChange?.('error');
     });
 
-    this.socket.on('worker-status', (data: { status: string; workspaceId?: string }) => {
+    this.socket.on('worker-status', (data: { status: WorkerStatus; workspaceId?: string }) => {
       const workspaceId = data.workspaceId;
-      const status = data.status as WorkerStatus;
+      const status = data.status;
       this.debugLog(`[TerminalController] Received worker-status: ${status} for workspace: ${workspaceId}`);
 
       if (workspaceId) {
@@ -323,7 +330,7 @@ export class TerminalController {
       }
     });
 
-    this.socket.on('session-created', (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string }) => {
+    this.socket.on('session-created', (data: TerminalSessionCreationPayload) => {
       this.activeSessionId = data.id;
       this.sessionOwnership.set(data.id, true);
       const instance = this.getTerminalInstance(data.id);
@@ -343,7 +350,7 @@ export class TerminalController {
       onSessionEnded?.(payload);
     });
 
-    this.socket.on('workspace-sessions', (data: { workspaceId: string, sessions: WorkspaceSession[] }) => {
+    this.socket.on('workspace-sessions', (data: { workspaceId: string; sessions: WorkspaceSession[] }) => {
       this.onWorkspaceSessionsChange?.(data);
     });
 
@@ -368,7 +375,7 @@ export class TerminalController {
       this.onRestoreFailed?.(payload);
     });
 
-    this.socket.on('session-joined', (payload: { id: string; workspaceId: string; workspaceName?: string; workspaceType?: string; isOwner: boolean }) => {
+    this.socket.on('session-joined', (payload: TerminalSessionPayload) => {
       this.debugLog(`[TerminalController] session-joined: ${payload.id} (owner: ${payload.isOwner})`);
       this.sessionOwnership.set(payload.id, payload.isOwner);
       const instance = this.getTerminalInstance(payload.id);
@@ -426,7 +433,7 @@ export class TerminalController {
     }
   }
 
-  public startSession(payload?: { workspaceId?: string; workspaceName?: string; workspaceType?: string }) {
+  public startSession(payload?: { workspaceId?: string; workspaceName?: string; workspaceType?: WorkspaceTypeId }) {
     if (this.socket?.connected) {
       this.socket.emit('create-session', payload);
     }

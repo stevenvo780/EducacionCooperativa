@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { getErrorMessage } from '@/lib/error-utils';
 import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
-
-/* eslint-disable no-console */
+import { MercadoPagoPaymentStatus } from '@/types/payments';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
 
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     const planId = subData?.planId || (payment.external_reference?.split('|')[1]);
 
-    if (payment.status === 'approved') {
+    if (payment.status === MercadoPagoPaymentStatus.Approved) {
       await adminDb.collection('subscriptions').doc(auth.uid).set({
         userId: auth.uid,
         planId: planId as PlanId,
@@ -75,24 +75,24 @@ export async function POST(req: NextRequest) {
         }
       }, { merge: true });
 
-      console.log(`[Verify] ✅ Subscription activated for user ${auth.uid}, plan: ${planId}`);
+      console.debug(`[Verify] Subscription activated for user ${auth.uid}, plan: ${planId}`);
       return NextResponse.json({
         status: SubscriptionStatus.Active,
         planId,
         message: 'Suscripción activada correctamente'
       });
     } else {
-      console.log(`[Verify] Payment ${paymentId} status: ${payment.status} for user ${auth.uid}`);
+      console.debug(`[Verify] Payment ${paymentId} status: ${payment.status} for user ${auth.uid}`);
       return NextResponse.json({
         status: payment.status,
         planId,
         message: `El pago está en estado: ${payment.status}`
       });
     }
-  } catch (error: any) {
-    console.error('[Verify] Error:', error?.message || error);
+  } catch (error: unknown) {
+    console.error('[Verify] Error:', getErrorMessage(error));
     return NextResponse.json(
-      { error: error.message || 'Error al verificar pago' },
+      { error: getErrorMessage(error, 'Error al verificar pago') },
       { status: 500 }
     );
   }

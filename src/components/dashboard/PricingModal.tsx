@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getErrorMessage } from '@/lib/error-utils';
 import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive } from 'lucide-react';
 import { PLAN_ORDER, PLANS, Plan, type PlanId, type PlanConfig, formatStorageSize } from '@/types/subscription';
 import { authFetch } from '@/services/apiClient';
@@ -65,8 +66,8 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail, 
       } else {
         throw new Error('No se recibió URL de checkout');
       }
-    } catch (err: any) {
-      setError(err.message || 'Error al procesar el pago');
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Error al procesar el pago'));
       setLoading(null);
     }
   };
