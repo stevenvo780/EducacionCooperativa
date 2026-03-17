@@ -172,14 +172,10 @@ const moveCardInState = (
 
 const SortableCard = ({
   card,
-  columns,
-  onMoveCard,
   onDeleteCard,
   onUpdateCardTitle
 }: {
   card: BoardCard;
-  columns: BoardColumn[];
-  onMoveCard: (cardId: string, columnId: string) => void;
   onDeleteCard: (cardId: string) => void;
   onUpdateCardTitle: (cardId: string, title: string) => void;
 }) => {
@@ -269,16 +265,7 @@ const SortableCard = ({
           )}
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <select
-          value={card.columnId}
-          onChange={(e) => onMoveCard(card.id, e.target.value)}
-          className="text-[11px] bg-surface-800 border border-surface-600 rounded px-2 py-1 text-surface-300"
-        >
-          {columns.map(col => (
-            <option key={col.id} value={col.id}>{col.name}</option>
-          ))}
-        </select>
+      <div className="mt-2 flex items-center justify-end gap-2">
         <button
           onClick={() => onDeleteCard(card.id)}
           className="text-surface-500 hover:text-mandy-400"
@@ -440,8 +427,6 @@ const SortableColumn = ({
             <SortableCard
               key={card.id}
               card={card}
-              columns={columns}
-              onMoveCard={onMoveCard}
               onDeleteCard={onDeleteCard}
               onUpdateCardTitle={onUpdateCardTitle}
             />

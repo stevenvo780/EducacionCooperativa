@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, Loader2, Pencil, Search, Star, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -79,6 +79,10 @@ interface SidebarProps {
   onFolderDragOver: (e: React.DragEvent, path: string) => void;
   onFolderDrop: (e: React.DragEvent, path: string) => void;
   onFolderDragLeave: (path: string) => void;
+  onCreateDoc?: () => void;
+  onCreateFolder?: () => void;
+  onUploadFile?: () => void;
+  onUploadFolder?: () => void;
 }
 
 const Sidebar = ({
@@ -110,7 +114,11 @@ const Sidebar = ({
   folderDragOver,
   onFolderDragOver,
   onFolderDrop,
-  onFolderDragLeave
+  onFolderDragLeave,
+  onCreateDoc,
+  onCreateFolder,
+  onUploadFile,
+  onUploadFolder
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
@@ -477,6 +485,42 @@ const Sidebar = ({
                 ARCHIVOS: {currentWorkspace?.name}
                 {loadingDocs && <Loader2 className="w-3 h-3 animate-spin text-surface-500" />}
               </span>
+            </div>
+
+            {/* File action buttons */}
+            <div className="grid grid-cols-2 gap-1 px-2 pb-2">
+              <button
+                onClick={onCreateDoc}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
+                title="Nuevo archivo"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="truncate">Nuevo archivo</span>
+              </button>
+              <button
+                onClick={onCreateFolder}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
+                title="Nueva carpeta"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+                <span className="truncate">Nueva carpeta</span>
+              </button>
+              <button
+                onClick={onUploadFile}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
+                title="Subir archivos"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="truncate">Subir archivos</span>
+              </button>
+              <button
+                onClick={onUploadFolder}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
+                title="Subir carpeta"
+              >
+                <FolderUp className="w-3.5 h-3.5" />
+                <span className="truncate">Subir carpeta</span>
+              </button>
             </div>
 
             {favoriteDocs.length > 0 && (
