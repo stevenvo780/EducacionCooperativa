@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, ReactNode } from 'react';
 import { TerminalController, WorkspaceWorkerStatus, WorkerStatus, DocChangeEvent } from '@/lib/TerminalController';
 import { useAuth } from './AuthContext';
 
@@ -560,29 +560,34 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         };
     }, []);
 
+    const contextValue = useMemo(() => ({
+        controller: controllerRef.current,
+        sessions,
+        activeSessionId,
+        status,
+        hubConnected,
+        isCreatingSession,
+        initialize,
+        createSession,
+        joinSession,
+        selectSession,
+        destroySession,
+        renameSession,
+        errorMessage,
+        workspaceWorkerStatuses,
+        getWorkerStatusForWorkspace,
+        getSessionsForWorkspace,
+        subscribeToWorkspace,
+        clearActiveSession,
+        lastDocChange,
+        onDocChangeCallback
+    }), [sessions, activeSessionId, status, hubConnected, isCreatingSession, errorMessage,
+        workspaceWorkerStatuses, lastDocChange, initialize, createSession, joinSession,
+        selectSession, destroySession, renameSession, getWorkerStatusForWorkspace,
+        getSessionsForWorkspace, subscribeToWorkspace, clearActiveSession, onDocChangeCallback]);
+
     return (
-        <TerminalContext.Provider value={{
-            controller: controllerRef.current,
-            sessions,
-            activeSessionId,
-            status,
-            hubConnected,
-            isCreatingSession,
-            initialize,
-            createSession,
-            joinSession,
-            selectSession,
-            destroySession,
-            renameSession,
-            errorMessage,
-            workspaceWorkerStatuses,
-            getWorkerStatusForWorkspace,
-            getSessionsForWorkspace,
-            subscribeToWorkspace,
-            clearActiveSession,
-            lastDocChange,
-            onDocChangeCallback
-        }}>
+        <TerminalContext.Provider value={contextValue}>
             {children}
         </TerminalContext.Provider>
     );

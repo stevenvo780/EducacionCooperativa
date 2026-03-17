@@ -172,14 +172,15 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        const snapshot = await query.get();
-        const docs = snapshot.docs.map(doc => {
-            const data = doc.data() as Record<string, unknown>;
-            if (!shouldIncludeContent && Object.prototype.hasOwnProperty.call(data, 'content')) {
-                delete data.content;
-            }
-            return { id: doc.id, ...data };
-        });
+        const limitParam = searchParams.get('limit');
+        const offsetParam = searchParams.get('offset');
+        const limitVal = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10)), 1000) : 1000;
+        const snapshot = await query.limit(limitVal).get();
+        let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Record<string, unknown> }));
+        if (offsetParam) {
+            const offsetVal = Math.max(0, parseInt(offsetParam, 10));
+            docs = docs.slice(offsetVal);
+        }
 
         return NextResponse.json(docs, {
             headers: {

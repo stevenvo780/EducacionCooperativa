@@ -5,6 +5,10 @@ import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, buildStoragePrefix, ensureMarkdownFileName, sanitizeFileName, getStorageBaseName } from '@/lib/storage-path';
 
+// Throttle Firestore URL updates: max once per 50 minutes per document
+const urlRefreshThrottle = new Map<string, number>();
+const URL_REFRESH_THROTTLE_MS = 50 * 60 * 1000;
+
 const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: string) => {
     const workspaceId = typeof data?.workspaceId === 'string' ? data.workspaceId : null;
     if (!workspaceId || workspaceId === 'personal') {
@@ -203,7 +207,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Refresh signed URL for file-type documents so viewers never get ExpiredToken errors
+        // Refresh signed URL for file-type documents so viewers never get ExpiredToken errors.
+        // Throttle Firestore writes to at most once per 50 min per document.
         if (data.type === 'file' && typeof data.storagePath === 'string') {
             try {
                 const bucket = adminStorage.bucket();
@@ -213,8 +218,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                         expires: Date.now() + 60 * 60 * 1000 // 1 hour
                     });
                     data.url = freshUrl;
-                    // Update Firestore in background so subsequent reads are fast if within the hour
-                    adminDb.collection('documents').doc(id).update({ url: freshUrl }).catch(() => {});
+                    const lastRefresh = urlRefreshThrottle.get(id) ?? 0;
+                    if (Date.now() - lastRefresh > URL_REFRESH_THROTTLE_MS) {
+                        urlRefreshThrottle.set(id, Date.now());
+                        adminDb.collection('documents').doc(id).update({ url: freshUrl }).catch(() => {});
+                    }
                 }
             } catch (e) {
                 console.warn('Failed to refresh signed URL on GET:', e);

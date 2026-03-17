@@ -44,7 +44,6 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  swcMinify: false,
   transpilePackages: ['react-mosaic-component', 'firebase', 'undici'],
   experimental: {
     serverComponentsExternalPackages: ['firebase-admin'],

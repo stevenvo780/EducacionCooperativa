@@ -1,14 +1,19 @@
 import { auth as getAuth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 
-const waitForAuthUser = async (timeoutMs = 3000): Promise<User | null> => {
+// Shared promise so concurrent calls while auth is loading share the same wait
+let authWaiter: Promise<User | null> | null = null;
+
+const waitForAuthUser = (timeoutMs = 3000): Promise<User | null> => {
   const firebaseAuth = getAuth();
 
   if (firebaseAuth.currentUser) {
-    return firebaseAuth.currentUser;
+    return Promise.resolve(firebaseAuth.currentUser);
   }
 
-  return new Promise((resolve) => {
+  if (authWaiter) return authWaiter;
+
+  authWaiter = new Promise<User | null>((resolve) => {
     const timeout = window.setTimeout(() => {
       unsubscribe();
       resolve(firebaseAuth.currentUser);
@@ -27,7 +32,11 @@ const waitForAuthUser = async (timeoutMs = 3000): Promise<User | null> => {
         resolve(firebaseAuth.currentUser);
       }
     );
+  }).finally(() => {
+    authWaiter = null;
   });
+
+  return authWaiter;
 };
 
 export const getAuthToken = async () => {

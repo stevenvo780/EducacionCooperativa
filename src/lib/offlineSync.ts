@@ -25,7 +25,10 @@ export type SyncProgress = {
 
 export type SyncProgressCallback = (progress: SyncProgress) => void;
 
-// ─── Replay a single operation ─────────────────────────────────
+/**
+ * Replays a single offline operation by sending the appropriate API request.
+ * @param item - The sync queue item to replay.
+ */
 async function replayOperation(item: SyncQueueItem): Promise<void> {
   const { operation, payload } = item;
   const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -91,9 +94,13 @@ async function replayOperation(item: SyncQueueItem): Promise<void> {
   }
 }
 
-// ─── Process the full queue ─────────────────────────────────────
 let _processing = false;
 
+/**
+ * Processes the full offline sync queue.
+ * @param onProgress - Optional callback to track sync progress.
+ * @returns Object containing the number of processed and failed items.
+ */
 export async function processSyncQueue(
   onProgress?: SyncProgressCallback
 ): Promise<{ processed: number; failed: number }> {
@@ -116,10 +123,8 @@ export async function processSyncQueue(
       onProgress?.({ total, processed, failed, current: item.docId });
 
       try {
-        // Mark as processing
         await updateSyncItem({ ...item, status: 'processing' });
         await replayOperation(item);
-        // Success — remove from queue
         if (item.id !== null && item.id !== undefined) await removeSyncItem(item.id);
         processed++;
       } catch (err) {
@@ -133,14 +138,12 @@ export async function processSyncQueue(
           });
           failed++;
         } else {
-          // Back to pending with incremented retries — will be retried next cycle
           await updateSyncItem({
             ...item,
             status: 'pending',
             retries,
             error: err instanceof Error ? err.message : String(err)
           });
-          // Exponential backoff delay before next item
           await sleep(BASE_BACKOFF_MS * Math.pow(2, retries - 1));
         }
       }
@@ -154,18 +157,24 @@ export async function processSyncQueue(
   return { processed, failed };
 }
 
+/**
+ * Checks if the sync queue is currently being processed.
+ */
 export function isProcessing(): boolean {
   return _processing;
 }
 
-// ─── Auto-sync on connectivity ──────────────────────────────────
 let _autoSyncCleanup: (() => void) | null = null;
 
+/**
+ * Starts automatic synchronization when the network connection is restored.
+ * @param onProgress - Optional callback to track sync progress.
+ * @returns A cleanup function to stop auto-sync.
+ */
 export function startAutoSync(onProgress?: SyncProgressCallback): () => void {
   if (_autoSyncCleanup) _autoSyncCleanup();
 
   const handler = () => {
-    // Small delay to ensure connection is stable
     setTimeout(() => {
       if (navigator.onLine) {
         processSyncQueue(onProgress).catch((err) =>
@@ -177,7 +186,6 @@ export function startAutoSync(onProgress?: SyncProgressCallback): () => void {
 
   window.addEventListener('online', handler);
 
-  // Also try immediately if already online
   if (navigator.onLine) {
     handler();
   }
@@ -189,7 +197,10 @@ export function startAutoSync(onProgress?: SyncProgressCallback): () => void {
   return _autoSyncCleanup;
 }
 
-// ─── Utility ────────────────────────────────────────────────────
+/**
+ * Helper to delay execution.
+ * @param ms - Milliseconds to sleep.
+ */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

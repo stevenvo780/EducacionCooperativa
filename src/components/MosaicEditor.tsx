@@ -41,7 +41,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Monitor, PenLine, AlertTriangle, FileCode2, Quote, ListTodo, Sigma, BetweenHorizontalStart } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Monitor, PenLine, AlertTriangle, FileCode2, Quote, ListTodo, Sigma, BetweenHorizontalStart, Library } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
@@ -49,11 +49,13 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import MermaidDiagram from '@/components/MermaidDiagram';
+import SnippetGallery from '@/components/SnippetGallery';
+import katex from 'katex';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { normalizePath } from '@/lib/folder-utils';
 
-type ViewMode = 'edit' | 'split' | 'preview' | 'raw';
+type ViewMode = 'edit' | 'preview' | 'raw';
 
 interface SearchState {
   currentMatch: number;
@@ -522,6 +524,7 @@ export default function MosaicEditor({
   const [currentMatch, setCurrentMatch] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const lastReportedSearchStateRef = useRef<SearchState | null>(null);
+  const renderToolbarContentsRef = useRef<(() => React.ReactNode) | null>(null);
 
   const { user } = useAuth();
   const { onDocChangeCallback } = useTerminal();
@@ -547,6 +550,7 @@ export default function MosaicEditor({
   const [showCompactMenu, setShowCompactMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
+  const [showSnippetGallery, setShowSnippetGallery] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1134,6 +1138,238 @@ export default function MosaicEditor({
     handleContentChange(editor.getMarkdown());
   }, [handleContentChange]);
 
+  /* ── Obsidian-style inline LaTeX rendering ──
+   * Scans the editor DOM for paragraphs containing $$...$$ blocks and $...$
+   * inline math. Replaces them visually with rendered KaTeX. Clicking on a
+   * rendered block reveals the source for editing; clicking elsewhere
+   * re-renders it. This mimics Obsidian's live preview behavior.
+   *
+   * IMPORTANT: Overlays are placed OUTSIDE the contenteditable (in a sibling
+   * container) so that Lexical's DOM reconciliation does not remove them.
+   */
+  useEffect(() => {
+    if (viewMode !== 'edit') return;
+    const shell = editorShellRef.current;
+    if (!shell) return;
+
+    const OVERLAY_CONTAINER_CLASS = 'katex-overlay-container';
+    const EDITING_ATTR = 'data-katex-editing';
+
+    /**
+     * Pre-process LaTeX so users don't need verbose \begin{array}... wrappers.
+     * - Restores `\\` that MDXEditor collapses into `\` + newline.
+     * - If the LaTeX uses `\\` line-breaks but has no explicit environment,
+     *   auto-wraps in `\begin{array}{l}` (if \hline present) or
+     *   `\begin{gathered}` (otherwise) so KaTeX can render multi-line math.
+     */
+    const normalizeLatex = (raw: string): string => {
+      let src = raw.trim();
+      // MDXEditor/DOM collapses `\\` into `\` + newline. Restore double backslash.
+      src = src.replace(/\\\n/g, '\\\\\n');
+
+      // If user already has an explicit environment, leave as-is
+      if (/\\begin\s*\{/.test(src)) return src;
+
+      // Check if there are line-break markers (`\\`)
+      const hasLineBreaks = /\\\\/.test(src);
+      if (!hasLineBreaks) return src;
+
+      // Auto-wrap: use array (supports \hline) or gathered (simpler)
+      if (/\\hline/.test(src)) {
+        return `\\begin{array}{l}\n${src}\n\\end{array}`;
+      }
+      return `\\begin{gathered}\n${src}\n\\end{gathered}`;
+    };
+
+    /**
+     * Ensure the overlay container exists as a sibling of the contenteditable,
+     * inside the same scrollable parent so overlays scroll with content.
+     */
+    const ensureOverlayContainer = (): HTMLElement | null => {
+      const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement;
+      if (!editable) return null;
+      const scrollParent = editable.parentElement;
+      if (!scrollParent) return null;
+
+      let container = scrollParent.querySelector(`.${OVERLAY_CONTAINER_CLASS}`) as HTMLElement;
+      if (!container) {
+        container = document.createElement('div');
+        container.className = OVERLAY_CONTAINER_CLASS;
+        // Ensure parent is positioned
+        if (getComputedStyle(scrollParent).position === 'static') {
+          scrollParent.style.position = 'relative';
+        }
+        scrollParent.appendChild(container);
+      }
+      return container;
+    };
+
+    /**
+     * Build/rebuild all KaTeX overlays for $$...$$ blocks.
+     */
+    const decorateAll = () => {
+      const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement;
+      if (!editable) return;
+      const container = ensureOverlayContainer();
+      if (!container) return;
+
+      const paragraphs = editable.querySelectorAll('p, [data-lexical-paragraph]');
+
+      // Collect current math blocks: { element, latexSrc, rect }
+      type MathBlock = { el: HTMLElement; latex: string; top: number; left: number; width: number; height: number };
+      const blocks: MathBlock[] = [];
+
+      paragraphs.forEach((p) => {
+        const el = p as HTMLElement;
+        // Skip paragraphs in editing mode
+        if (el.getAttribute(EDITING_ATTR) === '1') return;
+
+        const text = el.textContent || '';
+        const match = text.match(/\$\$([\s\S]*?)\$\$/);
+        if (!match || !match[1]?.trim()) return;
+
+        // Normalize LaTeX: restore collapsed `\\`, auto-wrap if needed
+        const latex = normalizeLatex(match[1]);
+        // Position relative to editable parent
+        const elRect = el.getBoundingClientRect();
+        const parentRect = editable.getBoundingClientRect();
+
+        blocks.push({
+          el,
+          latex,
+          top: el.offsetTop,
+          left: el.offsetLeft - editable.offsetLeft,
+          width: elRect.width,
+          height: elRect.height
+        });
+      });
+
+      // Clear existing overlays
+      container.innerHTML = '';
+
+      // Create overlays
+      blocks.forEach(({ el, latex, top, width, height }) => {
+        try {
+          const html = katex.renderToString(latex, {
+            displayMode: true,
+            throwOnError: false,
+            trust: true
+          });
+
+          const overlay = document.createElement('div');
+          overlay.className = 'katex-block-overlay';
+          overlay.innerHTML = html;
+
+          // Position to cover the source paragraph
+          overlay.style.position = 'absolute';
+          overlay.style.top = `${top}px`;
+          overlay.style.left = '0';
+          overlay.style.width = `${width}px`;
+          overlay.style.minHeight = `${height}px`;
+          overlay.style.zIndex = '5';
+
+          overlay.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Hide overlay and mark paragraph as editing
+            overlay.style.display = 'none';
+            el.setAttribute(EDITING_ATTR, '1');
+            // Focus the paragraph and place cursor near the $$
+            el.focus();
+            try {
+              const range = document.createRange();
+              const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+              let textNode = walker.nextNode() as Text | null;
+              while (textNode) {
+                const idx = (textNode.textContent || '').indexOf('$$');
+                if (idx >= 0) {
+                  range.setStart(textNode, Math.min(idx + 2, textNode.textContent?.length || 0));
+                  range.collapse(true);
+                  const sel = window.getSelection();
+                  sel?.removeAllRanges();
+                  sel?.addRange(range);
+                  break;
+                }
+                textNode = walker.nextNode() as Text | null;
+              }
+            } catch { /* cursor placement best-effort */ }
+          });
+
+          container.appendChild(overlay);
+        } catch {
+          // KaTeX error — skip this block
+        }
+      });
+    };
+
+    // Re-render overlays when user clicks outside an editing paragraph
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // If clicking on an overlay, let the overlay's own handler deal with it
+      if (target.closest(`.${OVERLAY_CONTAINER_CLASS}`)) return;
+
+      const editingEls = shell.querySelectorAll(`[${EDITING_ATTR}="1"]`);
+      if (editingEls.length === 0) return;
+
+      editingEls.forEach((el) => {
+        if (!el.contains(target)) {
+          el.removeAttribute(EDITING_ATTR);
+        }
+      });
+
+      // Re-decorate after the DOM settles
+      requestAnimationFrame(decorateAll);
+    };
+
+    // Initial decoration (wait for editor to mount)
+    const initialTimer = setTimeout(decorateAll, 400);
+
+    // Debounced re-decoration on DOM changes
+    let decorateTimer: ReturnType<typeof setTimeout> | null = null;
+    let isDecorating = false;
+
+    const debouncedDecorate = () => {
+      if (isDecorating) return;
+      if (decorateTimer) clearTimeout(decorateTimer);
+      decorateTimer = setTimeout(() => {
+        isDecorating = true;
+        decorateAll();
+        // Release guard after DOM settles
+        requestAnimationFrame(() => { isDecorating = false; });
+      }, 200);
+    };
+
+    // Observe contenteditable changes
+    const observer = new MutationObserver(debouncedDecorate);
+    const editable = shell.querySelector('[contenteditable="true"]');
+    if (editable) {
+      observer.observe(editable, { childList: true, subtree: true, characterData: true });
+    }
+
+    // Also re-decorate on scroll (overlay positions depend on layout)
+    const scrollTarget = editable?.parentElement;
+    const handleScroll = () => debouncedDecorate();
+
+    if (scrollTarget) {
+      scrollTarget.addEventListener('scroll', handleScroll, { passive: true });
+    }
+
+    document.addEventListener('click', handleClickOutside);
+
+    return () => {
+      clearTimeout(initialTimer);
+      if (decorateTimer) clearTimeout(decorateTimer);
+      observer.disconnect();
+      if (scrollTarget) scrollTarget.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('click', handleClickOutside);
+      // Clean up overlay container
+      const container = shell.querySelector(`.${OVERLAY_CONTAINER_CLASS}`);
+      if (container) container.remove();
+      // Clean up editing attributes
+      shell.querySelectorAll(`[${EDITING_ATTR}]`).forEach(el => el.removeAttribute(EDITING_ATTR));
+    };
+  }, [viewMode]);
+
   const toggleFullscreen = useCallback(async () => {
     if (typeof document === 'undefined') return;
 
@@ -1226,14 +1462,9 @@ export default function MosaicEditor({
           onClick={() => insertSnippet('\n$$\n\\int_{a}^{b} f(x) \\, dx = F(b) - F(a)\n$$\n')}
         />
         <ToolbarShortcutButton
-          title="Diagrama Mermaid"
-          icon={<BetweenHorizontalStart className="h-3.5 w-3.5" />}
-          onClick={() => insertSnippet('\n```mermaid\ngraph TD\n  A[Inicio] --> B[Proceso]\n```\n')}
-        />
-        <ToolbarShortcutButton
-          title="Nota al pie"
-          icon={<FileCode2 className="h-3.5 w-3.5" />}
-          onClick={() => insertSnippet('[^1]\n\n[^1]: Escribe la nota al pie aquí.\n')}
+          title="Galería de snippets"
+          icon={<Library className="h-3.5 w-3.5" />}
+          onClick={() => setShowSnippetGallery(s => !s)}
         />
       </>
     ));
@@ -1319,7 +1550,9 @@ export default function MosaicEditor({
                 {isFullscreen ? 'Salir pantalla completa' : 'Pantalla completa'}
               </button>
               <div className="my-1 h-px bg-slate-700" />
-              <div className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-500">Insertar rápido</div>
+              <button type="button" title="Abrir galería de snippets" aria-label="Abrir galería de snippets" onClick={() => { setShowSnippetGallery(s => !s); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+                <Library className="h-3.5 w-3.5 text-blue-400" />Galería de snippets
+              </button>
               {QUICK_INSERTS.map((snippet) => (
                 <button
                   key={snippet.id}
@@ -1343,59 +1576,56 @@ export default function MosaicEditor({
     );
   }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setViewModeWithSync]);
 
-  // MDXEditor plugins configuration
-  const editorPlugins = useMemo(() => {
-    const plugins = [
-      headingsPlugin(),
-      listsPlugin(),
-      quotePlugin(),
-      thematicBreakPlugin(),
-      markdownShortcutPlugin(),
-      tablePlugin(),
-      linkPlugin(),
-      linkDialogPlugin(),
-      imagePlugin({ imageUploadHandler: async () => '/placeholder.png' }),
-      codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
-      codeMirrorPlugin({
-        codeBlockLanguages: {
-          js: 'JavaScript',
-          javascript: 'JavaScript',
-          ts: 'TypeScript',
-          typescript: 'TypeScript',
-          python: 'Python',
-          py: 'Python',
-          css: 'CSS',
-          html: 'HTML',
-          json: 'JSON',
-          bash: 'Bash',
-          sh: 'Shell',
-          sql: 'SQL',
-          yaml: 'YAML',
-          xml: 'XML',
-          markdown: 'Markdown',
-          mermaid: 'Mermaid',
-          rust: 'Rust',
-          go: 'Go',
-          java: 'Java',
-          cpp: 'C++',
-          c: 'C',
-          '': 'Texto plano'
-        }
-      }),
-      directivesPlugin({
-        directiveDescriptors: [AdmonitionDirectiveDescriptor]
-      }),
-      frontmatterPlugin()
-    ];
+  // Keep ref in sync so the toolbar callback always calls the latest version
+  // without recreating the plugins array (which would cause MDXEditor remount)
+  renderToolbarContentsRef.current = renderToolbarContents;
 
-    plugins.push(
-      toolbarPlugin({
-        toolbarContents: renderToolbarContents
-      })
-    );
-
-    return plugins;
-  }, [renderToolbarContents]);
+  // MDXEditor plugins configuration — created once, toolbar uses a stable ref wrapper
+  const editorPlugins = useMemo(() => [
+    headingsPlugin(),
+    listsPlugin(),
+    quotePlugin(),
+    thematicBreakPlugin(),
+    markdownShortcutPlugin(),
+    tablePlugin(),
+    linkPlugin(),
+    linkDialogPlugin(),
+    imagePlugin({ imageUploadHandler: async () => '/placeholder.png' }),
+    codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
+    codeMirrorPlugin({
+      codeBlockLanguages: {
+        js: 'JavaScript',
+        javascript: 'JavaScript',
+        ts: 'TypeScript',
+        typescript: 'TypeScript',
+        python: 'Python',
+        py: 'Python',
+        css: 'CSS',
+        html: 'HTML',
+        json: 'JSON',
+        bash: 'Bash',
+        sh: 'Shell',
+        sql: 'SQL',
+        yaml: 'YAML',
+        xml: 'XML',
+        markdown: 'Markdown',
+        mermaid: 'Mermaid',
+        rust: 'Rust',
+        go: 'Go',
+        java: 'Java',
+        cpp: 'C++',
+        c: 'C',
+        '': 'Texto plano'
+      }
+    }),
+    directivesPlugin({
+      directiveDescriptors: [AdmonitionDirectiveDescriptor]
+    }),
+    frontmatterPlugin(),
+    toolbarPlugin({
+      toolbarContents: () => renderToolbarContentsRef.current?.() ?? null
+    })
+  ], []);
 
   const handleMdxChange = useCallback((md: string) => {
     // Skip if this is MDXEditor's initial markdown normalization
@@ -1559,8 +1789,14 @@ export default function MosaicEditor({
 
               <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Biblioteca rápida</h3>
-                  <span className="text-[11px] text-slate-500">LaTeX, Mermaid, admoniciones y más</span>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Biblioteca de snippets</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowSnippetGallery(s => !s)}
+                    className="text-[11px] text-blue-400 transition hover:text-blue-300"
+                  >
+                    {showSnippetGallery ? 'Cerrar galería' : 'Abrir galería completa'}
+                  </button>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {QUICK_INSERTS.map((snippet) => (
@@ -1584,79 +1820,93 @@ export default function MosaicEditor({
         </div>
       )}
 
-      <div className="flex-1 relative overflow-hidden">
-        {viewMode === 'preview' ? (
-          <>
-            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
-              <button
-                type="button"
-                onClick={() => setViewModeWithSync('edit')}
-                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
-                title="Volver al editor visual"
-                aria-label="Volver al editor visual"
-              >
-                <PenLine className="h-3 w-3" />
-                Editor visual
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewModeWithSync('raw')}
-                className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
-                title="Ver Markdown puro"
-                aria-label="Ver Markdown puro"
-              >
-                <FileCode2 className="h-3 w-3" />
-                Markdown puro
-              </button>
-              <span className="text-[11px] text-slate-500">Vista previa — LaTeX, Mermaid y tablas se renderizan aquí</span>
-            </div>
-            <MarkdownPreview content={statsContent || contentRef.current} onOpenInternalLink={openInternalMarkdownLink} />
-          </>
-        ) : viewMode === 'raw' ? (
-          <>
-            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
-              <button
-                type="button"
-                onClick={() => setViewModeWithSync('edit')}
-                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
-                title="Volver al editor visual"
-                aria-label="Volver al editor visual"
-              >
-                <PenLine className="h-3 w-3" />
-                Editor visual
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewModeWithSync('preview')}
-                className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
-                title="Abrir vista previa renderizada"
-                aria-label="Abrir vista previa renderizada"
-              >
-                <Monitor className="h-3 w-3" />
-                Vista previa
-              </button>
-              <span className="text-[11px] text-slate-500">Markdown puro — aquí ves y editas el texto exacto del documento</span>
-            </div>
-            <textarea
-              value={statsContent}
-              onChange={(event) => handleContentChange(event.target.value)}
-              spellCheck={false}
-              className="markdown-raw-textarea h-full w-full resize-none border-0 bg-slate-950/95 px-5 py-4 font-mono text-[13px] leading-6 text-slate-100 outline-none"
-              placeholder="# Markdown puro\n\nEscribe aquí el contenido exacto del documento..."
+      <div className="flex-1 relative overflow-hidden flex flex-row">
+        {/* ── Snippet Gallery sidebar ── */}
+        {showSnippetGallery && (
+          <div className="snippet-gallery-sidebar w-72 shrink-0 border-r border-slate-700 overflow-y-auto bg-slate-900">
+            <SnippetGallery
+              workspaceId={currentDocMetaRef.current.workspaceId || 'personal'}
+              onInsert={(md: string) => { insertSnippet(md); }}
+              onClose={() => setShowSnippetGallery(false)}
             />
-          </>
-        ) : (
-          <MDXEditor
-            key={editorKey}
-            ref={mdxEditorRef}
-            markdown={initialMarkdown}
-            onChange={handleMdxChange}
-            plugins={editorPlugins}
-            contentEditableClassName="mdx-content-editable"
-            className="mdx-editor-root h-full"
-            placeholder="Escribe aquí... Usa Markdown como en Obsidian"
-          />
+          </div>
         )}
+
+        {/* ── Editor area ── */}
+        <div className="flex-1 relative overflow-hidden">
+          {viewMode === 'preview' ? (
+            <>
+              <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setViewModeWithSync('edit')}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+                  title="Volver al editor visual"
+                  aria-label="Volver al editor visual"
+                >
+                  <PenLine className="h-3 w-3" />
+                  Editor visual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewModeWithSync('raw')}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
+                  title="Ver Markdown puro"
+                  aria-label="Ver Markdown puro"
+                >
+                  <FileCode2 className="h-3 w-3" />
+                  Markdown puro
+                </button>
+                <span className="text-[11px] text-slate-500">Vista previa — LaTeX, Mermaid y tablas se renderizan aquí</span>
+              </div>
+              <MarkdownPreview content={statsContent || contentRef.current} onOpenInternalLink={openInternalMarkdownLink} />
+            </>
+          ) : viewMode === 'raw' ? (
+            <>
+              <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setViewModeWithSync('edit')}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+                  title="Volver al editor visual"
+                  aria-label="Volver al editor visual"
+                >
+                  <PenLine className="h-3 w-3" />
+                  Editor visual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewModeWithSync('preview')}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
+                  title="Abrir vista previa renderizada"
+                  aria-label="Abrir vista previa renderizada"
+                >
+                  <Monitor className="h-3 w-3" />
+                  Vista previa
+                </button>
+                <span className="text-[11px] text-slate-500">Markdown puro — aquí ves y editas el texto exacto del documento</span>
+              </div>
+              <textarea
+                value={statsContent}
+                onChange={(event) => handleContentChange(event.target.value)}
+                spellCheck={false}
+                className="markdown-raw-textarea h-full w-full resize-none border-0 bg-slate-950/95 px-5 py-4 font-mono text-[13px] leading-6 text-slate-100 outline-none"
+                placeholder="# Markdown puro\n\nEscribe aquí el contenido exacto del documento..."
+              />
+            </>
+          ) : (
+            <MDXEditor
+              key={editorKey}
+              ref={mdxEditorRef}
+              markdown={initialMarkdown}
+              onChange={handleMdxChange}
+              plugins={editorPlugins}
+              contentEditableClassName="mdx-content-editable"
+              className="mdx-editor-root h-full"
+              placeholder="Escribe aquí... Usa Markdown como en Obsidian"
+            />
+          )}
+        </div>
       </div>
 
       {/* Status bar for embedded mode */}
@@ -2669,6 +2919,80 @@ export default function MosaicEditor({
           color: #94a3b8;
           overflow-x: auto;
           white-space: pre-wrap;
+        }
+
+        /* ─── Snippet Gallery sidebar ─── */
+        .snippet-gallery-sidebar {
+          scrollbar-width: thin;
+          scrollbar-color: #475569 transparent;
+        }
+        .snippet-gallery-sidebar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .snippet-gallery-sidebar::-webkit-scrollbar-thumb {
+          background: #475569;
+          border-radius: 2px;
+        }
+
+        /* ─── Snippet Mini Preview ─── */
+        .snippet-mini-preview {
+          font-size: 11px;
+          line-height: 1.4;
+          max-height: 80px;
+          overflow: hidden;
+          color: #94a3b8;
+        }
+        .snippet-mini-preview .katex {
+          font-size: 0.85em;
+        }
+        .snippet-mini-preview p {
+          margin: 0 0 4px 0;
+        }
+
+        /* ─── Obsidian-style Inline LaTeX Rendering ─── */
+        .katex-overlay-container {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 0;
+          overflow: visible;
+          pointer-events: none;
+          z-index: 10;
+        }
+        .katex-block-overlay {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #0f172a;
+          border: 1px solid rgba(59, 130, 246, 0.15);
+          border-radius: 6px;
+          padding: 12px 16px;
+          cursor: pointer;
+          pointer-events: auto;
+          animation: katexFadeIn 0.15s ease-out;
+          box-sizing: border-box;
+        }
+        .katex-block-overlay:hover {
+          border-color: rgba(59, 130, 246, 0.35);
+          background: #0c1222;
+        }
+        .katex-block-overlay .katex {
+          color: #e2e8f0;
+          font-size: 1.15em;
+        }
+        .katex-block-overlay .katex-display {
+          margin: 0;
+        }
+        /* Paragraph being edited — subtle highlight */
+        [data-katex-editing="1"] {
+          background: rgba(59, 130, 246, 0.05) !important;
+          border-radius: 4px;
+          outline: 1px dashed rgba(59, 130, 246, 0.25);
+        }
+        @keyframes katexFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
       `}</style>
     </div>

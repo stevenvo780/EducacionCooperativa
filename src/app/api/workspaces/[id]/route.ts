@@ -29,8 +29,11 @@ const deleteBoardData = async (workspaceId: string) => {
   const snap = await boardRef.get();
   if (!snap.exists) return false;
 
-  await deleteCollectionInBatches(boardRef.collection('columns'));
-  await deleteCollectionInBatches(boardRef.collection('cards'));
+  // Delete columns and cards in parallel — they are independent
+  await Promise.all([
+    deleteCollectionInBatches(boardRef.collection('columns')),
+    deleteCollectionInBatches(boardRef.collection('cards'))
+  ]);
   await boardRef.delete();
   return true;
 };
@@ -138,59 +141,44 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Only workspace owner or admin can delete' }, { status: 403 });
     }
 
-    const batchLimit = 400;
-    let deletedDocs = 0;
-    let lastDoc: QueryDocumentSnapshot | null = null;
-
-    while (true) {
-      let query = adminDb
-        .collection('documents')
-        .where('workspaceId', '==', id)
-        .orderBy('__name__')
-        .limit(batchLimit);
-
-      if (lastDoc) {
-        query = query.startAfter(lastDoc);
-      }
-
-      const docsSnap = await query.get();
-      if (docsSnap.empty) break;
-
-      const batch = adminDb.batch();
-      docsSnap.docs.forEach(docRef => {
-        batch.delete(docRef.ref);
-      });
-      await batch.commit();
-
-      deletedDocs += docsSnap.size;
-      lastDoc = docsSnap.docs[docsSnap.docs.length - 1];
-
-      if (docsSnap.size < batchLimit) break;
-    }
-
-    let boardDeleted = false;
-    try {
-      boardDeleted = await deleteBoardData(id);
-    } catch (err) {
-      console.warn('Board cleanup failed for workspace', id, err);
-    }
-
-    let storageDeleted = false;
-    const bucket = adminStorage.bucket();
-    if (bucket?.name) {
-      try {
+    // Delete documents, board data, and storage files in parallel
+    const [deletedDocs, boardResult, storageResult] = await Promise.allSettled([
+      (async () => {
+        const batchLimit = 400;
+        let count = 0;
+        let lastDoc: QueryDocumentSnapshot | null = null;
+        while (true) {
+          let q = adminDb.collection('documents').where('workspaceId', '==', id).orderBy('__name__').limit(batchLimit);
+          if (lastDoc) q = q.startAfter(lastDoc);
+          const snap = await q.get();
+          if (snap.empty) break;
+          const batch = adminDb.batch();
+          snap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+          count += snap.size;
+          if (snap.size < batchLimit) break;
+          lastDoc = snap.docs[snap.docs.length - 1];
+        }
+        return count;
+      })(),
+      deleteBoardData(id).catch(err => { console.warn('Board cleanup failed for workspace', id, err); return false; }),
+      (async () => {
+        const bucket = adminStorage.bucket();
+        if (!bucket?.name) return false;
         await bucket.deleteFiles({ prefix: `workspaces/${id}/` });
-        storageDeleted = true;
-      } catch (err) {
-        console.warn('Storage cleanup failed for workspace', id, err);
-      }
-    }
+        return true;
+      })().catch(err => { console.warn('Storage cleanup failed for workspace', id, err); return false; })
+    ]);
+
+    const deletedDocsCount = deletedDocs.status === 'fulfilled' ? deletedDocs.value : 0;
+    const boardDeleted = boardResult.status === 'fulfilled' ? boardResult.value : false;
+    const storageDeleted = storageResult.status === 'fulfilled' ? storageResult.value : false;
 
     await wsRef.delete();
 
     return NextResponse.json({
       status: 'deleted',
-      documentsDeleted: deletedDocs,
+      documentsDeleted: deletedDocsCount,
       storageDeleted,
       boardDeleted
     });

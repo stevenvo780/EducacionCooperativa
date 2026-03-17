@@ -4,6 +4,7 @@ import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import type { PlanId } from '@/types/subscription';
 import { getStorageLimitMB } from '@/types/subscription';
 
+export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {

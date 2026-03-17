@@ -3,15 +3,25 @@ import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { verifyPassword } from '@/lib/crypto';
 
-// In-memory rate limiter (simple implementation)
+// In-memory rate limiter
 const rateLimit = new Map<string, { count: number; expires: number }>();
 const LIMIT_WINDOW = 60 * 1000; // 1 minute
 const MAX_ATTEMPTS = 5;
+const MAX_RATE_LIMIT_ENTRIES = 10_000; // prevent unbounded growth under DDoS
+
+// Periodically evict expired entries to prevent unbounded Map growth
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of rateLimit) {
+        if (now > record.expires) rateLimit.delete(ip);
+    }
+}, LIMIT_WINDOW);
 
 const checkRateLimit = (ip: string) => {
+    const now = Date.now();
     const record = rateLimit.get(ip);
     if (record) {
-        if (Date.now() > record.expires) {
+        if (now > record.expires) {
             rateLimit.delete(ip);
         } else if (record.count >= MAX_ATTEMPTS) {
             return false;
@@ -20,7 +30,12 @@ const checkRateLimit = (ip: string) => {
             return true;
         }
     }
-    rateLimit.set(ip, { count: 1, expires: Date.now() + LIMIT_WINDOW });
+    // Evict oldest entries if the map is too large (DDoS protection)
+    if (rateLimit.size >= MAX_RATE_LIMIT_ENTRIES) {
+        const firstKey = rateLimit.keys().next().value;
+        if (firstKey !== undefined) rateLimit.delete(firstKey);
+    }
+    rateLimit.set(ip, { count: 1, expires: now + LIMIT_WINDOW });
     return true;
 };
 
