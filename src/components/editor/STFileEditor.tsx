@@ -1,26 +1,20 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import STCodeEditor from './STCodeEditor';
+import STRunner from '../STRunner';
 import { fetchDocumentRawApi, updateDocumentApi } from '@/services/dashboardApi';
-import { Save, Loader2, Play } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface STFileEditorProps {
   docId: string;
   docName: string;
 }
 
-interface RunResultOk { ok: true; output: string }
-interface RunResultErr { ok: false; error: string }
-type RunResult = RunResultOk | RunResultErr;
-
 export default function STFileEditor({ docId, docName }: STFileEditorProps) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [runResult, setRunResult] = useState<RunResult | null>(null);
-  const [showOutput, setShowOutput] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestContent = useRef(content);
 
@@ -94,36 +88,9 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
     }
   }, [docId]);
 
-  // ── Run ST code ──
-  const handleRun = useCallback(async () => {
-    try {
-      const { evaluate } = await import('@stevenvo780/st-lang/api');
-      const result = evaluate(latestContent.current);
-      setRunResult({ ok: true, output: JSON.stringify(result, null, 2) });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setRunResult({ ok: false, error: msg });
-    }
-    setShowOutput(true);
-  }, []);
-
-  // ── Keyboard shortcuts ──
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Ctrl+S → save
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      handleSave();
-    }
-    // Ctrl+Enter → run
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleRun();
-    }
-  }, [handleSave, handleRun]);
-
   if (loading) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-[#1a1b26]">
+      <div className="h-full w-full flex items-center justify-center bg-slate-950">
         <Loader2 className="w-6 h-6 animate-spin text-surface-400" />
         <span className="ml-2 text-surface-400 text-sm">Cargando {docName}…</span>
       </div>
@@ -131,68 +98,16 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-[#1a1b26]">
-      {/* ── Toolbar ── */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-800/80 border-b border-surface-700/50 shrink-0">
-        <span className="text-xs text-surface-400 font-mono truncate flex-1">
-          {docName}
-        </span>
-
-        <button
-          onClick={handleRun}
-          className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition"
-          title="Ejecutar (Ctrl+Enter)"
-        >
-          <Play className="w-3 h-3" /> Ejecutar
-        </button>
-
-        <button
-          onClick={handleSave}
-          disabled={saving || !dirty}
-          className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition ${
-            dirty
-              ? 'bg-sky-600/20 text-sky-400 hover:bg-sky-600/30'
-              : 'bg-surface-700/30 text-surface-500'
-          }`}
-          title="Guardar (Ctrl+S)"
-        >
-          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-          {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Guardado'}
-        </button>
-      </div>
-
-      {/* ── Editor ── */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <STCodeEditor
-          value={content}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder="// Escribe tu código ST aquí..."
-          className="h-full"
-        />
-      </div>
-
-      {/* ── Output panel ── */}
-      {showOutput && runResult && (
-        <div className="shrink-0 border-t border-surface-700/50 max-h-[30%] overflow-auto">
-          <div className="flex items-center justify-between px-3 py-1 bg-surface-800/80">
-            <span className={`text-xs font-medium ${runResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
-              {runResult.ok ? '✓ Resultado' : '✗ Error'}
-            </span>
-            <button
-              onClick={() => setShowOutput(false)}
-              className="text-surface-500 hover:text-surface-300 text-xs"
-            >
-              Cerrar
-            </button>
-          </div>
-          <pre className={`px-3 py-2 text-xs font-mono whitespace-pre-wrap ${
-            runResult.ok ? 'text-surface-300' : 'text-red-300'
-          }`}>
-            {runResult.ok ? runResult.output : runResult.error}
-          </pre>
-        </div>
-      )}
-    </div>
+    <STRunner
+      initialCode={content}
+      className="h-full border-0 rounded-none"
+      fileMode={{
+        docName,
+        isDirty: dirty,
+        isSaving: saving,
+        onSave: handleSave,
+        onContentChange: handleChange
+      }}
+    />
   );
 }

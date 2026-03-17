@@ -1150,14 +1150,6 @@ function DashboardContent() {
         return <FileText className="w-5 h-5" />;
     };
 
-    if (loading || !user) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-surface-900">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500" />
-            </div>
-        );
-    }
-
     useEffect(() => {
         if (typeof document === 'undefined') return;
         document.body.classList.toggle('sidebar-resizing-active', isResizingSidebar);
@@ -1166,7 +1158,19 @@ function DashboardContent() {
         } else {
             document.body.style.cursor = '';
         }
+        return () => {
+            document.body.classList.remove('sidebar-resizing-active');
+            document.body.style.cursor = '';
+        };
     }, [isResizingSidebar]);
+
+    if (loading || !user) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-surface-900">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500" />
+            </div>
+        );
+    }
 
     return (
         <LazyMotion features={domAnimation}>

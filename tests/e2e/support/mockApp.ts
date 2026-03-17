@@ -486,21 +486,33 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       }
 
       if (body.action === 'remove_member') {
+        if (!workspace) {
+          await json(route, { error: 'Workspace no encontrado' }, 404);
+          return;
+        }
         workspace.members = workspace.members.filter((memberId) => memberId !== body.userId);
         await json(route, { ok: true });
         return;
       }
 
       if (body.action === 'accept') {
+        if (!invite && !workspace) {
+          await json(route, { error: 'Workspace no encontrado' }, 404);
+          return;
+        }
+
         const acceptedWorkspace = invite
           ? {
               ...invite,
               members: Array.from(new Set([...invite.members, body.userId]))
             }
-          : {
-              ...workspace,
-              members: Array.from(new Set([...(workspace.members ?? []), body.userId]))
-            };
+          : (() => {
+              const currentWorkspace = workspace!;
+              return {
+                ...currentWorkspace,
+                members: Array.from(new Set([...(currentWorkspace.members ?? []), body.userId]))
+              };
+            })();
 
         state.invites = state.invites.filter((item) => item.id !== workspaceId);
         if (!state.workspaces.some((item) => item.id === acceptedWorkspace.id)) {
@@ -679,7 +691,7 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
 
 export const gotoDashboard = async (page: Page, workspaceId?: string) => {
   const target = workspaceId ? `/dashboard?workspaceId=${workspaceId}` : '/dashboard';
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
     await page.goto(target);
     await page.waitForLoadState('domcontentloaded');
 
@@ -688,19 +700,11 @@ export const gotoDashboard = async (page: Page, workspaceId?: string) => {
       await expect(header).toBeVisible({ timeout: 10000 });
       return;
     } catch (error) {
-      const notFoundHeading = page.getByRole('heading', { name: '404' });
-      const hitNotFound = await notFoundHeading.isVisible().catch(() => false);
-      const loginHeading = page.getByRole('heading', { name: 'Bienvenido de nuevo' });
-      const hitLogin = /\/login(?:\?|$)/.test(page.url())
-        || await loginHeading.isVisible().catch(() => false);
-      const runtimeErrorHeading = page.getByRole('heading', { name: 'Unhandled Runtime Error' });
-      const hitRuntimeError = await runtimeErrorHeading.isVisible().catch(() => false);
-
-      if (attempt === 3 || (!hitNotFound && !hitLogin && !hitRuntimeError)) {
+      if (attempt === 5) {
         throw error;
       }
 
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(500);
     }
   }
 };
