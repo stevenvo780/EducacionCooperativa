@@ -13,6 +13,7 @@ import {
   FolderOpen,
   FolderPlus,
   FolderUp,
+  FlaskConical,
   KanbanSquare,
   Key,
   Loader2,
@@ -55,6 +56,8 @@ interface HeaderBarProps {
   isAdmin: boolean;
   isBoardOpen: boolean;
   onOpenBoard: () => void;
+  isStRunnerOpen: boolean;
+  onOpenStRunner: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
   onDeleteWorkspace: (ws: Workspace) => void;
@@ -109,6 +112,8 @@ const HeaderBar = ({
   isAdmin,
   isBoardOpen,
   onOpenBoard,
+  isStRunnerOpen,
+  onOpenStRunner,
   onAcceptInvite,
   onSelectWorkspace,
   onDeleteWorkspace,
@@ -570,6 +575,17 @@ const HeaderBar = ({
           title="Tablero"
         >
           <KanbanSquare className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onOpenStRunner}
+          className={`p-1.5 rounded-full transition ${
+            isStRunnerOpen
+              ? 'bg-indigo-500/15 text-indigo-300'
+              : 'text-surface-500 hover:text-indigo-400 hover:bg-indigo-500/10'
+          }`}
+          title="ST Logic Runner"
+        >
+          <FlaskConical className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={openFilesTab}

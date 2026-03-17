@@ -3,14 +3,17 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown, Check } from 'lucide-react';
+import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown, Check, XCircle } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import { useContextMenu } from '@/hooks/useContextMenu';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 const KanbanBoard = dynamic(() => import('@/components/dashboard/KanbanBoard'), { ssr: false });
 const SpreadsheetViewer = dynamic(() => import('@/components/SpreadsheetViewer'), { ssr: false });
+const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false });
 
 const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xls', 'csv', 'tsv']);
 function isSpreadsheetDoc(doc: { name: string }): boolean {
@@ -28,7 +31,7 @@ export type ViewMode = 'edit' | 'preview' | 'split' | 'raw';
 export interface DocItem {
   id: string;
   name: string;
-  type?: 'text' | 'file' | 'folder' | 'terminal' | 'files' | 'board';
+  type?: 'text' | 'file' | 'folder' | 'terminal' | 'files' | 'board' | 'st-runner';
     sessionId?: string;
   content?: string;
   url?: string;
@@ -78,6 +81,8 @@ interface MosaicLayoutProps {
   onRenameDoc?: (doc: DocItem) => void;
   onRenameDocInline?: (doc: DocItem, nextName: string) => Promise<void> | void;
   onDownloadDoc?: (doc: DocItem) => void;
+  favoriteDocIds?: string[];
+  onToggleFavorite?: (doc: DocItem) => void;
   onDownloadFolder?: (folderPath: string) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
   onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
@@ -115,6 +120,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onRenameDoc,
   onRenameDocInline,
   onDownloadDoc,
+  favoriteDocIds,
+  onToggleFavorite,
   onDownloadFolder,
   onReorderDocs,
   onReorderFolders,
@@ -139,6 +146,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
   const mosaicContainerRef = useRef<HTMLDivElement | null>(null);
+  const { menu: tabContextMenu, close: closeTabContextMenu, getTriggerProps: getTabContextTriggerProps } = useContextMenu<string>();
 
   // Detect global drag of documents to show overlay over iframes
   useEffect(() => {
@@ -210,7 +218,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [isResizingMosaic, resizeCursor]);
 
   const fileExplorerDocs = useMemo(() => {
-      return docs.filter(d => d.type !== 'terminal' && d.type !== 'files' && d.type !== 'board');
+      return docs.filter(d => d.type !== 'terminal' && d.type !== 'files' && d.type !== 'board' && d.type !== 'st-runner');
   }, [docs]);
   const tabById = useMemo(() => new Map(openTabs.map(tab => [tab.id, tab])), [openTabs]);
   const docById = useMemo(() => new Map(docs.map(doc => [doc.id, doc])), [docs]);
@@ -288,7 +296,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [cancelInlineRename, editingTitleValue, onRenameDocInline]);
 
   const renderToolbarControls = useCallback((doc: { id: string; type?: string; name: string }, mode: ViewMode) => {
-    const isTextDoc = doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && !isSpreadsheetDoc(doc);
+    const isTextDoc = doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && doc.type !== 'st-runner' && !isSpreadsheetDoc(doc);
     const searchTerm = docSearchTerms[doc.id] || '';
     const searchState = docSearchStates[doc.id] || { currentMatch: 0, totalMatches: 0 };
 
@@ -355,8 +363,17 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     );
   }, [onCloseTab, docSearchTerms, docSearchStates, handleSearchChange]);
 
+  const closeOtherTabs = useCallback((keepDocId: string) => {
+    const otherIds = openTabs.filter(t => t.id !== keepDocId).map(t => t.id);
+    otherIds.forEach(id => onCloseTab(id));
+  }, [onCloseTab, openTabs]);
+
+  const closeAllTabs = useCallback(() => {
+    openTabs.forEach(t => onCloseTab(t.id));
+  }, [onCloseTab, openTabs]);
+
   const renderWindowToolbar = useCallback((doc: DocItem, mode: ViewMode) => {
-    const canRenameInline = Boolean(onRenameDocInline) && doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board';
+    const canRenameInline = Boolean(onRenameDocInline) && doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && doc.type !== 'st-runner';
     const isEditingTitle = editingTitleDocId === doc.id;
     const isRenaming = renamingDocId === doc.id;
 
@@ -430,6 +447,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                 e.stopPropagation();
                 if (canRenameInline) startInlineRename(doc);
               }}
+              {...getTabContextTriggerProps(doc.id)}
               disabled={!canRenameInline}
               className={`mosaic-inline-title group flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] ${canRenameInline ? 'text-surface-300 hover:bg-surface-800/80 hover:text-white' : 'cursor-default text-surface-300'}`}
               title={canRenameInline ? 'Click para renombrar' : doc.name}
@@ -443,7 +461,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         <div className="shrink-0 pl-1">{renderToolbarControls(doc, mode)}</div>
       </div>
     );
-  }, [cancelInlineRename, editingTitleDocId, editingTitleValue, onRenameDocInline, renderToolbarControls, renamingDocId, startInlineRename, submitInlineRename]);
+  }, [cancelInlineRename, editingTitleDocId, editingTitleValue, onRenameDocInline, renderToolbarControls, renamingDocId, startInlineRename, submitInlineRename, getTabContextTriggerProps]);
 
   const calcDropPosition = useCallback((e: React.DragEvent<HTMLDivElement>): 'left' | 'right' | 'top' | 'bottom' | 'replace' => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -513,6 +531,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isTerminal = doc.type === 'terminal';
     const isFileExplorer = doc.type === 'files';
     const isBoard = doc.type === 'board';
+    const isStRunner = doc.type === 'st-runner';
     const isSpreadsheet = !isTerminal && !isFileExplorer && !isBoard && isSpreadsheetDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
@@ -575,6 +594,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         onMoveDoc={onMoveDoc}
                         onRenameDoc={onRenameDoc}
                         onDownloadDoc={onDownloadDoc}
+                        favoriteDocIds={favoriteDocIds}
+                        onToggleFavorite={onToggleFavorite}
                         onDownloadFolder={onDownloadFolder}
                         onReorderDocs={onReorderDocs}
                         onReorderFolders={onReorderFolders}
@@ -595,6 +616,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         docId={doc.id}
                         docName={doc.name}
                       />
+                  ) : isStRunner ? (
+                      <STRunner height="100%" />
                   ) : (
                       <Editor
                         roomId={doc.id}
@@ -613,7 +636,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
     onSelectDoc, onActivateTab, onCreateFile, onCreateFolder, onUploadFile, onUploadFolder,
     handleTileDragOver, handleTileDragLeave, handleTileDrop,
-    onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, onDownloadFolder,
+    onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, favoriteDocIds, onToggleFavorite, onDownloadFolder,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
     handleSearchStateChange, getSearchNavRef
@@ -656,6 +679,35 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         />
       )}
       </div>
+      {tabContextMenu && (
+        <ContextMenu
+          x={tabContextMenu.x}
+          y={tabContextMenu.y}
+          onClose={closeTabContextMenu}
+          sections={[
+            {
+              actions: [
+                {
+                  label: 'Cerrar',
+                  icon: <X className="w-4 h-4" />,
+                  onClick: () => onCloseTab(tabContextMenu.data)
+                },
+                {
+                  label: 'Cerrar otros',
+                  icon: <XCircle className="w-4 h-4" />,
+                  onClick: () => closeOtherTabs(tabContextMenu.data)
+                },
+                {
+                  label: 'Cerrar todos',
+                  icon: <XCircle className="w-4 h-4" />,
+                  onClick: () => closeAllTabs(),
+                  destructive: true
+                }
+              ]
+            }
+          ]}
+        />
+      )}
       <style jsx global>{`
         body.mosaic-resizing-active,
         body.mosaic-resizing-active * {

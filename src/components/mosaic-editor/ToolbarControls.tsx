@@ -8,19 +8,26 @@ import { TABLE_MAX_COLS, TABLE_MAX_ROWS } from './constants';
 export function ToolbarShortcutButton({
   title,
   icon,
-  onClick
+  onClick,
+  disabled = false
 }: {
   title: string;
   icon: React.ReactNode;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded px-1.5 text-slate-400 transition hover:bg-slate-700 hover:text-white"
-      title={title}
-      aria-label={title}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      className={`inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded px-1.5 transition ${
+        disabled
+          ? 'text-slate-600 cursor-not-allowed'
+          : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+      }`}
+      title={disabled ? `${title} (deshabilitado)` : title}
+      aria-label={disabled ? `${title} (deshabilitado)` : title}
     >
       {icon}
     </button>

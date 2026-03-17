@@ -49,7 +49,7 @@ import {
 } from '@/services/dashboardApi';
 import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue } from '@/services/dashboardUtils';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
-import { clearDashboardState } from '@/services/dashboardPersistence';
+import { clearDashboardState, loadFavoriteDocIds, MAX_FAVORITE_DOCS, saveFavoriteDocIds } from '@/services/dashboardPersistence';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
 import { useDashboardPersistence } from '@/hooks/dashboard/useDashboardPersistence';
 import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
@@ -66,6 +66,8 @@ import { type PlanId, PLANS, canAccessTerminals } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
 import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
 import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
+import { semanticSearchApi } from '@/services/searchApi';
+import type { SearchResultFilter, SearchResultItem } from '@/lib/search/types';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -308,11 +310,14 @@ function DashboardContent() {
     const requestedWorkspaceId = (searchParams?.get('workspaceId') || searchParams?.get('workspace') || '').trim() || null;
 
     const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+    const [favoriteDocIds, setFavoriteDocIds] = useState<string[]>([]);
     const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
     const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
     const [closedFilesTabByWorkspace, setClosedFilesTabByWorkspace] = useState<Record<string, boolean>>({});
     const boardTabId = currentWorkspaceId ? `board-${currentWorkspaceId}` : null;
     const isBoardOpen = boardTabId ? openTabs.some(tab => tab.id === boardTabId) : false;
+    const stRunnerTabId = currentWorkspaceId ? `st-runner-${currentWorkspaceId}` : null;
+    const isStRunnerOpen = stRunnerTabId ? openTabs.some(tab => tab.id === stRunnerTabId) : false;
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
@@ -321,6 +326,7 @@ function DashboardContent() {
     const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
     const [isZenMode, setIsZenMode] = useState(false);
     const zenRestoreRef = useRef({ sidebar: false, header: false });
+    const openBoardRef = useRef<() => Promise<void> | void>(() => {});
     const openDocumentRef = useRef<(doc: DocItem) => Promise<void> | void>(() => {});
     const openDocumentInTileRef = useRef<(doc: DocItem, targetTileId?: string | null) => Promise<void> | void>(() => {});
     const resolveActiveFolder = useCallback((path?: string) => {
@@ -364,6 +370,10 @@ function DashboardContent() {
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
+    const [semanticSearchResults, setSemanticSearchResults] = useState<SearchResultItem[]>([]);
+    const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
+    const [semanticSearchError, setSemanticSearchError] = useState<string | null>(null);
+    const [quickSearchFilter, setQuickSearchFilter] = useState<SearchResultFilter>('all');
 
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
@@ -640,11 +650,15 @@ function DashboardContent() {
                 setShowQuickSearch(true);
                 setQuickSearchQuery('');
                 setQuickSearchIndex(0);
+                setQuickSearchFilter('all');
+                setSemanticSearchError(null);
+                setSemanticSearchResults([]);
                 setTimeout(() => quickSearchInputRef.current?.focus(), 50);
             }
             if (e.key === 'Escape' && showQuickSearch) {
                 setShowQuickSearch(false);
                 setQuickSearchQuery('');
+                setQuickSearchIndex(0);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -655,47 +669,190 @@ function DashboardContent() {
         const handleMessage = (event: MessageEvent) => {
             if (event.origin !== window.location.origin) return;
 
-            const data = event.data as { type?: string; docId?: string; sourceDocId?: string } | null;
-            if (!data || data.type !== 'agora-open-doc' || typeof data.docId !== 'string') return;
+            const data = event.data as { type?: string; docId?: string; sourceDocId?: string; workspaceId?: string } | null;
+            if (!data || typeof data.type !== 'string') return;
 
-            const doc = docs.find(item => item.id === data.docId);
-            if (!doc) return;
-
-            void openDocumentInTileRef.current(doc, data.sourceDocId ?? null);
+            if (data.type === 'agora-open-doc' && typeof data.docId === 'string') {
+                const doc = docs.find(item => item.id === data.docId);
+                if (!doc) return;
+                void openDocumentInTileRef.current(doc, data.sourceDocId ?? null);
+            } else if (data.type === 'agora-open-board') {
+                void openBoardRef.current();
+            }
         };
 
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
     }, [docs]);
 
+    const buildLocalQuickSearchFallback = useCallback((query: string): SearchResultItem[] => {
+        const normalizedQuery = query.trim().toLowerCase();
+        const fallbackDocs = docs
+            .filter(doc => doc.type !== 'folder')
+            .filter(doc => {
+                if (!normalizedQuery) return true;
+                const name = doc.name.toLowerCase();
+                const folder = (doc.folder || '').toLowerCase();
+                return name.includes(normalizedQuery) || folder.includes(normalizedQuery);
+            })
+            .slice(0, normalizedQuery ? 12 : 8);
+
+        return fallbackDocs.map((doc, index) => ({
+            id: `fallback-document:${doc.id}:${index}`,
+            kind: 'document',
+            title: doc.name,
+            subtitle: doc.folder || 'Raiz del espacio',
+            preview: doc.mimeType || 'Documento',
+            badge: 'DOC',
+            score: fallbackDocs.length - index,
+            matchedTerms: normalizedQuery ? [normalizedQuery] : [],
+            sourceDoc: {
+                id: doc.id,
+                name: doc.name,
+                type: doc.type,
+                folder: doc.folder,
+                workspaceId: doc.workspaceId,
+                mimeType: doc.mimeType,
+                url: doc.url,
+                storagePath: doc.storagePath,
+                ownerId: doc.ownerId,
+                updatedAt: doc.updatedAt,
+                size: doc.size
+            }
+        }));
+    }, [docs]);
+
+    useEffect(() => {
+        if (!showQuickSearch || !currentWorkspace) {
+            setSemanticSearchLoading(false);
+            return;
+        }
+
+        const controller = new AbortController();
+        const query = deferredQuickSearchQuery.trim();
+        const timeout = setTimeout(() => {
+            setSemanticSearchLoading(true);
+            setSemanticSearchError(null);
+
+            semanticSearchApi(
+                {
+                    query,
+                    workspaceId: currentWorkspace.id,
+                    limit: 18
+                },
+                { signal: controller.signal }
+            )
+                .then(data => {
+                    if (controller.signal.aborted) return;
+                    setSemanticSearchResults(data.results);
+                })
+                .catch(error => {
+                    if (controller.signal.aborted) return;
+                    const aborted = error instanceof DOMException && error.name === 'AbortError';
+                    if (aborted) return;
+                    setSemanticSearchError('Se mostró una búsqueda local de respaldo porque el índice semántico no respondió.');
+                    setSemanticSearchResults(buildLocalQuickSearchFallback(query));
+                })
+                .finally(() => {
+                    if (!controller.signal.aborted) {
+                        setSemanticSearchLoading(false);
+                    }
+                });
+        }, query ? 140 : 0);
+
+        return () => {
+            controller.abort();
+            clearTimeout(timeout);
+        };
+    }, [buildLocalQuickSearchFallback, currentWorkspace, deferredQuickSearchQuery, showQuickSearch]);
+
     const quickSearchResults = useMemo(() => {
-        const query = deferredQuickSearchQuery.trim().toLowerCase();
-        if (!query) return deferredDocs.slice(0, 10);
-        return deferredDocs
-            .filter(d => d.type !== 'folder' && d.name.toLowerCase().includes(query))
-            .slice(0, 15);
-    }, [deferredDocs, deferredQuickSearchQuery]);
+        if (quickSearchFilter === 'all') return semanticSearchResults;
+        return semanticSearchResults.filter(result => result.kind === quickSearchFilter);
+    }, [quickSearchFilter, semanticSearchResults]);
+
+    const closeQuickSearch = useCallback(() => {
+        setShowQuickSearch(false);
+        setQuickSearchQuery('');
+        setQuickSearchIndex(0);
+    }, [setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
+
+    const handleQuickSearchSelect = useCallback(async (result: SearchResultItem) => {
+        const docFromState = docs.find(item => item.id === result.sourceDoc.id);
+        const sourceDoc = docFromState ?? result.sourceDoc as DocItem;
+        await openDocumentRef.current(sourceDoc);
+        closeQuickSearch();
+    }, [closeQuickSearch, docs]);
 
     const handleQuickSearchKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'ArrowDown') {
+        if (e.key === 'ArrowDown' && quickSearchResults.length > 0) {
             e.preventDefault();
             setQuickSearchIndex(Math.min(quickSearchIndex + 1, quickSearchResults.length - 1));
-        } else if (e.key === 'ArrowUp') {
+        } else if (e.key === 'ArrowUp' && quickSearchResults.length > 0) {
             e.preventDefault();
             setQuickSearchIndex(Math.max(quickSearchIndex - 1, 0));
         } else if (e.key === 'Enter' && quickSearchResults[quickSearchIndex]) {
             e.preventDefault();
-            openDocument(quickSearchResults[quickSearchIndex]);
-            setShowQuickSearch(false);
-            setQuickSearchQuery('');
+            void handleQuickSearchSelect(quickSearchResults[quickSearchIndex]);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeQuickSearch();
         }
     };
+
+    useEffect(() => {
+        if (!showQuickSearch) return;
+        if (quickSearchResults.length === 0 && quickSearchIndex !== 0) {
+            setQuickSearchIndex(0);
+            return;
+        }
+        if (quickSearchIndex >= quickSearchResults.length && quickSearchResults.length > 0) {
+            setQuickSearchIndex(quickSearchResults.length - 1);
+        }
+    }, [quickSearchIndex, quickSearchResults, setQuickSearchIndex, showQuickSearch]);
 
     const sidebarFilteredDocs = useMemo(() => {
         const query = deferredSidebarQuery.trim().toLowerCase();
         if (!query) return deferredDocs;
         return deferredDocs.filter(d => d.name.toLowerCase().includes(query));
     }, [deferredDocs, deferredSidebarQuery]);
+
+    const favoriteDocs = useMemo(() => {
+        if (favoriteDocIds.length === 0) return [];
+
+        const docsById = new Map(docs.map(doc => [doc.id, doc]));
+        return favoriteDocIds
+            .map(docId => docsById.get(docId))
+            .filter((doc): doc is DocItem => Boolean(doc));
+    }, [docs, favoriteDocIds]);
+
+    useEffect(() => {
+        if (!currentWorkspaceId || !user?.uid) {
+            setFavoriteDocIds([]);
+            return;
+        }
+
+        setFavoriteDocIds(loadFavoriteDocIds(currentWorkspaceId, user.uid));
+    }, [currentWorkspaceId, user?.uid]);
+
+    useEffect(() => {
+        if (!currentWorkspaceId || !user?.uid || loadingDocs) return;
+
+        const availableDocIds = new Set(docs.map(doc => doc.id));
+        const sanitized = favoriteDocIds
+            .filter(docId => availableDocIds.has(docId))
+            .slice(0, MAX_FAVORITE_DOCS);
+
+        if (
+            sanitized.length !== favoriteDocIds.length
+            || sanitized.some((docId, index) => docId !== favoriteDocIds[index])
+        ) {
+            setFavoriteDocIds(sanitized);
+            return;
+        }
+
+        saveFavoriteDocIds(currentWorkspaceId, user.uid, sanitized);
+    }, [currentWorkspaceId, docs, favoriteDocIds, loadingDocs, user?.uid]);
 
     const openTerminal = async (session?: { id: string; name?: string }) => {
         // Verificar si el plan actual permite terminales
@@ -863,6 +1020,37 @@ function DashboardContent() {
         });
         setShowMobileSidebar(false);
         setSelectedDocId(boardId);
+    }, [currentWorkspace, user, openTabs, setShowMobileSidebar]);
+
+    openBoardRef.current = openBoard;
+
+    const openStRunner = useCallback(async () => {
+        if (!currentWorkspace || !user) return;
+        const stId = `st-runner-${currentWorkspace.id}`;
+        if (openTabs.find(tab => tab.id === stId)) {
+            setSelectedDocId(stId);
+            setShowMobileSidebar(false);
+            return;
+        }
+
+        const newStItem: DocItem = {
+            id: stId,
+            name: 'ST Logic',
+            type: 'st-runner',
+            workspaceId: currentWorkspace.id,
+            ownerId: user.uid,
+            updatedAt: new Date()
+        };
+
+        setOpenTabs(prev => [...prev, newStItem]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(stId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, stId]);
+        });
+        setShowMobileSidebar(false);
+        setSelectedDocId(stId);
     }, [currentWorkspace, user, openTabs, setShowMobileSidebar]);
 
     const closeTabById = useCallback(async (docId: string) => {
@@ -1131,6 +1319,40 @@ function DashboardContent() {
             setDialogConfig(config);
             setDialogInputValue(config.defaultValue ?? '');
             dialogResolverRef.current = resolve;
+        });
+    }, []);
+
+    const toggleFavoriteDoc = useCallback(async (doc: DocItem) => {
+        setFavoriteDocIds(prev => {
+            if (prev.includes(doc.id)) {
+                return prev.filter(docId => docId !== doc.id);
+            }
+
+            if (prev.length >= MAX_FAVORITE_DOCS) {
+                void showDialog({
+                    type: 'info',
+                    title: 'Límite de favoritos alcanzado',
+                    message: `Puedes fijar hasta ${MAX_FAVORITE_DOCS} documentos. Quita uno para agregar otro.`
+                });
+                return prev;
+            }
+
+            return [doc.id, ...prev];
+        });
+    }, [showDialog]);
+
+    const moveFavoriteDoc = useCallback((docId: string, direction: 'up' | 'down') => {
+        setFavoriteDocIds(prev => {
+            const currentIndex = prev.indexOf(docId);
+            if (currentIndex === -1) return prev;
+
+            const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+            if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+
+            const next = prev.slice();
+            const [moved] = next.splice(currentIndex, 1);
+            next.splice(targetIndex, 0, moved);
+            return next;
         });
     }, []);
 
@@ -2135,18 +2357,20 @@ function DashboardContent() {
                     open={showQuickSearch}
                     query={quickSearchQuery}
                     onQueryChange={setQuickSearchQuery}
-                    results={quickSearchResults}
+                    results={semanticSearchResults}
+                    loading={semanticSearchLoading}
+                    errorMessage={semanticSearchError}
+                    activeFilter={quickSearchFilter}
+                    onFilterChange={setQuickSearchFilter}
                     selectedIndex={quickSearchIndex}
                     onSelectIndex={setQuickSearchIndex}
-                    onClose={() => setShowQuickSearch(false)}
-                    onSelect={(doc) => {
-                        openDocument(doc);
-                        setShowQuickSearch(false);
-                        setQuickSearchQuery('');
+                    onClose={closeQuickSearch}
+                    onSelect={(result) => {
+                        void handleQuickSearchSelect(result);
                     }}
                     onKeyDown={handleQuickSearchKeyDown}
                     inputRef={quickSearchInputRef}
-                    getIcon={getIcon}
+                    getDocumentIcon={(doc) => getIcon(doc as DocItem)}
                     modalFade={modalFade}
                     modalPop={modalPop}
                 />
@@ -2182,6 +2406,8 @@ function DashboardContent() {
                         isAdmin={isAdmin}
                         isBoardOpen={isBoardOpen}
                         onOpenBoard={openBoard}
+                        isStRunnerOpen={isStRunnerOpen}
+                        onOpenStRunner={openStRunner}
                         onAcceptInvite={acceptInvite}
                         onSelectWorkspace={selectWorkspace}
                         onDeleteWorkspace={deleteWorkspace}
@@ -2278,7 +2504,11 @@ function DashboardContent() {
                         setSidebarSearchQuery={setSidebarSearchQuery}
                         sidebarFilteredDocs={sidebarFilteredDocs}
                         selectedDocId={selectedDocId}
+                        favoriteDocs={favoriteDocs}
+                        favoriteDocIds={favoriteDocIds}
                         openDocument={openDocument}
+                        onToggleFavorite={toggleFavoriteDoc}
+                        onMoveFavorite={moveFavoriteDoc}
                         handleDocDragStart={handleDocDragStart}
                         handleDocDragEnd={handleDocDragEnd}
                         deleteDocument={deleteDocument}
@@ -2350,6 +2580,8 @@ function DashboardContent() {
                                     onRenameDoc={promptRenameDocument}
                                     onRenameDocInline={renameDocument}
                                     onDownloadDoc={handleDownloadDoc}
+                                    favoriteDocIds={favoriteDocIds}
+                                    onToggleFavorite={toggleFavoriteDoc}
                                     onDownloadFolder={handleDownloadFolder}
                                     onReorderDocs={reorderDocsInFolder}
                                     onReorderFolders={reorderFoldersInParent}

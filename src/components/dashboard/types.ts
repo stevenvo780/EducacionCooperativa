@@ -56,6 +56,11 @@ export interface BoardCard {
   columnId: string;
   order: number;
   ownerId?: string;
+  // Metadata from source document
+  sourceDocId?: string;
+  sourceDocName?: string;
+  sourceFragment?: string;
+  sourcePath?: string;
 }
 
 export interface BoardData {

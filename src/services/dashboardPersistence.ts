@@ -2,7 +2,11 @@ import type { MosaicNode } from 'react-mosaic-component';
 import type { DocItem, ViewMode } from '@/components/dashboard/types';
 
 const STORAGE_KEY_PREFIX = 'dashboard_state';
+const FAVORITES_STORAGE_KEY_PREFIX = 'dashboard_favorites';
 const STORAGE_VERSION = 1;
+const FAVORITES_STORAGE_VERSION = 1;
+
+export const MAX_FAVORITE_DOCS = 8;
 
 interface PersistedTabState {
   id: string;
@@ -26,8 +30,19 @@ interface PersistedState {
   isHeaderCollapsed?: boolean;
 }
 
+interface PersistedFavoritesState {
+  version: number;
+  workspaceId: string;
+  userUid: string;
+  favoriteDocIds: string[];
+}
+
 function getStorageKey(workspaceId: string): string {
   return `${STORAGE_KEY_PREFIX}_${workspaceId}`;
+}
+
+function getFavoritesStorageKey(workspaceId: string, userUid: string): string {
+  return `${FAVORITES_STORAGE_KEY_PREFIX}_${workspaceId}_${userUid}`;
 }
 
 export function saveDashboardState(
@@ -141,6 +156,61 @@ export function clearDashboardState(workspaceId: string): void {
     localStorage.removeItem(getStorageKey(workspaceId));
   } catch (error) {
     console.warn('Failed to clear dashboard state:', error);
+  }
+}
+
+export function saveFavoriteDocIds(
+  workspaceId: string,
+  userUid: string,
+  favoriteDocIds: string[]
+): void {
+  if (!workspaceId || !userUid || typeof window === 'undefined') return;
+
+  try {
+    const persistedState: PersistedFavoritesState = {
+      version: FAVORITES_STORAGE_VERSION,
+      workspaceId,
+      userUid,
+      favoriteDocIds: favoriteDocIds.slice(0, MAX_FAVORITE_DOCS)
+    };
+
+    localStorage.setItem(
+      getFavoritesStorageKey(workspaceId, userUid),
+      JSON.stringify(persistedState)
+    );
+  } catch (error) {
+    console.warn('Failed to save favorite docs:', error);
+  }
+}
+
+export function loadFavoriteDocIds(workspaceId: string, userUid: string): string[] {
+  if (!workspaceId || !userUid || typeof window === 'undefined') return [];
+
+  try {
+    const stored = localStorage.getItem(getFavoritesStorageKey(workspaceId, userUid));
+    if (!stored) return [];
+
+    const parsed: PersistedFavoritesState = JSON.parse(stored);
+
+    if (parsed.version !== FAVORITES_STORAGE_VERSION) {
+      localStorage.removeItem(getFavoritesStorageKey(workspaceId, userUid));
+      return [];
+    }
+
+    if (parsed.workspaceId !== workspaceId || parsed.userUid !== userUid) {
+      return [];
+    }
+
+    if (!Array.isArray(parsed.favoriteDocIds)) {
+      return [];
+    }
+
+    return parsed.favoriteDocIds
+      .filter((docId): docId is string => typeof docId === 'string' && docId.trim().length > 0)
+      .slice(0, MAX_FAVORITE_DOCS);
+  } catch (error) {
+    console.warn('Failed to load favorite docs:', error);
+    return [];
   }
 }
 

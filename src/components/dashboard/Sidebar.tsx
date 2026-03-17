@@ -2,10 +2,13 @@
 
 import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, Loader2, Pencil, Search, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, Loader2, Pencil, Search, Star, Trash2, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
+import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import { useContextMenu } from '@/hooks/useContextMenu';
 
 const ROW_HEIGHT = 28;
 
@@ -62,7 +65,11 @@ interface SidebarProps {
   setSidebarSearchQuery: (value: string) => void;
   sidebarFilteredDocs: DocItem[];
   selectedDocId: string | null;
+  favoriteDocs: DocItem[];
+  favoriteDocIds: string[];
   openDocument: (doc: DocItem) => void;
+  onToggleFavorite: (doc: DocItem) => void;
+  onMoveFavorite: (docId: string, direction: 'up' | 'down') => void;
   handleDocDragStart: (e: React.DragEvent, doc: DocItem) => void;
   handleDocDragEnd: () => void;
   deleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
@@ -90,7 +97,11 @@ const Sidebar = ({
   sidebarSearchQuery,
   setSidebarSearchQuery,
   selectedDocId,
+  favoriteDocs,
+  favoriteDocIds,
   openDocument,
+  onToggleFavorite,
+  onMoveFavorite,
   handleDocDragStart,
   handleDocDragEnd,
   deleteDocument,
@@ -105,8 +116,10 @@ const Sidebar = ({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
+  const { menu: docContextMenu, close: closeDocContextMenu, getTriggerProps: getDocContextTriggerProps } = useContextMenu<DocItem>();
   const isCollapsedView = isCollapsed && !showMobileSidebar;
   const effectiveWidth = isCollapsedView ? 0 : sidebarWidth;
+  const favoriteDocIdSet = useMemo(() => new Set(favoriteDocIds), [favoriteDocIds]);
 
   useEffect(() => {
     setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
@@ -265,6 +278,7 @@ const Sidebar = ({
     if (!item) return null;
 
     if (item.kind === 'search') {
+      const isFavorite = favoriteDocIdSet.has(item.doc.id);
       return (
         <div
           style={{ ...style, paddingLeft: 12, paddingRight: 12 } as React.CSSProperties}
@@ -275,6 +289,7 @@ const Sidebar = ({
             draggable
             onDragStart={(e) => handleDocDragStart(e, item.doc)}
             onDragEnd={handleDocDragEnd}
+            {...getDocContextTriggerProps(item.doc)}
             className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${
               selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'
             }`}
@@ -285,6 +300,16 @@ const Sidebar = ({
             <span className="truncate flex-1">{item.doc.name}</span>
             <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{item.doc.folder?.split('/').pop()}</span>
             <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFavorite(item.doc);
+                }}
+                className={`p-0.5 ${isFavorite ? 'text-amber-300 hover:text-amber-200' : 'text-surface-500 hover:text-amber-300'}`}
+                title={isFavorite ? 'Quitar de favoritos' : 'Fijar en favoritos'}
+              >
+                <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
+              </button>
               {onDownloadDoc && (
                 <button
                   onClick={(e) => {
@@ -367,6 +392,7 @@ const Sidebar = ({
     }
 
     const paddingLeft = 8 + item.depth * 12 + 16;
+  const isFavorite = favoriteDocIdSet.has(item.doc.id);
     return (
       <div style={style} {...ariaAttributes}>
         <div
@@ -374,6 +400,7 @@ const Sidebar = ({
           draggable
           onDragStart={(e) => handleDocDragStart(e, item.doc)}
           onDragEnd={handleDocDragEnd}
+          {...getDocContextTriggerProps(item.doc)}
           className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
             selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-400 hover:bg-surface-700/40'
           }`}
@@ -384,6 +411,16 @@ const Sidebar = ({
           </div>
           <span className="truncate flex-1">{item.doc.name}</span>
           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(item.doc);
+              }}
+              className={`p-0.5 ${isFavorite ? 'text-amber-300 hover:text-amber-200' : 'text-surface-500 hover:text-amber-300'}`}
+              title={isFavorite ? 'Quitar de favoritos' : 'Fijar en favoritos'}
+            >
+              <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
+            </button>
             {onDownloadDoc && (
               <button
                 onClick={(e) => {
@@ -441,6 +478,79 @@ const Sidebar = ({
                 ARCHIVOS: {currentWorkspace?.name}
                 {loadingDocs && <Loader2 className="w-3 h-3 animate-spin text-surface-500" />}
               </span>
+            </div>
+
+            <div className="px-2 pb-2">
+              <div className="rounded-xl border border-surface-700/70 bg-surface-900/50 p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-amber-300/90">
+                    <Star className="h-3.5 w-3.5 fill-current" />
+                    <span>Favoritos</span>
+                  </div>
+                  <span className="text-[10px] text-surface-500">{favoriteDocs.length}/{MAX_FAVORITE_DOCS}</span>
+                </div>
+
+                {favoriteDocs.length === 0 ? (
+                  <p className="px-1 py-1 text-[11px] leading-relaxed text-surface-500">
+                    Fija hasta {MAX_FAVORITE_DOCS} documentos para abrirlos aquí en un clic.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {favoriteDocs.map((doc, index) => {
+                      const isSelected = selectedDocId === doc.id;
+
+                      return (
+                        <div
+                          key={doc.id}
+                          className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition ${
+                            isSelected ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/30' : 'text-surface-200 hover:bg-surface-800/80'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => openDocument(doc)}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                            title={doc.name}
+                          >
+                            <span className={`shrink-0 ${isSelected ? 'text-amber-200' : 'text-amber-300'}`}>
+                              <Star className="h-3.5 w-3.5 fill-current" />
+                            </span>
+                            <span className="truncate">{doc.name}</span>
+                          </button>
+                          <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => onMoveFavorite(doc.id, 'up')}
+                              disabled={index === 0}
+                              className="rounded p-0.5 text-surface-500 hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-30"
+                              title="Subir favorito"
+                            >
+                              <ArrowUp className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onMoveFavorite(doc.id, 'down')}
+                              disabled={index === favoriteDocs.length - 1}
+                              className="rounded p-0.5 text-surface-500 hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-30"
+                              title="Bajar favorito"
+                            >
+                              <ArrowDown className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onToggleFavorite(doc)}
+                              className="rounded p-0.5 text-amber-300 hover:text-amber-200"
+                              title="Quitar de favoritos"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="px-2 py-1">
@@ -520,6 +630,49 @@ const Sidebar = ({
           </div>
         </div>
       </div>
+
+      {docContextMenu && (
+        <ContextMenu
+          x={docContextMenu.x}
+          y={docContextMenu.y}
+          onClose={closeDocContextMenu}
+          sections={[
+            {
+              actions: [
+                {
+                  label: 'Abrir',
+                  onClick: () => openDocument(docContextMenu.data)
+                },
+                {
+                  label: 'Renombrar',
+                  icon: <Pencil className="w-4 h-4" />,
+                  onClick: () => onRenameDocument(docContextMenu.data)
+                },
+                {
+                  label: favoriteDocIdSet.has(docContextMenu.data.id) ? 'Quitar de favoritos' : 'Fijar en favoritos',
+                  icon: <Star className={`w-4 h-4 ${favoriteDocIdSet.has(docContextMenu.data.id) ? 'fill-current text-amber-300' : ''}`} />,
+                  onClick: () => onToggleFavorite(docContextMenu.data)
+                },
+                ...(onDownloadDoc ? [{
+                  label: 'Descargar',
+                  icon: <Download className="w-4 h-4" />,
+                  onClick: () => onDownloadDoc!(docContextMenu.data)
+                }] : [])
+              ]
+            },
+            {
+              actions: [
+                {
+                  label: 'Eliminar',
+                  icon: <Trash2 className="w-4 h-4" />,
+                  onClick: () => deleteDocument(docContextMenu.data, { stopPropagation: () => {} } as React.MouseEvent),
+                  destructive: true
+                }
+              ]
+            }
+          ]}
+        />
+      )}
     </>
   );
 };
