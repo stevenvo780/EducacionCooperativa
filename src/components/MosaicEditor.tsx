@@ -39,7 +39,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Eye, PenLine, AlertTriangle } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Monitor, PenLine, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
@@ -201,7 +201,7 @@ function unescapeLatex(md: string): string {
 const MarkdownPreview = React.memo(({ content }: { content: string }) => {
   const processed = useMemo(() => unescapeLatex(content), [content]);
   return (
-  <div className="markdown-preview-container prose prose-invert max-w-none p-6 overflow-auto h-full">
+  <div className="markdown-preview-container overflow-auto h-full">
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
       rehypePlugins={[rehypeKatex]}
@@ -852,6 +852,7 @@ export default function MosaicEditor({
             onClick={() => setShowCompactMenu(c => !c)}
             className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
             title="Más opciones"
+            aria-label="Más opciones del editor"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
@@ -865,14 +866,17 @@ export default function MosaicEditor({
                 : 'text-slate-400 hover:bg-slate-700 hover:text-white'
             )}
             title={viewMode === 'preview' ? 'Volver a editar' : 'Vista previa (LaTeX, Mermaid)'}
+            aria-label={viewMode === 'preview' ? 'Volver a editar' : 'Abrir vista previa'}
+            aria-pressed={viewMode === 'preview'}
           >
-            {viewMode === 'preview' ? <PenLine className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {viewMode === 'preview' ? <PenLine className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
           </button>
           <button
             type="button"
             onClick={() => void toggleFullscreen()}
             className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
             title={isFullscreen ? 'Restaurar' : 'Maximizar'}
+            aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Entrar en pantalla completa'}
           >
             {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
@@ -888,13 +892,13 @@ export default function MosaicEditor({
               className="min-w-[200px] rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-2xl shadow-black/60"
               onClick={(e) => e.stopPropagation()}
             >
-              <button type="button" onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+              <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Settings2 className="h-3.5 w-3.5 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
               </button>
-              <button type="button" onClick={() => { setToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+              <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { setToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />Restaurar barra completa
               </button>
-              <button type="button" onClick={() => { void toggleFullscreen(); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+              <button type="button" title={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} onClick={() => { void toggleFullscreen(); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 {isFullscreen ? <Minimize2 className="h-3.5 w-3.5 text-slate-400" /> : <Maximize2 className="h-3.5 w-3.5 text-slate-400" />}
                 {isFullscreen ? 'Salir pantalla completa' : 'Pantalla completa'}
               </button>
@@ -904,6 +908,8 @@ export default function MosaicEditor({
                 <button
                   key={snippet.id}
                   type="button"
+                  title={snippet.title}
+                  aria-label={snippet.title}
                   onClick={() => { insertSnippet(snippet.markdown); setShowCompactMenu(false); }}
                   className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
                 >
@@ -1170,6 +1176,8 @@ export default function MosaicEditor({
                 type="button"
                 onClick={() => setViewModeWithSync('edit')}
                 className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+                title="Volver al modo edición"
+                aria-label="Volver al modo edición"
               >
                 <PenLine className="h-3 w-3" />
                 Volver a editar
@@ -1474,6 +1482,15 @@ export default function MosaicEditor({
 
         .mdx-content-editable p {
           margin: 0.5em 0;
+        }
+
+        .mdx-content-editable,
+        .markdown-preview-container {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 15px;
+          line-height: 1.75;
+          letter-spacing: 0;
+          word-break: break-word;
         }
 
         .mdx-content-editable a {
@@ -1970,8 +1987,7 @@ export default function MosaicEditor({
         .markdown-preview-container {
           background: #0f172a;
           color: #e2e8f0;
-          font-size: 15px;
-          line-height: 1.75;
+          padding: 0.9rem 2rem 1.5rem;
         }
         .markdown-preview-container h1,
         .markdown-preview-container h2,
@@ -1979,22 +1995,26 @@ export default function MosaicEditor({
         .markdown-preview-container h4 {
           color: #f1f5f9;
           font-weight: 700;
-          margin-top: 1.5em;
+          margin-top: 0.6em;
           margin-bottom: 0.5em;
         }
         .markdown-preview-container > :first-child { margin-top: 0 !important; }
         .markdown-preview-container h1 { font-size: 2em; border-bottom: 1px solid #334155; padding-bottom: 0.3em; margin-top: 0.6em; }
-        .markdown-preview-container h2 { font-size: 1.5em; border-bottom: 1px solid #1e293b; padding-bottom: 0.2em; }
-        .markdown-preview-container h3 { font-size: 1.25em; }
-        .markdown-preview-container p { margin: 0.75em 0; }
-        .markdown-preview-container a { color: #60a5fa; text-decoration: underline; }
-        .markdown-preview-container strong { color: #f8fafc; }
+        .markdown-preview-container h2 { font-size: 1.5em; font-weight: 600; border-bottom: 1px solid #1e293b; padding-bottom: 0.2em; margin: 0.8em 0 0.4em; }
+        .markdown-preview-container h3 { font-size: 1.25em; font-weight: 600; margin: 0.7em 0 0.3em; color: #e2e8f0; }
+        .markdown-preview-container h4,
+        .markdown-preview-container h5,
+        .markdown-preview-container h6 { font-weight: 600; margin: 0.6em 0 0.3em; color: #cbd5e1; }
+        .markdown-preview-container p { margin: 0.5em 0; }
+        .markdown-preview-container a { color: #60a5fa; text-decoration: underline; text-decoration-color: rgba(96, 165, 250, 0.4); transition: text-decoration-color 0.2s; }
+        .markdown-preview-container a:hover { text-decoration-color: #60a5fa; }
+        .markdown-preview-container strong { color: #f1f5f9; font-weight: 600; }
+        .markdown-preview-container em { color: #cbd5e1; }
         .markdown-preview-container code:not(pre code) {
           background: #1e293b;
-          border: 1px solid #334155;
           border-radius: 4px;
-          padding: 2px 6px;
-          font-size: 0.875em;
+          padding: 0.15em 0.4em;
+          font-size: 0.9em;
           color: #f472b6;
         }
         .markdown-preview-container pre {
@@ -2014,11 +2034,10 @@ export default function MosaicEditor({
         }
         .markdown-preview-container blockquote {
           border-left: 4px solid #3b82f6;
-          background: #1e293b;
-          padding: 8px 16px;
+          background: rgba(59, 130, 246, 0.05);
+          padding: 0.5em 1em;
           margin: 1em 0;
-          border-radius: 0 8px 8px 0;
-          color: #cbd5e1;
+          color: #94a3b8;
         }
         .markdown-preview-container table {
           border-collapse: collapse;
