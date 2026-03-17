@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
-import type { PlanId } from '@/types/subscription';
+import { PLAN_IDS, Plan, SubscriptionStatus, isPlanId, type PlanId } from '@/types/subscription';
 
 /* eslint-disable no-console */
 
@@ -34,22 +34,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'userId y planId son requeridos' }, { status: 400 });
     }
 
-    const validPlans: string[] = ['free', 'basic', 'pro', 'enterprise'];
-    if (!validPlans.includes(planId)) {
-      return NextResponse.json({ error: `Plan inválido. Usar: ${validPlans.join(', ')}` }, { status: 400 });
+    if (typeof planId !== 'string' || !isPlanId(planId)) {
+      return NextResponse.json({ error: `Plan inválido. Usar: ${PLAN_IDS.join(', ')}` }, { status: 400 });
     }
 
     const now = new Date();
     const endDate = new Date(now);
     endDate.setMonth(endDate.getMonth() + durationMonths);
 
-    if (planId === 'free') {
+    if (planId === Plan.Free) {
       // Reset to free plan
       await adminDb.collection('subscriptions').doc(userId).delete();
       await adminDb.collection('users').doc(userId).set({
         subscription: {
-          planId: 'free',
-          status: 'free'
+          planId: Plan.Free,
+          status: SubscriptionStatus.Free
         }
       }, { merge: true });
 
@@ -57,8 +56,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         userId,
-        planId: 'free',
-        status: 'free',
+        planId: Plan.Free,
+        status: SubscriptionStatus.Free,
         message: 'Suscripción reseteada a plan gratuito'
       });
     }
@@ -67,7 +66,7 @@ export async function POST(req: NextRequest) {
     await adminDb.collection('subscriptions').doc(userId).set({
       userId,
       planId: planId as PlanId,
-      status: 'active',
+      status: SubscriptionStatus.Active,
       mpPaymentId: `admin-manual-${Date.now()}`,
       startDate: now.toISOString(),
       endDate: endDate.toISOString(),
@@ -79,7 +78,7 @@ export async function POST(req: NextRequest) {
     await adminDb.collection('users').doc(userId).set({
       subscription: {
         planId: planId as PlanId,
-        status: 'active',
+        status: SubscriptionStatus.Active,
         startDate: now.toISOString(),
         endDate: endDate.toISOString()
       }
@@ -91,7 +90,7 @@ export async function POST(req: NextRequest) {
       success: true,
       userId,
       planId,
-      status: 'active',
+      status: SubscriptionStatus.Active,
       startDate: now.toISOString(),
       endDate: endDate.toISOString(),
       message: `Suscripción al plan ${planId} activada manualmente por ${durationMonths} mes(es)`

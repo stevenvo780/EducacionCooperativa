@@ -8,11 +8,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type DragEvent,
-  type FormEvent,
   type InputHTMLAttributes,
-  type KeyboardEvent,
-  type MouseEvent,
+  type DragEvent as ReactDragEvent,
+  type FormEvent as ReactFormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode
 } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -74,12 +74,12 @@ import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { fetchSubscriptionStatus, verifyPayment } from '@/services/subscriptionApi';
-import { type PlanId, PLANS, canAccessTerminals } from '@/types/subscription';
+import { PLANS, Plan, SubscriptionStatus, canAccessTerminals, type PlanId } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
 import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
 import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
 import { semanticSearchApi } from '@/services/searchApi';
-import type { SearchResultFilter, SearchResultItem } from '@/lib/search/types';
+import { ALL_SEARCH_RESULT_FILTER, SearchKind, type SearchResultFilter, type SearchResultItem } from '@/lib/search/types';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -112,7 +112,7 @@ function DashboardContent() {
     const [folders, setFolders] = useState<FolderItem[]>([]);
     const [isAdmin, setIsAdmin] = useState(false);
     const [memberProfiles, setMemberProfiles] = useState<Record<string, { email?: string | null; displayName?: string | null }>>({});
-    const [currentPlan, setCurrentPlan] = useState<PlanId>('free');
+    const [currentPlan, setCurrentPlan] = useState<PlanId>(Plan.Free);
     const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
     const [showPricingModal, setShowPricingModal] = useState(false);
     const router = useRouter();
@@ -171,13 +171,13 @@ function DashboardContent() {
         fetchSubscriptionStatus()
             .then((sub) => {
                 if (!cancelled && sub?.planId) {
-                    setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
-                    setSubscriptionEndDate(sub.status === 'active' && sub.endDate ? sub.endDate : null);
+                    setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
+                    setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
                 }
             })
             .catch(() => {
                 if (!cancelled) {
-                    setCurrentPlan('free');
+                    setCurrentPlan(Plan.Free);
                     setSubscriptionEndDate(null);
                 }
             });
@@ -191,8 +191,8 @@ function DashboardContent() {
             // First try to verify/activate the payment
             verifyPayment()
                 .then((result) => {
-                    if (result.status === 'active' && result.planId) {
-                        setCurrentPlan(result.planId as PlanId);
+                    if (result.status === SubscriptionStatus.Active && result.planId) {
+                        setCurrentPlan(result.planId);
                     } else {
                         // Fallback: fetch subscription status
                         return fetchSubscriptionStatus();
@@ -200,8 +200,8 @@ function DashboardContent() {
                 })
                 .then((sub) => {
                     if (sub && 'planId' in sub) {
-                        setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
-                        setSubscriptionEndDate(sub.status === 'active' && sub.endDate ? sub.endDate : null);
+                        setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
+                        setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
                     }
                 })
                 .catch(() => {
@@ -209,8 +209,8 @@ function DashboardContent() {
                     fetchSubscriptionStatus()
                         .then((sub) => {
                             if (sub?.planId) {
-                                setCurrentPlan(sub.status === 'active' ? sub.planId : 'free');
-                                setSubscriptionEndDate(sub.status === 'active' && sub.endDate ? sub.endDate : null);
+                                setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
+                                setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
                             }
                         })
                         .catch(() => {});
@@ -385,7 +385,7 @@ function DashboardContent() {
     const [semanticSearchResults, setSemanticSearchResults] = useState<SearchResultItem[]>([]);
     const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
     const [semanticSearchError, setSemanticSearchError] = useState<string | null>(null);
-    const [quickSearchFilter, setQuickSearchFilter] = useState<SearchResultFilter>('all');
+    const [quickSearchFilter, setQuickSearchFilter] = useState<SearchResultFilter>(ALL_SEARCH_RESULT_FILTER);
 
     const quickSearchInputRef = useRef<HTMLInputElement>(null);
     const deferredQuickSearchQuery = useDeferredValue(quickSearchQuery);
@@ -406,7 +406,7 @@ function DashboardContent() {
     const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
-    const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as React.InputHTMLAttributes<HTMLInputElement>;
+    const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as InputHTMLAttributes<HTMLInputElement>;
 
     useEffect(() => {
         docsRef.current = docs;
@@ -656,13 +656,13 @@ function DashboardContent() {
     }, []);
 
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
                 e.preventDefault();
                 setShowQuickSearch(true);
                 setQuickSearchQuery('');
                 setQuickSearchIndex(0);
-                setQuickSearchFilter('all');
+                setQuickSearchFilter(ALL_SEARCH_RESULT_FILTER);
                 setSemanticSearchError(null);
                 setSemanticSearchResults([]);
                 setTimeout(() => quickSearchInputRef.current?.focus(), 50);
@@ -711,7 +711,7 @@ function DashboardContent() {
 
         return fallbackDocs.map((doc, index) => ({
             id: `fallback-document:${doc.id}:${index}`,
-            kind: 'document',
+            kind: SearchKind.Document,
             title: doc.name,
             subtitle: doc.folder || 'Raiz del espacio',
             preview: doc.mimeType || 'Documento',
@@ -779,7 +779,7 @@ function DashboardContent() {
     }, [buildLocalQuickSearchFallback, currentWorkspace, deferredQuickSearchQuery, showQuickSearch]);
 
     const quickSearchResults = useMemo(() => {
-        if (quickSearchFilter === 'all') return semanticSearchResults;
+        if (quickSearchFilter === ALL_SEARCH_RESULT_FILTER) return semanticSearchResults;
         return semanticSearchResults.filter(result => result.kind === quickSearchFilter);
     }, [quickSearchFilter, semanticSearchResults]);
 
@@ -796,7 +796,7 @@ function DashboardContent() {
         closeQuickSearch();
     }, [closeQuickSearch, docs]);
 
-    const handleQuickSearchKeyDown = (e: React.KeyboardEvent) => {
+    const handleQuickSearchKeyDown = (e: ReactKeyboardEvent) => {
         if (e.key === 'ArrowDown' && quickSearchResults.length > 0) {
             e.preventDefault();
             setQuickSearchIndex(Math.min(quickSearchIndex + 1, quickSearchResults.length - 1));
@@ -1856,7 +1856,7 @@ function DashboardContent() {
         }
     };
 
-    const createDoc = async (e?: React.FormEvent, folderName?: string) => {
+    const createDoc = async (e?: ReactFormEvent, folderName?: string) => {
         if (e) e.preventDefault();
         const name = newDocName.trim() || 'Sin título';
         if (!user) return;
@@ -1995,7 +1995,7 @@ function DashboardContent() {
         deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
     };
 
-    const handleDocDragStart = (e: React.DragEvent, docItem: DocItem) => {
+    const handleDocDragStart = (e: ReactDragEvent, docItem: DocItem) => {
         e.dataTransfer.setData('application/x-doc-id', docItem.id);
         e.dataTransfer.setData('text/plain', docItem.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -2006,7 +2006,7 @@ function DashboardContent() {
         setDropPosition(null);
     };
 
-    const handleDropZoneDragOver = (e: React.DragEvent, position: number) => {
+    const handleDropZoneDragOver = (e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
         if (isReorderDrag) return;
@@ -2017,13 +2017,13 @@ function DashboardContent() {
         setDropPosition(prev => (prev === position ? prev : position));
     };
 
-    const handleDropZoneDragLeave = (e: React.DragEvent) => {
+    const handleDropZoneDragLeave = (e: ReactDragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         setDropPosition(null);
     };
 
-    const handleDropZoneDrop = (e: React.DragEvent, position: number) => {
+    const handleDropZoneDrop = (e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
         if (isReorderDrag) return;
@@ -2046,7 +2046,7 @@ function DashboardContent() {
         }
     };
 
-    const handleFolderDragOver = (e: React.DragEvent, folderName: string) => {
+    const handleFolderDragOver = (e: ReactDragEvent, folderName: string) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
         if (isReorderDrag) return;
@@ -2068,7 +2068,7 @@ function DashboardContent() {
         }
     };
 
-    const handleFolderDrop = async (e: React.DragEvent, folderName: string) => {
+    const handleFolderDrop = async (e: ReactDragEvent, folderName: string) => {
         const didUpload = await uploadDroppedFilesToFolder(e, folderName);
         if (didUpload) {
             setFolderDragOver(null);
@@ -2275,7 +2275,7 @@ function DashboardContent() {
         }
     };
 
-    const deleteDocument = async (docItem: DocItem, e: React.MouseEvent) => {
+    const deleteDocument = async (docItem: DocItem, e: ReactMouseEvent) => {
         e.stopPropagation();
         if (deletingIds[docItem.id]) return;
         const confirmResult = await showDialog({
@@ -2583,7 +2583,7 @@ function DashboardContent() {
                                     }}
                                     onDeleteDoc={(docId) => {
                                         const doc = docs.find(d => d.id === docId);
-                                        if (doc) deleteDocument(doc, { stopPropagation: () => { } } as React.MouseEvent);
+                                        if (doc) deleteDocument(doc, { stopPropagation: () => { } } as ReactMouseEvent);
                                     }}
                                     onDeleteFolder={deleteFolder}
                                     onDeleteItems={deleteItems}

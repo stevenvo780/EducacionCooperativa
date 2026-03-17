@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
-import { formatStorageSize, getStorageLimitMB, type PlanId } from '@/types/subscription';
+import { Plan, SubscriptionStatus, formatStorageSize, getStorageLimitMB, type PlanId } from '@/types/subscription';
 
 export const runtime = 'nodejs';
 
@@ -35,10 +35,10 @@ export async function POST(req: NextRequest) {
 
         // Check storage limit for the user's plan
         const subSnap = await adminDb.collection('subscriptions').doc(auth.uid).get();
-        let planId: PlanId = 'free';
+        let planId: PlanId = Plan.Free;
         if (subSnap.exists) {
             const subData = subSnap.data();
-            if (subData?.status === 'active' && subData?.planId) {
+            if (subData?.status === SubscriptionStatus.Active && subData?.planId) {
                 planId = subData.planId as PlanId;
             }
         }

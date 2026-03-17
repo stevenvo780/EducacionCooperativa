@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import { PLANS, type PlanId } from '@/types/subscription';
+import { PLANS, SubscriptionStatus, isPlanId, type PlanId } from '@/types/subscription';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
 const isSandbox = process.env.MERCADOPAGO_SANDBOX === 'true';
@@ -15,9 +15,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const planId = body.planId as PlanId;
+    const planId = body.planId;
 
-    if (!planId || !PLANS[planId]) {
+    if (typeof planId !== 'string' || !isPlanId(planId)) {
       return NextResponse.json({ error: 'Plan inválido' }, { status: 400 });
     }
 
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     const existingSub = await adminDb.collection('subscriptions').doc(auth.uid).get();
     const existingData = existingSub.exists ? existingSub.data() : null;
 
-    if (existingData?.status === 'active') {
+    if (existingData?.status === SubscriptionStatus.Active) {
       // Tiene plan activo — solo guardar referencia de nueva preferencia
       await adminDb.collection('subscriptions').doc(auth.uid).set({
         mpPreferenceId: preference.id,
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       await adminDb.collection('subscriptions').doc(auth.uid).set({
         userId: auth.uid,
         planId,
-        status: 'pending',
+        status: SubscriptionStatus.Pending,
         mpPreferenceId: preference.id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()

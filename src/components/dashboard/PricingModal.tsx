@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive } from 'lucide-react';
-import { PLANS, type PlanId, type PlanConfig, formatStorageSize } from '@/types/subscription';
+import { PLAN_ORDER, PLANS, Plan, type PlanId, type PlanConfig, formatStorageSize } from '@/types/subscription';
 import { authFetch } from '@/services/apiClient';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
 
@@ -32,12 +32,12 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail, 
   if (!isOpen) return null;
 
   const handleSelectPlan = async (planId: PlanId) => {
-    if (planId === 'free') return;
+    if (planId === Plan.Free) return;
 
     // Solo bloquear si es plan gratuito intentando "seleccionarse"
     // Planes de pago permiten renovación (re-compra del mismo plan)
 
-    if (planId === 'enterprise') {
+    if (planId === Plan.Enterprise) {
       window.open(WHATSAPP_ENTERPRISE_URL, '_blank');
       return;
     }
@@ -70,8 +70,6 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail, 
       setLoading(null);
     }
   };
-
-  const planOrder: PlanId[] = ['free', 'basic', 'pro', 'enterprise'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -128,10 +126,10 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail, 
 
         {/* Plans Grid */}
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {planOrder.map((planId) => {
+          {PLAN_ORDER.map((planId) => {
             const plan = PLANS[planId];
             const isCurrent = planId === currentPlan;
-            const isPopular = planId === 'pro';
+            const isPopular = planId === Plan.Pro;
 
             return (
               <PlanCard

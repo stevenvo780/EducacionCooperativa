@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import type { UserSubscription } from '@/types/subscription';
+import { Plan, SubscriptionStatus, type UserSubscription } from '@/types/subscription';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         subscription: {
           userId: auth.uid,
-          planId: 'free',
-          status: 'free',
+          planId: Plan.Free,
+          status: SubscriptionStatus.Free,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         } as UserSubscription
@@ -29,22 +29,22 @@ export async function GET(req: NextRequest) {
     const data = snap.data() as UserSubscription;
 
     // Verificar si la suscripción ha expirado
-    if (data.status === 'active' && data.endDate) {
+    if (data.status === SubscriptionStatus.Active && data.endDate) {
       const endDate = new Date(data.endDate);
       if (endDate < new Date()) {
         // Suscripción expirada — actualizar ambos documentos
         const nowIso = new Date().toISOString();
         await adminDb.collection('subscriptions').doc(auth.uid).update({
-          status: 'expired',
+          status: SubscriptionStatus.Expired,
           updatedAt: nowIso
         });
         await adminDb.collection('users').doc(auth.uid).set({
           subscription: {
-            planId: 'free',
-            status: 'expired'
+            planId: Plan.Free,
+            status: SubscriptionStatus.Expired
           }
         }, { merge: true });
-        data.status = 'expired';
+        data.status = SubscriptionStatus.Expired;
       }
     }
 

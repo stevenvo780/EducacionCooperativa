@@ -5,8 +5,10 @@ import {
   getCachedDocuments,
   cacheDocContent,
   getCachedContent,
-  enqueueSync,
   deleteCachedDoc,
+  enqueueSync,
+  SyncOperation,
+  SyncQueueStatus,
   type CachedDoc
 } from '@/lib/offlineStorage';
 
@@ -217,11 +219,11 @@ export const createDocumentApi = async (payload: Record<string, unknown>) => {
     // Queue for later sync
     const tempId = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     await enqueueSync({
-      operation: 'create',
+      operation: SyncOperation.Create,
       docId: tempId,
       payload,
       timestamp: Date.now(),
-      status: 'pending',
+      status: SyncQueueStatus.Pending,
       retries: 0
     });
     // Return a temp doc so the UI can render it
@@ -241,11 +243,11 @@ export const updateDocumentApi = (docId: string, payload: Record<string, unknown
   if (!navigator.onLine) {
     return (async () => {
       await enqueueSync({
-        operation: 'update',
+        operation: SyncOperation.Update,
         docId,
         payload: { docId, ...payload },
         timestamp: Date.now(),
-        status: 'pending',
+        status: SyncQueueStatus.Pending,
         retries: 0
       });
       if (typeof payload.content === 'string') {
@@ -284,11 +286,11 @@ export const updateDocumentApi = (docId: string, payload: Record<string, unknown
 export const deleteDocumentApi = async (docId: string) => {
   if (!navigator.onLine) {
     await enqueueSync({
-      operation: 'delete',
+      operation: SyncOperation.Delete,
       docId,
       payload: { docId },
       timestamp: Date.now(),
-      status: 'pending',
+      status: SyncQueueStatus.Pending,
       retries: 0
     });
     try { await deleteCachedDoc(docId); } catch { /* ignore */ }

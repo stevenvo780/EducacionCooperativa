@@ -1,7 +1,19 @@
-export const SEARCH_RESULT_KINDS = ['document', 'concept', 'fragment', 'author', 'work'] as const;
+export enum SearchKind {
+  Document = 'document',
+  Concept = 'concept',
+  Fragment = 'fragment',
+  Author = 'author',
+  Work = 'work'
+}
 
-export type SearchResultKind = (typeof SEARCH_RESULT_KINDS)[number];
-export type SearchResultFilter = 'all' | SearchResultKind;
+export type SearchResultKind = `${SearchKind}`;
+export const SEARCH_RESULT_KINDS = Object.values(SearchKind) as SearchResultKind[];
+const SEARCH_RESULT_KIND_SET = new Set<SearchResultKind>(SEARCH_RESULT_KINDS);
+
+export const ALL_SEARCH_RESULT_FILTER = 'all';
+
+export type SearchResultFilter = typeof ALL_SEARCH_RESULT_FILTER | SearchResultKind;
+export const isSearchResultKind = (value: string): value is SearchResultKind => SEARCH_RESULT_KIND_SET.has(value as SearchResultKind);
 
 export interface SearchSourceDocument {
   id: string;
@@ -51,17 +63,17 @@ export interface SemanticSearchResponse {
 }
 
 export const SEARCH_KIND_LABELS: Record<SearchResultKind, string> = {
-  document: 'Documento',
-  concept: 'Concepto',
-  fragment: 'Fragmento',
-  author: 'Autor',
-  work: 'Obra'
+  [SearchKind.Document]: 'Documento',
+  [SearchKind.Concept]: 'Concepto',
+  [SearchKind.Fragment]: 'Fragmento',
+  [SearchKind.Author]: 'Autor',
+  [SearchKind.Work]: 'Obra'
 };
 
 export const SEARCH_KIND_BADGES: Record<SearchResultKind, string> = {
-  document: 'DOC',
-  concept: 'CON',
-  fragment: 'FRG',
-  author: 'AUT',
-  work: 'OBR'
+  [SearchKind.Document]: 'DOC',
+  [SearchKind.Concept]: 'CON',
+  [SearchKind.Fragment]: 'FRG',
+  [SearchKind.Author]: 'AUT',
+  [SearchKind.Work]: 'OBR'
 };

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import type { PlanId } from '@/types/subscription';
+import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
 
 /* eslint-disable no-console */
@@ -30,9 +30,9 @@ export async function POST(req: NextRequest) {
     const subData = subSnap.data();
 
     // If already active, just return current status
-    if (subData?.status === 'active') {
+    if (subData?.status === SubscriptionStatus.Active) {
       return NextResponse.json({
-        status: 'active',
+        status: SubscriptionStatus.Active,
         planId: subData.planId,
         message: 'La suscripción ya está activa'
       });
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       await adminDb.collection('subscriptions').doc(auth.uid).set({
         userId: auth.uid,
         planId: planId as PlanId,
-        status: 'active',
+        status: SubscriptionStatus.Active,
         mpPaymentId: String(paymentId),
         mpMerchantOrderId: payment.order?.id ? String(payment.order.id) : null,
         startDate: now.toISOString(),
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
       await adminDb.collection('users').doc(auth.uid).set({
         subscription: {
           planId: planId as PlanId,
-          status: 'active',
+          status: SubscriptionStatus.Active,
           startDate: now.toISOString(),
           endDate: endDate.toISOString()
         }
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
       console.log(`[Verify] ✅ Subscription activated for user ${auth.uid}, plan: ${planId}`);
       return NextResponse.json({
-        status: 'active',
+        status: SubscriptionStatus.Active,
         planId,
         message: 'Suscripción activada correctamente'
       });

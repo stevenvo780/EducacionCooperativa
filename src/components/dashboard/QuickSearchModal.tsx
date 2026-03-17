@@ -4,6 +4,8 @@ import type React from 'react';
 import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { AlignLeft, BookOpen, FileText, Lightbulb, Loader2, Search, UserRound } from 'lucide-react';
 import {
+  ALL_SEARCH_RESULT_FILTER,
+  SearchKind,
   SEARCH_KIND_LABELS,
   type SearchResultFilter,
   type SearchResultItem,
@@ -31,24 +33,31 @@ interface QuickSearchModalProps {
   modalPop: Transition;
 }
 
-const FILTERS: SearchResultFilter[] = ['all', 'document', 'concept', 'fragment', 'author', 'work'];
+const FILTERS: SearchResultFilter[] = [
+  ALL_SEARCH_RESULT_FILTER,
+  SearchKind.Document,
+  SearchKind.Concept,
+  SearchKind.Fragment,
+  SearchKind.Author,
+  SearchKind.Work
+];
 
 const filterLabel = (value: SearchResultFilter) => {
-  if (value === 'all') return 'Todos';
+  if (value === ALL_SEARCH_RESULT_FILTER) return 'Todos';
   return SEARCH_KIND_LABELS[value];
 };
 
 const kindIcon = (kind: SearchResultKind) => {
   switch (kind) {
-    case 'concept':
+    case SearchKind.Concept:
       return <Lightbulb className="w-5 h-5" />;
-    case 'fragment':
+    case SearchKind.Fragment:
       return <AlignLeft className="w-5 h-5" />;
-    case 'author':
+    case SearchKind.Author:
       return <UserRound className="w-5 h-5" />;
-    case 'work':
+    case SearchKind.Work:
       return <BookOpen className="w-5 h-5" />;
-    case 'document':
+    case SearchKind.Document:
     default:
       return <FileText className="w-5 h-5" />;
   }
@@ -73,7 +82,7 @@ const QuickSearchModal = ({
   modalFade,
   modalPop
 }: QuickSearchModalProps) => {
-  const visibleResults = activeFilter === 'all'
+  const visibleResults = activeFilter === ALL_SEARCH_RESULT_FILTER
     ? results
     : results.filter(result => result.kind === activeFilter);
 
@@ -141,7 +150,7 @@ const QuickSearchModal = ({
 
             <div className="px-4 py-2 border-b border-surface-700 flex flex-wrap gap-2">
               {FILTERS.map(filter => {
-                const count = filter === 'all' ? results.length : (kindCounts[filter] ?? 0);
+                const count = filter === ALL_SEARCH_RESULT_FILTER ? results.length : (kindCounts[filter] ?? 0);
                 const active = filter === activeFilter;
                 return (
                   <button
@@ -196,7 +205,7 @@ const QuickSearchModal = ({
                       globalResultIndex += 1;
                       const currentIndex = globalResultIndex;
                       const isSelected = currentIndex === selectedIndex;
-                      const icon = result.kind === 'document'
+                      const icon = result.kind === SearchKind.Document
                         ? getDocumentIcon(result.sourceDoc)
                         : kindIcon(result.kind);
 

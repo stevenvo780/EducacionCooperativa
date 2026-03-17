@@ -7,6 +7,8 @@
 
 import {
   getPendingSyncItems,
+  SyncOperation,
+  SyncQueueStatus,
   updateSyncItem,
   removeSyncItem,
   type SyncQueueItem
@@ -34,7 +36,7 @@ async function replayOperation(item: SyncQueueItem): Promise<void> {
   const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
   switch (operation) {
-    case 'create': {
+    case SyncOperation.Create: {
       const res = await authFetch('/api/documents', {
         method: 'POST',
         headers: JSON_HEADERS,
@@ -44,7 +46,7 @@ async function replayOperation(item: SyncQueueItem): Promise<void> {
       break;
     }
 
-    case 'update': {
+    case SyncOperation.Update: {
       const docId = payload.docId as string;
       const body = { ...payload };
       delete body.docId;
@@ -57,7 +59,7 @@ async function replayOperation(item: SyncQueueItem): Promise<void> {
       break;
     }
 
-    case 'delete': {
+    case SyncOperation.Delete: {
       const docId = payload.docId as string;
       const res = await authFetch(`/api/documents/${docId}`, {
         method: 'DELETE'
@@ -67,7 +69,7 @@ async function replayOperation(item: SyncQueueItem): Promise<void> {
       break;
     }
 
-    case 'rename': {
+    case SyncOperation.Rename: {
       const docId = payload.docId as string;
       const res = await authFetch(`/api/documents/${docId}`, {
         method: 'PUT',
@@ -78,7 +80,7 @@ async function replayOperation(item: SyncQueueItem): Promise<void> {
       break;
     }
 
-    case 'move': {
+    case SyncOperation.Move: {
       const docId = payload.docId as string;
       const res = await authFetch(`/api/documents/${docId}`, {
         method: 'PUT',
@@ -123,7 +125,7 @@ export async function processSyncQueue(
       onProgress?.({ total, processed, failed, current: item.docId });
 
       try {
-        await updateSyncItem({ ...item, status: 'processing' });
+        await updateSyncItem({ ...item, status: SyncQueueStatus.Processing });
         await replayOperation(item);
         if (item.id !== null && item.id !== undefined) await removeSyncItem(item.id);
         processed++;
@@ -132,7 +134,7 @@ export async function processSyncQueue(
         if (retries >= MAX_RETRIES) {
           await updateSyncItem({
             ...item,
-            status: 'failed',
+            status: SyncQueueStatus.Failed,
             retries,
             error: err instanceof Error ? err.message : String(err)
           });
@@ -140,7 +142,7 @@ export async function processSyncQueue(
         } else {
           await updateSyncItem({
             ...item,
-            status: 'pending',
+            status: SyncQueueStatus.Pending,
             retries,
             error: err instanceof Error ? err.message : String(err)
           });

@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { buildSemanticSearchResults, type SearchableDocument } from '@/lib/search/rank';
-import { SEARCH_RESULT_KINDS, type SearchResultKind, type SemanticSearchRequest } from '@/lib/search/types';
+import { isSearchResultKind, type SearchResultKind, type SemanticSearchRequest } from '@/lib/search/types';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 const MAX_SCAN_DOCS = 500;
 const DEFAULT_LIMIT = 18;
-
-const isSearchKind = (value: string): value is SearchResultKind =>
-  SEARCH_RESULT_KINDS.includes(value as SearchResultKind);
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +22,7 @@ export async function POST(req: NextRequest) {
     const limit = typeof body.limit === 'number' ? body.limit : DEFAULT_LIMIT;
     const offset = typeof body.offset === 'number' ? body.offset : 0;
     const kinds = Array.isArray(body.kinds)
-      ? body.kinds.filter((kind): kind is SearchResultKind => typeof kind === 'string' && isSearchKind(kind))
+      ? body.kinds.filter((kind): kind is SearchResultKind => typeof kind === 'string' && isSearchResultKind(kind))
       : undefined;
 
     let queryRef: FirebaseFirestore.Query = adminDb.collection('documents');

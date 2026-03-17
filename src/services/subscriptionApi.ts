@@ -1,5 +1,5 @@
 import { authFetch } from '@/services/apiClient';
-import type { UserSubscription, PlanId } from '@/types/subscription';
+import type { PlanId, SubscriptionStatusId, UserSubscription } from '@/types/subscription';
 
 export interface StorageUsage {
   usedMB: number;
@@ -46,7 +46,7 @@ export async function fetchStorageUsage(): Promise<StorageUsage> {
 }
 
 export async function verifyPayment(): Promise<{
-  status: string;
+  status: SubscriptionStatusId | string;
   planId?: PlanId;
   message: string;
 }> {
