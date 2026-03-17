@@ -469,7 +469,7 @@ const HeaderBar = ({
               ? 'text-emerald-400 hover:bg-emerald-500/15 hover:text-emerald-300'
               : 'text-surface-600 cursor-not-allowed'
           }`}
-          title={isWorkerOnline ? (isCreatingSession ? 'Creando…' : 'Nueva terminal') : 'Worker no conectado'}
+          title={isWorkerOnline ? (isCreatingSession ? 'Creando terminal…' : 'Nueva terminal') : 'Servidor de trabajo no conectado'}
         >
           {isCreatingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
         </button>
@@ -480,14 +480,14 @@ const HeaderBar = ({
         <button
           onClick={() => createDoc(undefined, activeFolder)}
           className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition shrink-0"
-          title="Nuevo Archivo"
+          title="Nuevo archivo"
         >
           <Plus className="w-3 h-3" />
         </button>
         <button
           onClick={() => createFolder()}
           className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition shrink-0"
-          title="Nueva Carpeta"
+          title="Nueva carpeta"
         >
           <FolderPlus className="w-3 h-3" />
         </button>
@@ -537,7 +537,7 @@ const HeaderBar = ({
           title={isOnline ? 'Conectado' : 'Sin conexión'}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
-          <span>{isOnline ? 'Online' : 'Offline'}</span>
+          <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
         </div>
         <div className="hidden md:flex items-center">
           <button
@@ -556,7 +556,7 @@ const HeaderBar = ({
               ? 'bg-mandy-500/15 text-mandy-300'
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
-          title={isZenMode ? 'Salir de modo Zen' : 'Modo Zen'}
+          title={isZenMode ? 'Salir del modo concentración' : 'Modo concentración'}
         >
           {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
         </button>
