@@ -5,7 +5,7 @@ import { rtdb } from '@/lib/firebase';
 import { getErrorMessage } from '@/lib/error-utils';
 import { ref, onChildAdded, off, push, query, orderByChild, startAt } from 'firebase/database';
 import { SyncEventSource, SyncEventType, type SyncEvent } from '@/types/sync';
-import type { WorkspaceTypeId } from '@/types/workspace';
+import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 
 interface UseSyncEventsOptions {
   workspaceId: string | null;
@@ -33,7 +33,7 @@ export function useSyncEvents({
 
   // Construir path de RTDB según el tipo de workspace
   const getSyncPath = useCallback(() => {
-    if (workspaceType === 'personal' && userId) {
+    if (workspaceType === WorkspaceType.Personal && userId) {
       return `sync-events/personal_${userId}`;
     }
     if (workspaceId) {

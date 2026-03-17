@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { authFetch } from '@/services/apiClient';
 import { normalizePath } from '@/lib/folder-utils';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 type WorkspaceRecord = {
   id: string;
@@ -127,7 +128,7 @@ export default function WorkspacePathResolverPage({ params }: { params: { slug: 
         let workspaceId = workspaceSegment;
         let workspacePool: WorkspaceRecord[] = [];
 
-        if (normalizedWorkspaceSegment !== 'personal') {
+        if (normalizedWorkspaceSegment !== PERSONAL_WORKSPACE_ID) {
           const search = new URLSearchParams({ ownerId: user.uid });
           if (userEmail) {
             search.set('email', userEmail);
@@ -154,14 +155,14 @@ export default function WorkspacePathResolverPage({ params }: { params: { slug: 
             workspaceId = matchedWorkspace.id;
           }
         } else {
-          workspaceId = 'personal';
+          workspaceId = PERSONAL_WORKSPACE_ID;
         }
 
-        const workspaceIdsToSearch = normalizedWorkspaceSegment === 'personal'
-          ? ['personal']
+        const workspaceIdsToSearch = normalizedWorkspaceSegment === PERSONAL_WORKSPACE_ID
+          ? [PERSONAL_WORKSPACE_ID]
           : Array.from(new Set([
               ...(workspaceId && workspaceId !== workspaceSegment ? [workspaceId] : []),
-              'personal',
+              PERSONAL_WORKSPACE_ID,
               ...workspacePool.map((workspace) => workspace.id)
             ]));
 

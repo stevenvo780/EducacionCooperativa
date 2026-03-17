@@ -557,7 +557,7 @@ const HeaderBar = ({
         </div>
         <button
           onClick={onToggleZenMode}
-          className={`p-1.5 rounded-full transition ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
             isZenMode
               ? 'bg-mandy-500/15 text-mandy-300'
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
@@ -565,10 +565,11 @@ const HeaderBar = ({
           title={isZenMode ? 'Salir del modo concentración' : 'Modo concentración'}
         >
           {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          <span className="hidden lg:inline">{isZenMode ? 'Salir' : 'Zen'}</span>
         </button>
         <button
           onClick={onOpenBoard}
-          className={`p-1.5 rounded-full transition ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
             isBoardOpen
               ? 'bg-mandy-500/15 text-mandy-300'
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
@@ -576,10 +577,11 @@ const HeaderBar = ({
           title="Tablero"
         >
           <KanbanSquare className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Tablero</span>
         </button>
         <button
           onClick={onOpenStRunner}
-          className={`p-1.5 rounded-full transition ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
             isStRunnerOpen
               ? 'bg-indigo-500/15 text-indigo-300'
               : 'text-surface-500 hover:text-indigo-400 hover:bg-indigo-500/10'
@@ -587,13 +589,23 @@ const HeaderBar = ({
           title="ST Logic Runner"
         >
           <FlaskConical className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">ST</span>
         </button>
         <button
           onClick={openFilesTab}
-          className="p-1.5 rounded-full transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
           title="Explorador de archivos"
         >
           <FolderOpen className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Archivos</span>
+        </button>
+        <button
+          onClick={onShowMembers}
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+          title="Miembros"
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Equipo</span>
         </button>
 
         {/* User menu */}

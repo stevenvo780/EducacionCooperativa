@@ -1,5 +1,6 @@
 import path from 'path';
 import { normalizeFolderPath } from '@/lib/folder-utils';
+import { isPersonalWorkspaceId } from '@/types/workspace';
 
 const SAFE_NAME_REGEX = /[\\/]/g;
 
@@ -11,7 +12,7 @@ export const ensureMarkdownFileName = (value: string) => {
 };
 
 export const buildStoragePrefix = (workspaceId: string, ownerId: string) => {
-  return workspaceId === 'personal' ? `users/${ownerId}` : `workspaces/${workspaceId}`;
+  return isPersonalWorkspaceId(workspaceId) ? `users/${ownerId}` : `workspaces/${workspaceId}`;
 };
 
 export const buildStoragePath = (params: {

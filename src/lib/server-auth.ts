@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { isPersonalWorkspaceId } from '@/types/workspace';
 
 export type AuthContext = {
   uid: string;
@@ -42,7 +43,7 @@ export const requireAuth = async (req: NextRequest): Promise<AuthContext | null>
 };
 
 export const isWorkspaceMember = async (workspaceId: string, uid: string): Promise<boolean> => {
-  if (!workspaceId || workspaceId === 'personal') return false;
+  if (isPersonalWorkspaceId(workspaceId)) return false;
   const snap = await adminDb.collection('workspaces').doc(workspaceId).get();
   if (!snap.exists) return false;
   const data = snap.data() as { members?: string[] } | undefined;

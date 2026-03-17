@@ -1,7 +1,9 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { getErrorMessage } from '@/lib/error-utils';
 import { requireAuth } from '@/lib/server-auth';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 /* ──────────────────────────────────────────────────────────
    GET /api/snippets?workspaceId=xxx
@@ -12,7 +14,7 @@ export async function GET(req: NextRequest) {
     const auth = await requireAuth(req);
     if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const workspaceId = req.nextUrl.searchParams.get('workspaceId') || 'personal';
+    const workspaceId = req.nextUrl.searchParams.get('workspaceId') || PERSONAL_WORKSPACE_ID;
 
     const snap = await adminDb
       .collection('snippets')
@@ -23,8 +25,8 @@ export async function GET(req: NextRequest) {
 
     const items = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     return NextResponse.json(items);
-  } catch (err) {
-    console.error('GET /api/snippets error', err);
+  } catch (error) {
+    console.error('GET /api/snippets error', getErrorMessage(error));
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
       markdown,
-      workspaceId: typeof workspaceId === 'string' && workspaceId ? workspaceId : 'personal',
+      workspaceId: typeof workspaceId === 'string' && workspaceId ? workspaceId : PERSONAL_WORKSPACE_ID,
       category: typeof category === 'string' ? category.trim() : 'general',
       order: typeof order === 'number' ? order : 0,
       ownerId: auth.uid,
@@ -63,8 +65,8 @@ export async function POST(req: NextRequest) {
 
     const ref = await adminDb.collection('snippets').add(data);
     return NextResponse.json({ id: ref.id, ...data }, { status: 201 });
-  } catch (err) {
-    console.error('POST /api/snippets error', err);
+  } catch (error) {
+    console.error('POST /api/snippets error', getErrorMessage(error));
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

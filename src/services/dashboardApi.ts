@@ -1,6 +1,7 @@
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { authFetch } from '@/services/apiClient';
 import { withErrorCode } from '@/lib/error-utils';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import {
   cacheDocuments,
   getCachedDocuments,
@@ -307,13 +308,17 @@ export const deleteDocumentApi = async (docId: string) => {
  * This bypasses Vercel's 4.5MB limit by not routing the file through serverless functions.
  */
 export const uploadFileApi = async (formData: FormData) => {
-  const file = formData.get('file') as File;
-  const workspaceId = (formData.get('workspaceId') as string) || 'personal';
+  const fileEntry = formData.get('file');
+  const workspaceIdEntry = formData.get('workspaceId');
+  const workspaceId = typeof workspaceIdEntry === 'string' && workspaceIdEntry
+    ? workspaceIdEntry
+    : PERSONAL_WORKSPACE_ID;
   const folder = (formData.get('folder') as string) || 'No estructurado';
 
-  if (!file) {
+  if (!(fileEntry instanceof File)) {
     throw new Error('No file provided');
   }
+  const file = fileEntry;
 
   // Step 1: Get signed URL for direct upload
   const signedUrlRes = await authFetch('/api/upload/signed-url', {
