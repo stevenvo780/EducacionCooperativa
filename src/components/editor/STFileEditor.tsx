@@ -4,7 +4,6 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import STCodeEditor from './STCodeEditor';
 import { fetchDocumentRawApi, updateDocumentApi } from '@/services/dashboardApi';
 import { Save, Loader2, Play } from 'lucide-react';
-import { transpile } from '@stevenvo780/st-lang';
 
 interface STFileEditorProps {
   docId: string;
@@ -96,9 +95,10 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
   }, [docId]);
 
   // ── Run ST code ──
-  const handleRun = useCallback(() => {
+  const handleRun = useCallback(async () => {
     try {
-      const result = transpile(latestContent.current);
+      const { evaluate } = await import('@stevenvo780/st-lang/api');
+      const result = evaluate(latestContent.current);
       setRunResult({ ok: true, output: JSON.stringify(result, null, 2) });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

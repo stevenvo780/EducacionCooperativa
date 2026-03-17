@@ -2352,6 +2352,7 @@ function DashboardContent() {
                                 onActiveFolderChange={setActiveFolderSafe}
                                 onOpenDocument={openDocument}
                                 onCreateDoc={() => createDoc(undefined, activeFolder)}
+                                onCreateStDoc={() => createStDoc(activeFolder)}
                                 onCreateFolder={() => createFolder()}
                                 onUploadFile={() => {
                                     setUploadTargetFolder(activeFolder);
