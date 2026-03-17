@@ -35,8 +35,8 @@ export function LinterOverlay({
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[50]">
       {diagnostics.map((d, i) => {
-        const line = d.line;
-        const col = d.column;
+        const line = d.line ?? 1;
+        const col = d.column ?? 1;
         
         // Basic positioning
         const top = (line - 1) * lineHeight + paddingTop - scrollTop + (lineHeight - 2);
@@ -45,7 +45,7 @@ export function LinterOverlay({
         // Calculate width (if endColumn is provided)
         let width = charWidth;
         if ('endColumn' in d && d.endColumn) {
-            width = (d.endColumn - col) * charWidth;
+            width = ((d.endColumn as number) - col) * charWidth;
         } else if ('text' in d && typeof d.text === 'string') {
             // Some ST diagnostics might have text or we can infer from line
             width = charWidth * 3; // fallback
@@ -91,6 +91,11 @@ export function LinterOverlay({
                 <div className="text-xs text-slate-200 leading-relaxed">
                     {d.message}
                 </div>
+                {'suggestion' in d && d.suggestion && (
+                    <div className="mt-1 text-[11px] text-cyan-400 font-medium">
+                        💡 {d.suggestion}
+                    </div>
+                )}
             </div>
           </div>
         );

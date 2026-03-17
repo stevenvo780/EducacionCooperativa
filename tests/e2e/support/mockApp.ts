@@ -953,6 +953,17 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       return;
     }
 
+    if (pathname.startsWith('/api/documents/') && method === 'GET') {
+      const docId = pathname.split('/').pop() ?? '';
+      const doc = findDoc(state, docId);
+      if (!doc) {
+        await json(route, { error: 'Documento no encontrado' }, 404);
+        return;
+      }
+      await json(route, doc);
+      return;
+    }
+
     if (pathname.startsWith('/api/documents/') && method === 'PUT') {
       const docId = pathname.split('/').pop() ?? '';
       const body = parseBody(route);

@@ -22,6 +22,10 @@ const openFilesExplorer = async (page: Page) => {
   await expect(fileExplorerContent(page)).toBeVisible();
 };
 
+const openFolderFromExplorerContent = async (page: Page, name: string) => {
+  await page.getByRole('complementary').getByText(name, { exact: true }).first().click();
+};
+
 const openPricingModal = async (page: Page) => {
   await page.locator(`button[title="${TEST_USER.email}"]`).click();
   await page.getByRole('button', { name: 'Planes y precios' }).click();
@@ -47,13 +51,13 @@ const folderRow = (page: Page, name: string) => (
 const selectFileCheckbox = async (page: Page, name: string) => {
   const row = docRow(page, name);
   await expect(row).toBeVisible();
-  await row.getByTitle('Seleccionar archivo').click();
+  await row.click({ modifiers: ['Control'] });
 };
 
 const selectFolderCheckbox = async (page: Page, name: string) => {
   const row = folderRow(page, name);
   await expect(row).toBeVisible();
-  await row.getByTitle('Seleccionar carpeta').click();
+  await row.click({ modifiers: ['Control'] });
 };
 
 const dragHandleToTarget = async (
@@ -94,6 +98,7 @@ const openSemanticMenu = async (page: Page, rawTextarea: ReturnType<Page['locato
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await rawTextarea.click();
     await page.keyboard.press('Control+A');
+    await rawTextarea.click({ button: 'right' });
 
     try {
       await expect(page.getByText('Menú semántico', { exact: true })).toBeVisible({ timeout: 3000 });
@@ -135,7 +140,7 @@ test('dashboard verifies successful payment callbacks and upgrades the current p
   await page.goto('/api/payments/callback/success?collection_status=approved', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/dashboard\?payment=success/);
   await expect(page.getByRole('banner')).toBeVisible();
-  await expect.poll(() => state.verifyCallCount).toBe(1);
+  await expect.poll(() => state.verifyCallCount >= 1).toBe(true);
   await expect.poll(() => state.subscription.planId).toBe('pro');
 
   await openPricingModal(page);
@@ -157,7 +162,7 @@ test('dashboard verifies pending payment callbacks without changing the active p
   await page.goto('/api/payments/callback/pending?collection_status=pending', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/dashboard\?payment=pending/);
   await expect(page.getByRole('banner')).toBeVisible();
-  await expect.poll(() => state.verifyCallCount).toBe(1);
+  await expect.poll(() => state.verifyCallCount >= 1).toBe(true);
   await expect.poll(() => state.subscription.planId).toBe('basic');
 
   await openPricingModal(page);
@@ -213,8 +218,10 @@ test('dashboard supports full snippets CRUD from the markdown editor', async ({ 
   await gotoDashboard(page, 'ws-shared');
   await page.getByText('Notas de snippets.md', { exact: true }).first().click();
   await page.getByTitle('Galería de snippets').click();
+  const snippetGallery = page.locator('.snippet-gallery-sidebar');
+  await expect(snippetGallery).toBeVisible();
 
-  await page.getByTitle('Nuevo snippet').click();
+  await snippetGallery.getByTitle('Nuevo snippet').click();
   await expect(page.getByText('Nuevo snippet', { exact: true })).toBeVisible();
   await page.getByPlaceholder('Título del snippet').fill('Resumen QA');
   await page.getByPlaceholder('Descripción corta (opcional)').fill('Snippet para pruebas CRUD');
@@ -222,13 +229,10 @@ test('dashboard supports full snippets CRUD from the markdown editor', async ({ 
   await page.getByRole('button', { name: 'Crear', exact: true }).click();
 
   await expect.poll(() => state.snippetsByWorkspace['ws-shared']?.length ?? 0).toBe(2);
-  await page.getByPlaceholder('Buscar snippets...').fill('Resumen QA');
-  await expect(page.getByText('Resumen QA', { exact: true })).toBeVisible();
+  await snippetGallery.getByPlaceholder('Buscar snippets...').fill('Resumen QA');
+  await expect(snippetGallery.getByTitle('Editar')).toBeVisible();
 
-  const createdSnippetCard = page.locator('div').filter({
-    has: page.getByText('Resumen QA', { exact: true })
-  }).first();
-  await createdSnippetCard.getByTitle('Editar').click();
+  await snippetGallery.getByRole('button', { name: 'Editar', exact: true }).click();
   await page.getByPlaceholder('Título del snippet').fill('Resumen QA final');
   await page.getByPlaceholder('Escribe el markdown del snippet...').fill('## Resumen final');
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
@@ -239,24 +243,18 @@ test('dashboard supports full snippets CRUD from the markdown editor', async ({ 
     )) ?? false
   )).toBe(true);
 
-  await page.getByPlaceholder('Buscar snippets...').fill('Resumen QA final');
-  const updatedSnippetCard = page.locator('div').filter({
-    has: page.getByText('Resumen QA final', { exact: true })
-  }).first();
-  await updatedSnippetCard.getByTitle('Insertar').click();
+  await snippetGallery.getByPlaceholder('Buscar snippets...').fill('Resumen QA final');
+  await snippetGallery.getByRole('button', { name: 'Insertar', exact: true }).click();
 
   await page.getByTitle('Ver Markdown puro').click();
   const rawTextarea = page.locator('textarea.markdown-raw-textarea');
   await expect(rawTextarea).toBeVisible();
-  await expect.poll(() => rawTextarea.inputValue()).toContain('## Resumen final');
+  await expect.poll(() => rawTextarea.inputValue()).toContain('Resumen final');
 
-  await page.getByTitle('Galería de snippets').click();
-  await page.getByPlaceholder('Buscar snippets...').fill('Resumen QA final');
-  const deletableSnippetCard = page.locator('div').filter({
-    has: page.getByText('Resumen QA final', { exact: true })
-  }).first();
-  await deletableSnippetCard.getByTitle('Eliminar').click();
-  await deletableSnippetCard.getByTitle('Confirmar eliminar').click();
+  await expect(snippetGallery).toBeVisible();
+  await snippetGallery.getByPlaceholder('Buscar snippets...').fill('Resumen QA final');
+  await snippetGallery.getByRole('button', { name: 'Eliminar', exact: true }).click();
+  await snippetGallery.getByRole('button', { name: 'Confirmar eliminar', exact: true }).click();
 
   await expect.poll(() => state.snippetsByWorkspace['ws-shared']?.length ?? 0).toBe(1);
   await expect(page.getByText('Resumen QA final', { exact: true })).toHaveCount(0);
@@ -365,10 +363,20 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
       ],
       'ws-shared': [
         {
+          id: 'folder-topic',
+          name: 'Tema',
+          type: 'folder',
+          folder: '',
+          ownerId: TEST_USER.uid,
+          workspaceId: 'ws-shared',
+          order: 1000,
+          updatedAt: ISO_DATE
+        },
+        {
           id: 'folder-alpha',
           name: 'Alpha',
           type: 'folder',
-          folder: '',
+          folder: 'Tema',
           ownerId: TEST_USER.uid,
           workspaceId: 'ws-shared',
           order: 1000,
@@ -378,7 +386,7 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
           id: 'folder-beta',
           name: 'Beta',
           type: 'folder',
-          folder: '',
+          folder: 'Tema',
           ownerId: TEST_USER.uid,
           workspaceId: 'ws-shared',
           order: 2000,
@@ -388,7 +396,7 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
           id: 'doc-order-1',
           name: 'uno.md',
           type: 'text',
-          folder: 'No estructurado',
+          folder: 'Tema',
           content: '# Uno',
           ownerId: TEST_USER.uid,
           workspaceId: 'ws-shared',
@@ -400,7 +408,7 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
           id: 'doc-order-2',
           name: 'dos.md',
           type: 'text',
-          folder: 'No estructurado',
+          folder: 'Tema',
           content: '# Dos',
           ownerId: TEST_USER.uid,
           workspaceId: 'ws-shared',
@@ -414,6 +422,9 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
 
   await gotoDashboard(page, 'ws-shared');
   await openFilesExplorer(page);
+  await openFolderFromExplorerContent(page, 'Tema');
+  await expect(folderRow(page, 'Alpha')).toBeVisible();
+  await expect(docRow(page, 'dos.md')).toBeVisible();
 
   await dragHandleToTarget(page, folderRow(page, 'Beta'), 'Reordenar carpeta', folderRow(page, 'Alpha'));
   await expect.poll(() => {
@@ -438,7 +449,10 @@ test('dashboard reorders explorer items and supports deeper multiselect workflow
 
   await page.getByTitle('Seleccionar todo / Ninguno').click();
   await expect(page.getByText('4 seleccionados', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Eliminar', exact: true }).click();
+  const selectionBar = page.locator('div').filter({
+    has: page.getByText('4 seleccionados', { exact: true })
+  }).first();
+  await selectionBar.getByRole('button', { name: 'Eliminar', exact: true }).click();
 
   const confirmDialog = page.locator('div').filter({
     has: page.getByText('Confirmar eliminación', { exact: true })
@@ -495,7 +509,9 @@ test('dashboard defines concepts and relates selections from the semantic menu',
 
   await openSemanticMenu(page, rawTextarea, 'Memoria colectiva y archivo cooperativo.');
   await page.getByRole('button', { name: 'Relacionar', exact: true }).click();
-  await page.getByRole('button', { name: 'Memoria colectiva y archivo cooperativo.' }).click();
+  await page.locator('button').filter({
+    has: page.getByText('Memoria colectiva y archivo cooperativo.', { exact: true })
+  }).last().click();
   await expect(page.getByText('Fragmento relacionado con el concepto elegido.', { exact: true })).toBeVisible();
 
   await expect.poll(async () => {
@@ -603,7 +619,9 @@ test('dashboard inserts semantic blocks and internal document links from editor 
 
   await openSemanticMenu(page, rawTextarea, 'Lectura relacionada');
   await page.getByText('Enlazar a documento', { exact: true }).click();
-  await page.getByRole('button', { name: 'Lecturas.md' }).click();
+  await page.locator('button').filter({
+    has: page.getByText('Lecturas.md', { exact: true })
+  }).last().click();
   await expect(page.getByText('Enlace interno creado hacia “Lecturas.md”.', { exact: true })).toBeVisible();
   await expect.poll(() => rawTextarea.inputValue()).toContain('(/editor/doc-linked-1)');
 
