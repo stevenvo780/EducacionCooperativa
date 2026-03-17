@@ -1,9 +1,12 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, ensureMarkdownFileName } from '@/lib/storage-path';
+import { DocumentType } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 export async function POST(req: NextRequest) {
     try {
@@ -13,17 +16,19 @@ export async function POST(req: NextRequest) {
         }
 
         if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
-             const body = await req.json();
              return NextResponse.json({ id: `mock-doc-${Date.now()}`, status: 'success' });
         }
 
-        const body = await req.json();
+        const body = (await req.json()) as Record<string, unknown>;
         const { name, content, type, workspaceId, folder, mimeType, url, storagePath, order } = body;
         const normalizedFolder = normalizeFolderPath(typeof folder === 'string' ? folder : undefined);
-        const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : 'personal';
+        const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : PERSONAL_WORKSPACE_ID;
         const ownerId = auth.uid;
+        const docName = typeof name === 'string' && name.trim() ? name : 'Sin titulo';
+        const docContent = typeof content === 'string' ? content : '';
+        const docType = typeof type === 'string' ? type : DocumentType.Text;
 
-        if (resolvedWorkspaceId !== 'personal') {
+        if (!isPersonalWorkspaceId(resolvedWorkspaceId)) {
             const member = await isWorkspaceMember(resolvedWorkspaceId, auth.uid);
             if (!member) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -31,9 +36,9 @@ export async function POST(req: NextRequest) {
         }
 
         const docData: Record<string, unknown> = {
-            name: name || 'Sin título',
-            content: content ?? '',
-            type: type || 'text',
+            name: docName,
+            content: docContent,
+            type: docType,
             mimeType: mimeType || null,
             ownerId,
             workspaceId: resolvedWorkspaceId,
@@ -45,7 +50,7 @@ export async function POST(req: NextRequest) {
             docData.order = order;
         }
 
-        const allowedPrefix = resolvedWorkspaceId === 'personal'
+        const allowedPrefix = isPersonalWorkspaceId(resolvedWorkspaceId)
             ? `users/${ownerId}/`
             : `workspaces/${resolvedWorkspaceId}/`;
 
@@ -58,11 +63,11 @@ export async function POST(req: NextRequest) {
 
         if (typeof url === 'string' && docData.storagePath) {
             docData.url = url;
-        } else if (!storagePath && (!type || type === 'text' || type === 'markdown')) {
+        } else if (!storagePath && (docType === DocumentType.Text || docType === 'markdown')) {
              try {
                  const bucket = adminStorage.bucket();
                  if (bucket.name) {
-                     const fname = ensureMarkdownFileName(name || 'Sin titulo');
+                     const fname = ensureMarkdownFileName(docName);
                      const path = buildStoragePath({
                         workspaceId: resolvedWorkspaceId,
                         ownerId,
@@ -70,24 +75,24 @@ export async function POST(req: NextRequest) {
                         fileName: fname
                      });
 
-                     await bucket.file(path).save(content ?? '', {
+                     await bucket.file(path).save(docContent, {
                         contentType: 'text/markdown',
                         metadata: { ownerId }
                      });
 
                      docData.storagePath = path;
                  }
-             } catch (err) {
-                 console.warn('Failed to sync document to storage:', err);
+             } catch (error) {
+                 console.warn('Failed to sync document to storage:', getErrorMessage(error));
              }
         }
 
         const docRef = await adminDb.collection('documents').add(docData);
 
         return NextResponse.json({ id: docRef.id, status: 'success' });
-    } catch (error: any) {
-        console.error('Error creating document:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error creating document:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }
 
@@ -103,8 +108,8 @@ export async function GET(req: NextRequest) {
                      id: 'mock-doc-1',
                      name: 'Documento de Prueba.md',
                      content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
-                     type: 'text',
-                     workspaceId: 'personal',
+                     type: DocumentType.Text,
+                     workspaceId: PERSONAL_WORKSPACE_ID,
                      folder: 'No estructurado',
                      updatedAt: { seconds: Date.now() / 1000 },
                      createdAt: { seconds: Date.now() / 1000 },
@@ -130,7 +135,7 @@ export async function GET(req: NextRequest) {
 
         let query: FirebaseFirestore.Query = adminDb.collection('documents');
 
-        if (workspaceId && workspaceId !== 'personal') {
+        if (workspaceId && !isPersonalWorkspaceId(workspaceId)) {
             const member = await isWorkspaceMember(workspaceId, auth.uid);
             if (!member) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -138,8 +143,8 @@ export async function GET(req: NextRequest) {
             query = query.where('workspaceId', '==', workspaceId);
         } else {
             query = query.where('ownerId', '==', auth.uid);
-            if (workspaceId === 'personal') {
-                query = query.where('workspaceId', '==', 'personal');
+            if (workspaceId === PERSONAL_WORKSPACE_ID) {
+                query = query.where('workspaceId', '==', PERSONAL_WORKSPACE_ID);
             }
         }
 
@@ -176,7 +181,7 @@ export async function GET(req: NextRequest) {
         const offsetParam = searchParams.get('offset');
         const limitVal = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10)), 1000) : 1000;
         const snapshot = await query.limit(limitVal).get();
-        let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Record<string, unknown> }));
+        let docs = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }));
         if (offsetParam) {
             const offsetVal = Math.max(0, parseInt(offsetParam, 10));
             docs = docs.slice(offsetVal);
@@ -187,8 +192,8 @@ export async function GET(req: NextRequest) {
                 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
             }
         });
-    } catch (error: any) {
-        console.error('Error listing documents:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error listing documents:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

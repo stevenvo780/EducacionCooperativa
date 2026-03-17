@@ -73,6 +73,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { getErrorMessage } from '@/lib/error-utils';
 import { fetchSubscriptionStatus, verifyPayment } from '@/services/subscriptionApi';
 import { PLANS, Plan, SubscriptionStatus, canAccessTerminals, type PlanId } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
@@ -2814,8 +2815,8 @@ function DashboardContent() {
                                             try {
                                                 await changePassword(passwordForm.current, passwordForm.new);
                                                 setPasswordSuccess(true);
-                                            } catch (err: any) {
-                                                setPasswordError(err.message || 'Error al cambiar la contraseña');
+                                            } catch (error: unknown) {
+                                                setPasswordError(getErrorMessage(error, 'Error al cambiar la contraseña'));
                                             } finally {
                                                 setIsChangingPassword(false);
                                             }

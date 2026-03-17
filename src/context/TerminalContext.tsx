@@ -1,9 +1,16 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, ReactNode } from 'react';
-import { TerminalController, WorkspaceWorkerStatus, WorkerStatus, DocChangeEvent } from '@/lib/TerminalController';
+import { TerminalController, WorkspaceWorkerStatus, DocChangeEvent } from '@/lib/TerminalController';
 import { getErrorMessage } from '@/lib/error-utils';
-import { TerminalConnectionStatus, type TerminalConnectionStatusId, type TerminalSessionCreationPayload, type TerminalSessionPayload } from '@/types/terminal';
+import {
+    TerminalConnectionStatus,
+    WorkerStatusValue,
+    type TerminalConnectionStatusId,
+    type TerminalSessionCreationPayload,
+    type TerminalSessionPayload,
+    type WorkerStatus
+} from '@/types/terminal';
 import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { useAuth } from './AuthContext';
 
@@ -190,7 +197,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const getWorkerStatusForWorkspace = useCallback((workspaceId: string): WorkerStatus => {
-        return workspaceWorkerStatuses.get(workspaceId) || 'unknown';
+        return workspaceWorkerStatuses.get(workspaceId) || WorkerStatusValue.Unknown;
     }, [workspaceWorkerStatuses]);
 
     const getSessionsForWorkspace = useCallback((workspaceId: string): TerminalSession[] => {
@@ -483,8 +490,8 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                         newMap.set(workspaceStatus.workspaceId, workspaceStatus.status);
                         return newMap;
                     });
-                    if (workspaceStatus.status === 'online') {
-                        setStatus('online');
+                    if (workspaceStatus.status === WorkerStatusValue.Online) {
+                        setStatus(TerminalConnectionStatus.Online);
                     }
                 },
                 (docEvent: DocChangeEvent) => {

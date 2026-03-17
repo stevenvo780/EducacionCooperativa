@@ -1,4 +1,5 @@
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
+import { WorkspaceType } from '@/types/workspace';
 
 export const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
   if (!value) return 0;
@@ -62,5 +63,5 @@ export const normalizeWorkspace = (data: Partial<Workspace> & { id: string }): W
   ownerId: data.ownerId ?? '',
   members: Array.isArray(data.members) ? data.members : [],
   pendingInvites: Array.isArray(data.pendingInvites) ? data.pendingInvites : [],
-  type: data.type === 'personal' ? 'personal' : 'shared'
+  type: data.type === WorkspaceType.Personal ? WorkspaceType.Personal : WorkspaceType.Shared
 });

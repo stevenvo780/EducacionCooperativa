@@ -1,6 +1,10 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { NextRequest, NextResponse } from 'next/server';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+
+type StoredDocumentRecord = Record<string, unknown>;
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
@@ -22,9 +26,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
 
-        const data = docSnap.data() as any;
+        const data = (docSnap.data() ?? {}) as StoredDocumentRecord;
         const workspaceId = data?.workspaceId;
-        if (!workspaceId || workspaceId === 'personal') {
+        if (typeof workspaceId !== 'string' || isPersonalWorkspaceId(workspaceId)) {
             if (data?.ownerId !== auth.uid) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
             }
@@ -40,8 +44,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             });
         }
 
-        const storagePath = data?.storagePath as string | undefined;
-        const url = data?.url as string | undefined;
+        const storagePath = typeof data.storagePath === 'string' ? data.storagePath : undefined;
+        const url = typeof data.url === 'string' ? data.url : undefined;
 
         if (storagePath) {
             const bucket = adminStorage.bucket();
@@ -83,8 +87,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         }
 
         return NextResponse.json({ error: 'No content available' }, { status: 404 });
-    } catch (error: any) {
-        console.error('Error fetching raw document:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error fetching raw document:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { DocumentType } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 export const runtime = 'nodejs';
 
@@ -21,16 +24,23 @@ export async function POST(req: NextRequest) {
             fileName,
             originalName,
             mimeType,
-            workspaceId = 'personal',
+            workspaceId = PERSONAL_WORKSPACE_ID,
             folder = 'No estructurado'
-        } = body;
+        } = body as {
+            storagePath?: string;
+            fileName?: string;
+            originalName?: string;
+            mimeType?: string;
+            workspaceId?: string;
+            folder?: string;
+        };
 
         if (!storagePath || !fileName) {
             return NextResponse.json({ error: 'storagePath and fileName required' }, { status: 400 });
         }
 
         // Validate storagePath prefix ownership
-        if (workspaceId === 'personal') {
+        if (isPersonalWorkspaceId(workspaceId)) {
           if (!storagePath.startsWith(`users/${auth.uid}/`)) {
             return NextResponse.json({ error: 'Access denied: Invalid storage path' }, { status: 403 });
           }
@@ -61,7 +71,7 @@ export async function POST(req: NextRequest) {
 
         const docRef = await adminDb.collection('documents').add({
             name: originalName || fileName,
-            type: 'file',
+            type: DocumentType.File,
             url,
             mimeType: mimeType || 'application/octet-stream',
             storagePath,
@@ -76,7 +86,7 @@ export async function POST(req: NextRequest) {
             id: docRef.id,
             url,
             name: originalName || fileName,
-            type: 'file',
+            type: DocumentType.File,
             path: storagePath,
             storagePath,
             mimeType: mimeType || 'application/octet-stream',
@@ -86,8 +96,8 @@ export async function POST(req: NextRequest) {
             updatedAt: { seconds: Date.now() / 1000 }
         });
 
-    } catch (error: any) {
-        console.error('Register Upload Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Register Upload Error:', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

@@ -582,7 +582,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       />
                   ) : isFileExplorer ? (
                       <FileExplorer
-                        docs={fileExplorerDocs as any}
+                        docs={fileExplorerDocs}
                         folders={folders}
                         onSelectDoc={onSelectDoc}
                         onCreateFile={onCreateFile}

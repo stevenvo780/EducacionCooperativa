@@ -33,11 +33,10 @@ import {
 } from 'lucide-react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
-import type { WorkerStatus } from '@/lib/TerminalController';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
-import type { TerminalConnectionStatusId } from '@/types/terminal';
-import type { WorkspaceTypeId } from '@/types/workspace';
+import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId, type WorkerStatus } from '@/types/terminal';
+import { PERSONAL_WORKSPACE_ID, WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { formatStorageSize } from '@/types/subscription';
 
 interface HeaderBarProps {
@@ -166,13 +165,13 @@ const HeaderBar = ({
 
   /* ── Terminal helpers ── */
   const workerToken = currentWorkspace && user
-    ? (currentWorkspace.type === 'personal' || currentWorkspace.id === 'personal'
-        ? `personal:${user.uid}`
+    ? (currentWorkspace.type === WorkspaceType.Personal || currentWorkspace.id === PERSONAL_WORKSPACE_ID
+        ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
         : currentWorkspace.id)
     : '';
 
-  const workerStatus = workerToken ? getWorkerStatusForWorkspace(workerToken) : ('unknown' as WorkerStatus);
-  const isWorkerOnline = workerStatus === 'online';
+  const workerStatus = workerToken ? getWorkerStatusForWorkspace(workerToken) : WorkerStatusValue.Unknown;
+  const isWorkerOnline = workerStatus === WorkerStatusValue.Online;
   const workspaceSessions = workerToken ? getSessionsForWorkspace(workerToken) : [];
 
   const handleCreateSession = useCallback(() => {
@@ -182,7 +181,7 @@ const HeaderBar = ({
 
   const statusDot = isWorkerOnline
     ? 'bg-emerald-400'
-    : connectionStatus === 'checking'
+    : connectionStatus === TerminalConnectionStatus.Checking
       ? 'bg-amber-400 animate-pulse'
       : 'bg-red-400';
 
@@ -224,7 +223,7 @@ const HeaderBar = ({
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-surface-700 rounded-lg transition border border-transparent hover:border-surface-600"
             title={currentWorkspace?.id && currentWorkspace.id !== personalWorkspaceId ? `ID: ${currentWorkspace.id}` : undefined}
           >
-            {currentWorkspace?.type === 'personal' ? (
+            {currentWorkspace?.type === WorkspaceType.Personal ? (
               <User className="w-3.5 h-3.5 text-surface-400" />
             ) : (
               <Briefcase className="w-3.5 h-3.5 text-mandy-400" />
@@ -279,7 +278,7 @@ const HeaderBar = ({
                         setShowWorkspaceMenu(false);
                       }}
                     >
-                      {ws.type === 'personal' ? <User className="w-4 h-4 shrink-0" /> : <Briefcase className="w-4 h-4 shrink-0" />}
+                      {ws.type === WorkspaceType.Personal ? <User className="w-4 h-4 shrink-0" /> : <Briefcase className="w-4 h-4 shrink-0" />}
                       <div className="flex flex-col flex-1 min-w-0">
                         <span className="truncate">{ws.name}</span>
                         {ws.id !== personalWorkspaceId && (
@@ -298,7 +297,7 @@ const HeaderBar = ({
                           <Copy className="w-3 h-3" />
                         </button>
                       )}
-                      {user && ws.type === 'shared' && ws.id !== personalWorkspaceId && (ws.ownerId === user.uid || isAdmin) && (
+                      {user && ws.type === WorkspaceType.Shared && ws.id !== personalWorkspaceId && (ws.ownerId === user.uid || isAdmin) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -351,13 +350,13 @@ const HeaderBar = ({
       {/* ── Center: Terminal tabs + File actions ── */}
       <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
         {/* Worker status dot */}
-        <div className="flex items-center gap-1 shrink-0 pr-1" title={isWorkerOnline ? 'Worker listo' : connectionStatus === 'checking' ? 'Conectando…' : 'Sin worker'}>
+        <div className="flex items-center gap-1 shrink-0 pr-1" title={isWorkerOnline ? 'Worker listo' : connectionStatus === TerminalConnectionStatus.Checking ? 'Conectando…' : 'Sin worker'}>
           <div className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
           <TerminalIcon className="w-3 h-3 text-surface-500" />
         </div>
 
         {/* Terminal session tabs */}
-        {connectionStatus === 'checking' && (
+        {connectionStatus === TerminalConnectionStatus.Checking && (
           <span className="flex items-center gap-1 text-[10px] text-surface-500 italic px-1 whitespace-nowrap shrink-0">
             <Loader2 className="w-2.5 h-2.5 animate-spin" />
             Conectando…
@@ -371,7 +370,7 @@ const HeaderBar = ({
           </span>
         )}
 
-        {!isWorkerOnline && connectionStatus !== 'checking' && (
+        {!isWorkerOnline && connectionStatus !== TerminalConnectionStatus.Checking && (
           <button
             onClick={() => openTerminal()}
             className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-amber-500/10 border border-amber-500/20 rounded text-amber-400 hover:bg-amber-500/20 transition whitespace-nowrap shrink-0"
@@ -381,7 +380,7 @@ const HeaderBar = ({
           </button>
         )}
 
-        {workspaceSessions.length === 0 && isWorkerOnline && !isCreatingSession && connectionStatus !== 'checking' && (
+        {workspaceSessions.length === 0 && isWorkerOnline && !isCreatingSession && connectionStatus !== TerminalConnectionStatus.Checking && (
           <span className="text-[10px] text-surface-500 italic whitespace-nowrap px-1 shrink-0">Sin sesiones</span>
         )}
 

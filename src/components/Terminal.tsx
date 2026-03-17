@@ -5,8 +5,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { getErrorMessage } from '@/lib/error-utils';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
-import { TerminalConnectionStatus, type TerminalConnectionStatusId } from '@/types/terminal';
-import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
+import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId } from '@/types/terminal';
+import { PERSONAL_WORKSPACE_ID, WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TerminalProps {
@@ -18,8 +18,8 @@ interface TerminalProps {
 }
 
 function getWorkerToken(workspaceType: WorkspaceTypeId, workspaceId: string | undefined, userId: string): string {
-  if (workspaceType === WorkspaceType.Personal || !workspaceId || workspaceId === WorkspaceType.Personal) {
-    return `${WorkspaceType.Personal}:${userId}`;
+  if (workspaceType === WorkspaceType.Personal || !workspaceId || workspaceId === PERSONAL_WORKSPACE_ID) {
+    return `${PERSONAL_WORKSPACE_ID}:${userId}`;
   }
   return workspaceId;
 }
@@ -138,7 +138,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   if (!user) return <div className="h-full flex items-center justify-center text-slate-500">Log in required</div>;
 
-  if (status === 'checking') {
+  if (status === TerminalConnectionStatus.Checking) {
       return (
           <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-slate-950">
               <Loader2 className="w-8 h-8 animate-spin mb-4 text-emerald-500/50" />
@@ -148,8 +148,8 @@ const Terminal: React.FC<TerminalProps> = ({
   }
 
   const showHubError = status === TerminalConnectionStatus.Error || (!hubConnected && status !== TerminalConnectionStatus.Offline);
-  const workerOnline = workspaceWorkerStatus === 'online';
-  const workerOffline = workspaceWorkerStatus === 'offline' || workspaceWorkerStatus === 'unknown';
+  const workerOnline = workspaceWorkerStatus === WorkerStatusValue.Online;
+  const workerOffline = workspaceWorkerStatus === WorkerStatusValue.Offline || workspaceWorkerStatus === WorkerStatusValue.Unknown;
 
   if (effectiveSessionId && sessionActive) {
       return (

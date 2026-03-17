@@ -1,11 +1,11 @@
 import type { FitAddon } from '@xterm/addon-fit';
 import type { WebLinksAddon } from '@xterm/addon-web-links';
-import type { Terminal as XTermTerminal } from '@xterm/xterm';
+import type { ITerminalOptions, Terminal as XTermTerminal } from '@xterm/xterm';
 import { io, Socket } from 'socket.io-client';
-import type { TerminalConnectionStatusId, TerminalSessionCreationPayload, TerminalSessionPayload, WorkerStatus } from '@/types/terminal';
+import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId, type TerminalSessionCreationPayload, type TerminalSessionPayload, type WorkerStatus } from '@/types/terminal';
 import type { WorkspaceTypeId } from '@/types/workspace';
 
-type XTermConstructor = new (options?: ConstructorParameters<typeof XTermTerminal>[0]) => XTermTerminal;
+type XTermConstructor = new (options?: ITerminalOptions) => XTermTerminal;
 type FitAddonConstructor = new () => FitAddon;
 type WebLinksAddonConstructor = new () => WebLinksAddon;
 type SocketStatus = TerminalConnectionStatusId | 'hub-online' | 'hub-offline';
@@ -146,8 +146,12 @@ export class TerminalController {
 
   private createTerminalInstance(sessionId: string): TerminalInstance {
     const Terminal = window.Terminal;
-    const FitAddon = window.FitAddon.FitAddon;
+    const FitAddon = window.FitAddon?.FitAddon;
     const WebLinksAddon = window.WebLinksAddon?.WebLinksAddon;
+
+    if (!Terminal || !FitAddon) {
+      throw new Error('xterm globals not initialized');
+    }
 
     const term = new Terminal({
       cursorBlink: true,
@@ -314,7 +318,7 @@ export class TerminalController {
 
     this.socket.on('connect_error', (err) => {
       console.error('[TerminalController] Connection error:', err.message);
-      onStatusChange?.('error');
+      onStatusChange?.(TerminalConnectionStatus.Error);
     });
 
     this.socket.on('worker-status', (data: { status: WorkerStatus; workspaceId?: string }) => {
@@ -325,7 +329,7 @@ export class TerminalController {
       if (workspaceId) {
         this.workspaceStatuses.set(workspaceId, status);
         this.onWorkerStatusChange?.({ workspaceId, status });
-      } else {
+      } else if (status === WorkerStatusValue.Online || status === WorkerStatusValue.Offline) {
         onStatusChange?.(status);
       }
     });
