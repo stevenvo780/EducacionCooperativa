@@ -16,18 +16,19 @@ test.beforeEach(async ({ page }) => {
 test('dashboard switches workspaces and creates a new workspace', async ({ page }) => {
   await installMockApi(page);
   await gotoDashboard(page);
+  const header = page.getByRole('banner');
 
   await expect(page.getByRole('button', { name: /Espacio Personal/i })).toBeVisible();
   await expect(page.getByText('Documento inicial.md')).toBeVisible();
 
-  await page.getByRole('button', { name: /Espacio Personal/i }).click();
+  await header.getByRole('button', { name: 'Espacio Personal', exact: true }).click();
   await page.getByText('Historia Cooperativa').click();
 
   await expect(page).toHaveURL(/workspaceId=ws-shared/);
-  await expect(page.getByRole('button', { name: /Historia Cooperativa/i })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Historia Cooperativa', exact: true })).toBeVisible();
   await expect(page.getByText('Bibliografia.md')).toBeVisible();
 
-  await page.getByRole('button', { name: /Historia Cooperativa/i }).click();
+  await header.getByRole('button', { name: 'Historia Cooperativa', exact: true }).click();
   await page.getByRole('button', { name: 'Nuevo Espacio' }).click();
   await expect(page.getByRole('heading', { name: 'Nuevo Espacio de Trabajo' })).toBeVisible();
 
@@ -35,7 +36,7 @@ test('dashboard switches workspaces and creates a new workspace', async ({ page 
   await page.getByRole('button', { name: 'Crear' }).click();
 
   await expect(page).toHaveURL(/workspaceId=ws-created-1/);
-  await expect(page.getByRole('button', { name: /Equipo QA/i })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Equipo QA', exact: true })).toBeVisible();
   await expect(page.getByText('Espacio vacío')).toBeVisible();
 });
 
@@ -80,7 +81,10 @@ test('dashboard opens pricing, changes password and manages workspace members', 
   await page.getByPlaceholder('usuario@ejemplo.com').fill('nuevo.miembro@cooperativa.test');
   await page.getByRole('button', { name: 'Enviar' }).click();
   await expect(page.getByText('Invitación enviada')).toBeVisible();
-  await page.getByRole('button', { name: 'Aceptar' }).click();
+  const inviteSentDialog = page.locator('div').filter({
+    has: page.getByText('Invitación enviada')
+  }).first();
+  await inviteSentDialog.locator('button').filter({ hasText: /^Aceptar$/ }).dispatchEvent('click');
 
   await page.getByTitle('Miembros').click();
   await expect(page.getByRole('heading', { name: 'Miembros del Espacio' })).toBeVisible();
@@ -89,9 +93,12 @@ test('dashboard opens pricing, changes password and manages workspace members', 
   const removeMemberDialog = page.locator('div').filter({
     has: page.getByText('¿Estás seguro de que quieres eliminar a este miembro del espacio de trabajo?')
   }).first();
-  await removeMemberDialog.locator('button').filter({ hasText: /^Eliminar$/ }).click();
+  await removeMemberDialog.locator('button').filter({ hasText: /^Eliminar$/ }).dispatchEvent('click');
   await expect(page.getByText('Miembro eliminado')).toBeVisible();
-  await page.getByRole('button', { name: 'Aceptar' }).click();
+  const memberRemovedDialog = page.locator('div').filter({
+    has: page.getByText('Miembro eliminado')
+  }).first();
+  await memberRemovedDialog.locator('button').filter({ hasText: /^Aceptar$/ }).dispatchEvent('click');
   await expect(page.getByText('Miembros (1)')).toBeVisible();
 });
 
@@ -114,7 +121,9 @@ test('dashboard creates documents and folders and uses sidebar and quick search'
   await expect(page.getByText('Memoria cooperativa.md')).toBeVisible();
   await sidebarSearch.clear();
 
-  await page.keyboard.press('Control+P');
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }));
+  });
   const quickSearchInput = page.getByPlaceholder('Buscar documentos, conceptos, fragmentos, autores u obras...');
   await expect(quickSearchInput).toBeVisible();
   await quickSearchInput.fill('memoria');

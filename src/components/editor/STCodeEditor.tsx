@@ -31,7 +31,8 @@ type TokenCategory =
 const KEYWORDS = new Set([
   'logic', 'axiom', 'theorem', 'derive', 'from', 'check', 'prove',
   'countermodel', 'truth_table', 'let', 'passage', 'formalize', 'as',
-  'claim', 'support', 'confidence', 'context', 'render'
+  'claim', 'support', 'confidence', 'context', 'render', 'explain',
+  'forall', 'exists'
 ]);
 
 const BUILTINS = new Set([
@@ -91,6 +92,17 @@ function tokenizeLine(line: string): HighlightToken[] {
     }
 
     // ── 4. Operators (multi-char first) ──
+    // Modal operators: [] (necessity) and <> (possibility)
+    if (line[i] === '[' && line[i + 1] === ']') {
+      tokens.push({ text: '[]', category: 'operator' });
+      i += 2;
+      continue;
+    }
+    if (line[i] === '<' && line[i + 1] === '>') {
+      tokens.push({ text: '<>', category: 'operator' });
+      i += 2;
+      continue;
+    }
     if (line[i] === '<' && line[i + 1] === '-' && line[i + 2] === '>') {
       tokens.push({ text: '<->', category: 'operator' });
       i += 3;
@@ -529,7 +541,7 @@ export default function STCodeEditor({
                 }}
                 onMouseEnter={() => setCompletionIdx(i)}
               >
-                <span className={`st-autocomplete-kind st-ac-${item.kind}`}>{item.kind === 'keyword' ? 'K' : item.kind === 'snippet' ? 'S' : 'V'}</span>
+                <span className={`st-autocomplete-kind st-ac-${item.kind}`}>{item.kind === 'keyword' ? 'K' : item.kind === 'operator' ? 'O' : item.kind === 'value' ? 'P' : item.kind === 'snippet' ? 'S' : 'V'}</span>
                 <span className="st-autocomplete-label">{item.label}</span>
                 {item.detail && <span className="st-autocomplete-detail">{item.detail}</span>}
               </button>
