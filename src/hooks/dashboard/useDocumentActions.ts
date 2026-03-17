@@ -13,6 +13,136 @@ import { DialogKind, type DocItem, type FolderItem, type Workspace, type DialogC
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { TerminalSession } from '@/context/TerminalContext';
 
+// ── ST Guide content for agents and users ───────────────────
+
+const ST_GUIDE_CONTENT = `# ST — Guía del Lenguaje de Lógica Formal
+
+> Intérprete disponible en terminal: \\\`st\\\`
+> Paquete npm: \\\`@stevenvo780/st-lang\\\`
+
+## Inicio rápido
+
+\\\`\\\`\\\`bash
+# Ejecutar un archivo .st
+st run archivo.st
+
+# REPL interactivo
+st
+
+# Ver perfiles disponibles
+st --list-profiles
+\\\`\\\`\\\`
+
+## Sintaxis básica
+
+### 1. Declarar lógica
+\\\`\\\`\\\`st
+logic classical.propositional
+\\\`\\\`\\\`
+
+### 2. Axiomas y teoremas
+\\\`\\\`\\\`st
+axiom a1 : P -> Q
+axiom a2 : P
+theorem t1 : Q
+\\\`\\\`\\\`
+
+### 3. Comandos de verificación
+\\\`\\\`\\\`st
+check valid (P | !P)
+check satisfiable (P & Q)
+check equivalent (P->Q), (!P|Q)
+derive Q from {a1, a2}
+truth_table (P & Q -> R)
+countermodel (P -> Q)
+\\\`\\\`\\\`
+
+### 4. Variables con let
+\\\`\\\`\\\`st
+let f = (P -> Q) & (Q -> R)
+check valid f -> (P -> R)
+\\\`\\\`\\\`
+
+## Operadores
+
+| Operador | Significado | Alias |
+|----------|-------------|-------|
+| \\\`&\\\` | Conjunción (Y) | \\\`y\\\` |
+| \\\`|\\\` | Disyunción (O) | \\\`o\\\` |
+| \\\`!\\\` | Negación | \\\`no\\\` |
+| \\\`->\\\` | Implicación | \\\`entonces\\\` |
+| \\\`<->\\\` | Bicondicional | \\\`sii\\\` |
+| \\\`forall x\\\` | Para todo x | |
+| \\\`exists x\\\` | Existe x | |
+| \\\`[]\\\` | Necesariamente | |
+| \\\`<>\\\` | Posiblemente | |
+
+## Perfiles de lógica
+
+- \\\`classical.propositional\\\` — Lógica proposicional clásica
+- \\\`classical.first_order\\\` — Lógica de primer orden
+- \\\`modal.k\\\` — Lógica modal K
+- \\\`paraconsistent.belnap\\\` — Belnap 4-valuada
+- \\\`intuitionistic.propositional\\\` — Intuicionista
+- \\\`deontic.standard\\\` — Deóntica
+- \\\`epistemic.s5\\\` — Epistémica S5
+- \\\`temporal.ltl\\\` — Temporal lineal
+- \\\`probabilistic.basic\\\` — Probabilística
+- \\\`aristotelian.syllogistic\\\` — Silogística
+
+## Capa Textual
+
+\\\`\\\`\\\`st
+logic classical.propositional
+let p1 = passage([[documento.md#seccion]])
+let f1 = formalize p1 as (P & Q)
+claim c1 = f1
+check valid c1
+\\\`\\\`\\\`
+
+## API programática (Node.js)
+
+\\\`\\\`\\\`javascript
+const { evaluate, createInterpreter } = require('@stevenvo780/st-lang/api');
+
+const result = evaluate('logic classical.propositional\\ncheck valid (P | !P)');
+console.log(result.results[0].status); // 'valid'
+
+const st = createInterpreter();
+st.exec('logic classical.propositional');
+st.exec('axiom a1 : P -> Q');
+const r = st.exec('check satisfiable a1');
+console.log(r.ok); // true
+\\\`\\\`\\\`
+
+## Ejemplos
+
+### Modus Ponens
+\\\`\\\`\\\`st
+logic classical.propositional
+axiom p1 : P -> Q
+axiom p2 : P
+derive Q from {p1, p2}
+\\\`\\\`\\\`
+
+### Primer Orden
+\\\`\\\`\\\`st
+logic classical.first_order
+axiom all_mortal : forall x (Human(x) -> Mortal(x))
+axiom socrates : Human(socrates)
+derive Mortal(socrates) from {all_mortal, socrates}
+\\\`\\\`\\\`
+
+### Modal
+\\\`\\\`\\\`st
+logic modal.k
+check valid [](P -> Q) -> ([]P -> []Q)
+\\\`\\\`\\\`
+
+---
+*ST v1.0.0 — https://github.com/stevenvo780/ST*
+`;
+
 interface UseDocumentActionsOptions {
     user: User | null;
     currentWorkspace: Workspace | null;
@@ -46,6 +176,7 @@ interface UseDocumentActionsResult {
     promptMoveDocument: (docItem: DocItem) => Promise<void>;
     createDoc: (e?: React.FormEvent, folderName?: string) => Promise<void>;
     createStDoc: (folderName?: string) => Promise<void>;
+    createStGuide: () => Promise<void>;
     handleDownloadDoc: (doc: DocItem) => Promise<void>;
     handleDownloadFolder: (folderPath: string) => Promise<void>;
 }
@@ -456,6 +587,55 @@ export function useDocumentActions({
         }
     };
 
+    const createStGuide = async () => {
+        if (!user) return;
+        const name = 'ST_GUIDE.md';
+        const targetFolder = normalizeFolderPath(activeFolder);
+        const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;
+
+        // Check if guide already exists in current folder
+        const exists = docsRef.current.some(d =>
+            d.name === name && normalizeFolderPath(d.folder) === targetFolder
+        );
+        if (exists) {
+            const existing = docsRef.current.find(d =>
+                d.name === name && normalizeFolderPath(d.folder) === targetFolder
+            );
+            if (existing) {
+                openDocument(existing);
+                return;
+            }
+        }
+
+        const guideContent = ST_GUIDE_CONTENT;
+        setIsCreating(true);
+        try {
+            const data = await createDocumentApi({
+                name,
+                content: guideContent,
+                type: 'text',
+                ownerId: user.uid,
+                workspaceId: docWorkspaceId,
+                folder: targetFolder
+            });
+            setNewDocName('');
+            await requestDocsRefresh();
+            openDocument({
+                id: String(data.id),
+                name,
+                type: 'text',
+                ownerId: user.uid,
+                updatedAt: { seconds: Date.now() / 1000 },
+                folder: targetFolder
+            });
+        } catch (err) {
+            console.error('Error creating ST guide', err);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
     const handleDownloadDoc = async (doc: DocItem) => {
         if (!doc) return;
         try {
@@ -528,6 +708,7 @@ export function useDocumentActions({
         promptMoveDocument,
         createDoc,
         createStDoc,
+        createStGuide,
         handleDownloadDoc,
         handleDownloadFolder
     };
