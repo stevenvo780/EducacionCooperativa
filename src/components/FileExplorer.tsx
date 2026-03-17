@@ -184,7 +184,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [activeFolder, setActiveFolder] = useState(resolveActiveFolder(activeFolderProp));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const { menu: contextMenu, open: openContextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<string>();
+  const { menu: contextMenu, open: openContextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<{
+    type: 'doc' | 'folder';
+    id?: string;
+    path?: string;
+    folder?: FolderItem;
+    doc?: DocItem;
+  }>();
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
@@ -648,6 +654,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               e.stopPropagation();
               handleFolderDoubleClick(folder);
             }}
+            {...getContextTriggerProps({ type: 'folder', path: folder.path, folder })}
             onDragOver={(e) => {
               const types = Array.from(e.dataTransfer.types ?? []);
               const hasFolderType = types.includes(FOLDER_REORDER_TYPE);
@@ -799,7 +806,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         <div
           onClick={(e) => handleDocSelect(doc, index, e)}
           onDoubleClick={() => handleDocDoubleClick(doc)}
-          {...getContextTriggerProps(doc.id)}
+          {...getContextTriggerProps({ type: 'doc', id: doc.id, doc })}
           onDragOver={(e) => {
             const types = Array.from(e.dataTransfer.types ?? []);
             if (!canReorderDocs || !types.includes(DOC_REORDER_TYPE)) return;
@@ -1018,6 +1025,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 toggleFolder(folder.path);
               }
             }}
+            {...getContextTriggerProps({ type: 'folder', path: folder.path, folder })}
             className={`group w-full flex items-center gap-2 py-1.5 px-2 rounded transition border cursor-pointer relative ${
               isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'
             }`}
@@ -1068,7 +1076,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       );
     });
-  }, [folderChildrenMap, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange, docMap, onRenameDoc]);
+  }, [folderChildrenMap, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange, docMap, onRenameDoc, getContextTriggerProps]);
 
   return (
     <div ref={containerRef} className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
@@ -1325,33 +1333,33 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={closeContextMenu}
-          sections={[
+          sections={contextMenu.data.type === 'doc' ? [
             {
               actions: [
                 ...(onDuplicateDoc ? [{
                   label: 'Duplicar',
                   icon: <Copy className="w-4 h-4" />,
-                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) onDuplicateDoc(doc); }
+                  onClick: () => { const doc = contextMenu.data.doc || (contextMenu.data.id ? docMap.get(contextMenu.data.id) : null); if (doc) onDuplicateDoc(doc); }
                 }] : []),
                 ...(onDownloadDoc ? [{
                   label: 'Descargar',
                   icon: <Download className="w-4 h-4" />,
-                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) onDownloadDoc(doc); }
+                  onClick: () => { const doc = contextMenu.data.doc || (contextMenu.data.id ? docMap.get(contextMenu.data.id) : null); if (doc) onDownloadDoc(doc); }
                 }] : []),
                 ...(onToggleFavorite ? [{
-                  label: favoriteDocIdSet.has(contextMenu.data) ? 'Quitar de favoritos' : 'Fijar en favoritos',
-                  icon: <Star className={`w-4 h-4 ${favoriteDocIdSet.has(contextMenu.data) ? 'fill-current text-amber-300' : ''}`} />,
-                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) handleToggleFavorite(doc); }
+                  label: (contextMenu.data.id && favoriteDocIdSet.has(contextMenu.data.id)) ? 'Quitar de favoritos' : 'Fijar en favoritos',
+                  icon: <Star className={`w-4 h-4 ${(contextMenu.data.id && favoriteDocIdSet.has(contextMenu.data.id)) ? 'fill-current text-amber-300' : ''}`} />,
+                  onClick: () => { const doc = contextMenu.data.doc || (contextMenu.data.id ? docMap.get(contextMenu.data.id) : null); if (doc) handleToggleFavorite(doc); }
                 }] : []),
                 ...(onRenameDoc ? [{
                   label: 'Renombrar',
                   icon: <Pencil className="w-4 h-4" />,
-                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) handleRenameDoc(doc); }
+                  onClick: () => { const doc = contextMenu.data.doc || (contextMenu.data.id ? docMap.get(contextMenu.data.id) : null); if (doc) handleRenameDoc(doc); }
                 }] : []),
                 ...(onMoveDoc ? [{
                   label: 'Mover a...',
                   icon: <FolderInput className="w-4 h-4" />,
-                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) handleMoveDoc(doc); }
+                  onClick: () => { const doc = contextMenu.data.doc || (contextMenu.data.id ? docMap.get(contextMenu.data.id) : null); if (doc) handleMoveDoc(doc); }
                 }] : [])
               ]
             },
@@ -1360,7 +1368,32 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 ...(onDeleteDoc ? [{
                   label: 'Eliminar',
                   icon: <Trash2 className="w-4 h-4" />,
-                  onClick: () => { if (onDeleteDoc) onDeleteDoc(contextMenu.data); },
+                  onClick: () => { if (contextMenu.data.id) onDeleteDoc(contextMenu.data.id); },
+                  destructive: true
+                }] : [])
+              ]
+            }
+          ] : [
+            {
+              actions: [
+                ...(onDownloadFolder ? [{
+                  label: 'Descargar Carpeta',
+                  icon: <Download className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.path) onDownloadFolder(contextMenu.data.path); }
+                }] : []),
+                ...(onRenameDoc && contextMenu.data.folder?.docId ? [{
+                  label: 'Renombrar Carpeta',
+                  icon: <Pencil className="w-4 h-4" />,
+                  onClick: () => { const doc = docMap.get(contextMenu.data.folder!.docId!); if (doc) onRenameDoc(doc); }
+                }] : [])
+              ]
+            },
+            {
+              actions: [
+                ...(onDeleteFolder && contextMenu.data.folder && contextMenu.data.folder.kind !== 'system' ? [{
+                  label: 'Eliminar Carpeta',
+                  icon: <Trash2 className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.folder) onDeleteFolder(contextMenu.data.folder); },
                   destructive: true
                 }] : [])
               ]
