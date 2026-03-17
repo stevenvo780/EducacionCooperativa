@@ -105,12 +105,13 @@ test('dashboard opens pricing, changes password and manages workspace members', 
 test('dashboard creates documents and folders and uses sidebar and quick search', async ({ page }) => {
   await installMockApi(page);
   await gotoDashboard(page, 'ws-shared');
-  const header = page.getByRole('banner');
 
-  await header.getByRole('button', { name: 'Nuevo archivo' }).click();
+  await page.getByRole('button', { name: 'Nuevo archivo' }).first().click();
+  await expect(page.getByRole('button', { name: /Documento Markdown/i })).toBeVisible();
+  await page.getByRole('button', { name: /Documento Markdown/i }).click();
   await expect(page.getByText('Sin título')).toBeVisible();
 
-  await header.getByRole('button', { name: 'Nueva carpeta' }).click();
+  await page.getByRole('button', { name: 'Nueva carpeta' }).first().click();
   await page.getByPlaceholder('Nombre de carpeta').fill('Apuntes');
   await page.getByRole('button', { name: 'Aceptar' }).click();
   await expect(page.getByRole('button', { name: 'Apuntes', exact: true })).toBeVisible();

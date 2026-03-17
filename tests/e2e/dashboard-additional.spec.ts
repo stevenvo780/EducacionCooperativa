@@ -198,6 +198,7 @@ test('dashboard sends a semantic selection from the editor to the board', async 
   await rawTextarea.fill('Fragmento clave para tarea dentro del editor.');
   await rawTextarea.click();
   await page.keyboard.press('Control+A');
+  await rawTextarea.click({ button: 'right' });
 
   await expect(page.getByText('Menú semántico', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Enviar a tarea', exact: true }).click();
@@ -205,5 +206,9 @@ test('dashboard sends a semantic selection from the editor to the board', async 
 
   await page.getByTitle('Tablero').click();
   await expect(page.getByRole('heading', { name: 'Tablero' })).toBeVisible();
-  await expect(page.getByText('Fragmento clave para tarea dentro del editor.', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('div.text-xs.font-semibold.text-surface-100.break-words').filter({
+      hasText: 'Fragmento clave para tarea dentro del editor.'
+    }).first()
+  ).toBeVisible();
 });
