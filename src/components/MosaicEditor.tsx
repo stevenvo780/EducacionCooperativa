@@ -996,12 +996,15 @@ export default function MosaicEditor({
         columnId: targetColumn.id,
         title,
         description: `Origen: ${docName || 'Documento'}\n\n${semanticSelection.text}`,
-        ownerId: user?.uid ?? null
+        ownerId: user?.uid ?? null,
+        sourceDocId: roomId || undefined,
+        sourceDocName: docName || 'Documento',
+        sourceFragment: semanticSelection.text
       });
       setSemanticNotice(`Fragmento enviado a “${targetColumn.name}”.`);
       clearSemanticSelection();
     });
-  }, [clearSemanticSelection, currentWorkspaceId, docName, runSemanticAction, semanticSelection, user?.uid]);
+  }, [clearSemanticSelection, currentWorkspaceId, docName, roomId, runSemanticAction, semanticSelection, user?.uid]);
 
   const handleMarkEvidence = useCallback(() => {
     if (!semanticSelection) return;
@@ -1125,10 +1128,10 @@ export default function MosaicEditor({
     pushSection('insert', (
       <>
         <TableGridPicker portalContainer={editorShellRef.current} onInsert={(rows, cols) => {
-          const header = '| ' + Array.from({ length: cols }, (_, i) => `Col ${i + 1}`).join(' | ') + ' |';
-          const sep = '| ' + Array.from({ length: cols }, () => '---').join(' | ') + ' |';
+          const header = `| ${Array.from({ length: cols }, (_, i) => `Col ${i + 1}`).join(' | ')} |`;
+          const sep = `| ${Array.from({ length: cols }, () => '---').join(' | ')} |`;
           const body = Array.from({ length: rows - 1 }, () =>
-            '| ' + Array.from({ length: cols }, () => '   ').join(' | ') + ' |'
+            `| ${Array.from({ length: cols }, () => '   ').join(' | ')} |`
           ).join('\n');
           const tableMd = `\n${header}\n${sep}\n${body}\n`;
           insertSnippet(tableMd);

@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         const docRef = await adminDb.collection('documents').add({
             name: file.name,
             type: 'file',
-            url: url,
+            url,
             mimeType: file.type,
             storagePath: filename,
             ownerId,
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
             path: filename,
             storagePath: filename,
             mimeType: file.type,
-            ownerId: ownerId,
+            ownerId,
             folder,
             updatedAt: { seconds: Date.now() / 1000 }
         });

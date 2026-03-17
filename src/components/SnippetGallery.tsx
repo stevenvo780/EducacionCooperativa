@@ -10,13 +10,13 @@ import {
   Search, GripVertical, Copy, Sigma, Code2, LayoutGrid, FileText
 } from 'lucide-react';
 import clsx from 'clsx';
-import type { Snippet } from '@/services/snippetApi';
 import {
   fetchSnippets,
   createSnippet,
   updateSnippet,
   deleteSnippet,
-  seedDefaultSnippets
+  seedDefaultSnippets,
+  type Snippet
 } from '@/services/snippetApi';
 
 /**

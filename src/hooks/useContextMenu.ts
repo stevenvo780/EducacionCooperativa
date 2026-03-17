@@ -1,5 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
-import React from 'react';
+import { useCallback, useRef, useState, type MouseEvent, type TouchEvent } from 'react';
 
 const LONG_PRESS_MS = 500;
 const DRAG_THRESHOLD_PX = 8;
@@ -26,12 +25,12 @@ export function useContextMenu<T>() {
   // Cubre: right-click en desktop y long press en touch.
   // Cancela el long press si hay movimiento (drag).
   const getTriggerProps = useCallback((data: T) => ({
-    onContextMenu: (e: React.MouseEvent) => {
+    onContextMenu: (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setMenu({ x: e.clientX, y: e.clientY, data });
     },
-    onTouchStart: (e: React.TouchEvent) => {
+    onTouchStart: (e: TouchEvent) => {
       const touch = e.touches[0];
       touchStartPos.current = { x: touch.clientX, y: touch.clientY };
       isDragging.current = false;
@@ -41,7 +40,7 @@ export function useContextMenu<T>() {
         }
       }, LONG_PRESS_MS);
     },
-    onTouchMove: (e: React.TouchEvent) => {
+    onTouchMove: (e: TouchEvent) => {
       if (!touchStartPos.current) return;
       const touch = e.touches[0];
       const dx = Math.abs(touch.clientX - touchStartPos.current.x);

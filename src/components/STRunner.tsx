@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Play, RotateCcw, Trash2, ChevronDown, Zap, BookOpen, Terminal } from 'lucide-react';
+import { Play, RotateCcw, Trash2, ChevronDown, Zap, BookOpen, Terminal, AlertTriangle, List, Info } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
+import type { Diagnostic, SymbolInfo } from 'st-lang/api';
 
 // ── Constantes ──────────────────────────────────────────────
 
@@ -160,6 +161,105 @@ function HistoryPanel({ entries }: { entries: STHistoryEntry[] }) {
   );
 }
 
+function ProblemsPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
+  if (diagnostics.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+        <Info className="w-4 h-4 mr-2" />
+        Sin diagnósticos
+      </div>
+    );
+  }
+
+  const severityIcon = (severity: string) => {
+    switch (severity) {
+      case 'error': return <span className="text-red-400">✗</span>;
+      case 'warning': return <span className="text-amber-400">⚠</span>;
+      case 'hint': return <span className="text-blue-400">ℹ</span>;
+      default: return <span className="text-slate-400">·</span>;
+    }
+  };
+
+  const severityClass = (severity: string) => {
+    switch (severity) {
+      case 'error': return 'border-red-800/50 bg-red-950/30';
+      case 'warning': return 'border-amber-800/50 bg-amber-950/30';
+      default: return 'border-blue-800/50 bg-blue-950/30';
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      {diagnostics.map((d, i) => (
+        <div
+          key={i}
+          className={`flex items-start gap-2 px-3 py-2 rounded border text-xs ${severityClass(d.severity)}`}
+        >
+          <span className="mt-0.5 flex-shrink-0">{severityIcon(d.severity)}</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-slate-200">{d.message}</span>
+            {d.line && (
+              <span className="text-slate-500 ml-2">línea {d.line}{d.column ? `:${d.column}` : ''}</span>
+            )}
+            {d.code && (
+              <span className="text-slate-600 ml-2">[{d.code}]</span>
+            )}
+            {d.suggestion && (
+              <div className="text-cyan-400/80 mt-0.5">💡 {d.suggestion}</div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SymbolsPanel({ symbolsList }: { symbolsList: SymbolInfo[] }) {
+  if (symbolsList.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+        <List className="w-4 h-4 mr-2" />
+        Sin símbolos definidos
+      </div>
+    );
+  }
+
+  const kindBadge = (kind: string) => {
+    const colors: Record<string, string> = {
+      axiom: 'bg-emerald-500/20 text-emerald-400',
+      theorem: 'bg-blue-500/20 text-blue-400',
+      claim: 'bg-purple-500/20 text-purple-400',
+      passage: 'bg-amber-500/20 text-amber-400',
+      variable: 'bg-slate-500/20 text-slate-400',
+      formula: 'bg-cyan-500/20 text-cyan-400'
+    };
+    return (
+      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase ${colors[kind] || colors.variable}`}>
+        {kind}
+      </span>
+    );
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      {symbolsList.map((sym, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-2 px-3 py-1.5 rounded border border-slate-800 bg-slate-900/50 text-xs hover:bg-slate-800/50 transition-colors"
+        >
+          {kindBadge(sym.kind)}
+          <span className="text-slate-200 font-mono">{sym.name}</span>
+          {sym.location?.line && (
+            <span className="text-slate-600 ml-auto">:{sym.location.line}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type OutputTab = 'output' | 'problems' | 'symbols';
+
 // ── Componente principal ────────────────────────────────────
 
 export type STRunnerMode = 'script' | 'repl';
@@ -184,7 +284,7 @@ export default function STRunner({
   onExecute,
   className = ''
 }: STRunnerProps) {
-  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles, isRunning } =
+  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles, isRunning, getSymbols, lastDiagnostics } =
     useSTInterpreter();
 
   const [mode, setMode] = useState<STRunnerMode>(initialMode);
@@ -195,12 +295,20 @@ export default function STRunner({
   const replInputRef = useRef<HTMLInputElement>(null);
   const [replHistory, setReplHistory] = useState<string[]>([]);
   const [replHistoryIdx, setReplHistoryIdx] = useState(-1);
+  const [activeTab, setActiveTab] = useState<OutputTab>('output');
+  const [currentSymbols, setCurrentSymbols] = useState<SymbolInfo[]>([]);
 
   // ── Ejecutar script completo ──
   const handleRun = useCallback(() => {
     const result = run(code);
+    setCurrentSymbols(getSymbols(code));
+    if (result.diagnostics && result.diagnostics.length > 0) {
+      setActiveTab('problems');
+    } else {
+      setActiveTab('output');
+    }
     onExecute?.(code, result);
-  }, [code, run, onExecute]);
+  }, [code, run, getSymbols, onExecute]);
 
   // ── Ejecutar línea REPL ──
   const handleReplSubmit = useCallback(() => {
@@ -272,7 +380,7 @@ export default function STRunner({
         const start = ta.selectionStart;
         const end = ta.selectionEnd;
         const value = ta.value;
-        setCode(value.substring(0, start) + '  ' + value.substring(end));
+        setCode(`${value.substring(0, start)}  ${value.substring(end)}`);
         requestAnimationFrame(() => {
           ta.selectionStart = ta.selectionEnd = start + 2;
         });
@@ -408,7 +516,7 @@ export default function STRunner({
       {/* ── Body ── */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {mode === 'script' ? (
-          /* Script mode: editor arriba, output abajo */
+          /* Script mode: editor arriba, output con tabs abajo */
           <>
             <div className="flex-shrink-0 border-b border-slate-800" style={{ height: '45%', minHeight: 120 }}>
               <textarea
@@ -421,7 +529,59 @@ export default function STRunner({
                 placeholder="// Escribe tu script ST aquí..."
               />
             </div>
-            <HistoryPanel entries={history} />
+            {/* Output tabs */}
+            <div className="flex items-center gap-0 bg-slate-900 border-b border-slate-800 flex-shrink-0 px-1">
+              <button
+                onClick={() => setActiveTab('output')}
+                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                  activeTab === 'output'
+                    ? 'border-indigo-500 text-white'
+                    : 'border-transparent text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                <Terminal className="w-3 h-3 inline mr-1" />
+                Salida
+              </button>
+              <button
+                onClick={() => setActiveTab('problems')}
+                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                  activeTab === 'problems'
+                    ? 'border-amber-500 text-white'
+                    : 'border-transparent text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                <AlertTriangle className="w-3 h-3 inline mr-1" />
+                Problemas
+                {lastDiagnostics.length > 0 && (
+                  <span className={`ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
+                    lastDiagnostics.some(d => d.severity === 'error')
+                      ? 'bg-red-500/30 text-red-400'
+                      : 'bg-amber-500/30 text-amber-400'
+                  }`}>
+                    {lastDiagnostics.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('symbols')}
+                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                  activeTab === 'symbols'
+                    ? 'border-emerald-500 text-white'
+                    : 'border-transparent text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                <List className="w-3 h-3 inline mr-1" />
+                Símbolos
+                {currentSymbols.length > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-emerald-500/30 text-emerald-400">
+                    {currentSymbols.length}
+                  </span>
+                )}
+              </button>
+            </div>
+            {activeTab === 'output' && <HistoryPanel entries={history} />}
+            {activeTab === 'problems' && <ProblemsPanel diagnostics={lastDiagnostics} />}
+            {activeTab === 'symbols' && <SymbolsPanel symbolsList={currentSymbols} />}
           </>
         ) : (
           /* REPL mode: output arriba, input abajo */

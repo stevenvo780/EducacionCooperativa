@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, type MutableRefObject } from 'react';
 import katex from 'katex';
-import type { MutableRefObject } from 'react';
 import type { ViewMode } from './types';
 
 const OVERLAY_CONTAINER_CLASS = 'katex-overlay-container';

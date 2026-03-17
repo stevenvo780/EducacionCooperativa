@@ -33,6 +33,7 @@ export interface SemanticSearchRequest {
   query: string;
   workspaceId: string;
   limit?: number;
+  offset?: number;
   kinds?: SearchResultKind[];
 }
 
@@ -43,6 +44,8 @@ export interface SemanticSearchResponse {
     workspaceId: string;
     scannedDocuments: number;
     totalCandidates: number;
+    offset: number;
+    hasMore: boolean;
     mode: 'heuristic-v1';
   };
 }

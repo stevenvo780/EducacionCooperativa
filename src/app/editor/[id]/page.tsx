@@ -2,8 +2,7 @@
 
 import { useAuth } from '@/context/AuthContext';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Editor from '@/components/Editor';
 
 export default function EditorPage({ params }: { params: { id: string } }) {

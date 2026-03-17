@@ -6,9 +6,12 @@ import {
   quickEval,
   createInterpreter,
   listProfiles,
+  symbols as stSymbols,
   type STEvalResult,
   type STInterpreter,
-  type TheorySummary
+  type TheorySummary,
+  type SymbolInfo,
+  type Diagnostic
 } from 'st-lang/api';
 
 // ── Tipos del hook ──────────────────────────────────────────
@@ -41,6 +44,10 @@ export interface UseSTInterpreterReturn {
   profiles: string[];
   /** Indica si está ejecutando */
   isRunning: boolean;
+  /** Obtiene los símbolos del código actual */
+  getSymbols: (code: string) => SymbolInfo[];
+  /** Diagnósticos acumulados de la última ejecución */
+  lastDiagnostics: Diagnostic[];
 }
 
 // ── Hook ────────────────────────────────────────────────────
@@ -50,6 +57,7 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
   const [history, setHistory] = useState<STHistoryEntry[]>([]);
   const [theorySummary, setTheorySummary] = useState<TheorySummary | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [lastDiagnostics, setLastDiagnostics] = useState<Diagnostic[]>([]);
   const idCounter = useRef(0);
 
   // Sesión REPL persistente
@@ -78,7 +86,16 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     };
     setHistory(prev => [...prev, entry]);
     setLastResult(result);
+    setLastDiagnostics(result.diagnostics || []);
     return result;
+  }, []);
+
+  const getSymbols = useCallback((code: string): SymbolInfo[] => {
+    try {
+      return stSymbols(code);
+    } catch {
+      return [];
+    }
   }, []);
 
   // Ejecución completa sin estado (cada llamada es independiente)
@@ -144,6 +161,8 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     clearHistory,
     theorySummary,
     profiles,
-    isRunning
+    isRunning,
+    getSymbols,
+    lastDiagnostics
   };
 }

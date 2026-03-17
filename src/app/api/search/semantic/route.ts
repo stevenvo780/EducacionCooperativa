@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       : 'personal';
     const query = typeof body.query === 'string' ? body.query : '';
     const limit = typeof body.limit === 'number' ? body.limit : DEFAULT_LIMIT;
+    const offset = typeof body.offset === 'number' ? body.offset : 0;
     const kinds = Array.isArray(body.kinds)
       ? body.kinds.filter((kind): kind is SearchResultKind => typeof kind === 'string' && isSearchKind(kind))
       : undefined;
@@ -61,10 +62,11 @@ export async function POST(req: NextRequest) {
         size: typeof item.size === 'number' ? item.size : undefined
       } satisfies SearchableDocument));
 
-    const { results, totalCandidates } = buildSemanticSearchResults({
+    const { results, totalCandidates, offset: resultOffset, hasMore } = buildSemanticSearchResults({
       docs,
       query,
       limit,
+      offset,
       kinds
     });
 
@@ -75,6 +77,8 @@ export async function POST(req: NextRequest) {
         workspaceId,
         scannedDocuments: docs.length,
         totalCandidates,
+        offset: resultOffset,
+        hasMore,
         mode: 'heuristic-v1'
       }
     });

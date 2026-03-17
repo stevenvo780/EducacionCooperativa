@@ -414,6 +414,7 @@ export const buildSemanticSearchResults = (params: {
   docs: SearchableDocument[];
   query: string;
   limit?: number;
+  offset?: number;
   kinds?: SearchResultKind[];
 }) => {
   const terms = makeSearchTerms(params.query);
@@ -466,6 +467,7 @@ export const buildSemanticSearchResults = (params: {
   });
 
   const limit = Math.max(1, Math.min(params.limit ?? MAX_RESULTS_DEFAULT, 50));
+  const offset = Math.max(0, params.offset ?? 0);
   const deduped: SearchResultItem[] = [];
   const seen = new Set<string>();
 
@@ -476,8 +478,12 @@ export const buildSemanticSearchResults = (params: {
     deduped.push(result);
   });
 
+  const paged = deduped.slice(offset, offset + limit);
+
   return {
-    results: deduped.slice(0, limit),
-    totalCandidates: deduped.length
+    results: paged,
+    totalCandidates: deduped.length,
+    offset,
+    hasMore: offset + limit < deduped.length
   };
 };
