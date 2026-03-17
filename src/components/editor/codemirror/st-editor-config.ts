@@ -15,6 +15,7 @@ import { stAutocompletion } from './st-autocomplete';
 import { stLintExtensions } from './st-lint';
 import { stHoverTooltip } from './st-hover';
 import { stRainbowParens } from './st-rainbow-parens';
+import { stTheme, stLightTheme } from './st-theme';
 
 // ── Feature keys ────────────────────────────────────────────
 
@@ -29,7 +30,8 @@ export type EditorFeature =
   | 'rainbowParens'
   | 'autocomplete'
   | 'lint'
-  | 'hover';
+  | 'hover'
+  | 'lightTheme';
 
 export interface EditorConfig {
   minimap: boolean;
@@ -43,6 +45,7 @@ export interface EditorConfig {
   autocomplete: boolean;
   lint: boolean;
   hover: boolean;
+  lightTheme: boolean;
 }
 
 // ── Defaults ────────────────────────────────────────────────
@@ -60,7 +63,8 @@ export const DEFAULT_CONFIG: EditorConfig = {
   rainbowParens: true,
   autocomplete: true,
   lint: true,
-  hover: true
+  hover: true,
+  lightTheme: false
 };
 
 export function loadConfig(): EditorConfig {
@@ -95,6 +99,7 @@ export interface EditorCompartments {
   autocomplete: Compartment;
   lint: Compartment;
   hover: Compartment;
+  lightTheme: Compartment;
 }
 
 export function createCompartments(): EditorCompartments {
@@ -109,7 +114,8 @@ export function createCompartments(): EditorCompartments {
     rainbowParens: new Compartment(),
     autocomplete: new Compartment(),
     lint: new Compartment(),
-    hover: new Compartment()
+    hover: new Compartment(),
+    lightTheme: new Compartment()
   };
 }
 
@@ -164,6 +170,10 @@ function hoverExtension(enabled: boolean): Extension {
   return enabled ? stHoverTooltip() : [];
 }
 
+function lightThemeExtension(enabled: boolean): Extension {
+  return enabled ? stLightTheme() : stTheme();
+}
+
 // ── Build initial extensions ────────────────────────────────
 
 export function buildCompartmentExtensions(
@@ -181,7 +191,8 @@ export function buildCompartmentExtensions(
     compartments.rainbowParens.of(rainbowParensExtension(config.rainbowParens)),
     compartments.autocomplete.of(autocompleteExtension(config.autocomplete)),
     compartments.lint.of(lintExtension(config.lint)),
-    compartments.hover.of(hoverExtension(config.hover))
+    compartments.hover.of(hoverExtension(config.hover)),
+    compartments.lightTheme.of(lightThemeExtension(config.lightTheme))
   ];
 }
 
@@ -198,7 +209,8 @@ const FACTORY_MAP: Record<EditorFeature, (enabled: boolean) => Extension> = {
   rainbowParens: rainbowParensExtension,
   autocomplete: autocompleteExtension,
   lint: lintExtension,
-  hover: hoverExtension
+  hover: hoverExtension,
+  lightTheme: lightThemeExtension
 };
 
 /**
@@ -230,10 +242,12 @@ export const FEATURE_LABELS: Record<EditorFeature, string> = {
   rainbowParens: 'Paréntesis arcoíris',
   autocomplete: 'Autocompletado',
   lint: 'Diagnósticos',
-  hover: 'Tooltips al hover'
+  hover: 'Tooltips al hover',
+  lightTheme: 'Tema claro ☀️'
 };
 
 export const ALL_FEATURES: EditorFeature[] = [
+  'lightTheme',
   'minimap',
   'lineNumbers',
   'activeLine',

@@ -3,9 +3,10 @@
  *
  * Usa StreamLanguage (parser streaming basado en tokens) en lugar de Lezer grammar completo,
  * reutilizando los conjuntos léxicos ya definidos en st-editor/tokenizer.ts.
+ * Incluye indentación inteligente para bloques ST (proof/qed, etc.)
  */
 
-import { StreamLanguage, StringStream, LanguageSupport } from '@codemirror/language';
+import { StreamLanguage, StringStream, LanguageSupport, indentService } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import { KEYWORDS, BUILTINS, PROFILES } from '../st-editor/tokenizer';
 
@@ -179,9 +180,45 @@ const stStreamParser = {
 
 export const stLanguage = StreamLanguage.define(stStreamParser);
 
+// ── Smart indentation for ST ────────────────────────────────
+
+/**
+ * Indentación inteligente para bloques ST.
+ * - Después de `proof {` → indentar +2
+ * - `} qed` → des-indentar
+ * - Mantener indentación del contexto
+ */
+const stIndentService = indentService.of((context, pos) => {
+  const doc = context.state.doc;
+  const currentLine = doc.lineAt(pos);
+  if (currentLine.number <= 1) return null;
+
+  const prevLine = doc.line(currentLine.number - 1);
+  const prevText = prevLine.text.trimEnd();
+  const prevIndent = prevLine.text.match(/^(\s*)/)?.[1].length ?? 0;
+
+  // After "proof {" or lines ending with "{" → indent +2
+  if (prevText.endsWith('{') || /\bproof\s*\{?\s*$/.test(prevText)) {
+    return prevIndent + 2;
+  }
+
+  // After "assume" or "show" inside proof → maintain indent
+  if (/^\s*(assume|show|asumir|demostrar)\b/.test(prevText)) {
+    return prevIndent;
+  }
+
+  // Current line starts with "}" or "qed" → deindent
+  const currentText = currentLine.text.trim();
+  if (currentText.startsWith('}') || currentText.startsWith('qed')) {
+    return Math.max(0, prevIndent - 2);
+  }
+
+  return null; // Fall back to default
+});
+
 /**
  * Full language support for ST files in CodeMirror 6.
  */
 export function stLanguageSupport(): LanguageSupport {
-  return new LanguageSupport(stLanguage);
+  return new LanguageSupport(stLanguage, [stIndentService]);
 }

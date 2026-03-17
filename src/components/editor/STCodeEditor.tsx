@@ -16,8 +16,8 @@ import { closeBracketsKeymap } from '@codemirror/autocomplete';
 
 import {
   stLanguageSupport,
-  stTheme,
   stKeymap,
+  stGotoDef,
   dispatchDiagnostics,
   type EditorConfig,
   type EditorCompartments,
@@ -102,9 +102,9 @@ export default function STCodeEditor({
     EditorState.readOnly.of(readOnly),
     EditorState.tabSize.of(2),
 
-    // ST language & theme (always on)
+    // ST language (always on) — theme comes from Compartment (lightTheme toggle)
     stLanguageSupport(),
-    ...stTheme(),
+    ...stGotoDef(),
 
     // Keymaps
     ...stKeymap(
