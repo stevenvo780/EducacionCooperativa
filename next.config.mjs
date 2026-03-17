@@ -44,7 +44,7 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  transpilePackages: ['react-mosaic-component', 'firebase', 'undici', 'st-lang'],
+  transpilePackages: ['react-mosaic-component', 'firebase', 'undici', '@stevenvo780/st-lang'],
   experimental: {
     serverComponentsExternalPackages: ['firebase-admin'],
     serverActions: {
