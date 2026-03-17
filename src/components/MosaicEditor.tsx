@@ -240,6 +240,33 @@ const ensureMarkdownCandidateNames = (value: string) => {
   return Array.from(candidates);
 };
 
+const buildWorkspaceAwarePathCandidates = (value: string) => {
+  const cleaned = normalizeRelativeMarkdownPath(value.replace(/^\/+/, ''));
+  if (!cleaned) return [];
+
+  const segments = cleaned.split('/').filter(Boolean);
+  const candidates = new Set<string>();
+  const addCandidate = (candidate: string) => {
+    const normalized = normalizeRelativeMarkdownPath(candidate);
+    if (!normalized) return;
+    ensureMarkdownCandidateNames(normalized).forEach((name) => candidates.add(name));
+  };
+
+  addCandidate(cleaned);
+
+  if ((segments[0] === 'workspace' || segments[0] === 'workspaces') && segments.length > 2) {
+    addCandidate(segments.slice(2).join('/'));
+  }
+
+  if (segments.length > 1) {
+    addCandidate(segments.slice(1).join('/'));
+  }
+
+  return Array.from(candidates);
+};
+
+const isBrowserNavigationHref = (href: string) => /^(\/editor\/|\/login\b|\/dashboard\b|\/docs\b)/i.test(href);
+
 const convertWikiLinksToMarkdown = (content: string) => {
   const lines = content.split('\n');
   let insideFence = false;
@@ -315,7 +342,7 @@ const MarkdownPreview = React.memo(({ content, onOpenInternalLink }: { content: 
                 if (href.startsWith('#') || isExternalMarkdownHref(href)) return;
                 event.preventDefault();
                 const opened = await onOpenInternalLink(href);
-                if (!opened) {
+                if (!opened && isBrowserNavigationHref(href)) {
                   window.location.assign(href);
                 }
               }}
@@ -930,13 +957,14 @@ export default function MosaicEditor({
 
       const docs = await res.json() as Array<{ id: string; name?: string; folder?: string; type?: string }>;
       const currentFolder = normalizePath(currentMeta.folder);
+      const normalizedHref = cleanedHref.replace(/^\/+/, '');
       const resolvedPath = cleanedHref.startsWith('/')
-        ? normalizeRelativeMarkdownPath(cleanedHref)
-        : normalizeRelativeMarkdownPath(currentFolder ? `${currentFolder}/${cleanedHref}` : cleanedHref);
-      const basePath = normalizeRelativeMarkdownPath(cleanedHref);
+        ? normalizeRelativeMarkdownPath(normalizedHref)
+        : normalizeRelativeMarkdownPath(currentFolder ? `${currentFolder}/${normalizedHref}` : normalizedHref);
+      const basePath = normalizeRelativeMarkdownPath(normalizedHref);
       const candidatePaths = new Set<string>([
-        ...ensureMarkdownCandidateNames(resolvedPath),
-        ...ensureMarkdownCandidateNames(basePath)
+        ...buildWorkspaceAwarePathCandidates(resolvedPath),
+        ...buildWorkspaceAwarePathCandidates(basePath)
       ]);
       const candidateNames = new Set<string>([
         ...ensureMarkdownCandidateNames(basePath.split('/').pop() || ''),
@@ -948,7 +976,10 @@ export default function MosaicEditor({
         const docName = typeof doc.name === 'string' ? doc.name : '';
         const docFolder = normalizePath(typeof doc.folder === 'string' ? doc.folder : '');
         const docPath = normalizeRelativeMarkdownPath(docFolder ? `${docFolder}/${docName}` : docName);
-        return candidatePaths.has(docPath) || candidateNames.has(docName) || doc.id === cleanedHref;
+        return candidatePaths.has(docPath)
+          || Array.from(candidatePaths).some((candidatePath) => docPath.endsWith(`/${candidatePath}`) || docPath === candidatePath)
+          || candidateNames.has(docName)
+          || doc.id === cleanedHref;
       });
 
       if (!matchedDoc) return false;
@@ -996,7 +1027,7 @@ export default function MosaicEditor({
         }
 
         const opened = await openInternalMarkdownLink(href);
-        if (!opened) {
+        if (!opened && isBrowserNavigationHref(href)) {
           window.location.assign(href);
         }
       })();
