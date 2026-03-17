@@ -123,7 +123,14 @@ const Sidebar = ({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
-  const { menu: docContextMenu, close: closeDocContextMenu, getTriggerProps: getDocContextTriggerProps } = useContextMenu<DocItem>();
+  const { menu: contextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<{
+    type: 'doc' | 'folder';
+    id?: string;
+    path?: string;
+    folder?: FolderItem;
+    doc?: DocItem;
+  }>();
+
   const isCollapsedView = isCollapsed && !showMobileSidebar;
   const effectiveWidth = isCollapsedView ? 0 : sidebarWidth;
   const favoriteDocIdSet = useMemo(() => new Set(favoriteDocIds), [favoriteDocIds]);
@@ -296,7 +303,7 @@ const Sidebar = ({
             draggable
             onDragStart={(e) => handleDocDragStart(e, item.doc)}
             onDragEnd={handleDocDragEnd}
-            {...getDocContextTriggerProps(item.doc)}
+            {...getContextTriggerProps({ type: 'doc', id: item.doc.id, doc: item.doc })}
             className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${
               selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'
             }`}
@@ -371,6 +378,7 @@ const Sidebar = ({
               setActiveFolder(item.folder.path);
               toggleFolder(item.folder.path);
             }}
+            {...getContextTriggerProps({ type: 'folder', path: item.folder.path, folder: item.folder })}
             onDragOver={(e) => onFolderDragOver(e, item.folder.path)}
             onDrop={(e) => onFolderDrop(e, item.folder.path)}
             onDragLeave={() => onFolderDragLeave(item.folder.path)}
@@ -407,7 +415,7 @@ const Sidebar = ({
           draggable
           onDragStart={(e) => handleDocDragStart(e, item.doc)}
           onDragEnd={handleDocDragEnd}
-          {...getDocContextTriggerProps(item.doc)}
+          {...getContextTriggerProps({ type: 'doc', id: item.doc.id, doc: item.doc })}
           className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
             selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-400 hover:bg-surface-700/40'
           }`}
@@ -658,32 +666,32 @@ const Sidebar = ({
         </div>
       </div>
 
-      {docContextMenu && (
+      {contextMenu && (
         <ContextMenu
-          x={docContextMenu.x}
-          y={docContextMenu.y}
-          onClose={closeDocContextMenu}
-          sections={[
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={closeContextMenu}
+          sections={contextMenu.data.type === 'doc' ? [
             {
               actions: [
                 {
                   label: 'Abrir',
-                  onClick: () => openDocument(docContextMenu.data)
+                  onClick: () => { if (contextMenu.data.doc) openDocument(contextMenu.data.doc); }
                 },
                 {
                   label: 'Renombrar',
                   icon: <Pencil className="w-4 h-4" />,
-                  onClick: () => onRenameDocument(docContextMenu.data)
+                  onClick: () => { if (contextMenu.data.doc) onRenameDocument(contextMenu.data.doc); }
                 },
                 {
-                  label: favoriteDocIdSet.has(docContextMenu.data.id) ? 'Quitar de favoritos' : 'Fijar en favoritos',
-                  icon: <Star className={`w-4 h-4 ${favoriteDocIdSet.has(docContextMenu.data.id) ? 'fill-current text-amber-300' : ''}`} />,
-                  onClick: () => onToggleFavorite(docContextMenu.data)
+                  label: (contextMenu.data.id && favoriteDocIdSet.has(contextMenu.data.id)) ? 'Quitar de favoritos' : 'Fijar en favoritos',
+                  icon: <Star className={`w-4 h-4 ${(contextMenu.data.id && favoriteDocIdSet.has(contextMenu.data.id)) ? 'fill-current text-amber-300' : ''}`} />,
+                  onClick: () => { if (contextMenu.data.doc) onToggleFavorite(contextMenu.data.doc); }
                 },
-                ...(onDownloadDoc ? [{
+                ...(onDownloadDoc && contextMenu.data.doc ? [{
                   label: 'Descargar',
                   icon: <Download className="w-4 h-4" />,
-                  onClick: () => onDownloadDoc!(docContextMenu.data)
+                  onClick: () => onDownloadDoc!(contextMenu.data.doc!)
                 }] : [])
               ]
             },
@@ -692,8 +700,18 @@ const Sidebar = ({
                 {
                   label: 'Eliminar',
                   icon: <Trash2 className="w-4 h-4" />,
-                  onClick: () => deleteDocument(docContextMenu.data, { stopPropagation: () => {} } as React.MouseEvent),
+                  onClick: () => { if (contextMenu.data.doc) deleteDocument(contextMenu.data.doc, { stopPropagation: () => {} } as React.MouseEvent); },
                   destructive: true
+                }
+              ]
+            }
+          ] : [
+            {
+              actions: [
+                {
+                  label: 'Abrir Carpeta',
+                  icon: <Folder className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.path) setActiveFolder(contextMenu.data.path); }
                 }
               ]
             }

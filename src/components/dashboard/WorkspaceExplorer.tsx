@@ -2,10 +2,12 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { Briefcase, Cloud, CloudOff, Code, Copy, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
+import { Briefcase, Cloud, CloudOff, Code, Copy, Download, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User, FilePlus2 } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { isDocUploaded } from '@/services/dashboardDocUtils';
 import { WorkspaceType } from '@/types/workspace';
+import { useContextMenu } from '@/hooks/useContextMenu';
+import { ContextMenu } from '@/components/ui/ContextMenu';
 
 const DOC_REORDER_TYPE = 'application/x-doc-reorder';
 const FOLDER_REORDER_TYPE = 'application/x-folder-reorder';
@@ -142,6 +144,13 @@ const WorkspaceExplorer = ({
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
+  const { menu: contextMenu, open: openContextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<{
+    type: 'doc' | 'folder';
+    id?: string;
+    path?: string;
+    folder?: FolderItem;
+    doc?: DocItem;
+  }>();
   const canReorderDocs = !!onReorderDocs;
   const canReorderFolders = !!onReorderFolders && activeChildFolders.every(folder => !!folder.docId);
 
@@ -198,6 +207,7 @@ const WorkspaceExplorer = ({
         <div style={style}>
           <div
             onClick={() => onActiveFolderChange(folder.path)}
+            {...getContextTriggerProps({ type: 'folder', path: folder.path, folder })}
             onDragOver={(e) => {
               const types = Array.from(e.dataTransfer.types ?? []);
               if (types.includes(FOLDER_REORDER_TYPE) && canReorderFolders) {
@@ -281,6 +291,7 @@ const WorkspaceExplorer = ({
       <div style={style}>
         <div
           onClick={() => onOpenDocument(doc)}
+          {...getContextTriggerProps({ type: 'doc', id: doc.id, doc })}
           draggable
           onDragStart={(e) => {
             onDocDragStart(e, doc);
@@ -509,6 +520,60 @@ const WorkspaceExplorer = ({
           )}
         </section>
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={closeContextMenu}
+          sections={contextMenu.data.type === 'doc' ? [
+            {
+              actions: [
+                {
+                  label: 'Abrir',
+                  icon: <FilePlus2 className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.doc) onOpenDocument(contextMenu.data.doc); }
+                },
+                {
+                  label: 'Duplicar',
+                  icon: <Copy className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.doc) onCopyDocument(contextMenu.data.doc); }
+                },
+                {
+                  label: 'Renombrar',
+                  icon: <Pencil className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.doc) onRenameDocument(contextMenu.data.doc); }
+                },
+                {
+                  label: 'Mover a...',
+                  icon: <FolderInput className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.doc) onMoveDocument(contextMenu.data.doc); }
+                }
+              ]
+            },
+            {
+              actions: [
+                {
+                  label: 'Eliminar',
+                  icon: <Trash2 className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.doc) onDeleteDocument(contextMenu.data.doc, { stopPropagation: () => {} } as any); },
+                  destructive: true
+                }
+              ]
+            }
+          ] : [
+            {
+              actions: [
+                {
+                  label: 'Abrir Carpeta',
+                  icon: <Folder className="w-4 h-4" />,
+                  onClick: () => { if (contextMenu.data.path) onActiveFolderChange(contextMenu.data.path); }
+                }
+              ]
+            }
+          ]}
+        />
+      )}
     </div>
   );
 };

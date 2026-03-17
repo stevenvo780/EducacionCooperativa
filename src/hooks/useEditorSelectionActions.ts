@@ -222,25 +222,54 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled }: Us
     const shell = editorShellRef.current;
     if (!shell || !enabled) return;
 
-    const handleMouseUp = (event: MouseEvent) => {
-      window.requestAnimationFrame(() => {
-        captureSelection({ x: event.clientX, y: event.clientY });
-      });
-    };
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let touchStartPos: { x: number; y: number } | null = null;
+    let isDragging = false;
+    const LONG_PRESS_MS = 500;
+    const DRAG_THRESHOLD_PX = 8;
 
-    const handleContextMenu = (event: MouseEvent) => {
+    const handleContextMenu = (event: MouseEvent | { clientX: number; clientY: number; preventDefault: () => void }) => {
       const snapshot = captureSelection({ x: event.clientX, y: event.clientY });
       if (snapshot) {
         event.preventDefault();
       }
     };
 
-    const handleKeyUp = () => {
-      window.requestAnimationFrame(() => {
-        if (selection) {
-          captureSelection();
+    const handleTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      touchStartPos = { x: touch.clientX, y: touch.clientY };
+      isDragging = false;
+      longPressTimer = setTimeout(() => {
+        if (!isDragging) {
+          handleContextMenu({
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            preventDefault: () => {}
+          });
         }
-      });
+      }, LONG_PRESS_MS);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchStartPos) return;
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartPos.x);
+      const dy = Math.abs(touch.clientY - touchStartPos.y);
+      if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX) {
+        isDragging = true;
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      touchStartPos = null;
     };
 
     const handleSelectionChange = () => {
@@ -253,18 +282,21 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled }: Us
       }
     };
 
-    shell.addEventListener('mouseup', handleMouseUp, true);
-    shell.addEventListener('contextmenu', handleContextMenu, true);
-    shell.addEventListener('keyup', handleKeyUp, true);
+    shell.addEventListener('contextmenu', handleContextMenu as any, true);
+    shell.addEventListener('touchstart', handleTouchStart as any, { passive: true });
+    shell.addEventListener('touchmove', handleTouchMove as any, { passive: true });
+    shell.addEventListener('touchend', handleTouchEnd as any, { passive: true });
     document.addEventListener('selectionchange', handleSelectionChange);
 
     return () => {
-      shell.removeEventListener('mouseup', handleMouseUp, true);
-      shell.removeEventListener('contextmenu', handleContextMenu, true);
-      shell.removeEventListener('keyup', handleKeyUp, true);
+      shell.removeEventListener('contextmenu', handleContextMenu as any, true);
+      shell.removeEventListener('touchstart', handleTouchStart as any);
+      shell.removeEventListener('touchmove', handleTouchMove as any);
+      shell.removeEventListener('touchend', handleTouchEnd as any);
       document.removeEventListener('selectionchange', handleSelectionChange);
+      if (longPressTimer) clearTimeout(longPressTimer);
     };
-  }, [captureSelection, editorShellRef, enabled, selection]);
+  }, [captureSelection, editorShellRef, enabled]);
 
   return {
     selection,

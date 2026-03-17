@@ -66,6 +66,7 @@ import { useDashboardPersistence } from '@/hooks/dashboard/useDashboardPersisten
 import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
 import StatusToasts from '@/components/dashboard/StatusToasts';
 import DialogModal from '@/components/dashboard/DialogModal';
+import NewFileModal, { type FileKind } from '@/components/dashboard/NewFileModal';
 import DragOverlay from '@/components/dashboard/DragOverlay';
 import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -283,6 +284,7 @@ function DashboardContent() {
     const isStRunnerOpen = stRunnerTabId ? openTabs.some(tab => tab.id === stRunnerTabId) : false;
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
+    const [showNewFileModal, setShowNewFileModal] = useState(false);
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
     const [isResizingSidebar, setIsResizingSidebar] = useState(false);
@@ -1221,6 +1223,20 @@ function DashboardContent() {
                     modalFade={modalFade}
                     modalPop={modalPop}
                 />
+                <NewFileModal
+                    open={showNewFileModal}
+                    onClose={() => setShowNewFileModal(false)}
+                    onSelect={(kind: FileKind) => {
+                        setShowNewFileModal(false);
+                        if (kind === 'st') {
+                            void createStDoc(activeFolder);
+                        } else {
+                            void createDoc(undefined, activeFolder);
+                        }
+                    }}
+                    modalFade={modalFade}
+                    modalPop={modalPop}
+                />
 
                 {!isHeaderCollapsed && (
                     <HeaderBar
@@ -1349,7 +1365,7 @@ function DashboardContent() {
                         onFolderDragOver={handleFolderDragOver}
                         onFolderDrop={handleFolderDrop}
                         onFolderDragLeave={handleFolderDragLeave}
-                        onCreateDoc={() => createDoc(undefined, activeFolder)}
+                        onCreateDoc={() => setShowNewFileModal(true)}
                         onCreateFolder={() => createFolder()}
                         onUploadFile={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); fileInputRef.current?.click(); }}
                         onUploadFolder={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); folderInputRef.current?.click(); }}
@@ -1402,8 +1418,8 @@ function DashboardContent() {
                                     onActivateTab={setSelectedDocId}
                                     onDropDocOnTile={handleDropDocOnTile}
                                     onDropDocOnEmpty={handleDropDocOnEmpty}
-                                    onCreateFile={() => createDoc(undefined, activeFolder)}
-                                    onCreateStFile={() => createStDoc(activeFolder)}
+                                    onCreateFile={() => setShowNewFileModal(true)}
+                                    onCreateStFile={() => setShowNewFileModal(true)}
                                     onCreateFolder={() => createFolder()}
                                     onUploadFile={() => {
                                         setUploadTargetFolder(activeFolder);
@@ -1455,8 +1471,8 @@ function DashboardContent() {
                                 onDocDragEnd={handleDocDragEnd}
                                 onActiveFolderChange={setActiveFolderSafe}
                                 onOpenDocument={openDocument}
-                                onCreateDoc={() => createDoc(undefined, activeFolder)}
-                                onCreateStDoc={() => createStDoc(activeFolder)}
+                                onCreateDoc={() => setShowNewFileModal(true)}
+                                onCreateStDoc={() => setShowNewFileModal(true)}
                                 onCreateFolder={() => createFolder()}
                                 onUploadFile={() => {
                                     setUploadTargetFolder(activeFolder);
