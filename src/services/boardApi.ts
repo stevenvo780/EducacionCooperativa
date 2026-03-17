@@ -133,6 +133,10 @@ export const createBoardCardApi = async (params: {
   title: string;
   description?: string;
   ownerId?: string | null;
+  sourceDocId?: string;
+  sourceDocName?: string;
+  sourceFragment?: string;
+  sourcePath?: string;
 }): Promise<BoardCard> => {
   const boardId = resolveBoardId(params.workspaceId);
   const cardData = {
@@ -141,6 +145,10 @@ export const createBoardCardApi = async (params: {
     description: params.description || '',
     ownerId: params.ownerId || auth().currentUser?.uid,
     order: Date.now(), // Simple ordering
+    sourceDocId: params.sourceDocId || null,
+    sourceDocName: params.sourceDocName || null,
+    sourceFragment: params.sourceFragment || null,
+    sourcePath: params.sourcePath || null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
@@ -160,6 +168,10 @@ export const updateBoardCardApi = async (params: {
   description?: string;
   columnId?: string;
   order?: number;
+  sourceDocId?: string;
+  sourceDocName?: string;
+  sourceFragment?: string;
+  sourcePath?: string;
 }) => {
   const boardId = resolveBoardId(params.workspaceId);
   const cardRef = doc(db(), 'boards', boardId, 'cards', params.cardId);
@@ -169,6 +181,10 @@ export const updateBoardCardApi = async (params: {
     ...(params.description !== undefined && { description: params.description }),
     ...(params.columnId && { columnId: params.columnId }),
     ...(params.order !== undefined && { order: params.order }),
+    ...(params.sourceDocId !== undefined && { sourceDocId: params.sourceDocId }),
+    ...(params.sourceDocName !== undefined && { sourceDocName: params.sourceDocName }),
+    ...(params.sourceFragment !== undefined && { sourceFragment: params.sourceFragment }),
+    ...(params.sourcePath !== undefined && { sourcePath: params.sourcePath }),
     updatedAt: serverTimestamp()
   });
 };

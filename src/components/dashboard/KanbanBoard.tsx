@@ -25,8 +25,10 @@ import {
   verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Clipboard, FileText, GripVertical, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { BoardCard, BoardColumn } from '@/components/dashboard/types';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import { useContextMenu } from '@/hooks/useContextMenu';
 import {
   createBoardCardApi,
   createBoardColumnApi,
@@ -173,12 +175,14 @@ const SortableCard = ({
   card,
   columns,
   onMoveCard,
-  onDeleteCard
+  onDeleteCard,
+  onUpdateCardTitle
 }: {
   card: BoardCard;
   columns: BoardColumn[];
   onMoveCard: (cardId: string, columnId: string) => void;
   onDeleteCard: (cardId: string) => void;
+  onUpdateCardTitle: (cardId: string, title: string) => void;
 }) => {
   const {
     attributes,
@@ -193,17 +197,29 @@ const SortableCard = ({
     data: { type: 'card', cardId: card.id, columnId: card.columnId }
   });
 
+  const { menu: cardContextMenu, close: closeCardContextMenu, getTriggerProps: getCardContextTriggerProps } = useContextMenu<string>();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(card.title);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1
   };
 
+  const handleOpenSource = () => {
+    if (card.sourceDocId) {
+      window.postMessage({ type: 'agora-open-doc', docId: card.sourceDocId }, window.location.origin);
+    }
+  };
+
   return (
+    <>
     <div
       ref={setNodeRef}
       style={style}
       className="bg-surface-700/70 border border-surface-600/40 rounded-lg p-2"
+      {...getCardContextTriggerProps(card.id)}
     >
       <div className="flex items-start gap-2">
         <button
@@ -215,7 +231,44 @@ const SortableCard = ({
         >
           <GripVertical className="w-3 h-3" />
         </button>
-        <div className="text-xs font-semibold text-surface-100 break-words flex-1">{card.title}</div>
+        <div className="flex-1 flex flex-col gap-1">
+          {isEditing ? (
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={() => {
+                if (editTitle.trim() && editTitle !== card.title) {
+                  onUpdateCardTitle(card.id, editTitle.trim());
+                }
+                setIsEditing(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (editTitle.trim() && editTitle !== card.title) {
+                    onUpdateCardTitle(card.id, editTitle.trim());
+                  }
+                  setIsEditing(false);
+                }
+                if (e.key === 'Escape') { setEditTitle(card.title); setIsEditing(false); }
+              }}
+              autoFocus
+              className="text-xs font-semibold text-surface-100 bg-surface-800 border border-surface-500 rounded px-1 py-0.5 outline-none focus:border-sky-500"
+            />
+          ) : (
+            <div className="text-xs font-semibold text-surface-100 break-words">{card.title}</div>
+          )}
+          {card.sourceDocName && (
+            <button
+              onClick={handleOpenSource}
+              className="flex items-center gap-1 text-[10px] text-mandy-400 hover:text-mandy-300 transition text-left"
+              title={`Origen: ${card.sourceDocName}`}
+            >
+              <FileText className="w-2.5 h-2.5" />
+              <span className="truncate max-w-[150px]">{card.sourceDocName}</span>
+            </button>
+          )}
+        </div>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         <select
@@ -236,6 +289,45 @@ const SortableCard = ({
         </button>
       </div>
     </div>
+    {cardContextMenu && (
+      <ContextMenu
+        x={cardContextMenu.x}
+        y={cardContextMenu.y}
+        onClose={closeCardContextMenu}
+        sections={[
+          {
+            actions: [
+              ...(card.sourceDocId ? [{
+                label: 'Abrir documento origen',
+                icon: <FileText className="w-4 h-4" />,
+                onClick: handleOpenSource
+              }] : []),
+              {
+                label: 'Editar título',
+                icon: <Pencil className="w-4 h-4" />,
+                onClick: () => { setEditTitle(card.title); setIsEditing(true); }
+              },
+              {
+                label: 'Copiar título',
+                icon: <Clipboard className="w-4 h-4" />,
+                onClick: () => { void navigator.clipboard.writeText(card.title); }
+              }
+            ]
+          },
+          {
+            actions: [
+              {
+                label: 'Eliminar',
+                icon: <Trash2 className="w-4 h-4" />,
+                onClick: () => onDeleteCard(card.id),
+                destructive: true
+              }
+            ]
+          }
+        ]}
+      />
+    )}
+    </>
   );
 };
 
@@ -251,7 +343,8 @@ const SortableColumn = ({
   newCardTitle,
   onNewCardTitleChange,
   onMoveCard,
-  onDeleteCard
+  onDeleteCard,
+  onUpdateCardTitle
 }: {
   column: BoardColumn;
   cards: BoardCard[];
@@ -265,6 +358,7 @@ const SortableColumn = ({
   onNewCardTitleChange: (value: string) => void;
   onMoveCard: (cardId: string, columnId: string) => void;
   onDeleteCard: (cardId: string) => void;
+  onUpdateCardTitle: (cardId: string, title: string) => void;
 }) => {
   const {
     attributes,
@@ -350,6 +444,7 @@ const SortableColumn = ({
               columns={columns}
               onMoveCard={onMoveCard}
               onDeleteCard={onDeleteCard}
+              onUpdateCardTitle={onUpdateCardTitle}
             />
           ))}
         </SortableContext>
@@ -505,6 +600,17 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
     }
   };
 
+  const handleUpdateCardTitle = async (cardId: string, title: string) => {
+    if (!workspaceId || !title) return;
+    try {
+      await updateBoardCardApi({ workspaceId, cardId, title });
+      setCards(prev => prev.map(card => (card.id === cardId ? { ...card, title } : card)));
+    } catch (err) {
+      console.error('Error updating card title', err);
+      setError('No se pudo renombrar la tarjeta.');
+    }
+  };
+
   const handleDragStart = ({ active }: DragStartEvent) => {
     const data = active.data.current as DragData | undefined;
     if (!data) return;
@@ -655,6 +761,7 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
                     onNewCardTitleChange={(value) => setNewCardTitles(prev => ({ ...prev, [column.id]: value }))}
                     onMoveCard={handleMoveCard}
                     onDeleteCard={handleDeleteCard}
+                    onUpdateCardTitle={handleUpdateCardTitle}
                   />
                 ))}
 

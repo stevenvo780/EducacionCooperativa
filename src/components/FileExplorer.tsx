@@ -26,10 +26,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Loader2,
+  Star,
   X
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
+import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import { useContextMenu } from '@/hooks/useContextMenu';
 
 export interface DocItem {
   id: string;
@@ -125,6 +129,8 @@ interface FileExplorerProps {
   onMoveDoc?: (docId: string, targetFolder: string) => void;
   onRenameDoc?: (doc: DocItem) => void;
   onDownloadDoc?: (doc: DocItem) => void;
+  favoriteDocIds?: string[];
+  onToggleFavorite?: (doc: DocItem) => void;
   onDownloadFolder?: (folderPath: string) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
   onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
@@ -150,6 +156,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   onMoveDoc,
   onRenameDoc,
   onDownloadDoc,
+  favoriteDocIds = [],
+  onToggleFavorite,
   onDownloadFolder,
   onReorderDocs,
   onReorderFolders,
@@ -159,6 +167,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   activeFolder: activeFolderProp,
   onActiveFolderChange
 }) => {
+  const favoriteDocIdSet = useMemo(() => new Set(favoriteDocIds), [favoriteDocIds]);
+
   const resolveActiveFolder = (value?: string) => {
     if (value === '') return '';
     if (value === undefined || value === null) return DEFAULT_FOLDER_NAME;
@@ -169,7 +179,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [activeFolder, setActiveFolder] = useState(resolveActiveFolder(activeFolderProp));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; docId: string } | null>(null);
+  const { menu: contextMenu, open: openContextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<string>();
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
@@ -450,7 +460,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const handleContextMenu = (e: React.MouseEvent, docId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, docId });
+    openContextMenu(e.clientX, e.clientY, docId);
   };
 
   const toggleSelection = (key: string, e?: React.MouseEvent | React.ChangeEvent) => {
@@ -563,6 +573,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const handleRenameDoc = (doc: DocItem) => {
     if (!onRenameDoc) return;
     onRenameDoc(doc);
+  };
+
+  const handleToggleFavorite = (doc: DocItem) => {
+    onToggleFavorite?.(doc);
   };
 
   const handleDeleteSelected = () => {
@@ -770,6 +784,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     const doc = item.doc;
     const key = `doc:${doc.id}`;
     const isSelected = selectedKeys.has(key);
+    const isFavorite = favoriteDocIdSet.has(doc.id);
     const uploaded = isDocUploaded(doc);
     const SyncIcon = uploaded ? Cloud : CloudOff;
     const syncLabel = uploaded ? 'Subido' : 'Pendiente';
@@ -779,7 +794,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         <div
           onClick={(e) => handleDocSelect(doc, index, e)}
           onDoubleClick={() => handleDocDoubleClick(doc)}
-          onContextMenu={(e) => handleContextMenu(e, doc.id)}
+          {...getContextTriggerProps(doc.id)}
           onDragOver={(e) => {
             const types = Array.from(e.dataTransfer.types ?? []);
             if (!canReorderDocs || !types.includes(DOC_REORDER_TYPE)) return;
@@ -838,6 +853,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-300 uppercase">
               {getDocBadge(doc)}
             </span>
+          )}
+          {onToggleFavorite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleFavorite(doc);
+              }}
+              className={`p-1 rounded-md transition ${
+                isFavorite
+                  ? 'text-amber-300 hover:text-amber-200 hover:bg-amber-500/10'
+                  : 'text-surface-500 hover:text-amber-300 hover:bg-surface-700/70'
+              }`}
+              title={isFavorite ? 'Quitar de favoritos' : `Fijar en favoritos (${MAX_FAVORITE_DOCS} máx.)`}
+            >
+              <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+            </button>
           )}
           {!isCompact && (
             <span
@@ -1268,82 +1299,52 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       </div>
 
       {contextMenu && (
-        <>
-          <div
-            className="fixed inset-0 z-50"
-            onClick={() => setContextMenu(null)}
-          />
-          <div
-            className="fixed z-50 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1 min-w-[160px]"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-          >
-            {onDuplicateDoc && (
-              <button
-                onClick={() => {
-                  const doc = docMap.get(contextMenu.docId);
-                  if (doc) onDuplicateDoc(doc);
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-200 hover:bg-surface-700 transition-colors"
-              >
-                <Copy className="w-4 h-4" />
-                Duplicar
-              </button>
-            )}
-            {onDownloadDoc && (
-              <button
-                onClick={() => {
-                  const doc = docMap.get(contextMenu.docId);
-                  if (doc) onDownloadDoc(doc);
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-200 hover:bg-surface-700 transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Descargar
-              </button>
-            )}
-            {onRenameDoc && (
-              <button
-                onClick={() => {
-                  const doc = docMap.get(contextMenu.docId);
-                  if (doc) handleRenameDoc(doc);
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-200 hover:bg-surface-700 transition-colors"
-              >
-                <Pencil className="w-4 h-4" />
-                Renombrar
-              </button>
-            )}
-            {onMoveDoc && (
-              <button
-                onClick={() => {
-                  const doc = docMap.get(contextMenu.docId);
-                  if (doc) handleMoveDoc(doc);
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-200 hover:bg-surface-700 transition-colors"
-              >
-                <FolderInput className="w-4 h-4" />
-                Mover a...
-              </button>
-            )}
-            {(onDuplicateDoc || onMoveDoc) && <div className="border-t border-surface-700 my-1" />}
-            {onDeleteDoc && (
-              <button
-                onClick={() => {
-                  onDeleteDoc(contextMenu.docId);
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-surface-700 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Eliminar
-              </button>
-            )}
-          </div>
-        </>
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={closeContextMenu}
+          sections={[
+            {
+              actions: [
+                ...(onDuplicateDoc ? [{
+                  label: 'Duplicar',
+                  icon: <Copy className="w-4 h-4" />,
+                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) onDuplicateDoc(doc); }
+                }] : []),
+                ...(onDownloadDoc ? [{
+                  label: 'Descargar',
+                  icon: <Download className="w-4 h-4" />,
+                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) onDownloadDoc(doc); }
+                }] : []),
+                ...(onToggleFavorite ? [{
+                  label: favoriteDocIdSet.has(contextMenu.data) ? 'Quitar de favoritos' : 'Fijar en favoritos',
+                  icon: <Star className={`w-4 h-4 ${favoriteDocIdSet.has(contextMenu.data) ? 'fill-current text-amber-300' : ''}`} />,
+                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) handleToggleFavorite(doc); }
+                }] : []),
+                ...(onRenameDoc ? [{
+                  label: 'Renombrar',
+                  icon: <Pencil className="w-4 h-4" />,
+                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) handleRenameDoc(doc); }
+                }] : []),
+                ...(onMoveDoc ? [{
+                  label: 'Mover a...',
+                  icon: <FolderInput className="w-4 h-4" />,
+                  onClick: () => { const doc = docMap.get(contextMenu.data); if (doc) handleMoveDoc(doc); }
+                }] : [])
+              ]
+            },
+            {
+              actions: [
+                ...(onDeleteDoc ? [{
+                  label: 'Eliminar',
+                  icon: <Trash2 className="w-4 h-4" />,
+                  onClick: () => { if (onDeleteDoc) onDeleteDoc(contextMenu.data); },
+                  destructive: true
+                }] : [])
+              ]
+            }
+          ]}
+        />
       )}
     </div>
   );

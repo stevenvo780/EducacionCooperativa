@@ -1047,4 +1047,27 @@ export const mosaicEditorStyles = `
           from { opacity: 0; }
           to { opacity: 1; }
         }
+
+        /* ─── Linked Tasks ─── */
+        .linked-tasks-section {
+          background: #0f172a;
+          border-top: 1px solid #1e293b;
+          padding: 8px 12px;
+          max-height: 120px;
+          overflow-y: auto;
+        }
+        .linked-task-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          color: #94a3b8;
+          transition: background 0.2s;
+        }
+        .linked-task-item:hover {
+          background: #1e293b;
+          color: #e2e8f0;
+        }
 `;

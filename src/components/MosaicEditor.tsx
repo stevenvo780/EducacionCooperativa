@@ -42,25 +42,40 @@ import { useTerminal } from '@/context/TerminalContext';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
 import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
-import type { ViewMode, SearchState, EditorProps, ToolbarGroupKey, ToolbarVisibility, QuickInsert, MarkdownDocMeta } from '@/components/mosaic-editor/types';
-import { TOOLBAR_VISIBILITY_STORAGE_KEY, DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS, TABLE_MAX_ROWS, TABLE_MAX_COLS } from '@/components/mosaic-editor/constants';
+import type { ViewMode, SearchState, EditorProps, ToolbarGroupKey, ToolbarVisibility, MarkdownDocMeta } from '@/components/mosaic-editor/types';
+import { TOOLBAR_VISIBILITY_STORAGE_KEY, DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS } from '@/components/mosaic-editor/constants';
 import {
   isMarkdownName, isMarkdownMime, isImageMime, isVideoMime, isAudioMime, isPdfMime,
-  unescapeLatex, stripQueryAndHash, isExternalMarkdownHref, isBrowserNavigationHref,
+  stripQueryAndHash, isExternalMarkdownHref, isBrowserNavigationHref,
   normalizeRelativeMarkdownPath, ensureMarkdownCandidateNames,
-  buildWorkspaceAwarePathCandidates, extractWorkspaceSegments, convertWikiLinksToMarkdown
+  buildWorkspaceAwarePathCandidates, extractWorkspaceSegments
 } from '@/components/mosaic-editor/utils';
 import { MarkdownPreview } from '@/components/mosaic-editor/MarkdownPreview';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, BetweenHorizontalStart, Library } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import SnippetGallery from '@/components/SnippetGallery';
 import { authFetch, getAuthToken } from '@/services/apiClient';
+import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
+import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { normalizePath } from '@/lib/folder-utils';
+import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
+import {
+  attachLinkedDocumentToSelection,
+  getRecentSemanticItems,
+  loadSemanticWorkspaceState,
+  markSelectionAsEvidence,
+  pinSelectionFragment,
+  registerConceptFromSelection,
+  registerSemanticBlock,
+  relateSelectionToConcept,
+  type SemanticWorkspaceState
+} from '@/services/editorSemanticStore';
 
 export default function MosaicEditor({
   initialContent = '',
@@ -83,7 +98,13 @@ export default function MosaicEditor({
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState('personal');
   const [showToolsPanel, setShowToolsPanel] = useState(false);
+  const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>({ concepts: [], fragments: [], relations: [], updatedAt: 0 });
+  const [semanticNotice, setSemanticNotice] = useState<string | null>(null);
+  const [semanticBusyAction, setSemanticBusyAction] = useState<string | null>(null);
+  const [linkableDocuments, setLinkableDocuments] = useState<Array<{ id: string; name: string; folder?: string }>>([]);
+  const [loadingLinkableDocuments, setLoadingLinkableDocuments] = useState(false);
 
   // Search state
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
@@ -116,6 +137,25 @@ export default function MosaicEditor({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
+
+  const semanticStoreContext = useMemo(() => ({
+    workspaceId: currentWorkspaceId || 'personal',
+    userId: user?.uid ?? null
+  }), [currentWorkspaceId, user?.uid]);
+
+  const semanticOverview = useMemo(() => getRecentSemanticItems(semanticState), [semanticState]);
+
+  const {
+    selection: semanticSelection,
+    restoreSelection,
+    clearSelection: clearSemanticSelection
+  } = useEditorSelectionActions({
+    editorShellRef,
+    docId: roomId ?? null,
+    enabled: docType !== 'file' && viewMode !== 'preview'
+  });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -181,6 +221,7 @@ export default function MosaicEditor({
     setFileUrl(null);
     setFileName('');
     setFileMime('');
+    setCurrentWorkspaceId('personal');
     setEditorContent('');
     currentDocMetaRef.current = { workspaceId: null, folder: '', name: '' };
     hasLoadedRef.current = true;
@@ -227,6 +268,7 @@ export default function MosaicEditor({
       folder,
       name
     };
+    setCurrentWorkspaceId(workspaceId || 'personal');
 
     if (type === 'file' && !isMarkdown) {
       setDocType('file');
@@ -292,6 +334,20 @@ export default function MosaicEditor({
 
     hasLoadedRef.current = true;
   }, [hasUnsavedLocalChanges, maybeLoadRawContent, resetDocState, setEditorContent, user?.uid]);
+
+  useEffect(() => {
+    setSemanticState(loadSemanticWorkspaceState(semanticStoreContext));
+  }, [semanticStoreContext]);
+
+  useEffect(() => {
+    if (!semanticNotice) return;
+    const timeout = window.setTimeout(() => setSemanticNotice(null), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [semanticNotice]);
+
+  useEffect(() => {
+    setLinkableDocuments([]);
+  }, [currentWorkspaceId, roomId]);
 
   const loadDoc = useCallback(async () => {
     if (!roomId) return;
@@ -389,6 +445,12 @@ export default function MosaicEditor({
     if (!isPageVisible || !roomId) return;
     loadDoc();
   }, [isPageVisible, roomId, loadDoc]);
+
+  useEffect(() => {
+    if (viewMode === 'preview') {
+      clearSemanticSelection();
+    }
+  }, [clearSemanticSelection, viewMode]);
 
   const handleContentChange = useCallback((val: string) => {
     contentRef.current = val;
@@ -703,6 +765,284 @@ export default function MosaicEditor({
     handleContentChange(editor.getMarkdown());
   }, [handleContentChange]);
 
+  const updateSemanticState = useCallback((nextState: SemanticWorkspaceState) => {
+    setSemanticState(nextState);
+  }, []);
+
+  const getSemanticPayload = useCallback((text: string) => ({
+    text,
+    docId: roomId ?? null,
+    docName: docName || currentDocMetaRef.current.name || 'Documento',
+    workspaceId: currentWorkspaceId || 'personal'
+  }), [currentWorkspaceId, docName, roomId]);
+
+  const applySelectionMarkdown = useCallback((markdown: string) => {
+    const activeSelection = semanticSelection;
+    if (!activeSelection) return false;
+
+    if (activeSelection.kind === 'textarea') {
+      const textarea = editorShellRef.current?.querySelector('textarea');
+      if (!(textarea instanceof HTMLTextAreaElement) || !activeSelection.textareaRange) return false;
+      textarea.focus();
+      textarea.setSelectionRange(activeSelection.textareaRange.start, activeSelection.textareaRange.end);
+      textarea.setRangeText(markdown, activeSelection.textareaRange.start, activeSelection.textareaRange.end, 'end');
+      handleContentChange(textarea.value);
+      return true;
+    }
+
+    const editor = mdxEditorRef.current;
+    if (!editor) return false;
+    restoreSelection(activeSelection);
+    editor.focus(() => {
+      editor.insertMarkdown(markdown);
+    }, { defaultSelection: 'rootEnd', preventScroll: false });
+    window.setTimeout(() => {
+      handleContentChange(editor.getMarkdown());
+    }, 0);
+    return true;
+  }, [handleContentChange, restoreSelection, semanticSelection]);
+
+  const loadDocumentsForSemanticLinking = useCallback(async () => {
+    if (loadingLinkableDocuments || linkableDocuments.length > 0) return;
+
+    setLoadingLinkableDocuments(true);
+    try {
+      const search = new URLSearchParams({
+        workspaceId: currentWorkspaceId || 'personal',
+        view: 'list',
+        excludeContent: 'true'
+      });
+      const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
+      if (!res.ok) {
+        throw new Error('No se pudo cargar la lista de documentos');
+      }
+      const docs = await res.json() as Array<{ id: string; name?: string; folder?: string; type?: string }>;
+      setLinkableDocuments(
+        docs
+          .filter((doc) => doc.id !== roomId && doc.type !== 'folder')
+          .map((doc) => ({ id: doc.id, name: doc.name || 'Documento', folder: doc.folder || '' }))
+      );
+    } catch (error) {
+      console.error('Error loading linkable documents:', error);
+      setSemanticNotice('No pude cargar documentos para enlazar.');
+    } finally {
+      setLoadingLinkableDocuments(false);
+    }
+  }, [currentWorkspaceId, linkableDocuments.length, loadingLinkableDocuments, roomId]);
+
+  const runSemanticAction = useCallback(async (actionKey: string, action: () => Promise<void> | void) => {
+    setSemanticBusyAction(actionKey);
+    try {
+      await action();
+    } catch (error) {
+      console.error(`Semantic action failed: ${actionKey}`, error);
+      setSemanticNotice('La acción semántica no se pudo completar.');
+    } finally {
+      setSemanticBusyAction(null);
+    }
+  }, []);
+
+  const loadLinkedTasks = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const workspaceId = currentDocMetaRef.current.workspaceId || 'personal';
+      const boardData = await fetchBoardApi({ workspaceId });
+      const tasks = boardData.cards.filter(card => card.sourceDocId === roomId);
+      setLinkedTasks(tasks);
+    } catch (error) {
+      console.error('Error loading linked tasks:', error);
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    loadLinkedTasks();
+  }, [loadLinkedTasks]);
+
+  const scanPendings = useCallback(async () => {
+    if (!roomId) return;
+    const content = mdxEditorRef.current?.getMarkdown() || contentRef.current;
+    if (!content) return;
+
+    const lines = content.split('\n');
+    const pendings = lines
+      .map(line => line.trim())
+      .filter(line => line.startsWith('- [ ]'))
+      .map(line => line.substring(5).trim())
+      .filter(Boolean);
+
+    if (pendings.length === 0) return;
+
+    setIsCreatingTask(true);
+    try {
+      const workspaceId = currentDocMetaRef.current.workspaceId || 'personal';
+      const boardData = await fetchBoardApi({ workspaceId });
+      const firstColumn = boardData.columns.sort((a, b) => a.order - b.order)[0];
+
+      if (!firstColumn) return;
+
+      const docName = currentDocMetaRef.current.name || 'Documento';
+
+      await Promise.all(pendings.map(pending =>
+        createBoardCardApi({
+          workspaceId,
+          columnId: firstColumn.id,
+          title: pending.substring(0, 100),
+          description: `Pendiente detectado en ${docName}`,
+          sourceDocId: roomId,
+          sourceDocName: docName,
+          sourceFragment: pending,
+          sourcePath: currentDocMetaRef.current.folder
+        })
+      ));
+
+      await loadLinkedTasks();
+    } catch (error) {
+      console.error('Error scanning pendings:', error);
+    } finally {
+      setIsCreatingTask(false);
+    }
+  }, [roomId, loadLinkedTasks]);
+
+  const createTaskFromSelection = useCallback(async () => {
+    const selection = window.getSelection()?.toString().trim();
+    const docName = currentDocMetaRef.current.name || 'Documento';
+
+    // Fallback to doc name if no selection
+    const title = selection ? selection.split('\n')[0].substring(0, 100) : `Revisar: ${docName}`;
+    const description = selection || `Tarea creada desde el documento ${docName}`;
+
+    if (!roomId) return;
+
+    setIsCreatingTask(true);
+    try {
+      const workspaceId = currentDocMetaRef.current.workspaceId || 'personal';
+      const boardData = await fetchBoardApi({ workspaceId });
+      const firstColumn = boardData.columns.sort((a, b) => a.order - b.order)[0];
+
+      if (!firstColumn) {
+        console.error('No columns found in board');
+        return;
+      }
+
+      await createBoardCardApi({
+        workspaceId,
+        columnId: firstColumn.id,
+        title,
+        description,
+        sourceDocId: roomId,
+        sourceDocName: docName,
+        sourceFragment: selection || undefined,
+        sourcePath: currentDocMetaRef.current.folder
+      });
+
+      await loadLinkedTasks();
+    } catch (error) {
+      console.error('Error creating task from selection:', error);
+    } finally {
+      setIsCreatingTask(false);
+    }
+  }, [roomId, loadLinkedTasks]);
+
+  const handleDefineConcept = useCallback(() => {
+    if (!semanticSelection) return;
+    void runSemanticAction('define-concept', () => {
+      const nextState = registerConceptFromSelection(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      updateSemanticState(nextState);
+      setSemanticNotice('Concepto registrado desde la selección.');
+      clearSemanticSelection();
+    });
+  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handleRelateConcept = useCallback((conceptId: string) => {
+    if (!semanticSelection) return;
+    void runSemanticAction('relate-concept', () => {
+      const nextState = relateSelectionToConcept(semanticStoreContext, getSemanticPayload(semanticSelection.text), conceptId);
+      updateSemanticState(nextState);
+      setSemanticNotice('Fragmento relacionado con el concepto elegido.');
+      clearSemanticSelection();
+    });
+  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handleCreateSemanticBlock = useCallback(() => {
+    if (!semanticSelection) return;
+    void runSemanticAction('semantic-block', () => {
+      const quoted = semanticSelection.text
+        .split(/\r?\n/)
+        .map((line) => `> ${line || ' '}`)
+        .join('\n');
+      const blockMarkdown = `${semanticSelection.text}\n\n> [!semantic] Fragmento académico\n${quoted}\n> origen: ${docName || 'Documento actual'}\n`;
+      const inserted = applySelectionMarkdown(blockMarkdown);
+      if (!inserted) {
+        throw new Error('Selection block insertion failed');
+      }
+      const nextState = registerSemanticBlock(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      updateSemanticState(nextState);
+      setSemanticNotice('Bloque semántico insertado en el documento.');
+      clearSemanticSelection();
+    });
+  }, [applySelectionMarkdown, clearSemanticSelection, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handleCreateTask = useCallback(() => {
+    if (!semanticSelection) return;
+    void runSemanticAction('create-task', async () => {
+      const board = await fetchBoardApi({ workspaceId: currentWorkspaceId || 'personal' });
+      const targetColumn = board.columns.find((column) => /por hacer|to do|todo/i.test(column.name)) ?? board.columns[0];
+      if (!targetColumn) {
+        throw new Error('No board columns available');
+      }
+      const title = semanticSelection.text.replace(/\s+/g, ' ').trim().slice(0, 80) || 'Fragmento del editor';
+      await createBoardCardApi({
+        workspaceId: currentWorkspaceId || 'personal',
+        columnId: targetColumn.id,
+        title,
+        description: `Origen: ${docName || 'Documento'}\n\n${semanticSelection.text}`,
+        ownerId: user?.uid ?? null
+      });
+      setSemanticNotice(`Fragmento enviado a “${targetColumn.name}”.`);
+      clearSemanticSelection();
+    });
+  }, [clearSemanticSelection, currentWorkspaceId, docName, runSemanticAction, semanticSelection, user?.uid]);
+
+  const handleMarkEvidence = useCallback(() => {
+    if (!semanticSelection) return;
+    void runSemanticAction('mark-evidence', () => {
+      const nextState = markSelectionAsEvidence(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      updateSemanticState(nextState);
+      setSemanticNotice('Evidencia guardada en el panel semántico.');
+      clearSemanticSelection();
+    });
+  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handlePinFragment = useCallback(() => {
+    if (!semanticSelection) return;
+    void runSemanticAction('pin-fragment', () => {
+      const nextState = pinSelectionFragment(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      updateSemanticState(nextState);
+      setSemanticNotice('Fragmento fijado para acceso rápido.');
+      clearSemanticSelection();
+    });
+  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handleLinkDocument = useCallback((documentItem: { id: string; name: string; folder?: string }) => {
+    if (!semanticSelection) return;
+    void runSemanticAction('link-document', () => {
+      const markdownLink = `[${semanticSelection.text}](/editor/${encodeURIComponent(documentItem.id)})`;
+      const inserted = applySelectionMarkdown(markdownLink);
+      if (!inserted) {
+        throw new Error('Document link insertion failed');
+      }
+      const nextState = attachLinkedDocumentToSelection(
+        semanticStoreContext,
+        getSemanticPayload(semanticSelection.text),
+        documentItem.id,
+        documentItem.name
+      );
+      updateSemanticState(nextState);
+      setSemanticNotice(`Enlace interno creado hacia “${documentItem.name}”.`);
+      clearSemanticSelection();
+    });
+  }, [applySelectionMarkdown, clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
   // Obsidian-style inline LaTeX rendering (extracted to hook)
   useKatexOverlayDecorations({ editorShellRef, viewMode });
 
@@ -761,6 +1101,18 @@ export default function MosaicEditor({
           title="Insertar lista de tareas"
           icon={<ListTodo className="h-3.5 w-3.5" />}
           onClick={() => insertSnippet('\n- [ ] Primera tarea\n- [ ] Segunda tarea\n')}
+        />
+        <ToolbarShortcutButton
+          title="Crear tarea en tablero"
+          icon={isCreatingTask ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KanbanSquare className="h-3.5 w-3.5" />}
+          onClick={() => { void createTaskFromSelection(); }}
+          disabled={isCreatingTask}
+        />
+        <ToolbarShortcutButton
+          title="Detectar pendientes en texto"
+          icon={isCreatingTask ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          onClick={() => { void scanPendings(); }}
+          disabled={isCreatingTask}
         />
       </>
     ));
@@ -910,7 +1262,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setViewModeWithSync]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)
@@ -1083,6 +1435,12 @@ export default function MosaicEditor({
         </div>
       )}
 
+      {semanticNotice && (
+        <div className="shrink-0 border-b border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-100">
+          {semanticNotice}
+        </div>
+      )}
+
       {showToolsPanel && (
         <div className="shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm">
           <div className="px-3 py-3">
@@ -1152,6 +1510,39 @@ export default function MosaicEditor({
                 </div>
               </section>
             </div>
+
+            <section className="mt-4 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Panel semántico</h3>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">Lo que guardas desde el menú contextual vive aquí: conceptos, evidencias, fijados y relaciones rápidas.</p>
+                </div>
+                <div className="text-[11px] text-slate-500">{semanticState.concepts.length} conceptos · {semanticState.fragments.length} fragmentos</div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-4">
+                <SemanticPanelColumn
+                  title="Conceptos"
+                  emptyLabel="Aún no defines conceptos desde una selección."
+                  items={semanticOverview.concepts.map((concept) => ({ title: concept.title, subtitle: concept.excerpt, meta: concept.docName }))}
+                />
+                <SemanticPanelColumn
+                  title="Fijados"
+                  emptyLabel="Todavía no hay fragmentos fijados."
+                  items={semanticOverview.pinned.map((item) => ({ title: item.excerpt, subtitle: item.docName, meta: 'Fragmento fijado' }))}
+                />
+                <SemanticPanelColumn
+                  title="Evidencias"
+                  emptyLabel="Todavía no hay evidencias marcadas."
+                  items={semanticOverview.evidence.map((item) => ({ title: item.excerpt, subtitle: item.docName, meta: 'Evidencia' }))}
+                />
+                <SemanticPanelColumn
+                  title="Relaciones"
+                  emptyLabel="Todavía no hay relaciones con conceptos."
+                  items={semanticOverview.relations.map((item) => ({ title: item.conceptTitle, subtitle: 'Fragmento relacionado', meta: item.relationType }))}
+                />
+              </div>
+            </section>
           </div>
         </div>
       )}
@@ -1245,6 +1636,28 @@ export default function MosaicEditor({
         </div>
       </div>
 
+      {linkedTasks.length > 0 && (
+        <div className="linked-tasks-section shrink-0 bg-slate-900 border-t border-slate-800 py-1">
+          <div className="flex items-center justify-between px-3 py-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tareas vinculadas</span>
+            <button
+              onClick={() => window.postMessage({ type: 'agora-open-board' }, window.location.origin)}
+              className="text-[10px] text-blue-400 hover:text-blue-300 transition"
+            >
+              Abrir tablero
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 px-3 pb-2">
+            {linkedTasks.map(task => (
+              <div key={task.id} className="linked-task-item bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 rounded px-2 py-1 flex items-center gap-2 max-w-[200px] cursor-default">
+                <KanbanSquare className="w-3 h-3 text-blue-400" />
+                <span className="truncate flex-1" title={task.title}>{task.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Status bar for embedded mode */}
       {embedded && (
         <div className="shrink-0 h-7 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-3 text-[11px] text-slate-400">
@@ -1263,7 +1676,56 @@ export default function MosaicEditor({
         </div>
       )}
 
+      {semanticSelection && viewMode !== 'preview' && (
+        <EditorSelectionMenu
+          selection={semanticSelection}
+          concepts={semanticState.concepts}
+          documents={linkableDocuments}
+          loadingDocuments={loadingLinkableDocuments}
+          busyAction={semanticBusyAction}
+          onClose={clearSemanticSelection}
+          onDefineConcept={handleDefineConcept}
+          onCreateSemanticBlock={handleCreateSemanticBlock}
+          onCreateTask={handleCreateTask}
+          onMarkEvidence={handleMarkEvidence}
+          onPinFragment={handlePinFragment}
+          onOpenConcepts={() => undefined}
+          onOpenDocuments={() => { void loadDocumentsForSemanticLinking(); }}
+          onRelateConcept={handleRelateConcept}
+          onLinkDocument={handleLinkDocument}
+        />
+      )}
+
       <style jsx global>{mosaicEditorStyles}</style>
+    </div>
+  );
+}
+
+function SemanticPanelColumn({
+  title,
+  emptyLabel,
+  items
+}: {
+  title: string;
+  emptyLabel: string;
+  items: Array<{ title: string; subtitle: string; meta: string }>;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{title}</div>
+      <div className="space-y-2">
+        {items.length === 0 ? (
+          <p className="text-[11px] leading-5 text-slate-500">{emptyLabel}</p>
+        ) : (
+          items.map((item, index) => (
+            <div key={`${title}-${index}`} className="rounded-md border border-slate-800 bg-slate-950/70 px-2.5 py-2">
+              <div className="text-xs font-medium text-slate-200">{item.title}</div>
+              <div className="mt-1 text-[11px] leading-5 text-slate-400">{item.subtitle}</div>
+              <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-500">{item.meta}</div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
