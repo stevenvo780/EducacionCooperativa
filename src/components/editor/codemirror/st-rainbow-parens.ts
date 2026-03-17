@@ -14,7 +14,6 @@ import {
   EditorView
 } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
-import { syntaxTree } from '@codemirror/language';
 
 // ── Decoration marks for each depth ────────────────────────
 

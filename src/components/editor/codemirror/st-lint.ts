@@ -8,28 +8,9 @@
  * - Tooltips al hover sobre errores
  */
 
-import { Diagnostic as CMDiagnostic, setDiagnostics, linter, lintGutter } from '@codemirror/lint';
+import { Diagnostic as CMDiagnostic, setDiagnostics, lintGutter } from '@codemirror/lint';
 import { EditorView } from '@codemirror/view';
-import { StateEffect, StateField } from '@codemirror/state';
 import type { Diagnostic as STDiagnostic } from '@stevenvo780/st-lang/api';
-
-// ── Effect para actualizar diagnostics desde React ──────────
-
-export const setSTDiagnostics = StateEffect.define<STDiagnostic[]>();
-
-// ── StateField que guarda los diagnostics actuales ──────────
-
-export const stDiagnosticsField = StateField.define<STDiagnostic[]>({
-  create: () => [],
-  update(value, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setSTDiagnostics)) {
-        return effect.value;
-      }
-    }
-    return value;
-  }
-});
 
 // ── Convertir ST diagnostics → CM diagnostics ──────────────
 
@@ -47,12 +28,9 @@ function convertDiagnostics(doc: { toString: () => string; line: (n: number) => 
     const lineNum = Math.max(1, Math.min(d.line ?? 1, text.split('\n').length));
     try {
       const line = doc.line(lineNum);
-      const from = line.from;
-      const to = line.to;
-
       cmDiags.push({
-        from,
-        to,
+        from: line.from,
+        to: line.to,
         severity: stToCMSeverity(d.severity),
         message: d.message,
         source: 'st-lang'
@@ -65,32 +43,25 @@ function convertDiagnostics(doc: { toString: () => string; line: (n: number) => 
   return cmDiags;
 }
 
-// ── Linter source que lee del field ─────────────────────────
-
-function stLintSource(view: EditorView): CMDiagnostic[] {
-  const stDiags = view.state.field(stDiagnosticsField);
-  return convertDiagnostics(view.state.doc, stDiags);
-}
-
 // ── Export ───────────────────────────────────────────────────
 
 /**
  * Extensiones de lint para ST.
- * Incluye el field para almacenar diagnostics, el linter, y el gutter.
+ * Solo el lintGutter (marcadores visuales en el margen).
+ * Los diagnósticos se empujan directamente via dispatchDiagnostics().
  */
 export function stLintExtensions() {
   return [
-    stDiagnosticsField,
-    linter(stLintSource, { delay: 0 }),
     lintGutter()
   ];
 }
 
 /**
- * Helper para dispatchar nuevos diagnostics a la vista CM.
+ * Empuja diagnósticos directamente al state de CodeMirror.
+ * Usa setDiagnostics (push inmediato) en vez de linter() (polling),
+ * para que los problemas aparezcan al instante sin desfase de 1 tecla.
  */
 export function dispatchDiagnostics(view: EditorView, diagnostics: STDiagnostic[]) {
-  view.dispatch({
-    effects: setSTDiagnostics.of(diagnostics)
-  });
+  const cmDiags = convertDiagnostics(view.state.doc, diagnostics);
+  view.dispatch(setDiagnostics(view.state, cmDiags));
 }
