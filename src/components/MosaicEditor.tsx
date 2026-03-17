@@ -102,7 +102,7 @@ export default function MosaicEditor({
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(PERSONAL_WORKSPACE_ID);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(PERSONAL_WORKSPACE_ID);
   const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>({ concepts: [], fragments: [], relations: [], updatedAt: 0 });
   const [semanticNotice, setSemanticNotice] = useState<string | null>(null);

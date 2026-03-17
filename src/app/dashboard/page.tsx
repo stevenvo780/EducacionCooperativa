@@ -246,7 +246,7 @@ function DashboardContent() {
             setMemberProfiles({});
             return;
         }
-        const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? 'personal' : currentWorkspace.id;
+        const wsId = currentWorkspace.id === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : currentWorkspace.id;
         fetchUserProfilesApi({ workspaceId: wsId, userIds: memberIds })
             .then((data) => {
                 if (cancelled) return;
@@ -1344,7 +1344,7 @@ function DashboardContent() {
 
             if (prev.length >= MAX_FAVORITE_DOCS) {
                 void showDialog({
-                    type: 'info',
+                    type: DialogKind.Info,
                     title: 'Límite de favoritos alcanzado',
                     message: `Puedes fijar hasta ${MAX_FAVORITE_DOCS} documentos. Quita uno para agregar otro.`
                 });
@@ -1470,7 +1470,7 @@ function DashboardContent() {
         if (exists) return false;
 
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;
         try {
             await createDocumentApi({
                 name: trimmed,
@@ -1489,7 +1489,7 @@ function DashboardContent() {
 
     const createFolder = async () => {
         const result = await showDialog({
-            type: 'input',
+            type: DialogKind.Input,
             title: 'Nueva carpeta',
             message: 'Ingresa el nombre de la carpeta',
             placeholder: 'Nombre de carpeta'
@@ -1501,12 +1501,12 @@ function DashboardContent() {
         const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
         const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
         if (exists) {
-            await showDialog({ type: 'info', title: 'La carpeta ya existe', message: fullPath });
+            await showDialog({ type: DialogKind.Info, title: 'La carpeta ya existe', message: fullPath });
             return;
         }
         const created = await createFolderRecord(trimmed, parentPath);
         if (!created) {
-            await showDialog({ type: 'error', title: 'No se pudo crear la carpeta' });
+            await showDialog({ type: DialogKind.Error, title: 'No se pudo crear la carpeta' });
         }
     };
 
@@ -1550,7 +1550,7 @@ function DashboardContent() {
 
         if (duplicate) {
             await showDialog({
-                type: 'info',
+                type: DialogKind.Info,
                 title: 'Nombre en uso',
                 message: `Ya existe un elemento llamado "${trimmed}" en esta ubicación.`
             });
@@ -1610,7 +1610,7 @@ function DashboardContent() {
         } catch (error) {
             await requestDocsRefresh({ force: true });
             await showDialog({
-                type: 'error',
+                type: DialogKind.Error,
                 title: 'No se pudo renombrar',
                 message: error instanceof Error ? error.message : 'Error desconocido'
             });
@@ -1619,7 +1619,7 @@ function DashboardContent() {
 
     const promptRenameDocument = async (doc: DocItem) => {
         const result = await showDialog({
-            type: 'input',
+            type: DialogKind.Input,
             title: 'Renombrar archivo',
             message: 'Ingresa el nuevo nombre para el archivo',
             defaultValue: doc.name,
@@ -1634,7 +1634,7 @@ function DashboardContent() {
 
     const promptRenameTerminalSession = useCallback(async (session: TerminalSession) => {
         const result = await showDialog({
-            type: 'input',
+            type: DialogKind.Input,
             title: 'Renombrar sesion',
             message: 'Ingresa el nuevo nombre para la sesion',
             defaultValue: session.name ?? '',
@@ -1706,7 +1706,7 @@ function DashboardContent() {
         if (!user) return;
         if (docItem.type === 'folder') return;
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;
         const newName = `${docItem.name} (copia)`;
         let resolvedContent = '';
         if (docItem.type !== 'file') {
@@ -1717,7 +1717,7 @@ function DashboardContent() {
                     resolvedContent = await fetchDocumentRawApi(docItem.id);
                 } catch (error) {
                     console.error('Error loading content for copy', error);
-                    await showDialog({ type: 'error', title: 'No se pudo cargar el contenido para copiar.' });
+                    await showDialog({ type: DialogKind.Error, title: 'No se pudo cargar el contenido para copiar.' });
                     return;
                 }
             }
@@ -1754,14 +1754,14 @@ function DashboardContent() {
             });
         } catch (error) {
             console.error('Error copying document', error);
-            await showDialog({ type: 'error', title: 'Error al copiar' });
+            await showDialog({ type: DialogKind.Error, title: 'Error al copiar' });
         }
     };
 
     const promptMoveDocument = async (docItem: DocItem) => {
         const current = normalizeFolderPath(docItem.folder);
         const result = await showDialog({
-            type: 'input',
+            type: DialogKind.Input,
             title: 'Mover a carpeta',
             message: 'Ingresa la ruta de destino',
             defaultValue: current,
@@ -1785,7 +1785,7 @@ function DashboardContent() {
                 name: data.name ?? newWorkspaceName,
                 ownerId: data.ownerId ?? user.uid,
                 members: Array.isArray(data.members) ? data.members : [user.uid],
-                type: 'shared'
+                type: WorkspaceType.Shared
             });
         } catch (e) {
             console.error('Error creating workspace', e);
@@ -1794,19 +1794,19 @@ function DashboardContent() {
 
     const deleteWorkspace = async (workspace: Workspace) => {
         if (!user) return;
-        if (workspace.id === PERSONAL_WORKSPACE_ID || workspace.type === 'personal') {
-            await showDialog({ type: 'info', title: 'No se puede eliminar', message: 'El espacio personal no se puede borrar.' });
+        if (workspace.id === PERSONAL_WORKSPACE_ID || workspace.type === WorkspaceType.Personal) {
+            await showDialog({ type: DialogKind.Info, title: 'No se puede eliminar', message: 'El espacio personal no se puede borrar.' });
             return;
         }
         const isOwner = !workspace.ownerId || workspace.ownerId === user.uid;
         if (!isOwner && !isAdmin) {
-            await showDialog({ type: 'error', title: 'Sin permisos', message: 'Solo el administrador o el propietario pueden eliminar este espacio.' });
+            await showDialog({ type: DialogKind.Error, title: 'Sin permisos', message: 'Solo el administrador o el propietario pueden eliminar este espacio.' });
             return;
         }
 
         setShowWorkspaceMenu(false);
         const confirmResult = await showDialog({
-            type: 'input',
+            type: DialogKind.Input,
             title: 'Eliminar espacio de trabajo',
             message: `Escribe "${workspace.name}" para confirmar. Esta acción eliminará documentos, archivos, tablero, miembros e invitaciones asociadas.`,
             placeholder: workspace.name,
@@ -1817,7 +1817,7 @@ function DashboardContent() {
         if (!confirmResult.confirmed) return;
         const typedName = (confirmResult.value ?? '').trim();
         if (typedName !== workspace.name.trim()) {
-            await showDialog({ type: 'error', title: 'Nombre incorrecto', message: 'El nombre no coincide.' });
+            await showDialog({ type: DialogKind.Error, title: 'Nombre incorrecto', message: 'El nombre no coincide.' });
             return;
         }
 
@@ -1837,7 +1837,7 @@ function DashboardContent() {
                     name: 'Espacio Personal',
                     ownerId: user.uid,
                     members: [user.uid],
-                    type: 'personal'
+                    type: WorkspaceType.Personal
                 };
                 selectWorkspace(personalSpace);
                 setDocs([]);
@@ -1849,10 +1849,10 @@ function DashboardContent() {
             }
             await fetchWorkspaces();
             setShowMembersModal(false);
-            await showDialog({ type: 'info', title: 'Espacio eliminado', message: workspace.name });
+            await showDialog({ type: DialogKind.Info, title: 'Espacio eliminado', message: workspace.name });
         } catch (e) {
             console.error('Error deleting workspace', e);
-            await showDialog({ type: 'error', title: 'Error al eliminar', message: workspace.name });
+            await showDialog({ type: DialogKind.Error, title: 'Error al eliminar', message: workspace.name });
         } finally {
             setDeletingWorkspaceId(null);
         }
@@ -1864,7 +1864,7 @@ function DashboardContent() {
         if (!user) return;
         const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
-        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? 'personal' : workspaceId;
+        const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;
         setIsCreating(true);
         try {
             const data = await createDocumentApi({
@@ -2106,7 +2106,7 @@ function DashboardContent() {
             if (deleteStatusTimer.current) {
                 clearTimeout(deleteStatusTimer.current);
             }
-            setDeleteStatus({ phase: 'deleting', name: label });
+            setDeleteStatus({ phase: DeletePhase.Deleting, name: label });
 
             const results = await Promise.all(
                 uniqueIds.map(async id => {
@@ -2130,10 +2130,10 @@ function DashboardContent() {
 
             if (failed.length > 0) {
                 console.error('Error deleting', failed);
-                setDeleteStatus({ phase: 'error', name: label, error: 'Error al eliminar' });
-                await showDialog({ type: 'error', title: 'Error al eliminar' });
+                setDeleteStatus({ phase: DeletePhase.Error, name: label, error: 'Error al eliminar' });
+                await showDialog({ type: DialogKind.Error, title: 'Error al eliminar' });
             } else {
-                setDeleteStatus({ phase: 'done', name: label });
+                setDeleteStatus({ phase: DeletePhase.Done, name: label });
             }
             scheduleDeleteStatusClear();
         } finally {
@@ -2153,7 +2153,7 @@ function DashboardContent() {
             .filter(path => path && path !== DEFAULT_FOLDER_NAME);
 
         if (filteredFolderPaths.length !== folderPaths.length) {
-            await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
+            await showDialog({ type: DialogKind.Info, title: 'No se puede eliminar la carpeta raíz.' });
         }
 
         const folderDocIds = new Set<string>();
@@ -2180,7 +2180,7 @@ function DashboardContent() {
         if (allDocIds.length === 0) {
             // Carpeta vacía (virtual o sin documentos) – confirmar y refrescar
             const confirmResult = await showDialog({
-                type: 'confirm',
+                type: DialogKind.Confirm,
                 title: 'Confirmar eliminación',
                 message: '¿Eliminar la carpeta vacía? Esta acción no se puede deshacer.',
                 confirmLabel: 'Eliminar',
@@ -2190,14 +2190,14 @@ function DashboardContent() {
             if (!confirmResult.confirmed) return;
             // Refrescar documentos para que las carpetas virtuales se recalculen
             await requestDocsRefresh({ force: true });
-            setDeleteStatus({ phase: 'done', name: 'Carpeta eliminada' });
+            setDeleteStatus({ phase: DeletePhase.Done, name: 'Carpeta eliminada' });
             scheduleDeleteStatusClear();
             return;
         }
 
         const label = allDocIds.length === 1 ? 'Elemento' : `${allDocIds.length} elementos`;
         const confirmResult = await showDialog({
-            type: 'confirm',
+            type: DialogKind.Confirm,
             title: 'Confirmar eliminación',
             message: `¿Eliminar ${label}? Esta acción no se puede deshacer.`,
             confirmLabel: 'Eliminar',
@@ -2210,7 +2210,7 @@ function DashboardContent() {
 
     const deleteFolder = async (folder: FolderItem) => {
         if (folder.path === DEFAULT_FOLDER_NAME || folder.kind === 'system') {
-            await showDialog({ type: 'info', title: 'No se puede eliminar la carpeta raíz.' });
+            await showDialog({ type: DialogKind.Info, title: 'No se puede eliminar la carpeta raíz.' });
             return;
         }
         await deleteItems({ docIds: [], folderPaths: [folder.path] });
@@ -2230,7 +2230,7 @@ function DashboardContent() {
             URL.revokeObjectURL(blobUrl);
         } catch (err) {
             console.error('Download error:', err);
-            showDialog({ type: 'error', title: 'Error al descargar', message: 'No se pudo descargar el archivo.' });
+            showDialog({ type: DialogKind.Error, title: 'Error al descargar', message: 'No se pudo descargar el archivo.' });
         }
     };
 
@@ -2242,7 +2242,7 @@ function DashboardContent() {
             return docFolder === folderPath || docFolder.startsWith(`${folderPath}/`);
         });
         if (folderDocs.length === 0) {
-            showDialog({ type: 'info', title: 'Carpeta vacía', message: 'No hay archivos para descargar en esta carpeta.' });
+            showDialog({ type: DialogKind.Info, title: 'Carpeta vacía', message: 'No hay archivos para descargar en esta carpeta.' });
             return;
         }
         try {
@@ -2273,7 +2273,7 @@ function DashboardContent() {
             URL.revokeObjectURL(blobUrl);
         } catch (err) {
             console.error('Folder download error:', err);
-            showDialog({ type: 'error', title: 'Error al descargar', message: 'No se pudo descargar la carpeta.' });
+            showDialog({ type: DialogKind.Error, title: 'Error al descargar', message: 'No se pudo descargar la carpeta.' });
         }
     };
 
@@ -2281,7 +2281,7 @@ function DashboardContent() {
         e.stopPropagation();
         if (deletingIds[docItem.id]) return;
         const confirmResult = await showDialog({
-            type: 'confirm',
+            type: DialogKind.Confirm,
             title: 'Eliminar elemento',
             message: 'Esta acción no se puede deshacer.',
             confirmLabel: 'Eliminar',
@@ -2293,7 +2293,7 @@ function DashboardContent() {
     };
 
     const inviteMember = async () => {
-        if (!inviteEmail || !currentWorkspace || currentWorkspace.type === 'personal') return;
+        if (!inviteEmail || !currentWorkspace || currentWorkspace.type === WorkspaceType.Personal) return;
         const emailToInvite = inviteEmail.trim();
         if (!emailToInvite) return;
         try {
@@ -2301,22 +2301,22 @@ function DashboardContent() {
             setInviteEmail('');
             setShowMembersModal(false);
             await showDialog({
-                type: 'info',
+                type: DialogKind.Info,
                 title: '✉️ Invitación enviada',
                 message: `Se ha enviado una invitación a "${emailToInvite}". Cuando el usuario acepte, aparecerá como miembro del espacio.`
             });
         } catch (e) {
             console.error('Error inviting', e);
-            await showDialog({ type: 'error', title: 'Error al invitar', message: 'No se pudo enviar la invitación. Intenta de nuevo.' });
+            await showDialog({ type: DialogKind.Error, title: 'Error al invitar', message: 'No se pudo enviar la invitación. Intenta de nuevo.' });
         }
     };
 
     const removeMember = async (userId: string) => {
-        if (!currentWorkspace || currentWorkspace.type === 'personal') return;
+        if (!currentWorkspace || currentWorkspace.type === WorkspaceType.Personal) return;
 
         try {
             const confirmResult = await showDialog({
-                type: 'confirm',
+                type: DialogKind.Confirm,
                 title: 'Eliminar miembro',
                 message: '¿Estás seguro de que quieres eliminar a este miembro del espacio de trabajo?',
                 confirmLabel: 'Eliminar',
@@ -2332,10 +2332,10 @@ function DashboardContent() {
             const updatedWorkspace = { ...currentWorkspace, members: updatedMembers };
             selectWorkspace(updatedWorkspace);
 
-            await showDialog({ type: 'info', title: 'Miembro eliminado', message: 'El usuario ha sido eliminado del espacio de trabajo.' });
+            await showDialog({ type: DialogKind.Info, title: 'Miembro eliminado', message: 'El usuario ha sido eliminado del espacio de trabajo.' });
         } catch (e) {
             console.error('Error removing member', e);
-            await showDialog({ type: 'error', title: 'Error', message: 'No se pudo eliminar al miembro.' });
+            await showDialog({ type: DialogKind.Error, title: 'Error', message: 'No se pudo eliminar al miembro.' });
         }
     };
 
@@ -2637,7 +2637,7 @@ function DashboardContent() {
                                 }}
                                 onCopyWorkspaceId={(id) => {
                                     navigator.clipboard.writeText(id);
-                                    showDialog({ type: 'info', title: 'ID copiado', message: id });
+                                    showDialog({ type: DialogKind.Info, title: 'ID copiado', message: id });
                                 }}
                                 onCopyDocument={copyDocument}
                                 onMoveDocument={promptMoveDocument}

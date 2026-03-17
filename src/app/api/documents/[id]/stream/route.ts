@@ -1,6 +1,8 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { NextRequest } from 'next/server';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { DocumentType } from '@/types/documents';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 export const runtime = 'nodejs';
 
@@ -28,8 +30,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                         id: params.id,
                         name: 'Documento de Prueba.md',
                         content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
-                        type: 'text',
-                        workspaceId: 'personal',
+                        type: DocumentType.Text,
+                        workspaceId: PERSONAL_WORKSPACE_ID,
                         folder: 'No estructurado',
                         updatedAt: { seconds: Date.now() / 1000 },
                         createdAt: { seconds: Date.now() / 1000 },
@@ -62,11 +64,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
     const data = docSnap.data() as Record<string, unknown>;
     const workspaceId = typeof data?.workspaceId === 'string' ? data.workspaceId : null;
-    if (!workspaceId || workspaceId === 'personal') {
+    if (isPersonalWorkspaceId(workspaceId)) {
         if (data?.ownerId !== auth.uid) {
             return new Response('Forbidden', { status: 403 });
         }
     } else {
+        if (!workspaceId) {
+            return new Response('Forbidden', { status: 403 });
+        }
         const member = await isWorkspaceMember(workspaceId, auth.uid);
         if (!member) {
             return new Response('Forbidden', { status: 403 });
