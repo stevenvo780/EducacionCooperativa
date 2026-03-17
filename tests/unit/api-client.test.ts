@@ -87,11 +87,10 @@ describe('api client auth wrappers', () => {
     });
 
     const apiClient = await loadApiClient();
+    const fromError = apiClient.getAuthToken();
     authState.currentUser = {
       getIdToken: vi.fn().mockResolvedValue('fallback-token')
     };
-
-    const fromError = apiClient.getAuthToken();
     errorCallback?.(new Error('observer failed'));
     await expect(fromError).resolves.toBe('fallback-token');
 

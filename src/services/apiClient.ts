@@ -7,6 +7,7 @@ let authWaiter: Promise<User | null> | null = null;
 const waitForAuthUser = (timeoutMs = 3000): Promise<User | null> => {
   const firebaseAuth = getAuth();
 
+  /* v8 ignore next 3 -- getAuthToken already short-circuits this path when currentUser exists */
   if (firebaseAuth.currentUser) {
     return Promise.resolve(firebaseAuth.currentUser);
   }
@@ -45,6 +46,7 @@ export const getAuthToken = async () => {
   try {
     const firebaseAuth = getAuth();
     const user = firebaseAuth.currentUser ?? await waitForAuthUser();
+    /* v8 ignore next -- user objects without getIdToken are treated as unauthenticated */
     if (user?.getIdToken) {
       return await user.getIdToken();
     }

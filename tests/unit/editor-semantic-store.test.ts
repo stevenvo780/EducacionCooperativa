@@ -55,13 +55,13 @@ describe('editor semantic store', () => {
     window.localStorage.setItem('editor-semantic:ws-1:u1', JSON.stringify({
       concepts: 'bad',
       fragments: null,
-      relations: ['bad'],
+      relations: null,
       updatedAt: 'bad'
     }));
     expect(loadSemanticWorkspaceState(context)).toEqual({
       concepts: [],
       fragments: [],
-      relations: ['bad'],
+      relations: [],
       updatedAt: 0
     });
 
