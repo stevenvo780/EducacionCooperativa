@@ -46,7 +46,7 @@ countermodel (P -> Q)`
   {
     label: 'Equivalencia lógica',
     code: `logic classical.propositional
-check equivalent (P -> Q) (! P | Q)`
+check equivalent (P -> Q), (! P | Q)`
   },
   {
     label: 'Derivación encadenada',
@@ -59,8 +59,8 @@ derive R from {a1, a2, a3}`
   {
     label: 'De Morgan',
     code: `logic classical.propositional
-check equivalent (!(P & Q)) (!P | !Q)
-check equivalent (!(P | Q)) (!P & !Q)`
+check equivalent (!(P & Q)), (!P | !Q)
+check equivalent (!(P | Q)), (!P & !Q)`
   },
   {
     label: 'Prueba desde teoría',
