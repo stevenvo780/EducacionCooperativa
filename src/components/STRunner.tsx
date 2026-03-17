@@ -27,8 +27,6 @@ check valid ((P -> Q) -> (!Q -> !P))
 truth_table (P & Q)
 `;
 
-
-
 // ── Subcomponentes ──────────────────────────────────────────
 
 function StatusBadge({ ok }: { ok: boolean }) {
