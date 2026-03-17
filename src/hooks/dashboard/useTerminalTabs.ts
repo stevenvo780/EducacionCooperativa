@@ -3,13 +3,13 @@
 import { useCallback, useEffect } from 'react';
 import type { MosaicNode } from 'react-mosaic-component';
 import type { User } from 'firebase/auth';
-import { canAccessTerminals, type Plan } from '@/types/subscription';
-import { WorkspaceType, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { canAccessTerminals, type PlanId } from '@/types/subscription';
+import { WorkspaceType, PERSONAL_WORKSPACE_ID, type WorkspaceTypeId } from '@/types/workspace';
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 
 interface UseTerminalTabsOptions {
-    currentPlan: Plan;
+    currentPlan: PlanId;
     setShowPricingModal: (value: boolean) => void;
     openTabs: DocItem[];
     setOpenTabs: React.Dispatch<React.SetStateAction<DocItem[]>>;
@@ -21,7 +21,7 @@ interface UseTerminalTabsOptions {
     terminalSessions: TerminalSession[];
     user: User | null;
     currentWorkspace: Workspace | null;
-    createSession: (workerToken: string, workspaceType: string, name: string) => void;
+    createSession: (workspaceId: string, workspaceType: WorkspaceTypeId, workspaceName?: string) => void;
     getSessionsForWorkspace: (workerToken: string) => TerminalSession[];
 }
 

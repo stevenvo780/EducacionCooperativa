@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
-import type React from 'react';
+import React, { useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import {
     createDocumentApi,
