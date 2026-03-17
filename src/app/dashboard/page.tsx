@@ -322,6 +322,7 @@ function DashboardContent() {
     const [isZenMode, setIsZenMode] = useState(false);
     const zenRestoreRef = useRef({ sidebar: false, header: false });
     const openDocumentRef = useRef<(doc: DocItem) => Promise<void> | void>(() => {});
+    const openDocumentInTileRef = useRef<(doc: DocItem, targetTileId?: string | null) => Promise<void> | void>(() => {});
     const resolveActiveFolder = useCallback((path?: string) => {
         if (path === ROOT_FOLDER_PATH) return ROOT_FOLDER_PATH;
         return normalizeFolderPath(path);
@@ -654,13 +655,13 @@ function DashboardContent() {
         const handleMessage = (event: MessageEvent) => {
             if (event.origin !== window.location.origin) return;
 
-            const data = event.data as { type?: string; docId?: string } | null;
+            const data = event.data as { type?: string; docId?: string; sourceDocId?: string } | null;
             if (!data || data.type !== 'agora-open-doc' || typeof data.docId !== 'string') return;
 
             const doc = docs.find(item => item.id === data.docId);
             if (!doc) return;
 
-            void openDocumentRef.current(doc);
+            void openDocumentInTileRef.current(doc, data.sourceDocId ?? null);
         };
 
         window.addEventListener('message', handleMessage);
@@ -905,6 +906,25 @@ function DashboardContent() {
         };
     }, []);
 
+    const removeLeafId = useCallback((node: MosaicNode<string>, leafId: string): MosaicNode<string> | null => {
+        if (typeof node === 'string') {
+            return node === leafId ? null : node;
+        }
+
+        const first = removeLeafId(node.first, leafId);
+        const second = removeLeafId(node.second, leafId);
+
+        if (!first && !second) return null;
+        if (!first) return second;
+        if (!second) return first;
+
+        return {
+            ...node,
+            first,
+            second
+        };
+    }, []);
+
     const splitLeafInTree = useCallback((
         node: MosaicNode<string>,
         targetId: string,
@@ -949,22 +969,44 @@ function DashboardContent() {
         return null;
     }, [docs, openTabs, terminalSessions, user?.uid]);
 
-    const openDocument = async (doc: DocItem) => {
+    const openDocumentInTile = useCallback(async (doc: DocItem, requestedTargetTileId?: string | null) => {
         if (doc.type === 'folder') return;
         setActiveFolderSafe(normalizeFolderPath(doc.folder));
+
+        const targetTileId = requestedTargetTileId && openTabs.some(tab => tab.id === requestedTargetTileId)
+            ? requestedTargetTileId
+            : null;
+
         const existingTab = openTabs.find(tab => tab.id === doc.id);
-        if (existingTab) {
+        if (existingTab && !targetTileId) {
             setShowMobileSidebar(false);
             setSelectedDocId(doc.id);
             return;
         }
 
-        const selectedTab = selectedDocId ? openTabs.find(tab => tab.id === selectedDocId) : undefined;
+        const selectedTab = targetTileId
+            ? openTabs.find(tab => tab.id === targetTileId)
+            : selectedDocId
+                ? openTabs.find(tab => tab.id === selectedDocId)
+                : undefined;
         const replaceTargetId = selectedTab && selectedTab.type !== 'files' ? selectedTab.id : null;
 
         if (replaceTargetId && replaceTargetId !== doc.id) {
             if (selectedTab?.type === 'terminal' && selectedTab.sessionId) {
                 clearActiveSession();
+            }
+
+            if (existingTab) {
+                setOpenTabs(prev => prev.filter(tab => tab.id !== replaceTargetId));
+                setMosaicNode(current => {
+                    if (!current) return doc.id;
+                    const withoutExisting = removeLeafId(current, doc.id);
+                    if (!withoutExisting) return doc.id;
+                    return replaceLeafId(withoutExisting, replaceTargetId, doc.id);
+                });
+                setShowMobileSidebar(false);
+                setSelectedDocId(doc.id);
+                return;
             }
 
             setOpenTabs(prev => {
@@ -993,8 +1035,14 @@ function DashboardContent() {
         });
         setShowMobileSidebar(false);
         setSelectedDocId(doc.id);
-    };
+    }, [clearActiveSession, openTabs, removeLeafId, replaceLeafId, selectedDocId, setShowMobileSidebar, setActiveFolderSafe]);
+
+    const openDocument = useCallback(async (doc: DocItem) => {
+        await openDocumentInTile(doc, null);
+    }, [openDocumentInTile]);
+
     openDocumentRef.current = openDocument;
+    openDocumentInTileRef.current = openDocumentInTile;
 
     const handleDropDocOnTile = useCallback(async (droppedDocId: string, targetTileId: string, position: 'left' | 'right' | 'top' | 'bottom' | 'replace') => {
         if (droppedDocId === targetTileId) return;

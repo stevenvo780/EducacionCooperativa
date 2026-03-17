@@ -234,7 +234,9 @@ const ensureMarkdownCandidateNames = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return [];
   const candidates = new Set<string>([trimmed]);
-  if (!/\.[a-z0-9]+$/i.test(trimmed)) {
+  if (/\.(md|markdown|mdown|mkd)$/i.test(trimmed)) {
+    candidates.add(trimmed.replace(/\.(md|markdown|mdown|mkd)$/i, ''));
+  } else {
     candidates.add(`${trimmed}.md`);
   }
   return Array.from(candidates);
@@ -266,6 +268,16 @@ const buildWorkspaceAwarePathCandidates = (value: string) => {
 };
 
 const isBrowserNavigationHref = (href: string) => /^(\/editor\/|\/login\b|\/dashboard\b|\/docs\b)/i.test(href);
+
+const extractWorkspaceSegments = (href: string): { workspaceName: string; targetPath: string } | null => {
+  const cleaned = decodeURIComponent(href).replace(/^\/?workspace\//, '');
+  const firstSlash = cleaned.indexOf('/');
+  if (firstSlash < 1) return null;
+  return {
+    workspaceName: cleaned.substring(0, firstSlash).trim(),
+    targetPath: normalizeRelativeMarkdownPath(cleaned.substring(firstSlash + 1))
+  };
+};
 
 const convertWikiLinksToMarkdown = (content: string) => {
   const lines = content.split('\n');
@@ -509,6 +521,7 @@ export default function MosaicEditor({
   const setSearchTerm = setInternalSearchTerm;
   const [currentMatch, setCurrentMatch] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
+  const lastReportedSearchStateRef = useRef<SearchState | null>(null);
 
   const { user } = useAuth();
   const { onDocChangeCallback } = useTerminal();
@@ -577,7 +590,7 @@ export default function MosaicEditor({
     return () => {
       document.removeEventListener('fullscreenchange', updateFullscreenState);
     };
-  }, []);
+  }, [embedded, roomId]);
 
   /** Helper: update the editor content (remount with new key) */
   const setEditorContent = useCallback((md: string) => {
@@ -749,6 +762,7 @@ export default function MosaicEditor({
 
   // SSE stream for real-time updates
   useEffect(() => {
+    if (embedded) return;
     if (!roomId || !isPageVisible) return;
     const controller = new AbortController();
     let cancelled = false;
@@ -800,7 +814,7 @@ export default function MosaicEditor({
       cancelled = true;
       controller.abort();
     };
-  }, [roomId, loadDoc, applyDocData, resetDocState, isPageVisible]);
+  }, [embedded, roomId, loadDoc, applyDocData, resetDocState, isPageVisible]);
 
   useEffect(() => {
     if (!isPageVisible || !roomId) return;
@@ -870,9 +884,14 @@ export default function MosaicEditor({
 
   // Notify parent of search state changes
   useEffect(() => {
-    if (onSearchStateChange) {
-      onSearchStateChange({ currentMatch, totalMatches });
+    if (!onSearchStateChange) return;
+    const nextState = { currentMatch, totalMatches };
+    const previousState = lastReportedSearchStateRef.current;
+    if (previousState && previousState.currentMatch === nextState.currentMatch && previousState.totalMatches === nextState.totalMatches) {
+      return;
     }
+    lastReportedSearchStateRef.current = nextState;
+    onSearchStateChange(nextState);
   }, [currentMatch, totalMatches, onSearchStateChange]);
 
   const navigateSearch = useCallback((direction: 'next' | 'prev') => {
@@ -942,26 +961,23 @@ export default function MosaicEditor({
     }
 
     const currentMeta = currentDocMetaRef.current;
-    if (!currentMeta.workspaceId) {
-      return false;
-    }
 
-    try {
+    const findDocInWorkspace = async (workspaceId: string, searchHref: string) => {
       const search = new URLSearchParams({
-        workspaceId: currentMeta.workspaceId,
+        workspaceId,
         view: 'list',
         excludeContent: 'true'
       });
       const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
-      if (!res.ok) return false;
+      if (!res.ok) return null;
 
       const docs = await res.json() as Array<{ id: string; name?: string; folder?: string; type?: string }>;
       const currentFolder = normalizePath(currentMeta.folder);
-      const normalizedHref = cleanedHref.replace(/^\/+/, '');
-      const resolvedPath = cleanedHref.startsWith('/')
-        ? normalizeRelativeMarkdownPath(normalizedHref)
-        : normalizeRelativeMarkdownPath(currentFolder ? `${currentFolder}/${normalizedHref}` : normalizedHref);
-      const basePath = normalizeRelativeMarkdownPath(normalizedHref);
+      const normalizedH = searchHref.replace(/^\/+/, '');
+      const resolvedPath = searchHref.startsWith('/')
+        ? normalizeRelativeMarkdownPath(normalizedH)
+        : normalizeRelativeMarkdownPath(currentFolder ? `${currentFolder}/${normalizedH}` : normalizedH);
+      const basePath = normalizeRelativeMarkdownPath(normalizedH);
       const candidatePaths = new Set<string>([
         ...buildWorkspaceAwarePathCandidates(resolvedPath),
         ...buildWorkspaceAwarePathCandidates(basePath)
@@ -971,35 +987,102 @@ export default function MosaicEditor({
         ...ensureMarkdownCandidateNames(resolvedPath.split('/').pop() || '')
       ]);
 
-      const matchedDoc = docs.find((doc) => {
+      const foundDoc = docs.find((doc) => {
         if (!doc || doc.type === 'folder') return false;
         const docName = typeof doc.name === 'string' ? doc.name : '';
         const docFolder = normalizePath(typeof doc.folder === 'string' ? doc.folder : '');
         const docPath = normalizeRelativeMarkdownPath(docFolder ? `${docFolder}/${docName}` : docName);
         return candidatePaths.has(docPath)
-          || Array.from(candidatePaths).some((candidatePath) => docPath.endsWith(`/${candidatePath}`) || docPath === candidatePath)
+          || Array.from(candidatePaths).some((cp) => docPath.endsWith(`/${cp}`) || docPath === cp)
           || candidateNames.has(docName)
-          || doc.id === cleanedHref;
-      });
+          || doc.id === searchHref;
+      }) ?? null;
+      return foundDoc;
+    };
 
-      if (!matchedDoc) return false;
-
-      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'agora-open-doc', docId: matchedDoc.id }, window.location.origin);
+    const emitOpenDoc = (docId: string) => {
+      if (embedded && typeof window !== 'undefined') {
+        window.postMessage({ type: 'agora-open-doc', docId, sourceDocId: roomId }, window.location.origin);
         return true;
       }
-
-      window.location.assign(`/editor/${encodeURIComponent(matchedDoc.id)}`);
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'agora-open-doc', docId, sourceDocId: roomId }, window.location.origin);
+        return true;
+      }
+      window.location.assign(`/editor/${encodeURIComponent(docId)}`);
       return true;
+    };
+
+    try {
+      // 1) Try current workspace first (fast path)
+      if (currentMeta.workspaceId) {
+        const matchedDoc = await findDocInWorkspace(currentMeta.workspaceId, cleanedHref);
+        if (matchedDoc) return emitOpenDoc(matchedDoc.id);
+      }
+
+      // 2) If href looks like /workspace/{name}/..., resolve the target workspace
+      const wsSegments = extractWorkspaceSegments(cleanedHref);
+      if (wsSegments && wsSegments.targetPath) {
+        const wsRes = await authFetch('/api/workspaces', { cache: 'no-store' });
+        if (wsRes.ok) {
+          const wsData = await wsRes.json() as { workspaces?: Array<{ id: string; name?: string }>; invites?: Array<{ id: string; name?: string }> };
+          const allWorkspaces = [
+            ...(Array.isArray(wsData.workspaces) ? wsData.workspaces : []),
+            ...(Array.isArray(wsData.invites) ? wsData.invites : [])
+          ];
+          const normalizedTargetWsName = wsSegments.workspaceName.toLowerCase();
+
+          const matchedWs = allWorkspaces.find((ws) => {
+            const wsName = typeof ws.name === 'string' ? ws.name.toLowerCase() : '';
+            return wsName === normalizedTargetWsName || ws.id === wsSegments.workspaceName;
+          });
+
+          // Search matched workspace, then fallback to all workspaces
+          const workspaceIdsToSearch = new Set<string>();
+          if (matchedWs) workspaceIdsToSearch.add(matchedWs.id);
+          workspaceIdsToSearch.add('personal');
+          allWorkspaces.forEach((ws) => workspaceIdsToSearch.add(ws.id));
+          // Remove already-searched workspace
+          if (currentMeta.workspaceId) workspaceIdsToSearch.delete(currentMeta.workspaceId);
+
+          for (const wsId of workspaceIdsToSearch) {
+            const matchedDoc = await findDocInWorkspace(wsId, wsSegments.targetPath);
+            if (matchedDoc) return emitOpenDoc(matchedDoc.id);
+          }
+        }
+      }
+
+      // 3) If workspaceId was null and href is NOT a workspace path, try personal
+      if (!currentMeta.workspaceId && !wsSegments) {
+        const matchedDoc = await findDocInWorkspace('personal', cleanedHref);
+        if (matchedDoc) return emitOpenDoc(matchedDoc.id);
+      }
+
+      return false;
     } catch (error) {
       console.error('Error opening internal markdown link:', error);
       return false;
     }
-  }, []);
+  }, [embedded, roomId]);
 
   useEffect(() => {
     const editorShell = editorShellRef.current;
     if (!editorShell) return;
+
+    const handleEditorLinkPointerDown = (event: MouseEvent) => {
+      if (viewMode !== 'edit') return;
+      if (event.button !== 0) return;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const anchor = target.closest('.mdx-content-editable a[href]');
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
 
     const handleEditorLinkClick = (event: MouseEvent) => {
       if (viewMode !== 'edit') return;
@@ -1033,9 +1116,11 @@ export default function MosaicEditor({
       })();
     };
 
+    editorShell.addEventListener('mousedown', handleEditorLinkPointerDown, true);
     editorShell.addEventListener('click', handleEditorLinkClick, true);
 
     return () => {
+      editorShell.removeEventListener('mousedown', handleEditorLinkPointerDown, true);
       editorShell.removeEventListener('click', handleEditorLinkClick, true);
     };
   }, [openInternalMarkdownLink, viewMode]);
