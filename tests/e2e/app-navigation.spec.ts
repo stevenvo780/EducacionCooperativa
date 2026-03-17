@@ -28,8 +28,8 @@ test('docs page expands sections and copies installation commands', async ({ pag
 
   await expect(page.getByRole('heading', { name: /Documentación/i })).toBeVisible();
 
-  await page.getByRole('button', { name: /Instalación/i }).click();
-  await expect(page.getByText('Instalación rápida (una línea)')).toBeVisible();
+  await page.getByRole('button', { name: /Instalación del Worker/i }).click();
+  await expect(page.getByRole('heading', { name: 'Instalación rápida' })).toBeVisible();
 
   const firstCopyButton = page.getByRole('button', { name: 'Copiar' }).first();
   await firstCopyButton.click();

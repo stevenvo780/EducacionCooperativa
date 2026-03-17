@@ -42,8 +42,11 @@ const withPWA = withPWAInit({
 });
 
 /** @type {import('next').NextConfig} */
+const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
+
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: useStandaloneOutput ? 'standalone' : undefined,
   transpilePackages: ['react-mosaic-component', 'firebase', 'undici', '@stevenvo780/st-lang'],
   experimental: {
     serverComponentsExternalPackages: ['firebase-admin'],
