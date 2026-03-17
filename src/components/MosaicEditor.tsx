@@ -39,7 +39,9 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Monitor, PenLine, AlertTriangle, FileCode2 } from 'lucide-react';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Monitor, PenLine, AlertTriangle, FileCode2, Quote, ListTodo, Sigma, BetweenHorizontalStart } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
@@ -79,7 +81,7 @@ const isVideoMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('vi
 const isAudioMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('audio/');
 const isPdfMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/pdf';
 
-type ToolbarGroupKey = 'history' | 'inline' | 'structure' | 'lists' | 'media' | 'insert' | 'advanced';
+type ToolbarGroupKey = 'history' | 'inline' | 'structure' | 'lists' | 'media' | 'insert' | 'snippets' | 'advanced';
 
 type ToolbarVisibility = Record<ToolbarGroupKey, boolean>;
 
@@ -90,7 +92,7 @@ type QuickInsert = {
   markdown: string;
 };
 
-const TOOLBAR_VISIBILITY_STORAGE_KEY = 'agora.editor.toolbar.visibility.v1';
+const TOOLBAR_VISIBILITY_STORAGE_KEY = 'agora.editor.toolbar.visibility.v2';
 
 const DEFAULT_TOOLBAR_VISIBILITY: ToolbarVisibility = {
   history: true,
@@ -99,6 +101,7 @@ const DEFAULT_TOOLBAR_VISIBILITY: ToolbarVisibility = {
   lists: true,
   media: true,
   insert: true,
+  snippets: true,
   advanced: true
 };
 
@@ -109,14 +112,15 @@ const TOOLBAR_GROUP_LABELS: Record<ToolbarGroupKey, string> = {
   lists: 'Listas',
   media: 'Links y media',
   insert: 'Inserciones',
+  snippets: 'Snippets',
   advanced: 'Avanzadas'
 };
 
 const QUICK_INSERTS: QuickInsert[] = [
   {
     id: 'latex-inline',
-    title: 'LaTeX inline',
-    description: 'Inserta una fórmula inline con KaTeX.',
+    title: 'LaTeX en línea',
+    description: 'Inserta una fórmula en línea con KaTeX.',
     markdown: '$E = mc^2$'
   },
   {
@@ -145,7 +149,7 @@ const QUICK_INSERTS: QuickInsert[] = [
   },
   {
     id: 'checklist',
-    title: 'Checklist',
+    title: 'Lista de tareas',
     description: 'Crea una lista de tareas lista para editar.',
     markdown: '- [ ] Primer pendiente\n- [ ] Segundo pendiente\n- [ ] Tercer pendiente\n'
   }
@@ -238,6 +242,28 @@ const MarkdownPreview = React.memo(({ content }: { content: string }) => {
   );
 });
 MarkdownPreview.displayName = 'MarkdownPreview';
+
+function ToolbarShortcutButton({
+  title,
+  icon,
+  onClick
+}: {
+  title: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded px-1.5 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+      title={title}
+      aria-label={title}
+    >
+      {icon}
+    </button>
+  );
+}
 
 function TableGridPicker({ onInsert }: { onInsert: (rows: number, cols: number) => void }) {
   const [open, setOpen] = React.useState(false);
@@ -353,7 +379,6 @@ export default function MosaicEditor({
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
   const [showToolsPanel, setShowToolsPanel] = useState(false);
-  const [toolbarVisibility, setToolbarVisibility] = useState<ToolbarVisibility>(DEFAULT_TOOLBAR_VISIBILITY);
 
   // Search state
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
@@ -364,6 +389,11 @@ export default function MosaicEditor({
 
   const { user } = useAuth();
   const { onDocChangeCallback } = useTerminal();
+  const dispatch = useAppDispatch();
+  const toolbarVisibility = useAppSelector((state) => ({
+    ...DEFAULT_TOOLBAR_VISIBILITY,
+    ...(state.dashboard.editorToolbarVisibility as Partial<ToolbarVisibility>)
+  }));
   const isPageVisible = usePageVisibility();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
@@ -387,10 +417,10 @@ export default function MosaicEditor({
       const rawValue = window.localStorage.getItem(TOOLBAR_VISIBILITY_STORAGE_KEY);
       if (!rawValue) return;
       const parsed = JSON.parse(rawValue) as Partial<ToolbarVisibility>;
-      setToolbarVisibility({ ...DEFAULT_TOOLBAR_VISIBILITY, ...parsed });
+      dispatch(setEditorToolbarVisibility({ ...DEFAULT_TOOLBAR_VISIBILITY, ...parsed }));
     } catch {
     }
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -740,12 +770,16 @@ export default function MosaicEditor({
     [toolbarVisibility]
   );
 
+  const applyToolbarVisibility = useCallback((nextVisibility: ToolbarVisibility) => {
+    dispatch(setEditorToolbarVisibility(nextVisibility));
+  }, [dispatch]);
+
   const toggleToolbarGroup = useCallback((group: ToolbarGroupKey) => {
-    setToolbarVisibility((current) => ({
-      ...current,
-      [group]: !current[group]
-    }));
-  }, []);
+    applyToolbarVisibility({
+      ...toolbarVisibility,
+      [group]: !toolbarVisibility[group]
+    });
+  }, [applyToolbarVisibility, toolbarVisibility]);
 
   const setViewModeWithSync = useCallback((nextMode: ViewMode) => {
     const editor = mdxEditorRef.current;
@@ -813,8 +847,26 @@ export default function MosaicEditor({
         <StrikeThroughSupSubToggles options={['Strikethrough', 'Sub', 'Sup']} />
       </>
     ));
-    pushSection('structure', <BlockTypeSelect />);
-    pushSection('lists', <ListsToggle />);
+    pushSection('structure', (
+      <>
+        <BlockTypeSelect />
+        <ToolbarShortcutButton
+          title="Insertar cita"
+          icon={<Quote className="h-3.5 w-3.5" />}
+          onClick={() => insertSnippet('\n> Escribe una cita aquí\n')}
+        />
+      </>
+    ));
+    pushSection('lists', (
+      <>
+        <ListsToggle />
+        <ToolbarShortcutButton
+          title="Insertar lista de tareas"
+          icon={<ListTodo className="h-3.5 w-3.5" />}
+          onClick={() => insertSnippet('\n- [ ] Primera tarea\n- [ ] Segunda tarea\n')}
+        />
+      </>
+    ));
     pushSection('media', (
       <>
         <CreateLink />
@@ -834,6 +886,30 @@ export default function MosaicEditor({
         }} />
         <InsertThematicBreak />
         <InsertCodeBlock />
+      </>
+    ));
+    pushSection('snippets', (
+      <>
+        <ToolbarShortcutButton
+          title="LaTeX en línea"
+          icon={<Sigma className="h-3.5 w-3.5" />}
+          onClick={() => insertSnippet('$E = mc^2$')}
+        />
+        <ToolbarShortcutButton
+          title="Bloque LaTeX"
+          icon={<Sigma className="h-3.5 w-3.5" />}
+          onClick={() => insertSnippet('\n$$\n\\int_{a}^{b} f(x) \\, dx = F(b) - F(a)\n$$\n')}
+        />
+        <ToolbarShortcutButton
+          title="Diagrama Mermaid"
+          icon={<BetweenHorizontalStart className="h-3.5 w-3.5" />}
+          onClick={() => insertSnippet('\n```mermaid\ngraph TD\n  A[Inicio] --> B[Proceso]\n```\n')}
+        />
+        <ToolbarShortcutButton
+          title="Nota al pie"
+          icon={<FileCode2 className="h-3.5 w-3.5" />}
+          onClick={() => insertSnippet('[^1]\n\n[^1]: Escribe la nota al pie aquí.\n')}
+        />
       </>
     ));
     pushSection('advanced', (
@@ -881,7 +957,7 @@ export default function MosaicEditor({
                 : 'text-slate-400 hover:bg-slate-700 hover:text-white'
             )}
             title={viewMode === 'preview' ? 'Volver a editar' : 'Vista previa (LaTeX, Mermaid)'}
-            aria-label={viewMode === 'preview' ? 'Volver a editar' : 'Abrir vista previa'}
+            aria-label={viewMode === 'preview' ? 'Volver al editor' : 'Abrir vista previa renderizada'}
             aria-pressed={viewMode === 'preview'}
           >
             {viewMode === 'preview' ? <PenLine className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
@@ -890,7 +966,7 @@ export default function MosaicEditor({
             type="button"
             onClick={() => void toggleFullscreen()}
             className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
-            title={isFullscreen ? 'Restaurar' : 'Maximizar'}
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'}
             aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Entrar en pantalla completa'}
           >
             {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -910,7 +986,7 @@ export default function MosaicEditor({
               <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Settings2 className="h-3.5 w-3.5 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
               </button>
-              <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { setToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+              <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />Restaurar barra completa
               </button>
               <button type="button" title={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} onClick={() => { void toggleFullscreen(); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
@@ -940,7 +1016,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setToolbarVisibility, setViewModeWithSync]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setViewModeWithSync]);
 
   // MDXEditor plugins configuration
   const editorPlugins = useMemo(() => {
@@ -1125,7 +1201,7 @@ export default function MosaicEditor({
                   <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Panel de visibilidad</h3>
                   <button
                     type="button"
-                    onClick={() => setToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY)}
+                    onClick={() => applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY)}
                     className="text-[11px] text-slate-500 transition hover:text-slate-300"
                   >
                     Restaurar
@@ -1152,7 +1228,7 @@ export default function MosaicEditor({
                   })}
                 </div>
                 <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                  Elige exactamente qué grupos aparecen en la barra principal: formato, bloques, listas, multimedia, inserciones y extras avanzados.
+                  Elige exactamente qué grupos aparecen en la barra principal: formato, bloques, listas, multimedia, inserciones, snippets y extras avanzados.
                 </p>
               </section>
 
@@ -1191,11 +1267,11 @@ export default function MosaicEditor({
                 type="button"
                 onClick={() => setViewModeWithSync('edit')}
                 className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
-                title="Volver al modo edición"
-                aria-label="Volver al modo edición"
+                title="Volver al editor visual"
+                aria-label="Volver al editor visual"
               >
                 <PenLine className="h-3 w-3" />
-                Volver a editar
+                Editor visual
               </button>
               <button
                 type="button"

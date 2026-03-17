@@ -25,6 +25,7 @@ export interface DashboardState {
   workspaces: Workspace[];
   invites: Workspace[];
   currentWorkspace: Workspace | null;
+  editorToolbarVisibility: Record<string, boolean>;
 }
 
 const initialState: DashboardState = {
@@ -44,7 +45,17 @@ const initialState: DashboardState = {
   deletingWorkspaceId: null,
   workspaces: [],
   invites: [],
-  currentWorkspace: null
+  currentWorkspace: null,
+  editorToolbarVisibility: {
+    history: true,
+    inline: true,
+    structure: true,
+    lists: true,
+    media: true,
+    insert: true,
+    snippets: true,
+    advanced: true
+  }
 };
 
 const dashboardSlice = createSlice({
@@ -101,6 +112,9 @@ const dashboardSlice = createSlice({
     },
     setCurrentWorkspace(state, action: PayloadAction<Workspace | null>) {
       state.currentWorkspace = action.payload;
+    },
+    setEditorToolbarVisibility(state, action: PayloadAction<Record<string, boolean>>) {
+      state.editorToolbarVisibility = action.payload;
     }
   }
 });
@@ -122,7 +136,8 @@ export const {
   setDeletingWorkspaceId,
   setWorkspaces,
   setInvites,
-  setCurrentWorkspace
+  setCurrentWorkspace,
+  setEditorToolbarVisibility
 } = dashboardSlice.actions;
 
 export default dashboardSlice.reducer;

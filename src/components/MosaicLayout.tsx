@@ -23,7 +23,7 @@ interface SearchState {
   totalMatches: number;
 }
 
-export type ViewMode = 'edit' | 'preview' | 'split';
+export type ViewMode = 'edit' | 'preview' | 'split' | 'raw';
 
 export interface DocItem {
   id: string;
@@ -583,10 +583,19 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           renderTile={renderTile}
           value={value}
           onChange={onChange}
+          onRelease={onChange}
           className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
           zeroStateView={emptyZeroState}
       />
       <style jsx global>{`
+        .mosaic-custom-dark .mosaic-split {
+          z-index: 30 !important;
+          background: rgba(148, 163, 184, 0.18) !important;
+        }
+        .mosaic-custom-dark .mosaic-split:hover,
+        .mosaic-custom-dark .mosaic-split.-active {
+          background: rgba(96, 165, 250, 0.4) !important;
+        }
         .mosaic-window-compact .mosaic-window-toolbar {
           height: 28px !important;
           min-height: 28px !important;
