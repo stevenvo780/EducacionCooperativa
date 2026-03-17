@@ -39,7 +39,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Monitor, PenLine, AlertTriangle } from 'lucide-react';
+import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Grid3x3, Monitor, PenLine, AlertTriangle, FileCode2 } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
@@ -50,7 +50,7 @@ import MermaidDiagram from '@/components/MermaidDiagram';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 
-type ViewMode = 'edit' | 'split' | 'preview';
+type ViewMode = 'edit' | 'split' | 'preview' | 'raw';
 
 interface SearchState {
   currentMatch: number;
@@ -858,6 +858,21 @@ export default function MosaicEditor({
           </button>
           <button
             type="button"
+            onClick={() => setViewModeWithSync(viewMode === 'raw' ? 'edit' : 'raw')}
+            className={clsx(
+              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
+              viewMode === 'raw'
+                ? 'bg-violet-600/25 text-violet-300 hover:bg-violet-600/35'
+                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+            )}
+            title={viewMode === 'raw' ? 'Volver al editor visual' : 'Ver Markdown puro'}
+            aria-label={viewMode === 'raw' ? 'Volver al editor visual' : 'Ver Markdown puro'}
+            aria-pressed={viewMode === 'raw'}
+          >
+            {viewMode === 'raw' ? <PenLine className="h-4 w-4" /> : <FileCode2 className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
             onClick={() => setViewModeWithSync(viewMode === 'preview' ? 'edit' : 'preview')}
             className={clsx(
               'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
@@ -1182,9 +1197,52 @@ export default function MosaicEditor({
                 <PenLine className="h-3 w-3" />
                 Volver a editar
               </button>
+              <button
+                type="button"
+                onClick={() => setViewModeWithSync('raw')}
+                className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
+                title="Ver Markdown puro"
+                aria-label="Ver Markdown puro"
+              >
+                <FileCode2 className="h-3 w-3" />
+                Markdown puro
+              </button>
               <span className="text-[11px] text-slate-500">Vista previa — LaTeX, Mermaid y tablas se renderizan aquí</span>
             </div>
             <MarkdownPreview content={statsContent || contentRef.current} />
+          </>
+        ) : viewMode === 'raw' ? (
+          <>
+            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
+              <button
+                type="button"
+                onClick={() => setViewModeWithSync('edit')}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+                title="Volver al editor visual"
+                aria-label="Volver al editor visual"
+              >
+                <PenLine className="h-3 w-3" />
+                Editor visual
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewModeWithSync('preview')}
+                className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
+                title="Abrir vista previa renderizada"
+                aria-label="Abrir vista previa renderizada"
+              >
+                <Monitor className="h-3 w-3" />
+                Vista previa
+              </button>
+              <span className="text-[11px] text-slate-500">Markdown puro — aquí ves y editas el texto exacto del documento</span>
+            </div>
+            <textarea
+              value={statsContent}
+              onChange={(event) => handleContentChange(event.target.value)}
+              spellCheck={false}
+              className="markdown-raw-textarea h-full w-full resize-none border-0 bg-slate-950/95 px-5 py-4 font-mono text-[13px] leading-6 text-slate-100 outline-none"
+              placeholder="# Markdown puro\n\nEscribe aquí el contenido exacto del documento..."
+            />
           </>
         ) : (
           <MDXEditor
@@ -1981,6 +2039,17 @@ export default function MosaicEditor({
 
         .mdx-editor-dark [class*="_diffSourceWrapper"] > div {
           height: 100% !important;
+        }
+
+        .markdown-raw-textarea {
+          tab-size: 2;
+          white-space: pre-wrap;
+          word-break: break-word;
+          caret-color: #60a5fa;
+        }
+
+        .markdown-raw-textarea::selection {
+          background: rgba(96, 165, 250, 0.35);
         }
 
         /* ─── Markdown Preview (LaTeX + Mermaid) ─── */
