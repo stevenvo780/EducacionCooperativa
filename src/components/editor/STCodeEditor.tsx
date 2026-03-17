@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import type { Diagnostic } from '@stevenvo780/st-lang/api';
+import { LinterOverlay } from './LinterOverlay';
 
 // ── Tipos de completions ────────────────────────────────────
 
@@ -233,6 +235,7 @@ interface STCodeEditorProps {
   placeholder?: string;
   className?: string;
   readOnly?: boolean;
+  diagnostics?: Diagnostic[];
 }
 
 export default function STCodeEditor({
@@ -241,13 +244,15 @@ export default function STCodeEditor({
   onKeyDown,
   placeholder = '// Escribe tu código ST aquí...',
   className = '',
-  readOnly = false
+  readOnly = false,
+  diagnostics = []
 }: STCodeEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeLine, setActiveLine] = useState(0);
+  const [scrollPos, setScrollPos] = useState({ top: 0, left: 0 });
 
   // ── Autocomplete state ──
   const [completions, setCompletions] = useState<CompletionItem[]>([]);
@@ -281,6 +286,9 @@ export default function STCodeEditor({
     const pre = preRef.current;
     const gutter = gutterRef.current;
     if (!ta) return;
+    
+    setScrollPos({ top: ta.scrollTop, left: ta.scrollLeft });
+
     if (pre) {
       pre.scrollTop = ta.scrollTop;
       pre.scrollLeft = ta.scrollLeft;
@@ -517,6 +525,18 @@ export default function STCodeEditor({
           data-gramm="false"
           readOnly={readOnly}
           placeholder=""
+        />
+
+        {/* Linter Overlay */}
+        <LinterOverlay 
+          diagnostics={diagnostics} 
+          content={value} 
+          lineHeight={20}
+          charWidth={7.825}
+          paddingTop={12}
+          paddingLeft={44}
+          scrollTop={scrollPos.top}
+          scrollLeft={scrollPos.left}
         />
 
         {/* Show placeholder when empty */}

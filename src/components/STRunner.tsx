@@ -212,7 +212,7 @@ export default function STRunner({
   className = '',
   fileMode
 }: STRunnerProps) {
-  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles, isRunning, getSymbols, lastDiagnostics } =
+  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles, isRunning, getSymbols, validate, lastDiagnostics } =
     useSTInterpreter();
 
   const [mode, setMode] = useState<STRunnerMode>(initialMode);
@@ -227,6 +227,16 @@ export default function STRunner({
       setInternalCode(val);
     }
   };
+
+  // ── Background Validation ──
+  useEffect(() => {
+    if (mode !== 'script') return;
+    const timer = setTimeout(() => {
+      validate(code);
+      setCurrentSymbols(getSymbols(code));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [code, mode, validate, getSymbols]);
 
   const replInputRef = useRef<HTMLInputElement>(null);
   const [replInput, setReplInput] = useState('');
@@ -504,6 +514,7 @@ export default function STRunner({
                 onKeyDown={handleCodeKeyDown}
                 placeholder="// Escribe tu script ST aquí..."
                 className="bg-slate-950 h-full"
+                diagnostics={lastDiagnostics}
               />
             </div>
 

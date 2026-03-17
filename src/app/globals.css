@@ -484,9 +484,10 @@ body {
   margin: 0;
   padding: 12px;
   border: none;
-  font: inherit;
-  line-height: inherit;
-  tab-size: inherit;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', 'Monaco', monospace !important;
+  font-size: 13px !important;
+  line-height: 20px !important;
+  tab-size: 2;
   white-space: pre;
   overflow: auto;
   box-sizing: border-box;
@@ -511,6 +512,12 @@ body {
 
 .st-editor-textarea::selection {
   background: rgba(99, 102, 241, 0.3);
+}
+
+.markdown-raw-textarea {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', 'Monaco', monospace !important;
+  font-size: 13px !important;
+  line-height: 24px !important;
 }
 
 .st-editor-placeholder {

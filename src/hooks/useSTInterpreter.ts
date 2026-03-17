@@ -46,7 +46,9 @@ export interface UseSTInterpreterReturn {
   isRunning: boolean;
   /** Obtiene los símbolos del código actual */
   getSymbols: (code: string) => SymbolInfo[];
-  /** Diagnósticos acumulados de la última ejecución */
+  /** Valida el código sin afectar el historial */
+  validate: (code: string) => Diagnostic[];
+  /** Diagnósticos acumulados de la última ejecución o validación */
   lastDiagnostics: Diagnostic[];
 }
 
@@ -93,6 +95,16 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
   const getSymbols = useCallback((code: string): SymbolInfo[] => {
     try {
       return stSymbols(code);
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const validate = useCallback((code: string): Diagnostic[] => {
+    try {
+      const result = evaluate(code);
+      setLastDiagnostics(result.diagnostics || []);
+      return result.diagnostics || [];
     } catch {
       return [];
     }
@@ -163,6 +175,7 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     profiles,
     isRunning,
     getSymbols,
+    validate,
     lastDiagnostics
   };
 }

@@ -25,6 +25,8 @@ type MockDoc = {
   ownerId: string;
   workspaceId: string;
   mimeType?: string;
+  url?: string;
+  storagePath?: string;
   order?: number;
   updatedAt: string;
 };
@@ -76,6 +78,14 @@ type MockBoardState = {
   cards: MockBoardCard[];
 };
 
+type MockVerifyPaymentResult = {
+  status: 'active' | 'free' | 'pending' | 'cancelled' | 'expired';
+  planId?: 'basic' | 'free' | 'pro';
+  message: string;
+  mutateSubscription?: boolean;
+  endDate?: string;
+};
+
 type MockAppState = {
   user: typeof TEST_USER;
   role: string;
@@ -88,7 +98,7 @@ type MockAppState = {
   subscription: {
     userId: string;
     planId: 'basic' | 'free' | 'pro';
-    status: 'active' | 'free';
+    status: 'active' | 'free' | 'pending' | 'cancelled' | 'expired';
     endDate?: string;
     createdAt: string;
     updatedAt: string;
@@ -108,12 +118,18 @@ type MockAppState = {
   nextDocId: number;
   nextBoardId: number;
   nextSnippetId: number;
+  verifyCallCount: number;
+  verifyPaymentResult: MockVerifyPaymentResult;
 };
 
 type MockOptions = Partial<Pick<MockAppState, 'loginShouldFail' | 'registerShouldFail' | 'changePasswordShouldFail' | 'role'>> & {
   workspaces?: MockWorkspace[];
   invites?: MockWorkspace[];
   docsByWorkspace?: Record<string, MockDoc[]>;
+  snippetsByWorkspace?: Record<string, MockSnippet[]>;
+  subscription?: Partial<MockAppState['subscription']>;
+  storageUsage?: Partial<MockAppState['storageUsage']>;
+  verifyPaymentResult?: MockVerifyPaymentResult;
 };
 
 const ISO_DATE = '2030-01-10T12:00:00.000Z';
@@ -200,7 +216,7 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
     ]
   },
   boardsByWorkspace: {},
-  snippetsByWorkspace: {},
+  snippetsByWorkspace: options.snippetsByWorkspace ?? {},
   userProfiles: {
     [TEST_USER.uid]: {
       uid: TEST_USER.uid,
@@ -219,7 +235,8 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
     status: 'active',
     endDate: '2030-12-31T00:00:00.000Z',
     createdAt: ISO_DATE,
-    updatedAt: ISO_DATE
+    updatedAt: ISO_DATE,
+    ...options.subscription
   },
   storageUsage: {
     usedMB: 128,
@@ -227,7 +244,8 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
     planId: 'basic',
     usedBytes: 128 * 1024 * 1024,
     limitBytes: 1024 * 1024 * 1024,
-    percentage: 12.5
+    percentage: 12.5,
+    ...options.storageUsage
   },
   loginShouldFail: options.loginShouldFail ?? false,
   registerShouldFail: options.registerShouldFail ?? false,
@@ -235,7 +253,13 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
   nextWorkspaceId: 1,
   nextDocId: 1,
   nextBoardId: 1,
-  nextSnippetId: 1
+  nextSnippetId: 1,
+  verifyCallCount: 0,
+  verifyPaymentResult: options.verifyPaymentResult ?? {
+    status: 'active',
+    planId: 'basic',
+    message: 'ok'
+  }
 });
 
 const createDefaultBoardColumns = (state: MockAppState) => ([
@@ -505,6 +529,53 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
 
   await page.route('https://uploads.test/**', async (route) => {
     await route.fulfill({ status: 200, body: '' });
+  });
+
+  await page.route('https://files.test/**', async (route) => {
+    const url = new URL(route.request().url());
+    const lowerPath = url.pathname.toLowerCase();
+
+    if (lowerPath.endsWith('.png')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pJ8j8QAAAAASUVORK5CYII=', 'base64')
+      });
+      return;
+    }
+
+    if (lowerPath.endsWith('.pdf')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/pdf',
+        body: '%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF'
+      });
+      return;
+    }
+
+    if (lowerPath.endsWith('.mp3')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'audio/mpeg',
+        body: ''
+      });
+      return;
+    }
+
+    if (lowerPath.endsWith('.mp4')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'video/mp4',
+        body: ''
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/octet-stream',
+      body: ''
+    });
   });
 
   await page.route('**/api/**', async (route) => {
@@ -855,6 +926,8 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
         ownerId: body.ownerId,
         workspaceId,
         mimeType: body.mimeType ?? (body.type === 'text' ? 'text/markdown' : undefined),
+        url: typeof body.url === 'string' ? body.url : undefined,
+        storagePath: typeof body.storagePath === 'string' ? body.storagePath : undefined,
         updatedAt: ISO_DATE
       };
       if (!state.docsByWorkspace[workspaceId]) {
@@ -931,12 +1004,63 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
     }
 
     if (pathname === '/api/payments/verify' && method === 'POST') {
-      await json(route, { status: 'active', planId: state.subscription.planId, message: 'ok' });
+      state.verifyCallCount += 1;
+      const result = state.verifyPaymentResult;
+
+      if (result.mutateSubscription && result.planId) {
+        state.subscription = {
+          ...state.subscription,
+          planId: result.planId,
+          status: result.status === 'free' ? 'free' : 'active',
+          endDate: result.endDate ?? state.subscription.endDate,
+          updatedAt: ISO_DATE
+        };
+        state.storageUsage = {
+          ...state.storageUsage,
+          planId: result.planId
+        };
+      }
+
+      await json(route, {
+        status: result.status,
+        planId: result.planId,
+        message: result.message
+      });
       return;
     }
 
     if (pathname === '/api/payments/create-preference' && method === 'POST') {
       await json(route, { checkoutUrl: 'https://checkout.test/mercadopago' });
+      return;
+    }
+
+    if (pathname === '/api/payments/callback/success' && method === 'GET') {
+      await route.fulfill({
+        status: 302,
+        headers: {
+          location: '/dashboard?payment=success'
+        }
+      });
+      return;
+    }
+
+    if (pathname === '/api/payments/callback/pending' && method === 'GET') {
+      await route.fulfill({
+        status: 302,
+        headers: {
+          location: '/dashboard?payment=pending'
+        }
+      });
+      return;
+    }
+
+    if (pathname === '/api/payments/callback/failure' && method === 'GET') {
+      await route.fulfill({
+        status: 302,
+        headers: {
+          location: '/dashboard?payment=failure'
+        }
+      });
       return;
     }
 
@@ -967,6 +1091,8 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
         ownerId: state.user.uid,
         workspaceId,
         mimeType: body.mimeType ?? 'application/octet-stream',
+        url: `https://uploads.test/${encodeURIComponent(body.originalName ?? body.fileName ?? docId)}`,
+        storagePath: body.storagePath ?? `uploads/${workspaceId}/${body.originalName ?? body.fileName ?? docId}`,
         updatedAt: ISO_DATE
       };
       if (!state.docsByWorkspace[workspaceId]) {
