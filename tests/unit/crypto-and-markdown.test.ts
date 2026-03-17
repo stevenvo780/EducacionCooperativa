@@ -84,7 +84,9 @@ describe('markdown conversion helpers', () => {
   });
 
   it('detects convertible mime types and extensions', () => {
+    expect(canConvertToMarkdown(undefined, undefined)).toBe(false);
     expect(canConvertToMarkdown('application/pdf', 'archivo.bin')).toBe(true);
+    expect(canConvertToMarkdown(undefined, 'archivo.pdf')).toBe(true);
     expect(canConvertToMarkdown(undefined, 'archivo.docx')).toBe(true);
     expect(canConvertToMarkdown('text/plain', 'archivo.bin')).toBe(true);
     expect(canConvertToMarkdown('application/octet-stream', 'archivo.csv')).toBe(true);
@@ -123,7 +125,6 @@ describe('markdown conversion helpers', () => {
     turndownMock.mockReturnValue('Titulo\n\nTexto');
 
     await expect(bufferToMarkdown(Buffer.from('docx'), {
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       fileName: 'Clase.docx'
     })).resolves.toEqual({
       markdown: 'Titulo\n\nTexto',

@@ -71,6 +71,26 @@ describe('semantic search ranking', () => {
     });
   });
 
+  it('handles fallback timestamps and partial token matches', () => {
+    const results = buildSemanticSearchResults({
+      docs: [
+        {
+          id: 'doc-partial',
+          name: 'Colonialidad',
+          folder: 'Archivo',
+          updatedAt: {},
+          content: 'Texto breve'
+        }
+      ],
+      query: 'colonial'
+    });
+
+    expect(results.results[0]).toMatchObject({
+      kind: SearchKind.Document,
+      title: 'Colonialidad'
+    });
+  });
+
   it('builds document, concept, fragment, author and work results from a rich query', () => {
     const result = buildSemanticSearchResults({
       docs,

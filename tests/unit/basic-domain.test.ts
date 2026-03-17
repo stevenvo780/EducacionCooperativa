@@ -82,6 +82,7 @@ describe('basic domain helpers', () => {
     expect(canAccessTerminals(Plan.Free)).toBe(false);
     expect(canAccessTerminals(Plan.Pro)).toBe(true);
     expect(canAccessTerminals(Plan.Enterprise)).toBe(true);
+    expect(canAccessTerminals('custom' as Plan)).toBe(false);
 
     expect(getPlanById(Plan.Basic)).toEqual(PLANS[Plan.Basic]);
     expect(getPlanById('invalid' as Plan)).toEqual(PLANS[Plan.Free]);
