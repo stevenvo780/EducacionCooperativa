@@ -3,8 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { deleteDocumentApi } from '@/services/dashboardApi';
 import { normalizePath, normalizeFolderPath, DEFAULT_FOLDER_NAME } from '@/lib/folder-utils';
-import { DeletePhase, DialogKind, type DeleteStatus, type DocItem, type FolderItem } from '@/components/dashboard/types';
-import type { DialogConfig, DialogResult } from '@/components/dashboard/types';
+import { DeletePhase, DialogKind, type DeleteStatus, type DocItem, type FolderItem, type DialogConfig, type DialogResult } from '@/components/dashboard/types';
 
 interface UseDeleteDocumentOptions {
     docs: DocItem[];
@@ -29,7 +28,7 @@ export function useDeleteDocument({
     requestDocsRefresh,
     closeTabById,
     showDialog,
-    setDocs,
+    setDocs
 }: UseDeleteDocumentOptions): UseDeleteDocumentResult {
     const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
     const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});

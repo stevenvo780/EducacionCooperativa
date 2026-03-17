@@ -28,7 +28,7 @@ export default function MembersModal({
     setInviteEmail,
     inviteMember,
     removeMember,
-    modalFade,
+    modalFade
 }: MembersModalProps) {
     return (
         <AnimatePresence>

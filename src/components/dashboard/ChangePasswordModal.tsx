@@ -39,7 +39,7 @@ export default function ChangePasswordModal({
     setIsChangingPassword,
     changePassword,
     modalFade,
-    modalPop,
+    modalPop
 }: ChangePasswordModalProps) {
     return (
         <AnimatePresence>
