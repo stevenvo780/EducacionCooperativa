@@ -1,94 +1,136 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+
+export type LinterSeverity = 'error' | 'warning' | 'info';
 
 export interface LinterDiagnostic {
   message: string;
-  severity: 'error' | 'warning' | 'info';
+  severity: LinterSeverity;
   line: number;
   column: number;
   endLine?: number;
   endColumn?: number;
   source: string;
+  suggestion?: string;
 }
 
-export function useMarkdownLinter(content: string) {
-  const [diagnostics, setDiagnostics] = useState<LinterDiagnostic[]>([]);
+export interface LinterRule {
+    name: string;
+    check: (text: string) => LinterDiagnostic[];
+}
 
-  const runLint = useCallback((text: string) => {
-    const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
+// ── Built-in Rules ──────────────────────────────────────────
 
-    // 1. Basic Spellcheck (Simulated for common logic/docs words or typos)
-    const commonTypos: Record<string, string> = {
-        'entonses': 'entonces',
-        'puedas': 'puedes',
-        'halla': 'haya',
-        'valla': 'vaya',
-        'cooperatiba': 'cooperativa',
-        'edicasion': 'educación',
-        'st-lang': 'ST',
-        'avierto': 'abierto',
-        'abia': 'había',
-        'estava': 'estaba',
-        'hise': 'hice',
-        'ubiera': 'hubiera',
-        'alla': 'allá / haya',
-        'ay': 'hay',
-        'ahi': 'ahí',
-    };
+const spellcheckRule: LinterRule = {
+    name: 'Spellcheck',
+    check: (text: string) => {
+        const results: LinterDiagnostic[] = [];
+        const commonTypos: Record<string, string> = {
+            'entonses': 'entonces',
+            'puedas': 'puedes',
+            'halla': 'haya',
+            'valla': 'vaya',
+            'cooperatiba': 'cooperativa',
+            'edicasion': 'educación',
+            'st-lang': 'ST',
+            'avierto': 'abierto',
+            'abia': 'había',
+            'estava': 'estaba',
+            'hise': 'hice',
+            'ubiera': 'hubiera',
+            'alla': 'allá / haya',
+            'ay': 'hay',
+            'ahi': 'ahí',
+        };
 
-    lines.forEach((line, lineIdx) => {
-        // Find typos
-        Object.keys(commonTypos).forEach(typo => {
-            const regex = new RegExp(`\\b${typo}\\b`, 'gi');
-            let match;
-            while ((match = regex.exec(line)) !== null) {
-                results.push({
-                    message: `Posible error de ortografía: "${match[0]}". ¿Quisiste decir "${commonTypos[typo]}"?`,
-                    severity: 'warning',
+        const lines = text.split('\n');
+        lines.forEach((line, lineIdx) => {
+            Object.keys(commonTypos).forEach(typo => {
+                const regex = new RegExp(`\\b${typo}\\b`, 'gi');
+                let match;
+                while ((match = regex.exec(line)) !== null) {
+                    results.push({
+                        message: `Posible error de ortografía: "${match[0]}"`,
+                        suggestion: `¿Quisiste decir "${commonTypos[typo.toLowerCase()]}"?`,
+                        severity: 'warning',
+                        line: lineIdx + 1,
+                        column: match.index + 1,
+                        endLine: lineIdx + 1,
+                        endColumn: match.index + 1 + match[0].length,
+                        source: 'Spellcheck'
+                    });
+                }
+            });
+        });
+        return results;
+    }
+};
+
+const markdownStructureRule: LinterRule = {
+    name: 'MarkdownStructure',
+    check: (text: string) => {
+        const results: LinterDiagnostic[] = [];
+        const lines = text.split('\n');
+        lines.forEach((line, lineIdx) => {
+            if (line.startsWith('#') && !line.includes(' ') && line.length > 1) {
+                 results.push({
+                    message: 'Los encabezados Markdown deben tener un espacio después de los "#".',
+                    severity: 'info',
                     line: lineIdx + 1,
-                    column: match.index + 1,
+                    column: 1,
                     endLine: lineIdx + 1,
-                    endColumn: match.index + 1 + match[0].length,
-                    source: 'Spellcheck'
+                    endColumn: line.indexOf('#', 1) === -1 ? 2 : line.lastIndexOf('#') + 1,
+                    source: 'Structure'
                 });
             }
         });
+        return results;
+    }
+};
 
-        // 2. Markdown structural checks
-        if (line.startsWith('#') && !line.includes(' ')) {
-             results.push({
-                message: 'Los encabezados Markdown deben tener un espacio después de los "#".',
-                severity: 'info',
-                line: lineIdx + 1,
-                column: 1,
-                endLine: lineIdx + 1,
-                endColumn: line.indexOf('#', 1) === -1 ? 2 : line.lastIndexOf('#') + 1,
-                source: 'Structure'
-            });
-        }
-
-        // 3. Link checks
+const linksRule: LinterRule = {
+    name: 'Links',
+    check: (text: string) => {
+        const results: LinterDiagnostic[] = [];
+        const lines = text.split('\n');
         const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-        let linkMatch;
-        while ((linkMatch = linkRegex.exec(line)) !== null) {
-            if (linkMatch[2].includes(' ')) {
-                results.push({
-                    message: 'Las URLs en los enlaces no deben contener espacios. Usa %20.',
-                    severity: 'error',
-                    line: lineIdx + 1,
-                    column: linkMatch.index + linkMatch[0].indexOf(linkMatch[2]) + 1,
-                    endLine: lineIdx + 1,
-                    endColumn: linkMatch.index + linkMatch[0].indexOf(linkMatch[2]) + 1 + linkMatch[2].length,
-                    source: 'Links'
-                });
+        lines.forEach((line, lineIdx) => {
+            let match;
+            while ((match = linkRegex.exec(line)) !== null) {
+                if (match[2].includes(' ')) {
+                    results.push({
+                        message: 'Las URLs en los enlaces no deben contener espacios.',
+                        suggestion: 'Usa %20 en lugar de espacios.',
+                        severity: 'error',
+                        line: lineIdx + 1,
+                        column: match.index + match[0].indexOf(match[2]) + 1,
+                        endLine: lineIdx + 1,
+                        endColumn: match.index + match[0].indexOf(match[2]) + 1 + match[2].length,
+                        source: 'Links'
+                    });
+                }
             }
-        }
-    });
+        });
+        return results;
+    }
+};
 
-    setDiagnostics(results);
-  }, []);
+// ── Registry ────────────────────────────────────────────────
+
+const defaultRules = [spellcheckRule, markdownStructureRule, linksRule];
+
+export function useMarkdownLinter(content: string, customRules: LinterRule[] = []) {
+  const [diagnostics, setDiagnostics] = useState<LinterDiagnostic[]>([]);
+
+  const runLint = useCallback((text: string) => {
+    const allRules = [...defaultRules, ...customRules];
+    const results = allRules.flatMap(rule => rule.check(text));
+    
+    // Sort and deduplicate (optional, but good for performance)
+    const sortedResults = results.sort((a, b) => a.line - b.line || a.column - b.column);
+    setDiagnostics(sortedResults);
+  }, [customRules]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

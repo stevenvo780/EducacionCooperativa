@@ -71,6 +71,7 @@ import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
+import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
 import {
   attachLinkedDocumentToSelection,
   getRecentSemanticItems,
@@ -1696,16 +1697,23 @@ export default function MosaicEditor({
               </div>
             </>
           ) : (
-            <MDXEditor
-              key={editorKey}
-              ref={mdxEditorRef}
-              markdown={initialMarkdown}
-              onChange={handleMdxChange}
-              plugins={editorPlugins}
-              contentEditableClassName="mdx-content-editable"
-              className="mdx-editor-root h-full"
-              placeholder="Escribe aquí... Usa Markdown como en Obsidian"
-            />
+            <div className="flex-1 relative overflow-hidden h-full">
+              <MDXEditor
+                key={editorKey}
+                ref={mdxEditorRef}
+                markdown={initialMarkdown}
+                onChange={handleMdxChange}
+                plugins={editorPlugins}
+                contentEditableClassName="mdx-content-editable"
+                className="mdx-editor-root h-full"
+                placeholder="Escribe aquí... Usa Markdown como en Obsidian"
+              />
+              <LinterPlugin
+                diagnostics={markdownDiagnostics}
+                editorShellRef={editorShellRef}
+                viewMode={viewMode}
+              />
+            </div>
           )}
           {isDocLoading && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 backdrop-blur-[2px]">

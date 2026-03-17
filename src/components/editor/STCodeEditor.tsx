@@ -34,17 +34,30 @@ const KEYWORDS = new Set([
   'logic', 'axiom', 'theorem', 'derive', 'from', 'check', 'prove',
   'countermodel', 'truth_table', 'let', 'passage', 'formalize', 'as',
   'claim', 'support', 'confidence', 'context', 'render', 'explain',
-  'forall', 'exists'
+  'forall', 'exists', 'analyze', 'refute',
+  // Aliases en español
+  'logica', 'axioma', 'teorema', 'derivar', 'desde', 'verificar',
+  'probar', 'contramodelo', 'refutar', 'tabla_verdad', 'sea', 'pasaje',
+  'formalizar', 'como', 'afirmacion', 'soporte', 'confianza', 'contexto',
+  'mostrar', 'explicar', 'analizar', 'paratodo', 'existe'
 ]);
 
 const BUILTINS = new Set([
-  'valid', 'satisfiable', 'equivalent', 'claims'
+  'valid', 'satisfiable', 'equivalent', 'claims',
+  // Aliases en español
+  'valido', 'satisfacible', 'equivalente'
 ]);
 
 const PROFILES = new Set([
   'classical.propositional', 'classical.first_order', 'classical.first-order',
   'modal.k', 'modal.s4', 'modal.s5', 'modal.t',
-  'paraconsistent.belnap'
+  'paraconsistent.belnap',
+  'deontic.standard',
+  'epistemic.s5',
+  'intuitionistic.propositional',
+  'temporal.ltl',
+  'probabilistic.basic',
+  'aristotelian.syllogistic'
 ]);
 
 // ── Tokenizador de highlighting ─────────────────────────────
@@ -67,10 +80,26 @@ function tokenizeLine(line: string): HighlightToken[] {
   let i = 0;
 
   while (i < line.length) {
-    // ── 1. Comentario (//) ──
+    // ── 1. Comentario de línea (//) ──
     if (line[i] === '/' && line[i + 1] === '/') {
       tokens.push({ text: line.slice(i), category: 'comment' });
       return tokens;
+    }
+
+    // ── 1b. Comentario de bloque (/* ... */) ──
+    if (line[i] === '/' && line[i + 1] === '*') {
+      let j = i + 2;
+      while (j < line.length - 1 && !(line[j] === '*' && line[j + 1] === '/')) {
+        j++;
+      }
+      if (j < line.length - 1) {
+        j += 2; // include closing */
+      } else {
+        j = line.length; // comentario no cerrado en esta línea
+      }
+      tokens.push({ text: line.slice(i, j), category: 'comment' });
+      i = j;
+      continue;
     }
 
     // ── 2. String literal ("...") ──
@@ -298,18 +327,64 @@ export default function STCodeEditor({
     }
   }, []);
 
+  // ── Extract dynamic completions from current code ──
+  const extractDynamicCompletions = useCallback((code: string): CompletionItem[] => {
+    const items: CompletionItem[] = [];
+    const lines = code.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // axiom name = ... | axiom name : ...
+      const axiomMatch = trimmed.match(/^(?:axiom|axioma)\s+(\w+)\s*[=:]/i);
+      if (axiomMatch) {
+        items.push({
+          label: axiomMatch[1],
+          kind: 'variable',
+          detail: 'axiom (definido en script)',
+        });
+      }
+      // theorem name = ... | theorem name : ...
+      const theoremMatch = trimmed.match(/^(?:theorem|teorema)\s+(\w+)\s*[=:]/i);
+      if (theoremMatch) {
+        items.push({
+          label: theoremMatch[1],
+          kind: 'variable',
+          detail: 'theorem (definido en script)',
+        });
+      }
+      // let name = ...
+      const letMatch = trimmed.match(/^(?:let|sea)\s+(\w+)\s*=/i);
+      if (letMatch) {
+        items.push({
+          label: letMatch[1],
+          kind: 'variable',
+          detail: 'let (definido en script)',
+        });
+      }
+      // claim name = ...
+      const claimMatch = trimmed.match(/^(?:claim|afirmacion)\s+(\w+)\s*=/i);
+      if (claimMatch) {
+        items.push({
+          label: claimMatch[1],
+          kind: 'variable',
+          detail: 'claim (definido en script)',
+        });
+      }
+    }
+    return items;
+  }, []);
+
   // ── Fetch completions from st-lang ──
   const fetchCompletions = useCallback(async (code: string, line: number, col: number) => {
     try {
       const mod = await import('@stevenvo780/st-lang/api');
-      // The completion function accepts (code, line, col) at runtime
       const completionFn = (mod as Record<string, unknown>).completion as (code: string, line: number, col: number) => CompletionItem[];
-      const items = completionFn(code, line, col);
-      return items || [];
+      const staticItems = completionFn(code, line, col) || [];
+      const dynamicItems = extractDynamicCompletions(code);
+      return [...dynamicItems, ...staticItems];
     } catch {
-      return [];
+      return extractDynamicCompletions(code);
     }
-  }, []);
+  }, [extractDynamicCompletions]);
 
   // ── Calculate popup position based on cursor in textarea ──
   const calcCompletionPos = useCallback(() => {
