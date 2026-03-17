@@ -798,6 +798,7 @@ function DashboardContent() {
         promptMoveDocument,
         createDoc,
         createStDoc,
+        createStGuide,
         handleDownloadDoc,
         handleDownloadFolder
     } = useDocumentActions({
@@ -1369,6 +1370,7 @@ function DashboardContent() {
                         onCreateFolder={() => createFolder()}
                         onUploadFile={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); fileInputRef.current?.click(); }}
                         onUploadFolder={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); folderInputRef.current?.click(); }}
+                        onCreateStGuide={() => createStGuide()}
                     />
 
                     {/* Resize Handle */}

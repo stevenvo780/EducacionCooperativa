@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -83,6 +83,7 @@ interface SidebarProps {
   onCreateFolder?: () => void;
   onUploadFile?: () => void;
   onUploadFolder?: () => void;
+  onCreateStGuide?: () => void;
 }
 
 const Sidebar = ({
@@ -118,7 +119,8 @@ const Sidebar = ({
   onCreateDoc,
   onCreateFolder,
   onUploadFile,
-  onUploadFolder
+  onUploadFolder,
+  onCreateStGuide
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
@@ -528,6 +530,14 @@ const Sidebar = ({
               >
                 <FolderUp className="w-3.5 h-3.5" />
                 <span className="truncate">Subir carpeta</span>
+              </button>
+              <button
+                onClick={onCreateStGuide}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-emerald-400/80 hover:text-emerald-300 hover:bg-emerald-500/10 transition col-span-2"
+                title="Crear guía ST para agentes IA"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span className="truncate">Instrucciones ST para agente</span>
               </button>
             </div>
 
