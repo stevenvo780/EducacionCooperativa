@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ChevronDown, ChevronRight, Download, Folder, FolderOpen, Loader2, Pencil, Search, Settings, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, Loader2, Pencil, Search, Trash2, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -51,6 +51,7 @@ interface SidebarProps {
   isCollapsed: boolean;
   showMobileSidebar: boolean;
   onCloseMobileSidebar: () => void;
+  onToggleSidebarCollapse: () => void;
   currentWorkspace: Workspace | null;
   activeFolder: string;
   setActiveFolder: (folder: string) => void;
@@ -79,6 +80,7 @@ const Sidebar = ({
   isCollapsed,
   showMobileSidebar,
   onCloseMobileSidebar,
+  onToggleSidebarCollapse,
   currentWorkspace,
   activeFolder,
   setActiveFolder,
@@ -505,7 +507,16 @@ const Sidebar = ({
         <div className="p-3 border-t border-surface-600/50 bg-surface-800 text-xs text-surface-500 flex justify-between items-center">
           <span>{sidebarSearchQuery ? `${actualFilteredDocs.length} de ${docs.length}` : `${docs.length} archivos`}</span>
           <div className="flex gap-2">
-            <Settings className="w-4 h-4 hover:text-surface-300 cursor-pointer" />
+            <button
+              type="button"
+              onClick={onToggleSidebarCollapse}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-surface-400 transition hover:bg-surface-700/70 hover:text-surface-200"
+              title="Ocultar panel de archivos"
+              aria-label="Ocultar panel de archivos"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Ocultar</span>
+            </button>
           </div>
         </div>
       </div>

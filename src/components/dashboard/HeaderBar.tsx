@@ -7,8 +7,6 @@ import {
   Briefcase,
   Check,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   Copy,
   Crown,
@@ -42,10 +40,7 @@ import { formatStorageSize } from '@/types/subscription';
 interface HeaderBarProps {
   onToggleMobileSidebar: () => void;
   onClearSelectedDoc: () => void;
-  isSidebarCollapsed: boolean;
-  isHeaderCollapsed: boolean;
   isZenMode: boolean;
-  onToggleSidebarCollapse: () => void;
   onToggleHeaderCollapse: () => void;
   onToggleZenMode: () => void;
   showWorkspaceMenu: boolean;
@@ -99,10 +94,7 @@ interface HeaderBarProps {
 const HeaderBar = ({
   onToggleMobileSidebar,
   onClearSelectedDoc,
-  isSidebarCollapsed,
-  isHeaderCollapsed,
   isZenMode,
-  onToggleSidebarCollapse,
   onToggleHeaderCollapse,
   onToggleZenMode,
   showWorkspaceMenu,
@@ -549,26 +541,12 @@ const HeaderBar = ({
         </div>
         <div className="hidden md:flex items-center">
           <button
-            onClick={onToggleSidebarCollapse}
-            className={`p-1.5 rounded-full transition ${
-              isSidebarCollapsed
-                ? 'bg-mandy-500/15 text-mandy-300'
-                : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
-            }`}
-            title={isSidebarCollapsed ? 'Mostrar archivos' : 'Ocultar archivos'}
-          >
-            {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-          </button>
-          <button
             onClick={onToggleHeaderCollapse}
-            className={`p-1.5 rounded-full transition ${
-              isHeaderCollapsed
-                ? 'bg-mandy-500/15 text-mandy-300'
-                : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
-            }`}
-            title={isHeaderCollapsed ? 'Mostrar barra superior' : 'Ocultar barra superior'}
+            className="p-1.5 rounded-full transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+            title="Ocultar barra superior"
+            aria-label="Ocultar barra superior"
           >
-            {isHeaderCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            <ChevronUp className="w-3.5 h-3.5" />
           </button>
         </div>
         <button
