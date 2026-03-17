@@ -131,11 +131,14 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const [dragOverInfo, setDragOverInfo] = useState<{ tileId: string; position: 'left' | 'right' | 'top' | 'bottom' | 'replace' } | null>(null);
   const [dragOverEmpty, setDragOverEmpty] = useState(false);
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
+  const [isResizingMosaic, setIsResizingMosaic] = useState(false);
+  const [resizeCursor, setResizeCursor] = useState<'col-resize' | 'row-resize'>('col-resize');
   const [editingTitleDocId, setEditingTitleDocId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
+  const mosaicContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Detect global drag of documents to show overlay over iframes
   useEffect(() => {
@@ -156,6 +159,55 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       document.removeEventListener('drop', handleGlobalDrop);
     };
   }, []);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const splitHandle = target.closest('.mosaic-split');
+      if (!splitHandle || !mosaicContainerRef.current?.contains(splitHandle)) return;
+
+      setIsResizingMosaic(true);
+      setResizeCursor(splitHandle.classList.contains('-column') ? 'row-resize' : 'col-resize');
+    };
+
+    const stopResize = () => {
+      setIsResizingMosaic(false);
+    };
+
+    const handleWindowBlur = () => {
+      stopResize();
+    };
+
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('touchstart', handlePointerDown, true);
+    document.addEventListener('mouseup', stopResize, true);
+    document.addEventListener('touchend', stopResize, true);
+    document.addEventListener('touchcancel', stopResize, true);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handlePointerDown, true);
+      document.removeEventListener('mouseup', stopResize, true);
+      document.removeEventListener('touchend', stopResize, true);
+      document.removeEventListener('touchcancel', stopResize, true);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    document.body.classList.toggle('mosaic-resizing-active', isResizingMosaic);
+    document.body.style.cursor = isResizingMosaic ? resizeCursor : '';
+
+    return () => {
+      document.body.classList.remove('mosaic-resizing-active');
+      document.body.style.cursor = '';
+    };
+  }, [isResizingMosaic, resizeCursor]);
 
   const fileExplorerDocs = useMemo(() => {
       return docs.filter(d => d.type !== 'terminal' && d.type !== 'files' && d.type !== 'board');
@@ -579,6 +631,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
 
   return (
     <>
+      <div ref={mosaicContainerRef} className="relative h-full w-full">
       <Mosaic<string>
           renderTile={renderTile}
           value={value}
@@ -587,14 +640,34 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           className="mosaic-blueprint-theme mosaic-custom-dark h-full w-full"
           zeroStateView={emptyZeroState}
       />
+      {isResizingMosaic && (
+        <div
+          className="absolute inset-0 z-[80] bg-transparent"
+          style={{ cursor: resizeCursor }}
+          onMouseUp={() => setIsResizingMosaic(false)}
+          onTouchEnd={() => setIsResizingMosaic(false)}
+        />
+      )}
+      </div>
       <style jsx global>{`
+        body.mosaic-resizing-active,
+        body.mosaic-resizing-active * {
+          user-select: none !important;
+        }
         .mosaic-custom-dark .mosaic-split {
           z-index: 30 !important;
           background: rgba(148, 163, 184, 0.18) !important;
+          touch-action: none !important;
         }
         .mosaic-custom-dark .mosaic-split:hover,
         .mosaic-custom-dark .mosaic-split.-active {
           background: rgba(96, 165, 250, 0.4) !important;
+        }
+        .mosaic-custom-dark .mosaic-tile,
+        .mosaic-custom-dark .mosaic-window,
+        .mosaic-custom-dark .mosaic-window-body {
+          min-width: 0;
+          min-height: 0;
         }
         .mosaic-window-compact .mosaic-window-toolbar {
           height: 28px !important;
