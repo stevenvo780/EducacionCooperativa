@@ -237,7 +237,13 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, []);
 
   const handleSearchStateChange = useCallback((docId: string, state: SearchState) => {
-    setDocSearchStates(prev => ({ ...prev, [docId]: state }));
+    setDocSearchStates(prev => {
+      const previousState = prev[docId];
+      if (previousState && previousState.currentMatch === state.currentMatch && previousState.totalMatches === state.totalMatches) {
+        return prev;
+      }
+      return { ...prev, [docId]: state };
+    });
   }, []);
 
   const getSearchNavRef = useCallback((docId: string) => {
@@ -593,6 +599,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       <Editor
                         roomId={doc.id}
                         embedded
+                        forceInline
                         externalSearchTerm={searchTerm}
                         onSearchStateChange={(state) => handleSearchStateChange(doc.id, state)}
                         searchNavRef={getSearchNavRef(doc.id)}
