@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { getErrorMessage } from '@/lib/error-utils';
 import { PLAN_IDS, Plan, SubscriptionStatus, isPlanId, type PlanId } from '@/types/subscription';
-
-/* eslint-disable no-console */
 
 const ADMIN_PASSWORD = process.env.APP_PASSWORD || '';
 const ENABLE_ADMIN_ENDPOINTS = process.env.ENABLE_ADMIN_ENDPOINTS === 'true';
@@ -52,7 +51,7 @@ export async function POST(req: NextRequest) {
         }
       }, { merge: true });
 
-      console.log(`[Admin] ✅ Subscription reset to free for user ${userId}`);
+      console.debug(`[Admin] Subscription reset to free for user ${userId}`);
       return NextResponse.json({
         success: true,
         userId,
@@ -84,7 +83,7 @@ export async function POST(req: NextRequest) {
       }
     }, { merge: true });
 
-    console.log(`[Admin] ✅ Subscription manually activated for user ${userId}, plan: ${planId}, duration: ${durationMonths} month(s)`);
+    console.debug(`[Admin] Subscription manually activated for user ${userId}, plan: ${planId}, duration: ${durationMonths} month(s)`);
 
     return NextResponse.json({
       success: true,
@@ -95,8 +94,8 @@ export async function POST(req: NextRequest) {
       endDate: endDate.toISOString(),
       message: `Suscripción al plan ${planId} activada manualmente por ${durationMonths} mes(es)`
     });
-  } catch (error: any) {
-    console.error('[Admin] Error activating subscription:', error?.message || error);
+  } catch (error: unknown) {
+    console.error('[Admin] Error activating subscription:', getErrorMessage(error));
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
 }

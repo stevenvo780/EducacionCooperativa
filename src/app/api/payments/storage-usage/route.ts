@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
+import { getErrorMessage } from '@/lib/error-utils';
 import { Plan, SubscriptionStatus, getStorageLimitMB, type PlanId } from '@/types/subscription';
 
 export const dynamic = 'force-dynamic';
@@ -46,10 +47,10 @@ export async function GET(req: NextRequest) {
       limitBytes: limitMB * 1024 * 1024,
       percentage: limitMB > 0 ? Math.round((usedMB / limitMB) * 100) : 0
     });
-  } catch (error: any) {
-    console.error('Error fetching storage usage:', error);
+  } catch (error: unknown) {
+    console.error('Error fetching storage usage:', getErrorMessage(error));
     return NextResponse.json(
-      { error: error.message || 'Error al obtener uso de almacenamiento' },
+      { error: getErrorMessage(error, 'Error al obtener uso de almacenamiento') },
       { status: 500 }
     );
   }

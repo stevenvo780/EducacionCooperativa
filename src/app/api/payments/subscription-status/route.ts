@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { getErrorMessage } from '@/lib/error-utils';
 import { Plan, SubscriptionStatus, type UserSubscription } from '@/types/subscription';
 
 export const dynamic = 'force-dynamic';
@@ -49,10 +50,10 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ subscription: data });
-  } catch (error: any) {
-    console.error('Error fetching subscription:', error);
+  } catch (error: unknown) {
+    console.error('Error fetching subscription:', getErrorMessage(error));
     return NextResponse.json(
-      { error: error.message || 'Error al obtener suscripción' },
+      { error: getErrorMessage(error, 'Error al obtener suscripción') },
       { status: 500 }
     );
   }

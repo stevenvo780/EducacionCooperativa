@@ -34,17 +34,18 @@ import { getUpdatedAtValue } from '@/services/dashboardUtils';
 import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
+import type { DocumentTypeId } from '@/types/documents';
 
 export interface DocItem {
   id: string;
   name: string;
-  type?: 'text' | 'file' | 'folder' | 'terminal' | 'files';
+  type?: DocumentTypeId;
   content?: string;
   url?: string;
   folder?: string;
   storagePath?: string;
   mimeType?: string;
-  updatedAt?: any;
+  updatedAt?: unknown;
   ownerId?: string;
   order?: number;
 }

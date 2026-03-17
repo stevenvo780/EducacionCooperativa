@@ -36,6 +36,8 @@ import type { TerminalSession } from '@/context/TerminalContext';
 import type { WorkerStatus } from '@/lib/TerminalController';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
+import type { TerminalConnectionStatusId } from '@/types/terminal';
+import type { WorkspaceTypeId } from '@/types/workspace';
 import { formatStorageSize } from '@/types/subscription';
 
 interface HeaderBarProps {
@@ -66,12 +68,12 @@ interface HeaderBarProps {
   onOpenPassword: () => void;
   onLogout: () => void;
   /* Terminal / session props */
-  connectionStatus: 'checking' | 'online' | 'offline' | 'error';
+  connectionStatus: TerminalConnectionStatusId;
   isCreatingSession: boolean;
   activeSessionId: string | null;
   getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
   getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
-  createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
+  createSession: (workspaceId: string, workspaceType: WorkspaceTypeId, workspaceName?: string) => void;
   selectSession: (sessionId: string) => void;
   destroySession: (sessionId: string) => void;
   onRenameSession: (session: TerminalSession) => void;

@@ -3,7 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Play, RotateCcw, Trash2, ChevronDown, Zap, BookOpen, Terminal, AlertTriangle, List, Info } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
-import type { Diagnostic, SymbolInfo } from '@stevenvo780/st-lang/api';
+import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 
 // ── Constantes ──────────────────────────────────────────────
 
@@ -272,7 +272,7 @@ interface STRunnerProps {
   /** Altura del componente (CSS) */
   height?: string;
   /** Callback cuando se ejecuta código */
-  onExecute?: (code: string, result: any) => void;
+  onExecute?: (code: string, result: STEvalResult) => void;
   /** Clase CSS extra */
   className?: string;
 }

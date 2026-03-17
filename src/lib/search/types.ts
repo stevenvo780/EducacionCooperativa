@@ -1,3 +1,5 @@
+import type { DocumentTypeId } from '@/types/documents';
+
 export enum SearchKind {
   Document = 'document',
   Concept = 'concept',
@@ -18,7 +20,7 @@ export const isSearchResultKind = (value: string): value is SearchResultKind => 
 export interface SearchSourceDocument {
   id: string;
   name: string;
-  type?: 'text' | 'file' | 'folder' | 'terminal' | 'files' | 'board' | 'st-runner';
+  type?: DocumentTypeId;
   folder?: string;
   workspaceId?: string;
   mimeType?: string;

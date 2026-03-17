@@ -1,5 +1,6 @@
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { authFetch } from '@/services/apiClient';
+import { withErrorCode } from '@/lib/error-utils';
 import {
   cacheDocuments,
   getCachedDocuments,
@@ -330,9 +331,10 @@ export const uploadFileApi = async (formData: FormData) => {
   // Handle storage limit exceeded
   if (signedUrlRes.status === 413) {
     const errData = await signedUrlRes.json();
-    const err = new Error(errData.error || 'Límite de almacenamiento alcanzado');
-    (err as any).code = 'STORAGE_LIMIT_EXCEEDED';
-    throw err;
+    throw withErrorCode(
+      new Error(errData.error || 'Límite de almacenamiento alcanzado'),
+      'STORAGE_LIMIT_EXCEEDED'
+    );
   }
 
   assertOk(signedUrlRes, 'Failed to get upload URL');

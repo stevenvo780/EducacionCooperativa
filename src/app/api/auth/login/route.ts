@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { verifyPassword } from '@/lib/crypto';
+import { getErrorMessage } from '@/lib/error-utils';
 
 // In-memory rate limiter
 const rateLimit = new Map<string, { count: number; expires: number }>();
@@ -87,8 +88,8 @@ export async function POST(req: NextRequest) {
             customToken
         }, { status: 200 });
 
-    } catch (error: any) {
-        console.error('Error login (custom auth):', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error login (custom auth):', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

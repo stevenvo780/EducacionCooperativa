@@ -3,20 +3,23 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
+import { getErrorMessage } from '@/lib/error-utils';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { TerminalConnectionStatus, type TerminalConnectionStatusId } from '@/types/terminal';
+import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TerminalProps {
   nexusUrl: string;
   workspaceId?: string;
   workspaceName?: string;
-  workspaceType?: 'personal' | 'shared';
+  workspaceType?: WorkspaceTypeId;
   sessionId?: string;
 }
 
-function getWorkerToken(workspaceType: 'personal' | 'shared', workspaceId: string | undefined, userId: string): string {
-  if (workspaceType === 'personal' || !workspaceId || workspaceId === 'personal') {
-    return `personal:${userId}`;
+function getWorkerToken(workspaceType: WorkspaceTypeId, workspaceId: string | undefined, userId: string): string {
+  if (workspaceType === WorkspaceType.Personal || !workspaceId || workspaceId === WorkspaceType.Personal) {
+    return `${WorkspaceType.Personal}:${userId}`;
   }
   return workspaceId;
 }
@@ -25,7 +28,7 @@ const Terminal: React.FC<TerminalProps> = ({
     nexusUrl,
     workspaceId,
     workspaceName,
-    workspaceType = 'personal',
+    workspaceType = WorkspaceType.Personal,
     sessionId
 }) => {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
@@ -59,12 +62,12 @@ const Terminal: React.FC<TerminalProps> = ({
   }, []);
 
   useEffect(() => {
-      if (!controller && status !== 'error' && nexusUrl) {
+      if (!controller && status !== TerminalConnectionStatus.Error && nexusUrl) {
           initialize(nexusUrl);
       }
   }, [controller, status, nexusUrl, initialize]);
 
-  const isPersonalWorkspace = workspaceType === 'personal' || workspaceId === 'personal' || !workspaceId;
+  const isPersonalWorkspace = workspaceType === WorkspaceType.Personal || workspaceId === WorkspaceType.Personal || !workspaceId;
   const workerToken = user ? getWorkerToken(workspaceType, workspaceId, user.uid) : '';
 
   const workspaceWorkerStatus = getWorkerStatusForWorkspace?.(workerToken) || status;
@@ -90,8 +93,8 @@ const Terminal: React.FC<TerminalProps> = ({
               try {
                   controller.mountSession(effectiveSessionId, containerEl);
                   mounted = true;
-              } catch (e) {
-                  console.error('Error mounting terminal for session', sessionId, e);
+              } catch (error) {
+                  console.error('Error mounting terminal for session', sessionId, getErrorMessage(error));
               }
           }
       };
@@ -144,7 +147,7 @@ const Terminal: React.FC<TerminalProps> = ({
       );
   }
 
-  const showHubError = status === 'error' || (!hubConnected && status !== 'offline');
+  const showHubError = status === TerminalConnectionStatus.Error || (!hubConnected && status !== TerminalConnectionStatus.Offline);
   const workerOnline = workspaceWorkerStatus === 'online';
   const workerOffline = workspaceWorkerStatus === 'offline' || workspaceWorkerStatus === 'unknown';
 

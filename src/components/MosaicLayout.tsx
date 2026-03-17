@@ -7,6 +7,8 @@ import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, C
 import dynamic from 'next/dynamic';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
+import type { DocumentTypeId } from '@/types/documents';
+import type { WorkspaceTypeId } from '@/types/workspace';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -31,8 +33,8 @@ export type ViewMode = 'edit' | 'preview' | 'split' | 'raw';
 export interface DocItem {
   id: string;
   name: string;
-  type?: 'text' | 'file' | 'folder' | 'terminal' | 'files' | 'board' | 'st-runner';
-    sessionId?: string;
+  type?: DocumentTypeId;
+  sessionId?: string;
   content?: string;
   url?: string;
   folder?: string;
@@ -42,7 +44,7 @@ export interface DocItem {
 
   mimeType?: string;
   size?: number;
-  updatedAt?: any;
+  updatedAt?: unknown;
   ownerId?: string;
 }
 
@@ -90,7 +92,7 @@ interface MosaicLayoutProps {
   onActiveFolderChange?: (folderPath: string) => void;
   currentWorkspaceName?: string;
   currentWorkspaceId?: string;
-  currentWorkspaceType?: 'personal' | 'shared';
+  currentWorkspaceType?: WorkspaceTypeId;
   currentUserId?: string;
   nexusUrl: string;
 }

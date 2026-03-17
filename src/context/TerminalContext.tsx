@@ -2,13 +2,16 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, ReactNode } from 'react';
 import { TerminalController, WorkspaceWorkerStatus, WorkerStatus, DocChangeEvent } from '@/lib/TerminalController';
+import { getErrorMessage } from '@/lib/error-utils';
+import { TerminalConnectionStatus, type TerminalConnectionStatusId, type TerminalSessionCreationPayload, type TerminalSessionPayload } from '@/types/terminal';
+import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { useAuth } from './AuthContext';
 
 export interface TerminalSession {
     id: string;
     name?: string;
     workspaceId: string;
-    workspaceType: 'personal' | 'shared';
+    workspaceType: WorkspaceTypeId;
     workspaceName?: string;
 }
 
@@ -16,11 +19,11 @@ interface TerminalContextType {
     controller: TerminalController | null;
     sessions: TerminalSession[];
     activeSessionId: string | null;
-    status: 'checking' | 'online' | 'offline' | 'error';
+    status: TerminalConnectionStatusId;
     hubConnected: boolean;
     isCreatingSession: boolean;
     initialize: (nexusUrl: string) => Promise<void>;
-    createSession: (workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => void;
+    createSession: (workspaceId: string, workspaceType: WorkspaceTypeId, workspaceName?: string) => void;
     joinSession: (sessionId: string) => void;
     selectSession: (sessionId: string) => void;
     destroySession: (sessionId: string) => void;
@@ -57,7 +60,7 @@ function isValidSession(value: unknown): value is TerminalSession {
     const session = value as TerminalSession;
     return typeof session.id === 'string'
         && typeof session.workspaceId === 'string'
-        && (session.workspaceType === 'personal' || session.workspaceType === 'shared');
+        && (session.workspaceType === WorkspaceType.Personal || session.workspaceType === WorkspaceType.Shared);
 }
 
 function normalizeSessions(input: unknown): TerminalSession[] {
@@ -160,7 +163,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
     const [sessions, setSessions] = useState<TerminalSession[]>([]);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-    const [status, setStatus] = useState<'checking' | 'online' | 'offline' | 'error'>('checking');
+    const [status, setStatus] = useState<TerminalConnectionStatusId>(TerminalConnectionStatus.Checking);
     const [hubConnected, setHubConnected] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isCreatingSession, setIsCreatingSession] = useState(false);
@@ -262,7 +265,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         }
 
         debugLog('[TerminalContext] Starting initialization...');
-        setStatus('checking');
+        setStatus(TerminalConnectionStatus.Checking);
         setHubConnected(false);
         setErrorMessage(null);
 
@@ -270,7 +273,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         const ok = await controller.initialize();
         debugLog('[TerminalContext] Controller initialized:', ok);
         if (!ok) {
-            setStatus('error');
+            setStatus(TerminalConnectionStatus.Error);
             setErrorMessage('Failed to initialize terminal controller');
             return;
         }
@@ -289,9 +292,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 restoringSessionIdsRef.current.add(savedSessionId);
             }
 
-            let pendingSessionMeta: { workspaceId: string; workspaceType: 'personal' | 'shared'; workspaceName?: string } | null = null;
+            let pendingSessionMeta: { workspaceId: string; workspaceType: WorkspaceTypeId; workspaceName?: string } | null = null;
 
-            const handleSessionCreated = (data: { id: string; workspaceId?: string; workspaceType?: 'personal' | 'shared'; workspaceName?: string; sessionName?: string }) => {
+            const handleSessionCreated = (data: TerminalSessionCreationPayload) => {
                 const isRestored = restoringSessionIdsRef.current.has(data.id);
                 if (!isRestored) {
                     setIsCreatingSession(false);
@@ -301,7 +304,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 setSessions(prev => {
                     const existing = prev.find(s => s.id === data.id);
                     const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
-                    const workspaceType = data.workspaceType || pendingSessionMeta?.workspaceType || 'personal';
+                    const workspaceType = data.workspaceType || pendingSessionMeta?.workspaceType || WorkspaceType.Personal;
                     const workspaceName = data.workspaceName || pendingSessionMeta?.workspaceName;
                     const persisted = persistedSessionsRef.current.get(data.id);
                     const existingCount = prev.filter(s => s.workspaceId === workspaceId).length;
@@ -377,7 +380,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                             id: s.id,
                             workspaceId: s.workspaceId,
                             workspaceName: s.workspaceName,
-                            workspaceType: (s.workspaceType as 'personal' | 'shared') || 'shared',
+                            workspaceType: s.workspaceType || WorkspaceType.Shared,
                             name: serverName || existing?.name || s.workspaceName || `Terminal ${s.id.substring(0, 4)}`
                         };
                     });
@@ -410,10 +413,10 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             });
 
             // Handle session-joined: when user joins a shared session they don't own
-            controller.setSessionJoinedHandler((payload) => {
+            controller.setSessionJoinedHandler((payload: TerminalSessionPayload) => {
                 debugLog('[TerminalContext] session-joined:', payload);
                 const { id: sessionId, workspaceId, workspaceName, workspaceType, isOwner } = payload;
-                const serverName = (payload as any).sessionName;
+                const serverName = payload.sessionName;
 
                 setSessions(prev => {
                     const existing = prev.find(s => s.id === sessionId);
@@ -423,7 +426,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                         id: sessionId,
                         name: serverName || workspaceName || `Terminal ${sessionId.substring(0, 4)}`,
                         workspaceId,
-                        workspaceType: (workspaceType as 'personal' | 'shared') || 'shared',
+                        workspaceType: workspaceType || WorkspaceType.Shared,
                         workspaceName
                     };
                     return [...prev, newSession];
@@ -457,20 +460,20 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                     if (newStatus === 'hub-online') {
                         debugLog('[TerminalContext] Setting hubConnected=true, status=online');
                         setHubConnected(true);
-                        setStatus('online');
+                        setStatus(TerminalConnectionStatus.Online);
                         restorePersistedSessions();
                     } else if (newStatus === 'hub-offline') {
                         debugLog('[TerminalContext] Setting hubConnected=false, status=offline');
                         setHubConnected(false);
-                        setStatus('offline');
-                    } else if (newStatus === 'online') {
+                        setStatus(TerminalConnectionStatus.Offline);
+                    } else if (newStatus === TerminalConnectionStatus.Online) {
                         debugLog('[TerminalContext] Setting hubConnected=true, status=online (online event)');
                         setHubConnected(true);
-                        setStatus('online');
-                    } else if (newStatus === 'offline') {
-                        setStatus('offline');
-                    } else if (newStatus === 'error') {
-                        setStatus('error');
+                        setStatus(TerminalConnectionStatus.Online);
+                    } else if (newStatus === TerminalConnectionStatus.Offline) {
+                        setStatus(TerminalConnectionStatus.Offline);
+                    } else if (newStatus === TerminalConnectionStatus.Error) {
+                        setStatus(TerminalConnectionStatus.Error);
                     }
                 },
                 handleSessionEnded,
@@ -493,23 +496,23 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             );
 
             const originalStartSession = controller.startSession.bind(controller);
-            controller.startSession = (opts: { workspaceId: string; workspaceName?: string; workspaceType: 'personal' | 'shared' }) => {
+            controller.startSession = (opts: { workspaceId: string; workspaceName?: string; workspaceType: WorkspaceTypeId }) => {
                 pendingSessionMeta = { workspaceId: opts.workspaceId, workspaceType: opts.workspaceType, workspaceName: opts.workspaceName };
                 originalStartSession(opts);
             };
 
             controller.socket?.on('connect_error', (err: Error) => {
                 setErrorMessage(err.message);
-                setStatus('error');
+                setStatus(TerminalConnectionStatus.Error);
             });
 
         } catch (e: unknown) {
-            setStatus('error');
-            setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
+            setStatus(TerminalConnectionStatus.Error);
+            setErrorMessage(getErrorMessage(e, 'Unknown error'));
         }
     }, [debugLog, restorePersistedSessions]);
 
-    const createSession = useCallback((workspaceId: string, workspaceType: 'personal' | 'shared', workspaceName?: string) => {
+    const createSession = useCallback((workspaceId: string, workspaceType: WorkspaceTypeId, workspaceName?: string) => {
         setIsCreatingSession(true);
         controllerRef.current?.startSession({ workspaceId, workspaceName, workspaceType });
     }, []);

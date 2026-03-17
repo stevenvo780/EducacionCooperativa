@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { hashPassword } from '@/lib/crypto';
+import { getErrorMessage } from '@/lib/error-utils';
 
 // In-memory rate limiter (simple implementation)
 const rateLimit = new Map<string, { count: number; expires: number }>();
@@ -69,8 +70,8 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ uid: userId, email, customToken }, { status: 201 });
 
-    } catch (error: any) {
-        console.error('Error creating user (custom auth):', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error creating user (custom auth):', getErrorMessage(error));
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

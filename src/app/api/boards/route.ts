@@ -1,12 +1,35 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, type CollectionReference, type DocumentReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
+import type { BoardCard, BoardColumn } from '@/components/dashboard/types';
+import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 
 const DEFAULT_COLUMNS = ['Por hacer', 'En progreso', 'Hecho'];
 
+enum BoardEntityType {
+  Column = 'column',
+  Card = 'card'
+}
+
+interface MockBoardColumn extends BoardColumn {
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface MockBoardCard extends BoardCard {
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface MockBoardState {
+  columns: MockBoardColumn[];
+  cards: MockBoardCard[];
+  seq: number;
+}
+
 // Simple in-memory mock board for insecure/dev mode to avoid hitting Firestore
-const mockBoards = new Map<string, { columns: any[]; cards: any[]; seq: number }>();
+const mockBoards = new Map<string, MockBoardState>();
 
 const getMockBoard = (workspaceId: string) => {
   if (!mockBoards.has(workspaceId)) {
@@ -138,9 +161,9 @@ export async function GET(req: NextRequest) {
       columns,
       cards
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching board:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -167,7 +190,7 @@ export async function POST(req: NextRequest) {
       const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
       const mock = getMockBoard(resolvedWorkspaceId);
 
-      if (type === 'column') {
+      if (type === BoardEntityType.Column) {
         const name = typeof body.name === 'string' ? body.name.trim() : '';
         const column = {
           id: `mock-col-${++mock.seq}`,
@@ -180,7 +203,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(column);
       }
 
-      if (type === 'card') {
+      if (type === BoardEntityType.Card) {
         const title = typeof body.title === 'string' ? body.title.trim() : '';
         const columnId = typeof body.columnId === 'string' ? body.columnId.trim() : '';
         if (!columnId) {
@@ -206,7 +229,7 @@ export async function POST(req: NextRequest) {
     const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
     const boardRef = await ensureBoard(resolvedWorkspaceId);
 
-    if (type === 'column') {
+    if (type === BoardEntityType.Column) {
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       const columnRef = boardRef.collection('columns').doc();
       const data = {
@@ -221,7 +244,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ id: columnRef.id, ...snap.data() });
     }
 
-    if (type === 'card') {
+    if (type === BoardEntityType.Card) {
       const title = typeof body.title === 'string' ? body.title.trim() : '';
       const columnId = typeof body.columnId === 'string' ? body.columnId.trim() : '';
       if (!columnId) {
@@ -244,9 +267,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating board item:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -278,7 +301,7 @@ export async function PATCH(req: NextRequest) {
       const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
       const mock = getMockBoard(resolvedWorkspaceId);
 
-      if (type === 'column') {
+      if (type === BoardEntityType.Column) {
         const column = mock.columns.find(c => c.id === id);
         if (!column) return NextResponse.json({ error: 'Column not found' }, { status: 404 });
         if (typeof data?.name === 'string') column.name = data.name.trim();
@@ -287,7 +310,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ status: 'updated' });
       }
 
-      if (type === 'card') {
+      if (type === BoardEntityType.Card) {
         const card = mock.cards.find(c => c.id === id);
         if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
         if (typeof data?.title === 'string') card.title = data.title.trim();
@@ -305,7 +328,7 @@ export async function PATCH(req: NextRequest) {
     const boardRef = await ensureBoard(resolvedWorkspaceId);
     const updateData: Record<string, unknown> = {};
 
-    if (type === 'column') {
+    if (type === BoardEntityType.Column) {
       if (typeof data?.name === 'string') updateData.name = data.name.trim();
       if (typeof data?.order === 'number') updateData.order = data.order;
       if (Object.keys(updateData).length === 0) {
@@ -317,7 +340,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ status: 'updated' });
     }
 
-    if (type === 'card') {
+    if (type === BoardEntityType.Card) {
       if (typeof data?.title === 'string') updateData.title = data.title.trim();
       if (typeof data?.description === 'string') updateData.description = data.description;
       if (typeof data?.columnId === 'string') updateData.columnId = data.columnId.trim();
@@ -332,9 +355,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating board item:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -361,13 +384,13 @@ export async function DELETE(req: NextRequest) {
       const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
       const mock = getMockBoard(resolvedWorkspaceId);
 
-      if (type === 'column') {
+      if (type === BoardEntityType.Column) {
         mock.columns = mock.columns.filter(c => c.id !== id);
         mock.cards = mock.cards.filter(c => c.columnId !== id);
         return NextResponse.json({ status: 'deleted' });
       }
 
-      if (type === 'card') {
+      if (type === BoardEntityType.Card) {
         mock.cards = mock.cards.filter(c => c.id !== id);
         return NextResponse.json({ status: 'deleted' });
       }
@@ -378,22 +401,22 @@ export async function DELETE(req: NextRequest) {
     const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
     const boardRef = await ensureBoard(resolvedWorkspaceId);
 
-    if (type === 'column') {
+    if (type === BoardEntityType.Column) {
       await deleteCardsByColumn(boardRef, id);
       await boardRef.collection('columns').doc(id).delete();
       await touchBoard(boardRef);
       return NextResponse.json({ status: 'deleted' });
     }
 
-    if (type === 'card') {
+    if (type === BoardEntityType.Card) {
       await boardRef.collection('cards').doc(id).delete();
       await touchBoard(boardRef);
       return NextResponse.json({ status: 'deleted' });
     }
 
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deleting board item:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
+import Image from 'next/image';
 import {
   MDXEditor,
   AdmonitionDirectiveDescriptor,
@@ -39,6 +40,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
+import { getErrorMessage, isAbortError } from '@/lib/error-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
 import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
@@ -64,6 +66,7 @@ import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { normalizePath } from '@/lib/folder-utils';
+import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import {
   attachLinkedDocumentToSelection,
@@ -93,7 +96,7 @@ export default function MosaicEditor({
   const [editorKey, setEditorKey] = useState(0);
   const [statsContent, setStatsContent] = useState(initialContent); // only for stats display
   const [saving, setSaving] = useState(false);
-  const [docType, setDocType] = useState<'text' | 'file'>('text');
+  const [docType, setDocType] = useState<DocumentType.Text | DocumentType.File>(DocumentType.Text);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
@@ -217,7 +220,7 @@ export default function MosaicEditor({
   }, []);
 
   const resetDocState = useCallback(() => {
-    setDocType('text');
+    setDocType(DocumentType.Text);
     setFileUrl(null);
     setFileName('');
     setFileMime('');
@@ -246,7 +249,17 @@ export default function MosaicEditor({
     }
   }, [roomId, setEditorContent]);
 
-  const applyDocData = useCallback((data: any) => {
+  const applyDocData = useCallback((data: {
+    type?: DocumentTypeId;
+    name?: string;
+    mimeType?: string;
+    url?: string | null;
+    storagePath?: string | null;
+    folder?: string;
+    workspaceId?: string | null;
+    content?: string;
+    lastUpdatedBy?: string;
+  } | null | undefined) => {
     if (!data) {
       if (!hasUnsavedLocalChanges()) {
         resetDocState();
@@ -254,7 +267,7 @@ export default function MosaicEditor({
       return;
     }
 
-    const type = data.type ?? 'text';
+    const type = data.type ?? DocumentType.Text;
     const name = data.name ?? '';
     const mimeType = data.mimeType ?? '';
     const url = data.url ?? null;
@@ -270,8 +283,8 @@ export default function MosaicEditor({
     };
     setCurrentWorkspaceId(workspaceId || 'personal');
 
-    if (type === 'file' && !isMarkdown) {
-      setDocType('file');
+    if (type === DocumentType.File && !isMarkdown) {
+      setDocType(DocumentType.File);
       setFileUrl(url);
       setFileName(name || 'Archivo');
       setFileMime(mimeType);
@@ -282,7 +295,7 @@ export default function MosaicEditor({
       return;
     }
 
-    setDocType('text');
+    setDocType(DocumentType.Text);
     setFileUrl(null);
     setFileName('');
     setFileMime(mimeType);
@@ -317,7 +330,7 @@ export default function MosaicEditor({
           setEditorContent(incoming);
         }
       }
-    } else if (type === 'file' && (url || storagePath)) {
+    } else if (type === DocumentType.File && (url || storagePath)) {
       const rawKey = storagePath || url;
       maybeLoadRawContent(rawKey);
     } else if (!hasUnsavedLocalChanges()) {
@@ -426,9 +439,9 @@ export default function MosaicEditor({
             }
           }
         }
-      } catch (e: any) {
-        if (e.name !== 'AbortError' && !cancelled) {
-          console.error('Stream error:', e);
+      } catch (error: unknown) {
+        if (!isAbortError(error) && !cancelled) {
+          console.error('Stream error:', getErrorMessage(error));
         }
       }
     };
@@ -455,7 +468,7 @@ export default function MosaicEditor({
   const handleContentChange = useCallback((val: string) => {
     contentRef.current = val;
     setStatsContent(val);
-    if (!roomId || docType === 'file') return;
+    if (!roomId || docType === DocumentType.File) return;
     if (!hasLoadedRef.current) return;
 
     const hasUnsavedChanges = val !== lastSyncedContentRef.current;
@@ -481,7 +494,7 @@ export default function MosaicEditor({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: val,
-            type: 'text',
+            type: DocumentType.Text,
             lastUpdatedBy: user?.uid
           })
         });
@@ -1360,8 +1373,18 @@ export default function MosaicEditor({
         </div>
         <div className="flex-1 p-4 bg-slate-900 flex items-center justify-center">
           {!fileUrl && <div className="text-sm text-slate-400">No se pudo cargar el archivo.</div>}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {fileUrl && isImage && <img src={fileUrl} alt={safeName} className="max-h-full max-w-full rounded shadow" />}
+          {fileUrl && isImage && (
+            <div className="relative h-full w-full">
+              <Image
+                src={fileUrl}
+                alt={safeName}
+                fill
+                unoptimized
+                sizes="100vw"
+                className="object-contain rounded shadow"
+              />
+            </div>
+          )}
           {fileUrl && isVideo && <video src={fileUrl} controls className="max-h-full max-w-full rounded shadow" />}
           {fileUrl && isAudio && <audio src={fileUrl} controls className="w-full max-w-xl" />}
           {fileUrl && !isImage && !isVideo && !isAudio && (
@@ -1733,7 +1756,7 @@ function SemanticPanelColumn({
   );
 }
 
-function ChevronLeft(props: any) {
+function ChevronLeft(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       {...props}

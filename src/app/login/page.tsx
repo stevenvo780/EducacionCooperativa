@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { getErrorMessage } from '@/lib/error-utils';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
 import { Mail, Lock, AlertCircle, Chrome, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -30,8 +31,8 @@ export default function LoginPage() {
       } else {
         await registerWithEmail(email, password);
       }
-    } catch (err: any) {
-      setError(err.message || 'Ocurrió un error');
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, 'Ocurrió un error'));
     } finally {
       setLoading(false);
     }
@@ -42,8 +43,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
         await signInWithGoogle();
-    } catch (err: any) {
-        setError(err.message || 'Error al iniciar sesión con Google');
+    } catch (error: unknown) {
+        setError(getErrorMessage(error, 'Error al iniciar sesión con Google'));
     } finally {
         setLoading(false);
     }
@@ -56,8 +57,8 @@ export default function LoginPage() {
     try {
       await resetPassword(resetEmail);
       setResetSuccess(true);
-    } catch (err: any) {
-      setResetError(err.message || 'Error al enviar el correo');
+    } catch (error: unknown) {
+      setResetError(getErrorMessage(error, 'Error al enviar el correo'));
     } finally {
       setResetLoading(false);
     }

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { getErrorMessage } from '@/lib/error-utils';
 import { PLANS, SubscriptionStatus, isPlanId, type PlanId } from '@/types/subscription';
+import { MercadoPagoAutoReturn } from '@/types/payments';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
 const isSandbox = process.env.MERCADOPAGO_SANDBOX === 'true';
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
           failure: `${appUrl}/api/payments/callback/failure`,
           pending: `${appUrl}/api/payments/callback/pending`
         },
-        auto_return: 'approved',
+        auto_return: MercadoPagoAutoReturn.Approved,
         external_reference: `${auth.uid}|${planId}`,
         notification_url: `${appUrl}/api/payments/webhook`,
         metadata: {
@@ -103,15 +105,18 @@ export async function POST(req: NextRequest) {
       preferenceId: preference.id,
       checkoutUrl
     });
-  } catch (error: any) {
-    console.error('Error creating payment preference:', error?.cause || error?.message);
-    const mpMessage = error?.cause?.message || error?.message || '';
+  } catch (error: unknown) {
+    console.error('Error creating payment preference:', getErrorMessage(error));
+    const errorCause = typeof error === 'object' && error !== null && 'cause' in error
+      ? (error as { cause?: unknown }).cause
+      : undefined;
+    const mpMessage = getErrorMessage(errorCause, getErrorMessage(error, ''));
     const safeMessage = (mpMessage || 'Error al crear preferencia de pago')
       .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
       .replace(/TEST-[\w-]+/gi, '[REDACTED]')
       .replace(/APP_USR-[\w-]+/gi, '[REDACTED]');
     return NextResponse.json(
-      { error: safeMessage, detail: error?.cause || error?.message || 'Unknown error' },
+      { error: safeMessage, detail: getErrorMessage(errorCause, getErrorMessage(error)) },
       { status: 500 }
     );
   }
