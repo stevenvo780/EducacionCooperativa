@@ -26,10 +26,10 @@ test('landing page renders core navigation and goes to login', async ({ page }) 
 test('docs page expands sections and copies installation commands', async ({ page }) => {
   await page.goto('/docs');
 
-  await expect(page.getByRole('heading', { name: /Documentación/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Manual Maestro Ágora/i })).toBeVisible();
 
-  await page.getByRole('button', { name: /Instalación del Worker/i }).click();
-  await expect(page.getByRole('heading', { name: 'Instalación rápida' })).toBeVisible();
+  await page.getByRole('button', { name: /Edu Worker: Guía Profunda para Operadores/i }).click();
+  await expect(page.getByRole('heading', { name: 'Instalación del Gestor CLI' })).toBeVisible();
 
   const firstCopyButton = page.getByRole('button', { name: 'Copiar' }).first();
   await firstCopyButton.click();
