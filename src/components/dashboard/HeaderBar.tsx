@@ -11,8 +11,6 @@ import {
   Copy,
   Crown,
   FolderOpen,
-  FolderPlus,
-  FolderUp,
   FlaskConical,
   KanbanSquare,
   Key,
@@ -26,7 +24,6 @@ import {
   Plus,
   Terminal as TerminalIcon,
   Trash2,
-  Upload,
   User,
   Users,
   X
@@ -79,17 +76,12 @@ interface HeaderBarProps {
   openTerminal: (session?: { id: string; name: string }) => void;
   openTabs: DocItem[];
   closeTabById: (tabId: string) => void;
-  /* File action props */
-  createDoc: (e?: React.FormEvent, folderName?: string) => void;
-  createFolder: () => void;
-  activeFolder: string;
-  setUploadTargetFolder: (folder: string) => void;
+  /* File action props (hidden inputs remain here) */
   fileInputRef: React.RefObject<HTMLInputElement>;
   folderInputRef: React.RefObject<HTMLInputElement>;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleFolderUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   folderInputProps: React.InputHTMLAttributes<HTMLInputElement>;
-  defaultFolderName: string;
   openFilesTab: () => void;
   onOpenPricing?: () => void;
   currentPlanName?: string;
@@ -134,23 +126,17 @@ const HeaderBar = ({
   openTerminal,
   openTabs,
   closeTabById,
-  createDoc,
-  createFolder,
-  activeFolder,
-  setUploadTargetFolder,
   fileInputRef,
   folderInputRef,
   handleFileUpload,
   handleFolderUpload,
   folderInputProps,
-  defaultFolderName,
   openFilesTab,
   onOpenPricing,
   currentPlanName
 }: HeaderBarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -187,7 +173,7 @@ const HeaderBar = ({
 
   // Close menus on outside click
   useEffect(() => {
-    if (!menuOpenId && !showUploadMenu) return;
+    if (!menuOpenId) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
       const insideMenu = menuRef.current && menuRef.current.contains(target);
@@ -195,12 +181,11 @@ const HeaderBar = ({
       if (!insideMenu && !insideButton) {
         setMenuOpenId(null);
         setMenuPos(null);
-        setShowUploadMenu(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpenId, showUploadMenu]);
+  }, [menuOpenId]);
 
   return (
     <header className="h-11 bg-surface-800 border-b border-surface-600/50 flex items-center px-3 shrink-0 z-50 relative gap-2">
@@ -480,56 +465,7 @@ const HeaderBar = ({
           {isCreatingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
         </button>
 
-        <div className="w-px h-4 bg-surface-600/40 mx-0.5 shrink-0" />
 
-        {/* File action buttons */}
-        <button
-          onClick={() => createDoc(undefined, activeFolder)}
-          className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition shrink-0"
-          title="Nuevo archivo"
-        >
-          <Plus className="w-3 h-3" />
-        </button>
-        <button
-          onClick={() => createFolder()}
-          className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition shrink-0"
-          title="Nueva carpeta"
-        >
-          <FolderPlus className="w-3 h-3" />
-        </button>
-        <div className="relative shrink-0" ref={showUploadMenu ? menuRef : undefined}>
-          <button
-            onClick={() => setShowUploadMenu(prev => !prev)}
-            className="p-1 rounded text-surface-500 hover:text-mandy-400 hover:bg-surface-700 transition"
-            title="Subir"
-          >
-            <Upload className="w-3 h-3" />
-          </button>
-          {showUploadMenu && (
-            <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-600 rounded-lg shadow-xl p-1 z-50 flex flex-col gap-1 min-w-[120px]">
-              <button
-                onClick={() => {
-                  setUploadTargetFolder(defaultFolderName);
-                  fileInputRef.current?.click();
-                  setShowUploadMenu(false);
-                }}
-                className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"
-              >
-                <Upload className="w-3 h-3" /> Archivos
-              </button>
-              <button
-                onClick={() => {
-                  setUploadTargetFolder(defaultFolderName);
-                  folderInputRef.current?.click();
-                  setShowUploadMenu(false);
-                }}
-                className="px-3 py-1.5 text-xs text-left text-surface-300 hover:bg-surface-700 rounded flex gap-2 items-center"
-              >
-                <FolderUp className="w-3 h-3" /> Carpeta
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── Right: Status + Controls ── */}

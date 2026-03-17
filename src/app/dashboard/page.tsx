@@ -1267,16 +1267,11 @@ function DashboardContent() {
                         openTerminal={openTerminal}
                         openTabs={openTabs}
                         closeTabById={closeTabById}
-                        createDoc={createDoc}
-                        createFolder={createFolder}
-                        activeFolder={activeFolder}
-                        setUploadTargetFolder={setUploadTargetFolder}
                         fileInputRef={fileInputRef}
                         folderInputRef={folderInputRef}
                         handleFileUpload={handleFileUpload}
                         handleFolderUpload={handleFolderUpload}
                         folderInputProps={folderInputProps}
-                        defaultFolderName={DEFAULT_FOLDER_NAME}
                         openFilesTab={openFilesTab}
                         onOpenPricing={() => setShowPricingModal(true)}
                         currentPlanName={PLANS[currentPlan]?.name}
@@ -1354,6 +1349,10 @@ function DashboardContent() {
                         onFolderDragOver={handleFolderDragOver}
                         onFolderDrop={handleFolderDrop}
                         onFolderDragLeave={handleFolderDragLeave}
+                        onCreateDoc={() => createDoc(undefined, activeFolder)}
+                        onCreateFolder={() => createFolder()}
+                        onUploadFile={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); fileInputRef.current?.click(); }}
+                        onUploadFolder={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); folderInputRef.current?.click(); }}
                     />
 
                     {/* Resize Handle */}

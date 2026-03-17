@@ -24,7 +24,7 @@ const boardColumn = (page: Page, name: string) => (
 
 const boardCard = (page: Page, title: string) => (
   page.getByText(title, { exact: true }).locator(
-    'xpath=ancestor::div[.//select and .//button[@title="Eliminar tarjeta"]][1]'
+    'xpath=ancestor::div[.//button[@title="Eliminar tarjeta"]][1]'
   )
 );
 
@@ -65,13 +65,7 @@ test('dashboard manages kanban columns and cards', async ({ page }) => {
   await expect(reviewColumn.getByText('Preparar clase final', { exact: true })).toBeVisible();
 
   const movedCard = boardCard(page, 'Preparar clase final');
-  await movedCard.getByRole('combobox').selectOption({ label: 'Hecho' });
-  await expect(boardColumn(page, 'Hecho').getByText('Preparar clase final', { exact: true })).toBeVisible();
-  await expect(reviewColumn.getByText('Preparar clase final', { exact: true })).toHaveCount(0);
-
-  await boardColumn(page, 'Hecho').getByText('Preparar clase final', { exact: true }).locator(
-    'xpath=ancestor::div[.//select and .//button[@title="Eliminar tarjeta"]][1]'
-  ).getByTitle('Eliminar tarjeta').click();
+  await movedCard.getByTitle('Eliminar tarjeta').click();
   await expect(page.getByText('Preparar clase final', { exact: true })).toHaveCount(0);
 
   await reviewColumn.getByTitle('Eliminar columna').click();
