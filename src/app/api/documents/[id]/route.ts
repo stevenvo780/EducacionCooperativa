@@ -1,5 +1,5 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
@@ -266,8 +266,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
         // Borrar archivo de Storage si existe (tanto para files como para documentos markdown)
         if (storagePath) {
-            const existing = await adminDb.collection('documents').where('storagePath', '==', storagePath).get();
-            const hasOtherReferences = existing.docs.some(docItem => docItem.id !== id);
+            // count() evita cargar documentos en memoria — solo verifica si hay referencias adicionales
+            const countSnap = await adminDb.collection('documents')
+                .where('storagePath', '==', storagePath)
+                .where(FieldPath.documentId(), '!=', id)
+                .count()
+                .get();
+            const hasOtherReferences = countSnap.data().count > 0;
             if (!hasOtherReferences) {
                 const bucket = adminStorage.bucket();
                 if (bucket?.name) {
