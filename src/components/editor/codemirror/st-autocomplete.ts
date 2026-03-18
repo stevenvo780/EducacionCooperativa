@@ -65,7 +65,7 @@ function makeKeywordCompletions(): Completion[] {
 const staticCompletions = makeKeywordCompletions();
 
 function makeOperatorCompletions(): Completion[] {
-  const operators = ['->', '<->', '&', '|', '!', '[]', '<>', '+', '-', '*', '/', '%', '<', '>', '<=', '>=', '≤', '≥'];
+  const operators = ['->', '<->', '&', '|', '^', '⊕', '!&', '↑', '!|', '↓', '!', '[]', '<>', '+', '-', '*', '/', '%', '<', '>', '<=', '>=', '≤', '≥'];
   return operators.map((operator) => ({
     label: operator,
     type: 'operator',
@@ -81,13 +81,13 @@ const operatorCompletions = makeOperatorCompletions();
 
 function makeSnippetCompletions(): Completion[] {
   return [
-    snippetCompletion('proof {\n  assume ${assume}\n  show ${goal}\n} qed', {
+    snippetCompletion('assume ${name} : ${assume}\nshow ${goal}\nqed', {
       label: 'proof',
       type: 'text',
-      detail: 'Bloque de demostración',
+      detail: 'Prueba estructurada con assume/show/qed',
       boost: 2
     }),
-    snippetCompletion('check valid ${formula} under ${profile}', {
+    snippetCompletion('check valid ${formula}', {
       label: 'check',
       type: 'text',
       detail: 'Verificar validez',
@@ -117,13 +117,13 @@ function makeSnippetCompletions(): Completion[] {
       detail: 'Declarar teorema',
       boost: 2
     }),
-    snippetCompletion('forall ${x} . (${body})', {
+    snippetCompletion('forall ${x} (${body})', {
       label: 'forall',
       type: 'text',
       detail: 'Cuantificador universal ∀',
       boost: 2
     }),
-    snippetCompletion('exists ${x} . (${body})', {
+    snippetCompletion('exists ${x} (${body})', {
       label: 'exists',
       type: 'text',
       detail: 'Cuantificador existencial ∃',
@@ -153,10 +153,10 @@ function makeSnippetCompletions(): Completion[] {
       detail: 'Establecer perfil lógico',
       boost: 2
     }),
-    snippetCompletion('render ${formula}', {
+    snippetCompletion('render ${target}', {
       label: 'render',
       type: 'text',
-      detail: 'Renderizar fórmula Unicode',
+      detail: 'Renderizar theory / claims / all o un nombre',
       boost: 2
     }),
     snippetCompletion('let ${name} = ${formula}', {
@@ -171,7 +171,7 @@ function makeSnippetCompletions(): Completion[] {
       detail: 'Derivar de premisas',
       boost: 2
     }),
-    snippetCompletion('passage [[\n  ${text}\n]]\nformalize as ${formula}', {
+    snippetCompletion('let ${passage} = passage([[\n  ${text}\n]])\nlet ${formalization} = formalize ${passage} as ${formula}', {
       label: 'passage',
       type: 'text',
       detail: 'Formalizar texto natural',
@@ -183,10 +183,10 @@ function makeSnippetCompletions(): Completion[] {
       detail: 'Declarar afirmación',
       boost: 2
     }),
-    snippetCompletion('analyze (${formula})', {
+    snippetCompletion('analyze {${premises}} -> ${conclusion}', {
       label: 'analyze',
       type: 'text',
-      detail: 'Analizar fórmula',
+      detail: 'Analizar inferencia completa',
       info: buildInfoText('analyze', 'keyword'),
       boost: 2
     }),
@@ -204,11 +204,25 @@ function makeSnippetCompletions(): Completion[] {
       info: buildInfoText('theory', 'keyword'),
       boost: 3
     }),
+    snippetCompletion('theory ${Name}(${params}) {\n  ${body}\n}', {
+      label: 'theory template',
+      type: 'text',
+      detail: 'Teoría parametrizada e instanciable',
+      info: buildInfoText('theory', 'keyword'),
+      boost: 3
+    }),
     snippetCompletion('theory ${Child} extends ${Parent} {\n  ${body}\n}', {
       label: 'theory extends',
       type: 'text',
       detail: 'Teoría que hereda de otra',
       info: buildInfoText('extends', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('export let ${name} = ${value}', {
+      label: 'export',
+      type: 'text',
+      detail: 'Exportar símbolo para importación',
+      info: buildInfoText('export', 'keyword'),
       boost: 3
     }),
     snippetCompletion('print ${value}', {
@@ -251,6 +265,27 @@ function makeSnippetCompletions(): Completion[] {
       type: 'text',
       detail: 'Declarar función con retorno',
       info: buildInfoText('fn', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('print typeof(${value})', {
+      label: 'typeof',
+      type: 'text',
+      detail: 'Inspeccionar tipo de un valor',
+      info: buildInfoText('typeof', 'builtin'),
+      boost: 3
+    }),
+    snippetCompletion('print is_valid(${formula})', {
+      label: 'is_valid',
+      type: 'text',
+      detail: 'Preguntar si una fórmula es válida',
+      info: buildInfoText('is_valid', 'builtin'),
+      boost: 3
+    }),
+    snippetCompletion('print get_atoms(${formula})', {
+      label: 'get_atoms',
+      type: 'text',
+      detail: 'Listar átomos usados en una fórmula',
+      info: buildInfoText('get_atoms', 'builtin'),
       boost: 3
     })
   ];

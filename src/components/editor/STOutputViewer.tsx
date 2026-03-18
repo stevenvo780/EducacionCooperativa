@@ -30,7 +30,7 @@ export interface STHistoryEntryLike {
 
 function collectAssociativeArgs(
   f: Formula,
-  kind: 'and' | 'or'
+  kind: 'and' | 'or' | 'xor'
 ): Formula[] {
   if (f.kind !== kind || !f.args?.length) return [f];
 
@@ -63,6 +63,18 @@ function formulaToUnicode(f: Formula): string {
       return f.args?.length === 2
         ? `(${collectAssociativeArgs(f, 'or').map(formulaToUnicode).join(' ∨ ')})`
         : '∨?';
+    case 'xor':
+      return f.args?.length === 2
+        ? `(${collectAssociativeArgs(f, 'xor').map(formulaToUnicode).join(' ⊕ ')})`
+        : '⊕?';
+    case 'nand':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} ↑ ${formulaToUnicode(f.args[1])})`
+        : '↑?';
+    case 'nor':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} ↓ ${formulaToUnicode(f.args[1])})`
+        : '↓?';
     case 'implies':
       return f.args?.length === 2
         ? `(${formulaToUnicode(f.args[0])} → ${formulaToUnicode(f.args[1])})`
@@ -75,6 +87,12 @@ function formulaToUnicode(f: Formula): string {
       return f.args?.[0] ? `□(${formulaToUnicode(f.args[0])})` : '□?';
     case 'modal_possibility':
       return f.args?.[0] ? `◇(${formulaToUnicode(f.args[0])})` : '◇?';
+    case 'temporal_next':
+      return f.args?.[0] ? `X(${formulaToUnicode(f.args[0])})` : 'X?';
+    case 'temporal_until':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} U ${formulaToUnicode(f.args[1])})`
+        : 'U?';
     case 'forall':
       return f.args?.[0]
         ? `∀${f.variable ?? '?'}(${formulaToUnicode(f.args[0])})`
@@ -91,6 +109,48 @@ function formulaToUnicode(f: Formula): string {
       return f.args?.length === 2
         ? `(${formulaToUnicode(f.args[0])} = ${formulaToUnicode(f.args[1])})`
         : '=?';
+    case 'number':
+      return String(f.value ?? '?');
+    case 'add':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} + ${formulaToUnicode(f.args[1])})`
+        : '+?';
+    case 'subtract':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} - ${formulaToUnicode(f.args[1])})`
+        : '-?';
+    case 'multiply':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} * ${formulaToUnicode(f.args[1])})`
+        : '*?';
+    case 'divide':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} / ${formulaToUnicode(f.args[1])})`
+        : '/?';
+    case 'modulo':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} % ${formulaToUnicode(f.args[1])})`
+        : '%?';
+    case 'less':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} < ${formulaToUnicode(f.args[1])})`
+        : '<?';
+    case 'greater':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} > ${formulaToUnicode(f.args[1])})`
+        : '>?';
+    case 'less_eq':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} ≤ ${formulaToUnicode(f.args[1])})`
+        : '≤?';
+    case 'greater_eq':
+      return f.args?.length === 2
+        ? `(${formulaToUnicode(f.args[0])} ≥ ${formulaToUnicode(f.args[1])})`
+        : '≥?';
+    case 'fn_call': {
+      const renderedArgs = (f.args ?? []).map(formulaToUnicode).join(', ');
+      return `${f.name ?? 'fn'}(${renderedArgs})`;
+    }
     default:
       return f.name ?? '?';
   }
