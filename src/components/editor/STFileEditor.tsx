@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import STRunner from '../STRunner';
 import { fetchDocumentRawApi, updateDocumentApi } from '@/services/dashboardApi';
+import { useTerminal } from '@/context/TerminalContext';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { Loader2 } from 'lucide-react';
 
 interface STFileEditorProps {
@@ -17,22 +19,47 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
   const [dirty, setDirty] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestContent = useRef(content);
+  const dirtyRef = useRef(false);
+  const savingRef = useRef(false);
+  const lastSyncedRef = useRef('');
 
-  // Keep ref in sync
+  const { onDocChangeCallback } = useTerminal();
+  const isPageVisible = usePageVisibility();
+
+  // Keep refs in sync
   useEffect(() => {
     latestContent.current = content;
   }, [content]);
+
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
+
+  useEffect(() => {
+    savingRef.current = saving;
+  }, [saving]);
+
+  // ── Fetch raw content (reusable) ──
+  const fetchContent = useCallback(async () => {
+    try {
+      const text = await fetchDocumentRawApi(docId);
+      return text ?? '';
+    } catch (err) {
+      console.error('[STFileEditor] Failed to fetch', docId, err);
+      return null;
+    }
+  }, [docId]);
 
   // ── Load document content ──
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchDocumentRawApi(docId)
+    fetchContent()
       .then((text) => {
-        if (!cancelled) {
-          setContent(text ?? '');
-          setDirty(false);
-        }
+        if (cancelled || text === null) return;
+        setContent(text);
+        lastSyncedRef.current = text;
+        setDirty(false);
       })
       .catch((err) => {
         console.error('[STFileEditor] Failed to load', docId, err);
@@ -42,7 +69,54 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [docId]);
+  }, [docId, fetchContent]);
+
+  // ── Real-time sync: listen for doc-change events via Hub socket ──
+  useEffect(() => {
+    if (!onDocChangeCallback || !docId) return;
+    return onDocChangeCallback((event) => {
+      if (event.docId !== docId) return;
+      if (event.action !== 'updated' && event.action !== 'created') return;
+
+      // Skip if we have unsaved local edits or a save is in-flight
+      if (dirtyRef.current || savingRef.current) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[STFileEditor] Skipping remote update (local edits pending)');
+        }
+        return;
+      }
+
+      // Re-fetch content from API
+      fetchContent().then((text) => {
+        if (text === null) return;
+        // Only update if content actually differs from what we have
+        if (text !== latestContent.current) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[STFileEditor] Applying remote update for', docId);
+          }
+          setContent(text);
+          lastSyncedRef.current = text;
+          setDirty(false);
+        }
+      });
+    });
+  }, [onDocChangeCallback, docId, fetchContent]);
+
+  // ── Re-fetch content when tab becomes visible again ──
+  useEffect(() => {
+    if (!isPageVisible || !docId || loading) return;
+    // Only refresh if there are no local edits
+    if (dirtyRef.current || savingRef.current) return;
+
+    fetchContent().then((text) => {
+      if (text === null) return;
+      if (text !== latestContent.current) {
+        setContent(text);
+        lastSyncedRef.current = text;
+        setDirty(false);
+      }
+    });
+  }, [isPageVisible, docId, loading, fetchContent]);
 
   // ── Auto-save with debounce (2s) ──
   const scheduleAutoSave = useCallback((value: string) => {
@@ -51,6 +125,7 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
       try {
         setSaving(true);
         await updateDocumentApi(docId, { content: value });
+        lastSyncedRef.current = value;
         setDirty(false);
       } catch (err) {
         console.error('[STFileEditor] Auto-save failed', err);
@@ -80,6 +155,7 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
     try {
       setSaving(true);
       await updateDocumentApi(docId, { content: latestContent.current });
+      lastSyncedRef.current = latestContent.current;
       setDirty(false);
     } catch (err) {
       console.error('[STFileEditor] Save failed', err);
