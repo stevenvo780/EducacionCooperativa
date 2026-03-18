@@ -79,10 +79,17 @@ import {
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
 import {
+  EMPTY_SEMANTIC_WORKSPACE_STATE,
+  hasSemanticWorkspaceStateChanged,
+  mergeSemanticWorkspaceStates,
+  normalizeSemanticWorkspaceState
+} from '@/lib/semantic/workspace-state';
+import {
   attachLinkedDocumentToSelection,
   captureAnalyticalFragment,
   getRecentSemanticItems,
   loadSemanticWorkspaceState,
+  saveSemanticWorkspaceState,
   markSelectionAsEvidence,
   pinSelectionFragment,
   registerConceptFromSelection,
@@ -90,6 +97,10 @@ import {
   relateSelectionToConcept,
   type SemanticWorkspaceState
 } from '@/services/editorSemanticStore';
+import {
+  fetchSemanticWorkspaceStateApi,
+  saveSemanticWorkspaceStateApi
+} from '@/services/semanticStateApi';
 
 export default function MosaicEditor({
   initialContent = '',
@@ -155,6 +166,8 @@ export default function MosaicEditor({
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
+  const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
+  const semanticSyncRequestIdRef = useRef(0);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [rawScrollPos, setRawScrollPos] = useState({ top: 0, left: 0 });
@@ -178,6 +191,10 @@ export default function MosaicEditor({
   const semanticItemCount = useMemo(() => (
     semanticState.concepts.length + semanticState.fragments.length + semanticState.relations.length
   ), [semanticState]);
+
+  useEffect(() => {
+    semanticStateRef.current = semanticState;
+  }, [semanticState]);
 
   const {
     selection: semanticSelection,
@@ -379,9 +396,86 @@ export default function MosaicEditor({
     hasLoadedRef.current = true;
   }, [hasUnsavedLocalChanges, maybeLoadRawContent, resetDocState, setEditorContent, user?.uid]);
 
-  useEffect(() => {
-    setSemanticState(loadSemanticWorkspaceState(semanticStoreContext));
+  const persistSemanticStateRemotely = useCallback(async (stateToPersist: SemanticWorkspaceState) => {
+    const requestId = ++semanticSyncRequestIdRef.current;
+    try {
+      const remoteState = await saveSemanticWorkspaceStateApi(
+        semanticStoreContext.workspaceId,
+        stateToPersist
+      );
+      const mergedState = mergeSemanticWorkspaceStates(
+        stateToPersist,
+        remoteState ?? EMPTY_SEMANTIC_WORKSPACE_STATE
+      );
+      saveSemanticWorkspaceState(semanticStoreContext, mergedState);
+      if (
+        requestId === semanticSyncRequestIdRef.current
+        && hasSemanticWorkspaceStateChanged(semanticStateRef.current, mergedState)
+      ) {
+        setSemanticState(mergedState);
+      }
+    } catch (error) {
+      console.error('Error syncing semantic workspace state:', error);
+      setSemanticNotice((current) => current ?? 'La mesa semantica quedo en cache local; no se pudo sincronizar con el workspace.');
+    }
   }, [semanticStoreContext]);
+
+  const loadSemanticStateFromWorkspace = useCallback(async (options?: {
+    seedFromLocal?: boolean;
+    persistMerged?: boolean;
+  }) => {
+    const seedFromLocal = options?.seedFromLocal ?? true;
+    const localState = loadSemanticWorkspaceState(semanticStoreContext);
+
+    if (seedFromLocal && hasSemanticWorkspaceStateChanged(semanticStateRef.current, localState)) {
+      setSemanticState(localState);
+    }
+
+    try {
+      const remoteState = await fetchSemanticWorkspaceStateApi(semanticStoreContext.workspaceId);
+      const mergedState = mergeSemanticWorkspaceStates(
+        remoteState ?? EMPTY_SEMANTIC_WORKSPACE_STATE,
+        localState
+      );
+      saveSemanticWorkspaceState(semanticStoreContext, mergedState);
+
+      if (hasSemanticWorkspaceStateChanged(semanticStateRef.current, mergedState)) {
+        setSemanticState(mergedState);
+      }
+
+      if (
+        options?.persistMerged
+        && hasSemanticWorkspaceStateChanged(
+          remoteState ?? EMPTY_SEMANTIC_WORKSPACE_STATE,
+          mergedState
+        )
+      ) {
+        await persistSemanticStateRemotely(mergedState);
+      }
+    } catch (error) {
+      console.error('Error loading semantic workspace state:', error);
+      if (seedFromLocal && hasSemanticWorkspaceStateChanged(semanticStateRef.current, localState)) {
+        setSemanticState(localState);
+      }
+    }
+  }, [persistSemanticStateRemotely, semanticStoreContext]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setSemanticState(EMPTY_SEMANTIC_WORKSPACE_STATE);
+      return;
+    }
+    void loadSemanticStateFromWorkspace({ seedFromLocal: true, persistMerged: true });
+  }, [loadSemanticStateFromWorkspace, user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || !isPageVisible) return;
+    void loadSemanticStateFromWorkspace({ seedFromLocal: false, persistMerged: false });
+    const interval = window.setInterval(() => {
+      void loadSemanticStateFromWorkspace({ seedFromLocal: false, persistMerged: false });
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, [isPageVisible, loadSemanticStateFromWorkspace, user?.uid]);
 
   useEffect(() => {
     if (!semanticNotice) return;
@@ -830,8 +924,11 @@ export default function MosaicEditor({
   }, [handleContentChange, insertSnippet, statsContent, viewMode]);
 
   const updateSemanticState = useCallback((nextState: SemanticWorkspaceState) => {
-    setSemanticState(nextState);
-  }, []);
+    const normalizedState = normalizeSemanticWorkspaceState(nextState);
+    saveSemanticWorkspaceState(semanticStoreContext, normalizedState);
+    setSemanticState(normalizedState);
+    void persistSemanticStateRemotely(normalizedState);
+  }, [persistSemanticStateRemotely, semanticStoreContext]);
 
   const getSemanticPayload = useCallback((text: string) => ({
     text,
