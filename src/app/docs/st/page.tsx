@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, BookOpen, ChevronRight, Download, ExternalLink,
-  FlaskConical, Info, Layers3, Scale, ShieldAlert, Sigma, Terminal
+  FlaskConical, GraduationCap, Info, Layers3, Scale, ShieldAlert, Sigma, Terminal
 } from 'lucide-react';
 
 /* ──────────── Types ──────────── */
@@ -24,10 +24,35 @@ interface ProfileManual {
   invalidExample: string;
   limits: string[];
 }
+interface LogicCourse {
+  id: string;
+  navLabel: string;
+  title: string;
+  level: string;
+  focus: string;
+  summary: string;
+  questions: string[];
+  concepts: string[];
+  syntax: string[];
+  commands: string[];
+  mistakes: string[];
+  lessonExample: string;
+}
 
 /* ──────────── Data: navigation ──────────── */
 const NAV: NavItem[] = [
   { id: 'intro', label: 'Introducción' },
+  { id: 'academy', label: 'Escuela de Lógicas' },
+  { id: 'propositional', label: 'Lógica Proposicional' },
+  { id: 'course-fol', label: 'Curso FOL' },
+  { id: 'course-modal', label: 'Curso Modal' },
+  { id: 'course-deontic', label: 'Curso Deóntico' },
+  { id: 'course-epistemic', label: 'Curso Epistémico' },
+  { id: 'course-intuitionistic', label: 'Curso Intuicionista' },
+  { id: 'course-temporal', label: 'Curso Temporal' },
+  { id: 'course-aristotelian', label: 'Curso Aristotélico' },
+  { id: 'course-belnap', label: 'Curso Belnap' },
+  { id: 'course-probabilistic', label: 'Curso Probabilístico' },
   { id: 'syntax', label: 'Sintaxis' },
   { id: 'commands', label: 'Comandos' },
   { id: 'profiles', label: 'Perfiles Lógicos' },
@@ -110,6 +135,150 @@ const COMMANDS: CommandBlock[] = [
     cmd: 'st --list-profiles',
     desc: 'Lista todos los perfiles lógicos disponibles desde la CLI.',
     example: 'st --list-profiles'
+  }
+];
+
+/* ──────────── Data: detailed logic courses ──────────── */
+const COURSES: LogicCourse[] = [
+  {
+    id: 'propositional',
+    navLabel: 'Proposicional',
+    title: 'Curso 1 · Lógica Proposicional Clásica',
+    level: 'Fundacional',
+    focus: 'Aprender a leer, construir y verificar fórmulas con conectivos clásicos.',
+    summary: 'Es la puerta de entrada a todo ST. Aquí estudias proposiciones atómicas, tablas de verdad, tautologías, contradicciones, contingencias y reglas básicas de derivación.',
+    questions: ['¿Qué significa una fórmula?', '¿Cuándo una fórmula es válida?', '¿Cómo se prueba algo desde premisas?', '¿Cómo se detecta un contramodelo?'],
+    concepts: ['Átomos proposicionales: P, Q, R...', 'Bivalencia: verdadero o falso', 'Conectivos: !, &, |, ->, <->', 'Validez, satisfacibilidad y equivalencia', 'Derivación por Modus Ponens, Modus Tollens y reglas estructurales'],
+    syntax: ['logic classical.propositional', 'axiom regla : P -> Q', 'derive Q from {regla, base}', 'check valid P | !P', 'countermodel P -> Q'],
+    commands: ['truth_table', 'check valid', 'check satisfiable', 'check equivalent', 'derive', 'countermodel'],
+    mistakes: ['Confundir implicación material con causalidad', 'Olvidar que P -> Q solo falla cuando P=V y Q=F', 'Usar derive sin declarar premisas', 'Pensar que satisfacible significa válida'],
+    lessonExample: 'logic classical.propositional\n\naxiom regla1 : Estudia -> Aprueba\naxiom regla2 : Aprueba -> Celebra\naxiom hecho = Estudia\n\nderive Aprueba from {regla1, hecho}\nderive Celebra from {regla1, regla2, hecho}\n\ncheck valid (Estudia & (Estudia -> Aprueba)) -> Aprueba\ncheck equivalent Estudia -> Aprueba, !Estudia | Aprueba\ntruth_table Estudia -> Aprueba\ncountermodel Estudia -> Celebra'
+  },
+  {
+    id: 'course-fol',
+    navLabel: 'Primer Orden',
+    title: 'Curso 2 · Lógica de Primer Orden',
+    level: 'Intermedio',
+    focus: 'Pasar de proposiciones globales a estructuras con individuos, propiedades y cuantificadores.',
+    summary: 'FOL permite decir “todos”, “alguno”, “este individuo” y expresar relaciones entre objetos. Es la base para modelar conocimiento más rico que P o Q.',
+    questions: ['¿Qué cambia al introducir individuos?', '¿Cómo se lee forall y exists?', '¿Qué papel cumplen constantes como a o c?', '¿Cuándo una fórmula FOL deja de ser decidible rápidamente?'],
+    concepts: ['Dominio de individuos', 'Predicados: P(x), R(x,y)', 'Cuantificador universal: forall x', 'Cuantificador existencial: exists x', 'Instanciación y generalización informal'],
+    syntax: ['logic classical.first_order', 'axiom regla : forall x (Humano(x) -> Mortal(x))', 'axiom caso = Humano(socrates)', 'derive Mortal(socrates) from {regla, caso}', 'check valid forall x (P(x) -> P(x))'],
+    commands: ['check valid', 'check satisfiable', 'derive', 'countermodel'],
+    mistakes: ['Confundir P con P(x)', 'Olvidar paréntesis al cuantificar', 'Creer que exists x P(x) implica forall x P(x)', 'Suponer que el motor siempre decide cualquier fórmula compleja'],
+    lessonExample: 'logic classical.first_order\n\naxiom regla : forall x (Estudiante(x) -> Lee(x))\naxiom caso = Estudiante(ana)\n\nderive Lee(ana) from {regla, caso}\ncheck valid forall x (Estudiante(x) -> Estudiante(x))\ncheck satisfiable exists x (Estudiante(x) & Lee(x))\ncountermodel exists x Estudiante(x) -> forall x Estudiante(x)'
+  },
+  {
+    id: 'course-modal',
+    navLabel: 'Modal K',
+    title: 'Curso 3 · Lógica Modal K',
+    level: 'Intermedio',
+    focus: 'Entender necesidad y posibilidad usando mundos posibles.',
+    summary: 'La lógica modal agrega una idea crucial: una fórmula puede no depender solo del mundo actual, sino también de qué ocurre en mundos accesibles.',
+    questions: ['¿Qué significa []P?', '¿Qué significa <>P?', '¿Por qué []P -> P no es válida en K?', '¿Qué es un mundo accesible?'],
+    concepts: ['Mundos posibles', 'Relación de accesibilidad', 'Necesidad □', 'Posibilidad ◇', 'Sistema K como base mínima'],
+    syntax: ['logic modal.k', 'check valid [](P -> Q) -> ([]P -> []Q)', 'check valid []P -> P', 'countermodel <>P -> []P'],
+    commands: ['check valid', 'check satisfiable', 'check equivalent', 'countermodel'],
+    mistakes: ['Leer []P como verdad absoluta en lugar de necesidad relativa al frame', 'Suponer reflexividad en K', 'Confundir <>P con P actual'],
+    lessonExample: 'logic modal.k\n\ncheck valid [](P -> Q) -> ([]P -> []Q)\ncheck equivalent <>(P), ![](!P)\ncheck valid []P -> P\ncheck satisfiable <>(P) & <>(Q)\ncountermodel <>P -> []P'
+  },
+  {
+    id: 'course-deontic',
+    navLabel: 'Deóntica',
+    title: 'Curso 4 · Lógica Deóntica',
+    level: 'Intermedio',
+    focus: 'Modelar obligación, permiso y prohibición.',
+    summary: 'La lógica deóntica traduce reglas normativas: lo que debe hacerse, lo que está permitido y lo que está prohibido.',
+    questions: ['¿Qué expresa O(P)?', '¿Por qué O(P) no implica P actual?', '¿Cómo aparece la prohibición?', '¿Qué garantiza la serialidad?'],
+    concepts: ['Obligación', 'Permisión', 'Prohibición', 'Sistema KD', 'Axioma D: lo obligatorio es permitido'],
+    syntax: ['logic deontic.standard', 'check valid [](P) -> <>(P)', 'check valid [](P) -> P', 'derive <>(Q) from {[](P -> Q), <>(P)}'],
+    commands: ['check valid', 'check satisfiable', 'derive', 'countermodel'],
+    mistakes: ['Confundir deber con hecho', 'Pensar que prohibición es solo !P', 'No distinguir entre norma y cumplimiento'],
+    lessonExample: 'logic deontic.standard\n\ncheck valid [](Entrega) -> <>(Entrega)\ncheck valid [](Entrega) -> Entrega\naxiom norma1 : [](Entrega -> Aprueba)\naxiom permiso = <>(Entrega)\nderive <>(Aprueba) from {norma1, permiso}\ncheck satisfiable [](Entrega) & !Entrega'
+  },
+  {
+    id: 'course-epistemic',
+    navLabel: 'Epistémica',
+    title: 'Curso 5 · Lógica Epistémica S5',
+    level: 'Intermedio',
+    focus: 'Distinguir verdad, conocimiento y accesibilidad epistémica.',
+    summary: 'Aquí las fórmulas hablan de lo que un agente sabe o considera posible. S5 modela conocimiento idealizado con accesibilidad universal.',
+    questions: ['¿Qué significa K(P)?', '¿Por qué K(P) -> P es válida en S5?', '¿Qué es introspección positiva y negativa?'],
+    concepts: ['Conocimiento', 'Creencia/posibilidad epistémica', 'Veridicidad', 'Introspección positiva', 'Introspección negativa'],
+    syntax: ['logic epistemic.s5', 'check valid [](P) -> P', 'check valid [](P) -> []([](P))', 'check valid !([](P)) -> [](!([](P)))'],
+    commands: ['check valid', 'check satisfiable', 'derive'],
+    mistakes: ['Tomar S5 como modelo realista de agentes humanos', 'Confundir saber P con creer P', 'Suponer que toda ignorancia es inconsistencia'],
+    lessonExample: 'logic epistemic.s5\n\ncheck valid [](P) -> P\ncheck valid [](P) -> []([](P))\ncheck valid !([](P)) -> [](!([](P)))\naxiom regla : [](P -> Q)\naxiom hecho = [](P)\nderive [](Q) from {regla, hecho}'
+  },
+  {
+    id: 'course-intuitionistic',
+    navLabel: 'Intuicionista',
+    title: 'Curso 6 · Lógica Intuicionista',
+    level: 'Intermedio–Avanzado',
+    focus: 'Estudiar una noción constructiva de verdad.',
+    summary: 'En lógica intuicionista, “verdadero” significa “constructivamente demostrable”. Por eso no todo principio clásico se conserva.',
+    questions: ['¿Por qué P | !P no siempre vale?', '¿Por qué !!P -> P falla?', 'Qué significa una prueba constructiva?'],
+    concepts: ['Verdad como prueba', 'Modelos de Kripke persistentes', 'Fallo del tercero excluido', 'Fallo de la eliminación de doble negación', 'Conservación de implicaciones constructivas'],
+    syntax: ['logic intuitionistic.propositional', 'check valid P -> !!P', 'check valid P | !P', 'countermodel !!P -> P'],
+    commands: ['check valid', 'check satisfiable', 'check equivalent', 'countermodel'],
+    mistakes: ['Aplicar leyes clásicas sin revisar', 'Suponer que no válido = falso', 'Confundir no demostrable con refutado'],
+    lessonExample: 'logic intuitionistic.propositional\n\ncheck valid P -> !!P\ncheck valid P | !P\ncheck valid !!P -> P\ncheck satisfiable P | !P\ncountermodel P | !P\ncountermodel !!P -> P'
+  },
+  {
+    id: 'course-temporal',
+    navLabel: 'Temporal',
+    title: 'Curso 7 · Lógica Temporal LTL',
+    level: 'Avanzado',
+    focus: 'Razonar sobre estados presentes y futuros.',
+    summary: 'La lógica temporal permite expresar propiedades que deben mantenerse siempre, ocurrir eventualmente o suceder en el siguiente paso.',
+    questions: ['¿Qué significa G(P)?', '¿Qué significa F(P)?', '¿Qué expresa X(P)?', '¿Por qué F(P) -> G(P) falla?'],
+    concepts: ['Siempre (G)', 'Eventualmente (F)', 'Siguiente (X)', 'Frames temporales reflexivo-transitivos', 'Propagación de obligaciones en el tiempo'],
+    syntax: ['logic temporal.ltl', 'check valid [](P) -> P', 'check valid [](P) -> <>(P)', 'check valid <>(P) -> [](P)'],
+    commands: ['check valid', 'check satisfiable', 'check equivalent', 'derive'],
+    mistakes: ['Confundir “alguna vez” con “siempre”', 'Leer X(P) como P actual', 'Suponer que U está tan maduro como G/F/X en el motor'],
+    lessonExample: 'logic temporal.ltl\n\ncheck valid [](P) -> P\ncheck valid [](P) -> <>(P)\ncheck valid <>(P) -> [](P)\ncheck equivalent <>(P), ![](!P)\naxiom regla : []((P -> Q))\naxiom hecho = [](P)\nderive [](Q) from {regla, hecho}'
+  },
+  {
+    id: 'course-aristotelian',
+    navLabel: 'Aristotélica',
+    title: 'Curso 8 · Silogística Aristotélica',
+    level: 'Histórica–Formal',
+    focus: 'Entender los modos silogísticos categóricos clásicos.',
+    summary: 'Este curso traduce la lógica de términos de Aristóteles a ST: universal afirmativa, universal negativa, particular afirmativa y particular negativa.',
+    questions: ['¿Qué son A, E, I y O?', '¿Qué es una figura silogística?', '¿Cómo se formaliza Barbara?'],
+    concepts: ['Proposiciones A/E/I/O', 'Término mayor, menor y medio', 'Figuras silogísticas', 'Modos válidos como Barbara o Celarent', 'Falacias de distribución'],
+    syntax: ['logic aristotelian.syllogistic', 'axiom mayor : forall x (M(x) -> P(x))', 'axiom menor : forall x (S(x) -> M(x))', 'derive forall x (S(x) -> P(x)) from {mayor, menor}'],
+    commands: ['check valid', 'check satisfiable', 'derive'],
+    mistakes: ['Usar más de dos premisas en derive', 'Confundir un silogismo válido con una mera semejanza verbal', 'Olvidar el papel del término medio'],
+    lessonExample: 'logic aristotelian.syllogistic\n\naxiom mayor : forall x (M(x) -> P(x))\naxiom menor : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {mayor, menor}\n\naxiom p1 : forall x (P(x) -> M(x))\naxiom p2 : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {p1, p2}'
+  },
+  {
+    id: 'course-belnap',
+    navLabel: 'Belnap',
+    title: 'Curso 9 · Lógica Paraconsistente Belnap',
+    level: 'Avanzado',
+    focus: 'Razonar con inconsistencia sin explosión trivial.',
+    summary: 'Belnap introduce cuatro valores: verdadero, falso, ambos y ninguno. Permite describir bases de datos incompletas o contradictorias sin colapso lógico.',
+    questions: ['¿Qué son T, F, B y N?', '¿Por qué P & !P puede ser satisfacible?', '¿Por qué P | !P ya no es válida?', '¿Por qué falla ex falso?'],
+    concepts: ['Lógica de 4 valores', 'Valores designados: T y B', 'Contradicciones toleradas', 'Fallo de explosión', 'Fallo de tercero excluido y reflexividad material'],
+    syntax: ['logic paraconsistent.belnap', 'check satisfiable P & !P', 'check valid P -> P', 'check valid P | !P'],
+    commands: ['check valid', 'check satisfiable', 'check equivalent', 'countermodel'],
+    mistakes: ['Esperar leyes clásicas automáticas', 'Suponer que contradicción implica cualquier conclusión', 'Olvidar que N no es designado'],
+    lessonExample: 'logic paraconsistent.belnap\n\ncheck satisfiable P & !P\ncheck valid (P & !P) -> Q\ncheck valid P | !P\ncheck valid P -> P\ncheck equivalent P -> Q, !P | Q\ncountermodel P -> P'
+  },
+  {
+    id: 'course-probabilistic',
+    navLabel: 'Probabilística',
+    title: 'Curso 10 · Lógica Probabilística',
+    level: 'Avanzado',
+    focus: 'Medir la fuerza probabilística de fórmulas clásicas.',
+    summary: 'En lugar de evaluar solo verdad o falsedad, este perfil calcula probabilidades de fórmulas sobre distribuciones discretas de probabilidad.',
+    questions: ['¿Qué significa que una fórmula sea válida probabilísticamente?', '¿Cómo se calcula P(φ)?', 'Qué papel juega la independencia entre átomos?'],
+    concepts: ['Mundos booleanos subyacentes', 'Asignaciones de probabilidad', 'Validez como probabilidad 1 en todo muestreo', 'Independencia de átomos', 'Muestreo discreto del motor'],
+    syntax: ['logic probabilistic.basic', 'check valid P | !P', 'check valid P -> Q', 'truth_table P -> Q'],
+    commands: ['check valid', 'check satisfiable', 'check equivalent', 'truth_table', 'countermodel'],
+    mistakes: ['Pensar que ya no hay estructura clásica dentro del mundo', 'Olvidar que el muestreo es discreto', 'Confundir probabilidad positiva con validez'],
+    lessonExample: 'logic probabilistic.basic\n\ncheck valid P | !P\ncheck valid P -> Q\ncheck satisfiable P & Q\ntruth_table P -> Q\ncheck equivalent (P -> Q) <-> (!P | Q), P | !P\ncountermodel P'
   }
 ];
 
@@ -288,6 +457,62 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
+function CourseSection({ course }: { course: LogicCourse }) {
+  return (
+    <section id={course.id} className="scroll-mt-24">
+      <div className="border border-surface-700/40 rounded-2xl overflow-hidden bg-surface-800/25">
+        <div className="px-6 py-5 border-b border-surface-700/30 bg-gradient-to-r from-mandy-500/10 to-transparent">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <span className="text-[10px] font-bold bg-mandy-500/20 text-mandy-300 px-2.5 py-1 rounded-md border border-mandy-500/30 tracking-wider">{course.level}</span>
+            <span className="text-[10px] font-bold bg-surface-700/60 text-surface-300 px-2.5 py-1 rounded-md border border-surface-600/40 tracking-wider">{course.navLabel}</span>
+          </div>
+          <h3 className="text-xl font-extrabold text-white tracking-tight">{course.title}</h3>
+          <p className="text-sm text-surface-400 mt-2">{course.focus}</p>
+        </div>
+
+        <div className="px-6 py-6 space-y-6">
+          <div>
+            <h4 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Qué aprendes aquí</h4>
+            <p className="text-sm text-surface-300 leading-relaxed">{course.summary}</p>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="bg-surface-900/40 rounded-xl p-4 border border-surface-700/30">
+              <h4 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Preguntas guía</h4>
+              <BulletList items={course.questions} />
+            </div>
+            <div className="bg-surface-900/40 rounded-xl p-4 border border-surface-700/30">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-3">Conceptos clave</h4>
+              <BulletList items={course.concepts} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="bg-surface-900/40 rounded-xl p-4 border border-surface-700/30">
+              <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-3">Patrones de sintaxis ST</h4>
+              <BulletList items={course.syntax} />
+            </div>
+            <div className="bg-surface-900/40 rounded-xl p-4 border border-surface-700/30">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">Comandos que debes practicar</h4>
+              <BulletList items={course.commands} />
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Lección práctica</h4>
+            <CopyBlock code={course.lessonExample} />
+          </div>
+
+          <div className="bg-red-500/5 rounded-xl p-4 border border-red-500/20">
+            <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest mb-3">Errores comunes</h4>
+            <BulletList items={course.mistakes} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ──────────── Main Page ──────────── */
 export default function STDocsPage() {
   const [openProfile, setOpenProfile] = useState<string | null>(null);
@@ -358,6 +583,397 @@ export default function STDocsPage() {
               </div>
             </div>
           </section>
+
+          <section>
+            <SectionTitle id="academy" icon={BookOpen} title="Escuela de Lógicas" />
+            <div className="bg-gradient-to-br from-violet-600/10 via-surface-800/50 to-surface-900 border border-violet-500/20 rounded-2xl p-6 space-y-5">
+              <div>
+                <p className="text-sm text-surface-300 leading-relaxed">
+                  Aquí está la parte que faltaba: una <strong className="text-white">ruta de aprendizaje visible</strong>,
+                  clara y directa. En vez de esconder la enseñanza dentro de tarjetas compactas, esta página ahora organiza
+                  las lógicas como <strong className="text-mandy-400">cursos completos</strong>. La recomendación es estudiar
+                  en orden: primero proposicional, luego primer orden, y desde allí abrir las familias modal, normativa,
+                  epistémica, intuicionista, temporal, aristotélica, paraconsistente y probabilística.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {COURSES.map(course => (
+                  <a
+                    key={course.id}
+                    href={`#${course.id}`}
+                    className="group border border-surface-700/40 rounded-xl p-4 bg-surface-900/35 hover:bg-surface-900/60 hover:border-mandy-500/30 transition"
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-mandy-300 bg-mandy-500/15 border border-mandy-500/25 px-2 py-1 rounded-md">{course.level}</span>
+                      <ChevronRight className="w-4 h-4 text-surface-500 group-hover:text-mandy-400 transition group-hover:translate-x-0.5" />
+                    </div>
+                    <h3 className="text-sm font-bold text-white mb-1">{course.navLabel}</h3>
+                    <p className="text-xs text-surface-400 leading-relaxed">{course.focus}</p>
+                  </a>
+                ))}
+              </div>
+
+              <div className="bg-surface-900/40 border border-surface-700/30 rounded-xl p-4">
+                <h3 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Ruta sugerida</h3>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <a href="#propositional" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">1. Proposicional</a>
+                  <a href="#course-fol" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">2. Primer Orden</a>
+                  <a href="#course-modal" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">3. Modal</a>
+                  <a href="#course-deontic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">4. Deóntica</a>
+                  <a href="#course-epistemic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">5. Epistémica</a>
+                  <a href="#course-intuitionistic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">6. Intuicionista</a>
+                  <a href="#course-temporal" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">7. Temporal</a>
+                  <a href="#course-aristotelian" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">8. Aristotélica</a>
+                  <a href="#course-belnap" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">9. Belnap</a>
+                  <a href="#course-probabilistic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">10. Probabilística</a>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Lógica Proposicional — Curso completo ── */}
+          <section>
+            <SectionTitle id="propositional" icon={GraduationCap} title="Curso de Lógica Proposicional" />
+            <p className="text-surface-300 text-sm leading-relaxed mb-6">
+              Esta sección es una guía exhaustiva de lógica proposicional clásica usando el lenguaje ST.
+              Todos los ejemplos son ejecutables: cópialos y pégalos en la terminal ST o en el editor integrado.
+            </p>
+
+            {/* 1. Proposiciones */}
+            <div className="space-y-6">
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-3">1. ¿Qué es una proposición?</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-3">
+                  Una <strong className="text-mandy-400">proposición</strong> es un enunciado declarativo que puede ser
+                  verdadero (<strong className="text-emerald-400">V</strong>) o falso (<strong className="text-red-400">F</strong>),
+                  pero nunca ambos al mismo tiempo. En ST las proposiciones se representan con letras mayúsculas
+                  llamadas <em>átomos proposicionales</em>.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 mb-3">
+                  <div className="bg-surface-900/50 rounded-lg p-3 border border-surface-700/30">
+                    <p className="text-xs text-emerald-400 font-bold mb-1">✓ Son proposiciones</p>
+                    <p className="text-xs text-surface-400">&quot;La Tierra es redonda&quot; → P</p>
+                    <p className="text-xs text-surface-400">&quot;2 + 2 = 5&quot; → Q (falsa, pero es proposición)</p>
+                  </div>
+                  <div className="bg-surface-900/50 rounded-lg p-3 border border-surface-700/30">
+                    <p className="text-xs text-red-400 font-bold mb-1">✗ NO son proposiciones</p>
+                    <p className="text-xs text-surface-400">&quot;¿Qué hora es?&quot; (pregunta)</p>
+                    <p className="text-xs text-surface-400">&quot;¡Cierra la puerta!&quot; (imperativo)</p>
+                  </div>
+                </div>
+                <CopyBlock label="Declarar el perfil proposicional" code="logic classical.propositional" />
+                <p className="text-xs text-surface-500 italic">
+                  Todo script ST comienza declarando el perfil lógico. Para lógica proposicional usamos
+                  <code className="text-mandy-400 mx-1">classical.propositional</code>.
+                </p>
+              </div>
+
+              {/* 2. Valores de verdad */}
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-3">2. Valores de verdad y bivalencia</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-3">
+                  La lógica clásica es <strong className="text-white">bivalente</strong>: cada proposición tiene exactamente
+                  uno de dos valores — verdadero (V/T) o falso (F). No existe un tercer valor.
+                  El motor de ST evalúa fórmulas generando <em>todas</em> las combinaciones posibles de V y F
+                  para cada átomo (esto se llama <strong className="text-mandy-400">tabla de verdad</strong>).
+                </p>
+                <CopyBlock label="Generar tabla de verdad para un átomo" code={'logic classical.propositional\ntruth_table P'} />
+                <p className="text-xs text-surface-400 mt-2">
+                  Resultado: una tabla con una sola columna y dos filas — P=V y P=F.
+                  Con 2 átomos hay 4 filas (2²), con 3 hay 8 (2³), y así sucesivamente hasta 2²⁰ = 1,048,576 filas (el límite del motor).
+                </p>
+              </div>
+
+              {/* 3. Los 5 operadores */}
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-4">3. Los 5 operadores lógicos</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-4">
+                  Los operadores transforman proposiciones simples en fórmulas compuestas. ST implementa los 5 conectivos
+                  clásicos. A continuación cada uno con su tabla de verdad y su significado intuitivo.
+                </p>
+
+                {/* Negación */}
+                <div className="border border-surface-700/30 rounded-lg p-4 mb-4 bg-surface-900/30">
+                  <h4 className="text-sm font-bold text-mandy-400 mb-2">3.1 Negación — <code className="text-emerald-300">!P</code></h4>
+                  <p className="text-xs text-surface-400 mb-3">
+                    Invierte el valor de verdad. Si P es verdadera, !P es falsa y viceversa.
+                    Equivale a decir &quot;no es el caso que P&quot;.
+                  </p>
+                  <CopyBlock code={'logic classical.propositional\n// La negación de una contradicción es tautología\ncheck valid !(P & !P)\n\n// La doble negación se elimina en clásica\ncheck valid !!P -> P\n\n// Tabla de verdad de la negación\ntruth_table !P'} />
+                  <div className="mt-3 bg-surface-950/60 rounded-lg p-3 border border-surface-700/30 font-mono text-xs text-surface-400">
+                    <p className="text-surface-500 mb-1">Tabla de verdad:</p>
+                    <p>P=V → !P=<span className="text-red-400">F</span></p>
+                    <p>P=F → !P=<span className="text-emerald-400">V</span></p>
+                  </div>
+                </div>
+
+                {/* Conjunción */}
+                <div className="border border-surface-700/30 rounded-lg p-4 mb-4 bg-surface-900/30">
+                  <h4 className="text-sm font-bold text-mandy-400 mb-2">3.2 Conjunción — <code className="text-emerald-300">P & Q</code></h4>
+                  <p className="text-xs text-surface-400 mb-3">
+                    Es verdadera <em>solo</em> cuando ambos operandos son verdaderos. Equivale al &quot;y&quot; del lenguaje natural.
+                    Si cualquiera de los dos es falso, la conjunción completa es falsa.
+                  </p>
+                  <CopyBlock code={'logic classical.propositional\n// P & Q solo es verdadera si ambas lo son\ntruth_table P & Q\n\n// Satisfacibilidad: ¿existe algún caso donde P & Q sea V?\ncheck satisfiable P & Q\n\n// P & !P nunca es verdadera (contradicción)\ncheck satisfiable P & !P'} />
+                  <div className="mt-3 bg-surface-950/60 rounded-lg p-3 border border-surface-700/30 font-mono text-xs text-surface-400">
+                    <p className="text-surface-500 mb-1">Tabla de verdad:</p>
+                    <p>P=V, Q=V → P&Q=<span className="text-emerald-400">V</span></p>
+                    <p>P=V, Q=F → P&Q=<span className="text-red-400">F</span></p>
+                    <p>P=F, Q=V → P&Q=<span className="text-red-400">F</span></p>
+                    <p>P=F, Q=F → P&Q=<span className="text-red-400">F</span></p>
+                  </div>
+                </div>
+
+                {/* Disyunción */}
+                <div className="border border-surface-700/30 rounded-lg p-4 mb-4 bg-surface-900/30">
+                  <h4 className="text-sm font-bold text-mandy-400 mb-2">3.3 Disyunción — <code className="text-emerald-300">P | Q</code></h4>
+                  <p className="text-xs text-surface-400 mb-3">
+                    Es verdadera cuando <em>al menos uno</em> de los operandos es verdadero (disyunción inclusiva).
+                    Solo es falsa cuando ambos son falsos. Equivale al &quot;o&quot; (inclusivo) del lenguaje natural.
+                  </p>
+                  <CopyBlock code={'logic classical.propositional\n// La disyunción inclusiva\ntruth_table P | Q\n\n// Tercero excluido: P o no-P siempre es verdadero\ncheck valid P | !P\n\n// Si tenemos P, podemos derivar P | Q\naxiom base = P\nderive P | Q from {base}'} />
+                  <div className="mt-3 bg-surface-950/60 rounded-lg p-3 border border-surface-700/30 font-mono text-xs text-surface-400">
+                    <p className="text-surface-500 mb-1">Tabla de verdad:</p>
+                    <p>P=V, Q=V → P|Q=<span className="text-emerald-400">V</span></p>
+                    <p>P=V, Q=F → P|Q=<span className="text-emerald-400">V</span></p>
+                    <p>P=F, Q=V → P|Q=<span className="text-emerald-400">V</span></p>
+                    <p>P=F, Q=F → P|Q=<span className="text-red-400">F</span></p>
+                  </div>
+                </div>
+
+                {/* Implicación */}
+                <div className="border border-surface-700/30 rounded-lg p-4 mb-4 bg-surface-900/30">
+                  <h4 className="text-sm font-bold text-mandy-400 mb-2">3.4 Implicación material — <code className="text-emerald-300">P -&gt; Q</code></h4>
+                  <p className="text-xs text-surface-400 mb-3">
+                    &quot;Si P entonces Q&quot;. Es falsa <em>solo</em> cuando el antecedente (P) es verdadero y el consecuente (Q) es falso.
+                    En todos los demás casos es verdadera — incluso cuando P es falsa (la &quot;implicación vacuamente verdadera&quot;).
+                    Este es el operador que más confusión genera: <code className="text-surface-300">F -&gt; F = V</code> y{' '}
+                    <code className="text-surface-300">F -&gt; V = V</code>.
+                  </p>
+                  <CopyBlock code={'logic classical.propositional\n// Tabla de verdad de la implicación\ntruth_table P -> Q\n\n// La implicación NO es una tautología\ncheck valid P -> Q\n// → NO es válida (contramodelo: P=V, Q=F)\n\n// Contramodelo: muestra cuándo falla\ncountermodel P -> Q\n\n// Equivalencia fundamental: P->Q ≡ !P | Q\ncheck equivalent P -> Q, !P | Q'} />
+                  <div className="mt-3 bg-surface-950/60 rounded-lg p-3 border border-surface-700/30 font-mono text-xs text-surface-400">
+                    <p className="text-surface-500 mb-1">Tabla de verdad:</p>
+                    <p>P=V, Q=V → P→Q=<span className="text-emerald-400">V</span></p>
+                    <p>P=V, Q=F → P→Q=<span className="text-red-400">F</span> ← el único caso falso</p>
+                    <p>P=F, Q=V → P→Q=<span className="text-emerald-400">V</span></p>
+                    <p>P=F, Q=F → P→Q=<span className="text-emerald-400">V</span></p>
+                  </div>
+                </div>
+
+                {/* Bicondicional */}
+                <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                  <h4 className="text-sm font-bold text-mandy-400 mb-2">3.5 Bicondicional — <code className="text-emerald-300">P &lt;-&gt; Q</code></h4>
+                  <p className="text-xs text-surface-400 mb-3">
+                    &quot;P si y solo si Q&quot;. Es verdadera cuando ambos tienen el <em>mismo</em> valor de verdad
+                    (ambos verdaderos o ambos falsos). Equivale a la doble implicación:
+                    (P → Q) y (Q → P) simultáneamente.
+                  </p>
+                  <CopyBlock code={'logic classical.propositional\n// Tabla de verdad del bicondicional\ntruth_table P <-> Q\n\n// Equivalencia: bicondicional = doble implicación\ncheck equivalent P <-> Q, (P -> Q) & (Q -> P)\n\n// P <-> P siempre es verdadero (reflexividad)\ncheck valid P <-> P'} />
+                  <div className="mt-3 bg-surface-950/60 rounded-lg p-3 border border-surface-700/30 font-mono text-xs text-surface-400">
+                    <p className="text-surface-500 mb-1">Tabla de verdad:</p>
+                    <p>P=V, Q=V → P↔Q=<span className="text-emerald-400">V</span></p>
+                    <p>P=V, Q=F → P↔Q=<span className="text-red-400">F</span></p>
+                    <p>P=F, Q=V → P↔Q=<span className="text-red-400">F</span></p>
+                    <p>P=F, Q=F → P↔Q=<span className="text-emerald-400">V</span></p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Clasificación de fórmulas */}
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-3">4. Clasificación de fórmulas</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-4">
+                  Toda fórmula proposicional cae en exactamente una de tres categorías según su comportamiento
+                  en todas las valuaciones posibles:
+                </p>
+                <div className="grid gap-4 sm:grid-cols-3 mb-4">
+                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4">
+                    <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">Tautología</h5>
+                    <p className="text-xs text-surface-400">Verdadera en <em>toda</em> valuación. El motor reporta &quot;VÁLIDA&quot;.</p>
+                    <p className="text-xs text-surface-500 mt-2 font-mono">P | !P</p>
+                  </div>
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                    <h5 className="text-xs font-bold text-red-400 uppercase tracking-widest mb-2">Contradicción</h5>
+                    <p className="text-xs text-surface-400">Falsa en <em>toda</em> valuación. El motor reporta &quot;INSATISFACIBLE&quot;.</p>
+                    <p className="text-xs text-surface-500 mt-2 font-mono">P & !P</p>
+                  </div>
+                  <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                    <h5 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Contingencia</h5>
+                    <p className="text-xs text-surface-400">Verdadera en algunas valuaciones, falsa en otras. Es &quot;satisfacible pero no válida&quot;.</p>
+                    <p className="text-xs text-surface-500 mt-2 font-mono">P -&gt; Q</p>
+                  </div>
+                </div>
+                <CopyBlock code={'logic classical.propositional\n// Tautología: verdadera siempre\ncheck valid P | !P\n\n// Contradicción: nunca satisfacible\ncheck satisfiable P & !P\n\n// Contingencia: satisfacible pero no válida\ncheck valid P -> Q\ncheck satisfiable P -> Q'} />
+              </div>
+
+              {/* 5. Equivalencias fundamentales */}
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-3">5. Equivalencias lógicas fundamentales</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-4">
+                  Dos fórmulas son <strong className="text-mandy-400">lógicamente equivalentes</strong> cuando tienen
+                  el mismo valor de verdad en <em>toda</em> valuación. ST las verifica con
+                  <code className="text-mandy-400 mx-1">check equivalent</code>.
+                </p>
+                <div className="space-y-3">
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-blue-400 mb-2">Leyes de De Morgan</h5>
+                    <p className="text-xs text-surface-400 mb-2">La negación de una conjunción es la disyunción de las negaciones, y viceversa.</p>
+                    <CopyBlock code={'logic classical.propositional\ncheck equivalent !(P & Q), (!P | !Q)\ncheck equivalent !(P | Q), (!P & !Q)'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-blue-400 mb-2">Contraposición</h5>
+                    <p className="text-xs text-surface-400 mb-2">&quot;Si P entonces Q&quot; es equivalente a &quot;Si no Q entonces no P&quot;.</p>
+                    <CopyBlock code={'logic classical.propositional\ncheck equivalent P -> Q, !Q -> !P\ncheck valid (P -> Q) <-> (!Q -> !P)'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-blue-400 mb-2">Eliminación de implicación</h5>
+                    <p className="text-xs text-surface-400 mb-2">La implicación se puede reescribir como disyunción.</p>
+                    <CopyBlock code={'logic classical.propositional\ncheck equivalent P -> Q, !P | Q'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-blue-400 mb-2">Doble negación</h5>
+                    <p className="text-xs text-surface-400 mb-2">En lógica clásica, negar dos veces equivale a afirmar.</p>
+                    <CopyBlock code={'logic classical.propositional\ncheck equivalent !!P, P\ncheck valid !!P -> P'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-blue-400 mb-2">Idempotencia, conmutatividad y asociatividad</h5>
+                    <CopyBlock code={'logic classical.propositional\n// Idempotencia\ncheck equivalent P & P, P\ncheck equivalent P | P, P\n\n// Conmutatividad\ncheck equivalent P & Q, Q & P\ncheck equivalent P | Q, Q | P\n\n// Asociatividad\ncheck equivalent (P & Q) & R, P & (Q & R)\ncheck equivalent (P | Q) | R, P | (Q | R)'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-blue-400 mb-2">Distributividad y absorción</h5>
+                    <CopyBlock code={'logic classical.propositional\n// Distributividad\ncheck equivalent P & (Q | R), (P & Q) | (P & R)\ncheck equivalent P | (Q & R), (P | Q) & (P | R)\n\n// Absorción\ncheck equivalent P & (P | Q), P\ncheck equivalent P | (P & Q), P'} />
+                  </div>
+                </div>
+              </div>
+
+              {/* 6. Reglas de derivación */}
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-3">6. Reglas de inferencia (motor de derivación)</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-4">
+                  El motor de ST implementa un <strong className="text-mandy-400">derivador BFS</strong> (búsqueda en anchura)
+                  que aplica las siguientes reglas automáticamente. El comando
+                  <code className="text-mandy-400 mx-1">derive</code> intenta encadenar estas reglas para llegar
+                  desde las premisas hasta la meta. Si la derivación sintáctica falla, usa un
+                  <em> fallback semántico</em> por tabla de verdad.
+                </p>
+                <div className="space-y-3">
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Modus Ponens</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">A</code> y <code className="text-surface-300">A -&gt; B</code>,
+                      se concluye <code className="text-surface-300">B</code>.
+                      La regla de inferencia más fundamental: si sabemos que P y que P implica Q, entonces Q.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom p1 : P -> Q\naxiom p2 = P\nderive Q from {p1, p2}\n// Prueba: Modus Ponens [de p1, p2]'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Modus Tollens</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">!B</code> y <code className="text-surface-300">A -&gt; B</code>,
+                      se concluye <code className="text-surface-300">!A</code>.
+                      Si sabemos que Q es falsa y que P implica Q, entonces P debe ser falsa.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom impl : P -> Q\naxiom neg : !Q\nderive !P from {impl, neg}\n// Prueba: Modus Tollens [de neg, impl]'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Silogismo hipotético (encadenamiento)</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">P -&gt; Q</code> y <code className="text-surface-300">Q -&gt; R</code>
+                      junto con <code className="text-surface-300">P</code>, se concluye <code className="text-surface-300">R</code>.
+                      El motor encadena Modus Ponens múltiples veces.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom chain1 : P -> Q\naxiom chain2 : Q -> R\naxiom start = P\nderive R from {chain1, chain2, start}\n// Prueba: MP[start,chain1] → Q; MP[Q,chain2] → R'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Eliminación de conjunción</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">A & B</code> se puede concluir <code className="text-surface-300">A</code> y
+                      también <code className="text-surface-300">B</code> por separado.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom both : P & Q\nderive P from {both}\nderive Q from {both}'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Introducción de conjunción</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">A</code> y <code className="text-surface-300">B</code> por separado,
+                      se concluye <code className="text-surface-300">A & B</code>.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom left = P\naxiom right = Q\nderive P & Q from {left, right}'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Introducción de disyunción</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">A</code> se puede concluir <code className="text-surface-300">A | B</code>
+                      para cualquier B (si la meta es una disyunción).
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom fact = P\nderive P | Q from {fact}'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Doble negación</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">!!A</code> se concluye <code className="text-surface-300">A</code>.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom dbl : !!P\nderive P from {dbl}'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Contraposición</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">A -&gt; B</code> se genera
+                      <code className="text-surface-300 mx-1">!B -&gt; !A</code>.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom orig : P -> Q\naxiom negq : !Q\nderive !P from {orig, negq}\n// El motor genera la contrapositiva y aplica MP'} />
+                  </div>
+                  <div className="border border-surface-700/30 rounded-lg p-4 bg-surface-900/30">
+                    <h5 className="text-xs font-bold text-emerald-400 mb-1">Eliminación de bicondicional</h5>
+                    <p className="text-xs text-surface-400 mb-2">
+                      De <code className="text-surface-300">A &lt;-&gt; B</code> se generan ambas direcciones:
+                      <code className="text-surface-300 mx-1">A -&gt; B</code> y
+                      <code className="text-surface-300 mx-1">B -&gt; A</code>.
+                    </p>
+                    <CopyBlock code={'logic classical.propositional\naxiom iff : P <-> Q\naxiom haveP = P\nderive Q from {iff, haveP}\n// Elimina bic → (P->Q), luego MP con P → Q'} />
+                  </div>
+                </div>
+                <div className="mt-4 bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
+                  <p className="text-xs text-amber-300">
+                    <strong>Nota:</strong> El derivador BFS tiene un límite de 200 iteraciones. Si no encuentra una prueba
+                    sintáctica, recurre a un <strong>fallback semántico</strong>: verifica por tabla de verdad si en toda
+                    valuación donde las premisas son verdaderas, la meta también lo es.
+                  </p>
+                </div>
+              </div>
+
+              {/* 7. Tautologías clásicas */}
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-3">7. Tautologías clásicas importantes</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-4">
+                  Estas fórmulas son verdaderas bajo <em>toda</em> valuación. Son los &quot;teoremas gratuitos&quot; de la lógica
+                  proposicional — no necesitan axiomas para ser verdaderas.
+                </p>
+                <CopyBlock code={'logic classical.propositional\n\n// Identidad\ncheck valid P -> P\n\n// Tercero excluido (LEM)\ncheck valid P | !P\n\n// No-contradicción\ncheck valid !(P & !P)\n\n// Doble negación (eliminación)\ncheck valid !!P -> P\n\n// Contrapositiva\ncheck valid (P -> Q) <-> (!Q -> !P)\n\n// Modus ponens como tautología\ncheck valid (P & (P -> Q)) -> Q\n\n// Transitividad de la implicación\ncheck valid ((P -> Q) & (Q -> R)) -> (P -> R)\n\n// Principio de explosión (ex falso quodlibet)\ncheck valid (P & !P) -> Q\n\n// Axioma S de Hilbert\ncheck valid (P -> (Q -> R)) -> ((P -> Q) -> (P -> R))\n\n// Contrarrecíproca (Modus Tollens como tautología)\ncheck valid (!P -> !Q) -> (Q -> P)'} />
+              </div>
+
+              {/* 8. Ejemplo completo */}
+              <div className="bg-gradient-to-br from-mandy-600/10 via-surface-800/40 to-surface-900 border border-mandy-500/20 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-3">8. Ejemplo integrador: razonamiento completo</h3>
+                <p className="text-sm text-surface-300 leading-relaxed mb-4">
+                  Un script completo que combina axiomas, derivaciones, verificaciones de validez, equivalencias,
+                  tablas de verdad y contramodelos — todo en un solo flujo:
+                </p>
+                <CopyBlock code={'logic classical.propositional\n\n// === Teoría: sistema de alarma ===\n// Si hay humo, hay fuego\naxiom regla1 : Humo -> Fuego\n// Si hay fuego, hay que evacuar\naxiom regla2 : Fuego -> Evacuar\n// Hay humo\naxiom hecho = Humo\n\n// === Derivaciones ===\n// ¿Hay fuego? (Modus Ponens)\nderive Fuego from {regla1, hecho}\n\n// ¿Hay que evacuar? (Encadenamiento)\nderive Evacuar from {regla1, regla2, hecho}\n\n// === Verificaciones ===\n// ¿Es válido que humo + reglas implique evacuación?\ncheck valid (Humo & (Humo -> Fuego) & (Fuego -> Evacuar)) -> Evacuar\n\n// Contrapositiva: si no evacuamos, no había humo\ncheck equivalent !Evacuar -> !Humo, Humo -> Evacuar\n\n// === Exploración ===\n// ¿Es posible tener fuego sin humo? (en este modelo)\ncheck satisfiable Fuego & !Humo\n\n// Tabla de verdad del razonamiento completo\ntruth_table (Humo & (Humo -> Fuego)) -> Fuego\n\n// Contramodelo: ¿cuándo falla Humo -> Evacuar directamente?\ncountermodel Humo -> Evacuar'} />
+                <p className="text-xs text-surface-500 mt-3 italic">
+                  Este script demuestra el flujo típico: definir axiomas → derivar consecuencias → verificar propiedades →
+                  explorar con contramodelos y tablas de verdad.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <div className="space-y-8">
+            {COURSES.filter(course => course.id !== 'propositional').map(course => (
+              <CourseSection key={course.id} course={course} />
+            ))}
+          </div>
 
           {/* ── Syntax ── */}
           <section>
