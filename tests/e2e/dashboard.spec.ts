@@ -109,7 +109,7 @@ test('dashboard creates documents and folders and uses sidebar and quick search'
   await page.getByRole('button', { name: 'Nuevo archivo' }).first().click();
   await expect(page.getByRole('button', { name: /Documento Markdown/i })).toBeVisible();
   await page.getByRole('button', { name: /Documento Markdown/i }).click();
-  await expect(page.getByText('Sin título')).toBeVisible();
+  await expect(page.getByText('Sin título').first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Nueva carpeta' }).first().click();
   await page.getByPlaceholder('Nombre de carpeta').fill('Apuntes');
@@ -122,9 +122,9 @@ test('dashboard creates documents and folders and uses sidebar and quick search'
   await expect(page.getByText('Memoria cooperativa.md')).toBeVisible();
   await sidebarSearch.clear();
 
-  await page.evaluate(() => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }));
-  });
+  const quickSearchTrigger = page.getByRole('button', { name: 'Buscar en este espacio', exact: true });
+  await expect(quickSearchTrigger).toBeVisible();
+  await quickSearchTrigger.click();
   const quickSearchInput = page.getByPlaceholder('Buscar documentos, conceptos, fragmentos, autores u obras...');
   await expect(quickSearchInput).toBeVisible();
   await quickSearchInput.fill('memoria');
@@ -138,6 +138,12 @@ test('dashboard creates documents and folders and uses sidebar and quick search'
   await page.keyboard.press('Escape');
   await expect(quickSearchInput).toBeHidden();
 
-  await page.getByTitle('Tablero').click();
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }));
+  });
+  await expect(quickSearchInput).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Tablero', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Tablero' })).toBeVisible();
 });

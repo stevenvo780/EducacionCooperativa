@@ -22,6 +22,7 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  Search,
   Terminal as TerminalIcon,
   Trash2,
   User,
@@ -56,6 +57,7 @@ interface HeaderBarProps {
   onOpenBoard: () => void;
   isStRunnerOpen: boolean;
   onOpenStRunner: () => void;
+  onOpenQuickSearch: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
   onDeleteWorkspace: (ws: Workspace) => void;
@@ -108,6 +110,7 @@ const HeaderBar = ({
   onOpenBoard,
   isStRunnerOpen,
   onOpenStRunner,
+  onOpenQuickSearch,
   onAcceptInvite,
   onSelectWorkspace,
   onDeleteWorkspace,
@@ -493,6 +496,26 @@ const HeaderBar = ({
           <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
           <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
         </div>
+        <button
+          onClick={onOpenQuickSearch}
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+          title="Buscar en este espacio (Ctrl+P)"
+          aria-label="Buscar en este espacio"
+        >
+          <Search className="w-3.5 h-3.5" />
+          <span className="hidden xl:inline">Buscar</span>
+        </button>
+        <a
+          href="/docs"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+          title="Abrir documentación"
+          aria-label="Abrir documentación"
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span className="hidden xl:inline">Ayuda</span>
+        </a>
         <div className="hidden md:flex items-center">
           <button
             onClick={onToggleHeaderCollapse}

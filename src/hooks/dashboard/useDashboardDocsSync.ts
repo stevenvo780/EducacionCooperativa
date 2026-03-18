@@ -46,6 +46,23 @@ export const useDashboardDocsSync = ({
   const docsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncEventRef = useRef(0);
   const lastDocsFetchAtRef = useRef(0);
+  const pendingRefetchOptionsRef = useRef<{ showLoading?: boolean } | undefined>(undefined);
+  const fetchDocsRef = useRef<((options?: { showLoading?: boolean }) => Promise<void>) | null>(null);
+  const latestStateRef = useRef({
+    user,
+    currentWorkspace,
+    docsLength,
+    applyDocsSnapshot,
+    setLoadingDocs
+  });
+
+  latestStateRef.current = {
+    user,
+    currentWorkspace,
+    docsLength,
+    applyDocsSnapshot,
+    setLoadingDocs
+  };
 
   useEffect(() => {
     return () => {
@@ -60,31 +77,46 @@ export const useDashboardDocsSync = ({
     };
   }, []);
 
+  const resolveWorkspaceRequest = useCallback((workspace: Workspace | null, currentUser: FirebaseUser | null) => {
+    if (!workspace || !currentUser) return null;
+
+    return {
+      workspaceId: workspace.id === personalWorkspaceId ? PERSONAL_WORKSPACE_ID : workspace.id,
+      ownerId: workspace.id === personalWorkspaceId ? currentUser.uid : undefined
+    };
+  }, [personalWorkspaceId]);
+
   const fetchDocs = useCallback(async (options?: { showLoading?: boolean }) => {
-    if (!user || !currentWorkspace) return;
+    const latestState = latestStateRef.current;
+    const request = resolveWorkspaceRequest(latestState.currentWorkspace, latestState.user);
+    if (!request) return;
+
     if (fetchInFlightRef.current) {
       pendingRefetchRef.current = true;
+      pendingRefetchOptionsRef.current = {
+        showLoading: Boolean(pendingRefetchOptionsRef.current?.showLoading || options?.showLoading)
+      };
       if (process.env.NODE_ENV !== 'production') {
         console.debug('[Sync] fetchDocs skipped (in-flight), trailing refetch queued');
       }
       return fetchInFlightRef.current;
     }
 
-    const showLoading = options?.showLoading ?? docsLength === 0;
+    const showLoading = options?.showLoading ?? latestState.docsLength === 0;
     if (showLoading) {
-      setLoadingDocs(true);
+      latestState.setLoadingDocs(true);
     }
 
     if (process.env.NODE_ENV !== 'production') {
       console.debug('[Sync] fetchDocs starting API call…');
     }
 
+    const requestWorkspaceId = request.workspaceId;
     const fetchPromise = (async () => {
       try {
-        const workspaceId = currentWorkspace.id === personalWorkspaceId ? PERSONAL_WORKSPACE_ID : currentWorkspace.id;
         const fetched = await fetchDocsApi({
-          workspaceId,
-          ownerId: currentWorkspace.id === personalWorkspaceId ? user.uid : undefined,
+          workspaceId: request.workspaceId,
+          ownerId: request.ownerId,
           view: 'metadata'
         });
 
@@ -92,7 +124,18 @@ export const useDashboardDocsSync = ({
           console.debug('[Sync] fetchDocs got', fetched.length, 'docs from API');
         }
 
-        applyDocsSnapshot(fetched);
+        const activeRequest = resolveWorkspaceRequest(
+          latestStateRef.current.currentWorkspace,
+          latestStateRef.current.user
+        );
+        if (activeRequest?.workspaceId !== requestWorkspaceId) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[Sync] ignoring stale docs response for workspace', requestWorkspaceId);
+          }
+          return;
+        }
+
+        latestStateRef.current.applyDocsSnapshot(fetched);
       } catch (error) {
         console.error('Error fetching docs', error);
       }
@@ -103,19 +146,29 @@ export const useDashboardDocsSync = ({
     try {
       await fetchPromise;
     } finally {
-      fetchInFlightRef.current = null;
+      if (fetchInFlightRef.current === fetchPromise) {
+        fetchInFlightRef.current = null;
+      }
       lastDocsFetchAtRef.current = Date.now();
-      if (showLoading) {
-        setLoadingDocs(false);
+      const activeRequest = resolveWorkspaceRequest(
+        latestStateRef.current.currentWorkspace,
+        latestStateRef.current.user
+      );
+      if (showLoading && activeRequest?.workspaceId === requestWorkspaceId) {
+        latestStateRef.current.setLoadingDocs(false);
       }
       if (pendingRefetchRef.current) {
         pendingRefetchRef.current = false;
+        const queuedOptions = pendingRefetchOptionsRef.current;
+        pendingRefetchOptionsRef.current = undefined;
         setTimeout(() => {
-          void fetchDocs();
-        }, 800);
+          void fetchDocsRef.current?.(queuedOptions);
+        }, 100);
       }
     }
-  }, [user, currentWorkspace, docsLength, personalWorkspaceId, applyDocsSnapshot, setLoadingDocs]);
+  }, [resolveWorkspaceRequest]);
+
+  fetchDocsRef.current = fetchDocs;
 
   const requestDocsRefresh = useCallback((options?: SyncRequestOptions) => {
     const delayMs = options?.delayMs ?? 250;
