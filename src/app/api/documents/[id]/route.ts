@@ -159,7 +159,18 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
             updateData.storagePath = storagePath;
         }
 
-        if (storagePath && isFileDoc && storagePath !== existingData?.storagePath) {
+        const shouldRefreshFileUrl = Boolean(
+            storagePath
+            && isFileDoc
+            && (
+                storagePath !== existingData?.storagePath
+                || body.refreshUrl === true
+                || typeof body.mimeType === 'string'
+                || typeof body.size === 'number'
+            )
+        );
+
+        if (storagePath && shouldRefreshFileUrl) {
             try {
                 const bucket = adminStorage.bucket();
                 if (bucket?.name) {

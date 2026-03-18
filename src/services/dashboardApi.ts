@@ -206,6 +206,57 @@ export const downloadDocumentBlobApi = async (docId: string): Promise<{ blob: Bl
   return { blob, mimeType };
 };
 
+export const replaceDocumentFileApi = async (params: {
+  docId: string;
+  blob: Blob;
+  mimeType?: string;
+}) => {
+  const mimeType = params.mimeType || params.blob.type || 'application/octet-stream';
+
+  const signedUrlRes = await authFetch(`/api/documents/${params.docId}/upload-url`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      mimeType,
+      fileSize: params.blob.size
+    })
+  });
+
+  if (signedUrlRes.status === 413) {
+    const errData = await signedUrlRes.json();
+    throw withErrorCode(
+      new Error(errData.error || 'Límite de almacenamiento alcanzado'),
+      'STORAGE_LIMIT_EXCEEDED'
+    );
+  }
+
+  assertOk(signedUrlRes, 'Failed to get replacement upload URL');
+  const uploadInfo = await signedUrlRes.json() as { signedUrl: string };
+
+  const uploadRes = await fetch(uploadInfo.signedUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': mimeType
+    },
+    body: params.blob
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Direct replacement upload failed: ${uploadRes.status}`);
+  }
+
+  const updateRes = await authFetch(`/api/documents/${params.docId}`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      mimeType,
+      size: params.blob.size,
+      refreshUrl: true
+    })
+  });
+  assertOk(updateRes, 'Failed to update file metadata');
+};
+
 export const fetchUserProfilesApi = async (params: { workspaceId: string; userIds: string[] }) => {
   const res = await authFetch('/api/users/lookup', {
     method: 'POST',

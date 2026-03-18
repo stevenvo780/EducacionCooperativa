@@ -7,26 +7,38 @@ import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, C
 import dynamic from 'next/dynamic';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
-import type { DocumentTypeId } from '@/types/documents';
+import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import type { WorkspaceTypeId } from '@/types/workspace';
+import { isMarkdownDocument } from '@/lib/document-format';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 const KanbanBoard = dynamic(() => import('@/components/dashboard/KanbanBoard'), { ssr: false });
-const SpreadsheetViewer = dynamic(() => import('@/components/SpreadsheetViewer'), { ssr: false });
 const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false });
 const STFileEditor = dynamic(() => import('@/components/editor/STFileEditor'), { ssr: false });
-
-const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xls', 'csv', 'tsv']);
-function isSpreadsheetDoc(doc: { name: string }): boolean {
-  const ext = doc.name.split('.').pop()?.toLowerCase() || '';
-  return SPREADSHEET_EXTENSIONS.has(ext);
-}
 
 function isStFileDoc(doc: { name: string }): boolean {
   const lower = doc.name.toLowerCase();
   return lower.endsWith('.md.st') || lower.endsWith('.st');
+}
+
+function isTextSearchableDoc(doc: { type?: string; name: string; mimeType?: string }) {
+  if (
+    doc.type === DocumentType.Terminal
+    || doc.type === DocumentType.Files
+    || doc.type === DocumentType.Board
+    || doc.type === DocumentType.STRunner
+    || isStFileDoc(doc)
+  ) {
+    return false;
+  }
+
+  if (doc.type === DocumentType.File) {
+    return isMarkdownDocument(doc.name, doc.mimeType);
+  }
+
+  return true;
 }
 
 interface SearchState {
@@ -340,8 +352,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     }
   }, [cancelInlineRename, editingTitleValue, onRenameDocInline]);
 
-  const renderToolbarControls = useCallback((doc: { id: string; type?: string; name: string }, mode: ViewMode) => {
-    const isTextDoc = doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && doc.type !== 'st-runner' && !isSpreadsheetDoc(doc) && !isStFileDoc(doc);
+  const renderToolbarControls = useCallback((doc: { id: string; type?: string; name: string; mimeType?: string }, mode: ViewMode) => {
+    const isTextDoc = isTextSearchableDoc(doc);
     const searchTerm = docSearchTerms[doc.id] || '';
     const searchState = docSearchStates[doc.id] || { currentMatch: 0, totalMatches: 0 };
 
@@ -584,7 +596,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isFileExplorer = doc.type === 'files';
     const isBoard = doc.type === 'board';
     const isStRunner = doc.type === 'st-runner';
-    const isSpreadsheet = !isTerminal && !isFileExplorer && !isBoard && isSpreadsheetDoc(doc);
     const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && isStFileDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
@@ -666,11 +677,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         workspaceName={currentWorkspaceName}
                         ownerId={doc.ownerId ?? currentUserId}
                       />
-                  ) : isSpreadsheet ? (
-                      <SpreadsheetViewer
-                        docId={doc.id}
-                        docName={doc.name}
-                      />
                   ) : isStRunner ? (
                       <STRunner height="100%" />
                   ) : isStFile ? (
@@ -683,6 +689,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         roomId={doc.id}
                         embedded
                         forceInline
+                        initialDocument={doc}
                         externalSearchTerm={searchTerm}
                         onSearchStateChange={(state) => handleSearchStateChange(doc.id, state)}
                         searchNavRef={getSearchNavRef(doc.id)}
