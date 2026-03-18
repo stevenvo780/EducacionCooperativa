@@ -73,6 +73,7 @@ interface HeaderBarProps {
   selectSession: (sessionId: string) => void;
   destroySession: (sessionId: string) => void;
   onRenameSession: (session: TerminalSession) => void;
+  onAddStInstructions: () => void;
   openTerminal: (session?: { id: string; name: string }) => void;
   openTabs: DocItem[];
   closeTabById: (tabId: string) => void;
@@ -123,6 +124,7 @@ const HeaderBar = ({
   selectSession,
   destroySession,
   onRenameSession,
+  onAddStInstructions,
   openTerminal,
   openTabs,
   closeTabById,
@@ -405,7 +407,7 @@ const HeaderBar = ({
                     setMenuPos(null);
                   } else {
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                    setMenuPos({ top: rect.bottom + 4, left: Math.max(0, rect.right - 160) });
+                    setMenuPos({ top: rect.bottom + 4, left: Math.max(0, rect.right - 196) });
                     setMenuOpenId(sess.id);
                   }
                 }}
@@ -418,9 +420,20 @@ const HeaderBar = ({
               {menuOpenId === sess.id && menuPos && (
                 <div
                   ref={menuRef}
-                  className="fixed z-[9999] w-40 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden"
+                  className="fixed z-[9999] w-48 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden"
                   style={{ top: menuPos.top, left: menuPos.left }}
                 >
+                  <button
+                    onClick={() => {
+                      onAddStInstructions();
+                      setMenuOpenId(null);
+                      setMenuPos(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 transition"
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    Añadir instrucciones ST
+                  </button>
                   <button
                     onClick={() => {
                       onRenameSession(sess);

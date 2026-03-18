@@ -590,7 +590,7 @@ export function useDocumentActions({
     const createStGuide = async () => {
         if (!user) return;
         const name = 'ST_GUIDE.md';
-        const targetFolder = normalizeFolderPath(activeFolder);
+        const targetFolder = DEFAULT_FOLDER_NAME;
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
         const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;
 
