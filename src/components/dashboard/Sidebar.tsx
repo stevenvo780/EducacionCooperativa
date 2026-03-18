@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useLayoutEffect, useRef, useEffect, useCallback } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, Info, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
@@ -8,6 +8,8 @@ import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
+import { setTouchDragDocId } from '@/lib/touchDragState';
+import { TOUCH_DROP_DOC_EVENT, LONG_PRESS_DELAY_MS, DRAG_START_THRESHOLD_PX } from '@/hooks/useTouchDrag';
 
 const ROW_HEIGHT = 28;
 
@@ -148,6 +150,142 @@ const Sidebar = ({
     folder?: FolderItem;
     doc?: DocItem;
   }>();
+
+  // Touch drag state (refs to avoid re-renders)
+  const touchDocRef = useRef<{ id: string; label: string } | null>(null);
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchDraggingRef = useRef(false);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const touchGhostRef = useRef<HTMLElement | null>(null);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Create/reuse the ghost element for touch drag
+  const getTouchGhost = useCallback((): HTMLElement => {
+    if (!touchGhostRef.current) {
+      const el = document.createElement('div');
+      el.style.cssText = [
+        'position:fixed', 'pointer-events:none', 'z-index:99999',
+        'padding:6px 12px', 'border-radius:8px',
+        'background:rgba(30,41,59,0.95)', 'border:1px solid rgba(100,116,139,0.5)',
+        'color:#cbd5e1', 'font-size:12px', 'font-weight:500',
+        'box-shadow:0 8px 24px rgba(0,0,0,0.5)', 'backdrop-filter:blur(4px)',
+        'display:none', 'user-select:none', 'white-space:nowrap'
+      ].join(';');
+      document.body.appendChild(el);
+      touchGhostRef.current = el;
+    }
+    return touchGhostRef.current;
+  }, []);
+
+  // Cleanup ghost on unmount
+  useEffect(() => {
+    return () => {
+      touchGhostRef.current?.remove();
+      touchGhostRef.current = null;
+    };
+  }, []);
+
+  // Container-level touch drag handling for doc items
+  useEffect(() => {
+    const container = listContainerRef.current;
+    if (!container) return;
+
+    const cancelTouch = () => {
+      if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
+      if (touchDraggingRef.current) { setTouchDragDocId(null); touchDraggingRef.current = false; }
+      if (touchGhostRef.current) touchGhostRef.current.style.display = 'none';
+      touchDocRef.current = null;
+      touchStartPosRef.current = null;
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      // Walk up from touch target to find a doc item
+      let node = e.target as HTMLElement | null;
+      while (node && node !== container) {
+        if (node.dataset.docId) {
+          touchDocRef.current = { id: node.dataset.docId, label: node.dataset.docLabel ?? '' };
+          break;
+        }
+        node = node.parentElement;
+      }
+      if (!touchDocRef.current) return;
+
+      const touch = e.touches[0];
+      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+      touchTimerRef.current = setTimeout(() => {
+        touchTimerRef.current = null;
+        if (!touchDocRef.current) return;
+        touchDraggingRef.current = true;
+        setTouchDragDocId(touchDocRef.current.id);
+        const ghost = getTouchGhost();
+        ghost.textContent = `📄 ${touchDocRef.current.label}`;
+        ghost.style.display = 'block';
+        ghost.style.left = `${touch.clientX + 12}px`;
+        ghost.style.top = `${touch.clientY - 20}px`;
+      }, LONG_PRESS_DELAY_MS);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touchDraggingRef.current) {
+        // Cancel long-press if finger moved beyond threshold before activation
+        if (touchStartPosRef.current) {
+          const dx = touch.clientX - touchStartPosRef.current.x;
+          const dy = touch.clientY - touchStartPosRef.current.y;
+          if (Math.sqrt(dx * dx + dy * dy) > DRAG_START_THRESHOLD_PX) {
+            if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
+          }
+        }
+        return;
+      }
+      e.preventDefault();
+      const ghost = getTouchGhost();
+      ghost.style.left = `${touch.clientX + 12}px`;
+      ghost.style.top = `${touch.clientY - 20}px`;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!touchDraggingRef.current) { cancelTouch(); return; }
+      const touch = e.changedTouches[0];
+      if (touchGhostRef.current) touchGhostRef.current.style.display = 'none';
+
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      let tileId: string | null = null;
+      let isDropTarget = false;
+      let node: Element | null = el;
+      while (node) {
+        if (node instanceof HTMLElement) {
+          if (node.dataset.touchDropTarget === 'true') { isDropTarget = true; tileId = node.dataset.tileId ?? null; break; }
+          if (node.dataset.touchEmptyDrop === 'true') { isDropTarget = true; break; }
+        }
+        node = node.parentElement;
+      }
+
+      if (isDropTarget && touchDocRef.current) {
+        window.dispatchEvent(new CustomEvent(TOUCH_DROP_DOC_EVENT, {
+          detail: { docId: touchDocRef.current.id, tileId }
+        }));
+      }
+
+      setTouchDragDocId(null);
+      touchDraggingRef.current = false;
+      touchDocRef.current = null;
+      touchStartPosRef.current = null;
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: true });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd);
+    container.addEventListener('touchcancel', cancelTouch);
+    return () => {
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('touchcancel', cancelTouch);
+    };
+  }, [getTouchGhost]);
 
   const isCollapsedView = isCollapsed && !showMobileSidebar;
   const effectiveWidth = isCollapsedView ? 0 : sidebarWidth;
@@ -319,6 +457,8 @@ const Sidebar = ({
           <div
             onClick={() => openDocument(item.doc)}
             draggable
+            data-doc-id={item.doc.id}
+            data-doc-label={item.doc.name}
             onDragStart={(e) => handleDocDragStart(e, item.doc)}
             onDragEnd={handleDocDragEnd}
             {...getContextTriggerProps({ type: 'doc', id: item.doc.id, doc: item.doc })}
@@ -431,6 +571,8 @@ const Sidebar = ({
         <div
           onClick={() => openDocument(item.doc)}
           draggable
+          data-doc-id={item.doc.id}
+          data-doc-label={item.doc.name}
           onDragStart={(e) => handleDocDragStart(e, item.doc)}
           onDragEnd={handleDocDragEnd}
           {...getContextTriggerProps({ type: 'doc', id: item.doc.id, doc: item.doc })}
@@ -653,7 +795,10 @@ const Sidebar = ({
               )}
 
               {listItems.length > 0 && (
-                <div ref={listRef} className="h-full min-h-[200px]">
+                <div
+                  ref={(el) => { listRef.current = el; listContainerRef.current = el; }}
+                  className="h-full min-h-[200px]"
+                >
                   <VirtualizedList
                     rowCount={listItems.length}
                     rowHeight={ROW_HEIGHT}
