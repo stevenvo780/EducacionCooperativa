@@ -15,10 +15,11 @@ import type { TerminalSession } from '@/context/TerminalContext';
 
 // ── ST Guide content for agents and users ───────────────────
 
-const ST_GUIDE_CONTENT = `# ST — Guía del Lenguaje de Lógica Formal
+const ST_GUIDE_CONTENT = `# ST — Guía actualizada del lenguaje
 
-> Intérprete disponible en terminal: \\\`st\\\`
+> Intérprete CLI: \\\`st\\\`
 > Paquete npm: \\\`@stevenvo780/st-lang\\\`
+> Manual completo dentro de Ágora: \\\`/docs/st\\\`
 
 ## Inicio rápido
 
@@ -26,121 +27,215 @@ const ST_GUIDE_CONTENT = `# ST — Guía del Lenguaje de Lógica Formal
 # Ejecutar un archivo .st
 st run archivo.st
 
-# REPL interactivo
-st
+# Validar sintaxis y diagnósticos
+st check archivo.st
+
+# Evaluar algo puntual
+st eval "check valid (P -> P)"
 
 # Ver perfiles disponibles
-st --list-profiles
+st profiles
+
+# Abrir REPL
+st repl
 \\\`\\\`\\\`
 
-## Sintaxis básica
+## Script mínimo
 
-### 1. Declarar lógica
 \\\`\\\`\\\`st
 logic classical.propositional
-\\\`\\\`\\\`
 
-### 2. Axiomas y teoremas
-\\\`\\\`\\\`st
-axiom a1 : P -> Q
-axiom a2 : P
-theorem t1 : Q
-\\\`\\\`\\\`
+axiom regla : P -> Q
+axiom base = P
 
-### 3. Comandos de verificación
-\\\`\\\`\\\`st
+derive Q from {regla, base}
 check valid (P | !P)
-check satisfiable (P & Q)
-check equivalent (P->Q), (!P|Q)
-derive Q from {a1, a2}
-truth_table (P & Q -> R)
 countermodel (P -> Q)
 \\\`\\\`\\\`
 
-### 4. Variables con let
-\\\`\\\`\\\`st
-let f = (P -> Q) & (Q -> R)
-check valid f -> (P -> R)
-\\\`\\\`\\\`
+## Núcleo del lenguaje
 
-## Operadores
-
-| Operador | Significado | Alias |
-|----------|-------------|-------|
-| \\\`&\\\` | Conjunción (Y) | \\\`y\\\` |
-| \\\`|\\\` | Disyunción (O) | \\\`o\\\` |
-| \\\`!\\\` | Negación | \\\`no\\\` |
-| \\\`->\\\` | Implicación | \\\`entonces\\\` |
-| \\\`<->\\\` | Bicondicional | \\\`sii\\\` |
-| \\\`forall x\\\` | Para todo x | |
-| \\\`exists x\\\` | Existe x | |
-| \\\`[]\\\` | Necesariamente | |
-| \\\`<>\\\` | Posiblemente | |
-
-## Perfiles de lógica
-
-- \\\`classical.propositional\\\` — Lógica proposicional clásica
-- \\\`classical.first_order\\\` — Lógica de primer orden
-- \\\`modal.k\\\` — Lógica modal K
-- \\\`paraconsistent.belnap\\\` — Belnap 4-valuada
-- \\\`intuitionistic.propositional\\\` — Intuicionista
-- \\\`deontic.standard\\\` — Deóntica
-- \\\`epistemic.s5\\\` — Epistémica S5
-- \\\`temporal.ltl\\\` — Temporal lineal
-- \\\`probabilistic.basic\\\` — Probabilística
-- \\\`aristotelian.syllogistic\\\` — Silogística
-
-## Capa Textual
+### Declaraciones y verificaciones
 
 \\\`\\\`\\\`st
 logic classical.propositional
+axiom a1 : P -> Q
+theorem t1 : Q
+
+check valid (P | !P)
+check satisfiable (P & Q)
+check equivalent (P -> Q), (!P | Q)
+derive Q from {a1, base}
+prove Q from {a1, base}
+truth_table (P -> Q)
+countermodel (P -> Q)
+refute (P -> Q)
+\\\`\\\`\\\`
+
+### Variables, flujo y funciones
+
+\\\`\\\`\\\`st
+logic arithmetic
+
+let X = 2 + 3
+print X
+set X = X * 2
+
+if valid X > 5 {
+  print "mayor que cinco"
+} else {
+  print "cinco o menos"
+}
+
+for N in { 1, 2, 3 } {
+  print N
+}
+
+while satisfiable X > 0 {
+  print X
+  set X = X - 4
+}
+
+fn revisar(V) {
+  explain V
+  return V
+}
+
+revisar(X)
+\\\`\\\`\\\`
+
+> En \\\`if\\\` y \\\`while\\\` también puedes usar \\\`invalid\\\` y \\\`unsatisfiable\\\`.
+
+### Prueba estructurada
+
+\\\`\\\`\\\`st
+logic classical.propositional
+
+assume h1 : P
+show P
+qed
+\\\`\\\`\\\`
+
+### Módulos, export e import
+
+\\\`\\\`\\\`st
+// utilidades.st
+export let regla = P -> Q
+export fn revisar(X) {
+  print X
+}
+\\\`\\\`\\\`
+
+\\\`\\\`\\\`st
+// curso.st
+logic classical.propositional
+import "utilidades.st"
+
+print regla
+revisar(P)
+\\\`\\\`\\\`
+
+### Teorías parametrizadas
+
+\\\`\\\`\\\`st
+logic classical.propositional
+
+theory Caja(valor) {
+  let dato = valor
+  fn ver() {
+    print dato
+  }
+}
+
+let caja = Caja("demo")
+print caja.dato
+caja.ver()
+\\\`\\\`\\\`
+
+## Operadores disponibles
+
+### Lógicos
+
+- \\\`!\\\` negación
+- \\\`&\\\` conjunción
+- \\\`|\\\` disyunción
+- \\\`->\\\` implicación
+- \\\`<->\\\` bicondicional
+- \\\`^\\\` o \\\`⊕\\\` XOR
+- \\\`!&\\\` o \\\`↑\\\` NAND
+- \\\`!|\\\` o \\\`↓\\\` NOR
+- \\\`[]\\\` necesidad / siempre / obligación / conocimiento
+- \\\`<>\\\` posibilidad / eventualmente / permiso / creencia
+- \\\`next\\\` y \\\`until\\\` para temporal
+- \\\`forall\\\` y \\\`exists\\\` para cuantificación
+
+### Aritméticos
+
+- \\\`+\\\`, \\\`-\\\`, \\\`*\\\`, \\\`/\\\`, \\\`%\\\`
+- \\\`<\\\`, \\\`>\\\`, \\\`<=\\\`, \\\`>=\\\`, \\\`≤\\\`, \\\`≥\\\`
+
+## Funciones nativas del runtime
+
+\\\`\\\`\\\`st
+logic arithmetic
+
+print typeof(2 + 3)
+print is_valid(2 + 3 < 10)
+print is_satisfiable(5 > 3)
+print get_atoms((P -> Q) & R)
+let nombre = input("Nombre:")
+\\\`\\\`\\\`
+
+## Text Layer
+
+\\\`\\\`\\\`st
+logic classical.propositional
+
 let p1 = passage([[documento.md#seccion]])
 let f1 = formalize p1 as (P & Q)
 claim c1 = f1
-check valid c1
+support c1 <- p1
+confidence c1 = 0.85
+context c1 = "Lectura conservadora"
+
+render claims
+render theory
+render all
 \\\`\\\`\\\`
 
-## API programática (Node.js)
+## Perfiles incorporados
+
+- \\\`classical.propositional\\\`
+- \\\`classical.first_order\\\`
+- \\\`modal.k\\\`
+- \\\`deontic.standard\\\`
+- \\\`epistemic.s5\\\`
+- \\\`intuitionistic.propositional\\\`
+- \\\`temporal.ltl\\\`
+- \\\`arithmetic\\\`
+- \\\`aristotelian.syllogistic\\\`
+- \\\`paraconsistent.belnap\\\`
+- \\\`probabilistic.basic\\\`
+
+## API programática
 
 \\\`\\\`\\\`javascript
-const { evaluate, createInterpreter } = require('@stevenvo780/st-lang/api');
+const { evaluate, createInterpreter, listProfiles } = require('@stevenvo780/st-lang/api');
 
 const result = evaluate('logic classical.propositional\\ncheck valid (P | !P)');
-console.log(result.results[0].status); // 'valid'
+console.log(result.ok);
+console.log(result.results[0].status);
 
 const st = createInterpreter();
 st.exec('logic classical.propositional');
 st.exec('axiom a1 : P -> Q');
-const r = st.exec('check satisfiable a1');
-console.log(r.ok); // true
-\\\`\\\`\\\`
-
-## Ejemplos
-
-### Modus Ponens
-\\\`\\\`\\\`st
-logic classical.propositional
-axiom p1 : P -> Q
-axiom p2 : P
-derive Q from {p1, p2}
-\\\`\\\`\\\`
-
-### Primer Orden
-\\\`\\\`\\\`st
-logic classical.first_order
-axiom all_mortal : forall x (Human(x) -> Mortal(x))
-axiom socrates : Human(socrates)
-derive Mortal(socrates) from {all_mortal, socrates}
-\\\`\\\`\\\`
-
-### Modal
-\\\`\\\`\\\`st
-logic modal.k
-check valid [](P -> Q) -> ([]P -> []Q)
+st.exec('axiom a2 : P');
+console.log(st.exec('derive Q from {a1, a2}').stdout);
+console.log(listProfiles());
 \\\`\\\`\\\`
 
 ---
-*ST v1.0.0 — https://github.com/stevenvo780/ST*
+*Runtime documentado para EducacionCooperativa con \\\`@stevenvo780/st-lang\\\` 2.0.0 — https://github.com/stevenvo780/ST*
 `;
 
 interface UseDocumentActionsOptions {
