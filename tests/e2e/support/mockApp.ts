@@ -376,6 +376,60 @@ const makeSearchResults = (state: MockAppState, workspaceId: string, query: stri
 };
 
 export const installBrowserStubs = async (page: Page) => {
+  await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: `
+        window.pdfjsLib = {
+          version: '3.11.174',
+          GlobalWorkerOptions: { workerSrc: '' },
+          getDocument() {
+            return {
+              promise: Promise.resolve({
+                numPages: 1,
+                async getPage() {
+                  return {
+                    getViewport({ scale }) {
+                      return { width: 600 * scale, height: 2200 * scale };
+                    },
+                    render({ canvasContext, viewport }) {
+                      canvasContext.fillStyle = '#ffffff';
+                      canvasContext.fillRect(0, 0, viewport.width, viewport.height);
+                      canvasContext.fillStyle = '#111827';
+                      canvasContext.fillRect(48, 48, viewport.width - 96, 72);
+                      canvasContext.fillStyle = '#2563eb';
+                      canvasContext.fillRect(48, 180, viewport.width - 96, 1800);
+                      return { promise: Promise.resolve() };
+                    },
+                    cleanup() {},
+                    async getTextContent() {
+                      return {
+                        items: [
+                          { str: 'Documento PDF de prueba', transform: [1, 0, 0, 1, 0, 2100] },
+                          { str: 'Scroll persistente', transform: [1, 0, 0, 1, 0, 2040] }
+                        ]
+                      };
+                    }
+                  };
+                },
+                async destroy() {}
+              })
+            };
+          }
+        };
+      `
+    });
+  });
+
+  await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: ''
+    });
+  });
+
   await page.route('https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css', async (route) => {
     await route.fulfill({ status: 200, contentType: 'text/css', body: '' });
   });

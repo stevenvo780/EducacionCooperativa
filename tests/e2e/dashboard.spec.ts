@@ -197,3 +197,74 @@ test('dashboard supports VS Code style keyboard shortcuts', async ({ page }) => 
   await dispatchShortcut(page, { key: 'z', code: 'KeyZ' });
   await expect(page.getByLabel('Salir de modo Zen')).toBeVisible();
 });
+
+test('dashboard preserves PDF scroll position when reopening a file', async ({ page }) => {
+  await installMockApi(page, {
+    docsByWorkspace: {
+      personal: [
+        {
+          id: 'doc-personal-1',
+          name: 'Documento inicial.md',
+          type: 'text',
+          folder: 'No estructurado',
+          content: '# Documento inicial\n\nContenido base del espacio personal.',
+          ownerId: TEST_USER.uid,
+          workspaceId: 'personal',
+          mimeType: 'text/markdown',
+          updatedAt: '2030-01-10T12:00:00.000Z'
+        }
+      ],
+      'ws-shared': [
+        {
+          id: 'doc-pdf-1',
+          name: 'Informe.pdf',
+          type: 'file',
+          folder: 'No estructurado',
+          ownerId: TEST_USER.uid,
+          workspaceId: 'ws-shared',
+          mimeType: 'application/pdf',
+          url: 'https://files.test/informe.pdf',
+          updatedAt: '2030-01-10T12:00:00.000Z'
+        },
+        {
+          id: 'doc-note-1',
+          name: 'Notas sobre PDF.md',
+          type: 'text',
+          folder: 'No estructurado',
+          content: '# Notas sobre PDF\n\nReferencia temporal.',
+          ownerId: TEST_USER.uid,
+          workspaceId: 'ws-shared',
+          mimeType: 'text/markdown',
+          updatedAt: '2030-01-10T12:00:00.000Z'
+        }
+      ]
+    }
+  });
+  await gotoDashboard(page, 'ws-shared');
+
+  await page.getByText('Informe.pdf', { exact: true }).first().click();
+  const pdfViewer = page.getByTestId('pdf-viewer-scroll-container');
+  await expect(pdfViewer).toBeVisible();
+  await expect(page.getByTestId('pdf-page-canvas')).toHaveCount(1);
+  await expect.poll(async () => (
+    pdfViewer.evaluate((element) => element.scrollHeight > element.clientHeight)
+  )).toBe(true);
+
+  await pdfViewer.evaluate((element) => {
+    element.scrollTop = 900;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await expect.poll(async () => (
+    pdfViewer.evaluate((element) => element.scrollTop)
+  )).toBeGreaterThan(400);
+
+  await page.getByText('Notas sobre PDF.md', { exact: true }).first().click();
+  await expect(pdfViewer).toHaveCount(0);
+
+  await page.getByText('Informe.pdf', { exact: true }).first().click();
+  const restoredViewer = page.getByTestId('pdf-viewer-scroll-container');
+  await expect(restoredViewer).toBeVisible();
+  await expect.poll(async () => (
+    restoredViewer.evaluate((element) => element.scrollTop)
+  )).toBeGreaterThan(400);
+});
