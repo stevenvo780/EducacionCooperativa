@@ -10,6 +10,7 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import type { WorkspaceTypeId } from '@/types/workspace';
 import { isMarkdownDocument } from '@/lib/document-format';
+import { subscribeTouchDragDocId } from '@/lib/touchDragState';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -160,6 +161,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const [dragOverInfo, setDragOverInfo] = useState<{ tileId: string; position: 'left' | 'right' | 'top' | 'bottom' | 'replace' } | null>(null);
   const [dragOverEmpty, setDragOverEmpty] = useState(false);
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
+  const [isTouchDraggingDoc, setIsTouchDraggingDoc] = useState(false);
   const [isResizingMosaic, setIsResizingMosaic] = useState(false);
   const [resizeCursor, setResizeCursor] = useState<'col-resize' | 'row-resize'>('col-resize');
   const [editingTitleDocId, setEditingTitleDocId] = useState<string | null>(null);
@@ -204,6 +206,27 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       }
     }
   }, []);
+
+  // Subscribe to touch-drag state so we can show the overlay over iframes
+  useEffect(() => {
+    return subscribeTouchDragDocId((id) => setIsTouchDraggingDoc(id !== null));
+  }, []);
+
+  // Handle touch-drag drops on tiles and the empty canvas
+  useEffect(() => {
+    const handleTouchDropDoc = (e: Event) => {
+      const { docId, tileId } = (e as CustomEvent<{ docId: string; tileId: string | null }>).detail;
+      if (tileId) {
+        if (docId !== tileId) {
+          onDropDocOnTile?.(docId, tileId, 'replace');
+        }
+      } else {
+        onDropDocOnEmpty?.(docId);
+      }
+    };
+    window.addEventListener('touchdropdoc', handleTouchDropDoc);
+    return () => window.removeEventListener('touchdropdoc', handleTouchDropDoc);
+  }, [onDropDocOnTile, onDropDocOnEmpty]);
 
   // Detect global drag of documents to show overlay over iframes
   useEffect(() => {
@@ -612,6 +635,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             <div
                 ref={(el) => { tileRefs.current[doc.id] = el; }}
                 className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
+                data-touch-drop-target="true"
+                data-tile-id={doc.id}
                 onMouseDownCapture={() => {
                   onActivateTab?.(doc.id);
                 }}
@@ -622,8 +647,20 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                 onDragLeave={handleTileDragLeave}
                 onDrop={(e) => handleTileDrop(e, doc.id)}
             >
-                {/* Transparent overlay during drag to prevent iframe from capturing drag events */}
-                {isDraggingDoc && (
+                {/* Floating exit-fullscreen button inside the tile, visible only when this tile is fullscreen */}
+                {fullscreenDocId === doc.id && (
+                  <button
+                    onClick={() => void toggleFullscreen(doc.id)}
+                    className="absolute top-2 right-2 z-[9999] flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-900/90 border border-surface-600/60 text-surface-200 hover:bg-surface-700 hover:text-white shadow-xl transition backdrop-blur-sm"
+                    title="Salir de pantalla completa"
+                    aria-label="Salir de pantalla completa"
+                  >
+                    <Minimize2 className="w-4 h-4" />
+                    <span className="text-xs font-medium">Salir</span>
+                  </button>
+                )}
+                {/* Transparent overlay during drag (mouse or touch) to prevent iframe from capturing drag events */}
+                {(isDraggingDoc || isTouchDraggingDoc) && (
                   <div className="absolute inset-0 z-40" style={{ background: 'transparent' }} />
                 )}
                 {dropInfo && (
@@ -699,19 +736,23 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </MosaicWindow>
     );
   }, [
-    tabById, docById, docModes, nexusUrl, renderToolbarControls, renderWindowToolbar, docSearchTerms, dragOverInfo, isDraggingDoc,
+    tabById, docById, docModes, nexusUrl, renderToolbarControls, renderWindowToolbar, docSearchTerms, dragOverInfo, isDraggingDoc, isTouchDraggingDoc,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
     onSelectDoc, onActivateTab, onCreateFile, onCreateStFile, onCreateFolder, onUploadFile, onUploadFolder,
     handleTileDragOver, handleTileDragLeave, handleTileDrop,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, favoriteDocIds, onToggleFavorite, onDownloadFolder,
     onReorderDocs, onReorderFolders,
     activeFolder, onActiveFolderChange, fileExplorerDocs,
-    handleSearchStateChange, getSearchNavRef
+    handleSearchStateChange, getSearchNavRef,
+    fullscreenDocId, toggleFullscreen
   ]);
 
-  const emptyZeroState = useMemo(() => (
+  const emptyZeroState = useMemo(() => {
+    const isDropHighlighted = dragOverEmpty || isTouchDraggingDoc;
+    return (
     <div
-      className={`h-full w-full flex flex-col items-center justify-center text-surface-400 p-8 text-center transition-colors duration-150 ${dragOverEmpty ? 'bg-sky-500/10 ring-2 ring-inset ring-sky-500' : ''}`}
+      className={`h-full w-full flex flex-col items-center justify-center text-surface-400 p-8 text-center transition-colors duration-150 ${isDropHighlighted ? 'bg-sky-500/10 ring-2 ring-inset ring-sky-500' : ''}`}
+      data-touch-empty-drop="true"
       onDragOver={handleEmptyDragOver}
       onDragLeave={() => setDragOverEmpty(false)}
       onDrop={handleEmptyDrop}
@@ -720,11 +761,12 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         <div className="w-16 h-16 bg-surface-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <Columns className="w-8 h-8 text-surface-400" />
         </div>
-        <h3 className="text-xl font-medium text-surface-200">{dragOverEmpty ? 'Soltar aquí para abrir' : 'No hay paneles abiertos'}</h3>
-        <p className="text-surface-400">{dragOverEmpty ? 'Suelta el archivo para abrirlo en el panel' : 'Selecciona o arrastra un archivo del explorador para comenzar.'}</p>
+        <h3 className="text-xl font-medium text-surface-200">{isDropHighlighted ? 'Soltar aquí para abrir' : 'No hay paneles abiertos'}</h3>
+        <p className="text-surface-400">{isDropHighlighted ? 'Suelta el archivo para abrirlo en el panel' : 'Selecciona o arrastra un archivo del explorador para comenzar.'}</p>
       </div>
     </div>
-  ), [dragOverEmpty, handleEmptyDragOver, handleEmptyDrop]);
+    );
+  }, [dragOverEmpty, isTouchDraggingDoc, handleEmptyDragOver, handleEmptyDrop]);
 
   return (
     <>

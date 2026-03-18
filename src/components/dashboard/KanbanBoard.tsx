@@ -6,6 +6,7 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   closestCorners,
   useSensor,
   useSensors,
@@ -475,6 +476,7 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
