@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Minus, Plus, Search } from 'lucide-react';
 
 interface PDFViewportProxy {
@@ -317,6 +317,17 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
   }, [searchMatches]);
 
   const saveCurrentViewerState = useCallback(() => {
+    lastKnownStateRef.current = {
+      ...lastKnownStateRef.current,
+      zoomLevel,
+      searchQuery,
+      activeSearchIndex
+    };
+    saveViewerState(storageKey, lastKnownStateRef.current);
+  }, [activeSearchIndex, searchQuery, storageKey, zoomLevel]);
+
+  // Actualización síncrona del ref antes de cualquier cleanup (desmontaje de tile)
+  useLayoutEffect(() => {
     lastKnownStateRef.current = {
       ...lastKnownStateRef.current,
       zoomLevel,

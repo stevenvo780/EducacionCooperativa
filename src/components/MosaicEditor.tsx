@@ -1728,17 +1728,19 @@ export default function MosaicEditor({
               type="button"
               onClick={() => setShowSemanticWorkbench((current) => !current)}
               className={clsx(
-                'mr-1 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition',
+                'mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full border transition',
                 showSemanticWorkbench
                   ? 'border-blue-500/40 bg-blue-500/15 text-blue-200'
                   : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
               )}
-              title={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
-              aria-label={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
+              title={showSemanticWorkbench
+                ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
+                : `Abrir mesa semantica (${semanticItemCount} elementos)`}
+              aria-label={showSemanticWorkbench
+                ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
+                : `Abrir mesa semantica (${semanticItemCount} elementos)`}
             >
               <BookMarked className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Semantica</span>
-              <span>{semanticItemCount}</span>
             </button>
             <span>{stats.words} palabras</span>
             <span>·</span>
@@ -1908,24 +1910,21 @@ export default function MosaicEditor({
                 <button
                   type="button"
                   onClick={() => setViewModeWithSync('edit')}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-blue-500/50 bg-blue-600/20 text-blue-300 transition hover:bg-blue-600/30"
                   title="Volver al editor visual"
                   aria-label="Volver al editor visual"
                 >
                   <PenLine className="h-3 w-3" />
-                  Editor visual
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewModeWithSync('raw')}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-violet-500/40 bg-violet-600/15 text-violet-200 transition hover:bg-violet-600/25"
                   title="Ver Markdown puro"
                   aria-label="Ver Markdown puro"
                 >
                   <FileCode2 className="h-3 w-3" />
-                  Markdown puro
                 </button>
-                <span className="text-[11px] text-slate-500">Vista previa — LaTeX, Mermaid y tablas se renderizan aquí</span>
               </div>
               <MarkdownPreview content={statsContent || contentRef.current} onOpenInternalLink={openInternalMarkdownLink} />
             </>
@@ -1935,24 +1934,21 @@ export default function MosaicEditor({
                 <button
                   type="button"
                   onClick={() => setViewModeWithSync('edit')}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-blue-500/50 bg-blue-600/20 text-blue-300 transition hover:bg-blue-600/30"
                   title="Volver al editor visual"
                   aria-label="Volver al editor visual"
                 >
                   <PenLine className="h-3 w-3" />
-                  Editor visual
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewModeWithSync('preview')}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-600/25"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-violet-500/40 bg-violet-600/15 text-violet-200 transition hover:bg-violet-600/25"
                   title="Abrir vista previa renderizada"
                   aria-label="Abrir vista previa renderizada"
                 >
                   <Monitor className="h-3 w-3" />
-                  Vista previa
                 </button>
-                <span className="text-[11px] text-slate-500">Markdown puro — aquí ves y editas el texto exacto del documento</span>
               </div>
               <div className="flex-1 relative overflow-hidden">
                 <textarea

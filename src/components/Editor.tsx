@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
-import MosaicEditor from './MosaicEditor';
+import type { DocumentTypeId } from '@/types/documents';
+import DocumentSurface from './DocumentSurface';
 
 export type ViewMode = 'edit' | 'preview' | 'raw';
 
@@ -20,6 +21,13 @@ export interface EditorProps {
   onSearchStateChange?: (state: SearchState) => void;
   onNavigateSearch?: (direction: 'next' | 'prev') => void;
   searchNavRef?: React.MutableRefObject<{ next: () => void; prev: () => void } | null>;
+  initialDocument?: {
+    type?: DocumentTypeId;
+    name?: string;
+    mimeType?: string;
+    url?: string;
+    storagePath?: string;
+  };
 }
 
 export default function Editor(props: EditorProps) {
@@ -34,5 +42,5 @@ export default function Editor(props: EditorProps) {
     );
   }
 
-  return <MosaicEditor {...props} />;
+  return <DocumentSurface {...props} />;
 }
