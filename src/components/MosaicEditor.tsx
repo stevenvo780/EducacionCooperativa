@@ -1660,7 +1660,7 @@ export default function MosaicEditor({
             <PdfViewer
               fileUrl={fileUrl}
               fileName={safeName}
-              storageKey={roomId || fileUrl}
+              storageKey={roomId ? `${roomId}:${fileUrl}` : fileUrl}
             />
           )}
           {fileUrl && !isPdf && !isImage && !isVideo && !isAudio && (
@@ -1901,7 +1901,7 @@ export default function MosaicEditor({
         )}
 
         {/* ── Editor area ── */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className="flex-1 relative overflow-hidden flex flex-col">
           {viewMode === 'preview' ? (
             <>
               <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
