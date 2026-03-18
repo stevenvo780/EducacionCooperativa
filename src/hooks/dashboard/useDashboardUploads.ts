@@ -340,6 +340,15 @@ export const useDashboardUploads = ({
 
   const isFileDrag = useCallback((e: DragEvent) => {
     const types = Array.from(e.dataTransfer?.types ?? []);
+    const isInternalDashboardDrag = types.includes('application/x-dashboard-internal-drag')
+      || types.includes('application/x-doc-id')
+      || types.includes('application/x-doc-reorder')
+      || types.includes('application/x-folder-reorder');
+
+    if (isInternalDashboardDrag) {
+      return false;
+    }
+
     if (types.includes('Files')) return true;
     return Array.from(e.dataTransfer?.items ?? []).some(item => item.kind === 'file');
   }, []);
