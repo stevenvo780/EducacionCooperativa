@@ -326,6 +326,7 @@ function DashboardContent() {
     const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
     const [isZenMode, setIsZenMode] = useState(false);
     const zenRestoreRef = useRef({ sidebar: false, header: false });
+    const shortcutChordDeadlineRef = useRef(0);
     const openBoardRef = useRef<() => Promise<void> | void>(() => {});
     const openDocumentRef = useRef<(doc: DocItem) => Promise<void> | void>(() => {});
     const openDocumentInTileRef = useRef<(doc: DocItem, targetTileId?: string | null) => Promise<void> | void>(() => {});
@@ -659,22 +660,6 @@ function DashboardContent() {
     }, [currentWorkspaceId, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch, setSidebarSearchQuery]);
 
     useEffect(() => {
-        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-                e.preventDefault();
-                openQuickSearch();
-            }
-            if (e.key === 'Escape' && showQuickSearch) {
-                setShowQuickSearch(false);
-                setQuickSearchQuery('');
-                setQuickSearchIndex(0);
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [openQuickSearch, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch, showQuickSearch]);
-
-    useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
             if (event.origin !== window.location.origin) return;
 
@@ -948,6 +933,113 @@ function DashboardContent() {
         setActiveFolderSafe(DEFAULT_FOLDER_NAME);
         await createStGuide();
     }, [createStGuide, setActiveFolderSafe]);
+
+    useEffect(() => {
+        const clearShortcutChord = () => {
+            shortcutChordDeadlineRef.current = 0;
+        };
+
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            const hasPrimaryModifier = e.ctrlKey || e.metaKey;
+            const chordActive = shortcutChordDeadlineRef.current > Date.now();
+            const normalizedKey = e.key.toLowerCase();
+            const matchesShortcut = (code: string, key: string) => e.code === code || normalizedKey === key;
+            const hasBlockingOverlay = Boolean(
+                dialogConfig
+                || showNewFileModal
+                || showNewWorkspaceModal
+                || showMembersModal
+                || showPasswordModal
+                || showPricingModal
+            );
+
+            if (e.key === 'Escape' && showQuickSearch) {
+                e.preventDefault();
+                clearShortcutChord();
+                closeQuickSearch();
+                return;
+            }
+
+            if (chordActive) {
+                if (matchesShortcut('KeyZ', 'z') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    handleToggleZenMode();
+                    return;
+                }
+                if (!matchesShortcut('KeyK', 'k')) {
+                    clearShortcutChord();
+                }
+            }
+
+            if (hasBlockingOverlay || showQuickSearch || !hasPrimaryModifier) {
+                return;
+            }
+
+            if (matchesShortcut('KeyK', 'k') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                shortcutChordDeadlineRef.current = Date.now() + 1500;
+                return;
+            }
+
+            if (matchesShortcut('KeyP', 'p') && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openQuickSearch();
+                return;
+            }
+
+            if (matchesShortcut('KeyN', 'n') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openNewFileModalAt();
+                return;
+            }
+
+            if (matchesShortcut('KeyB', 'b') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                handleToggleSidebarCollapse();
+                return;
+            }
+
+            if ((e.code === 'Backquote' || normalizedKey === '`' || normalizedKey === 'dead') && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                if (e.shiftKey) {
+                    handleRequestNewTerminal();
+                } else {
+                    void openTerminal();
+                }
+            }
+        };
+
+        const handleWindowBlur = () => {
+            clearShortcutChord();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('blur', handleWindowBlur);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('blur', handleWindowBlur);
+        };
+    }, [
+        closeQuickSearch,
+        dialogConfig,
+        handleRequestNewTerminal,
+        handleToggleSidebarCollapse,
+        handleToggleZenMode,
+        openNewFileModalAt,
+        openQuickSearch,
+        openTerminal,
+        showMembersModal,
+        showNewFileModal,
+        showNewWorkspaceModal,
+        showPasswordModal,
+        showPricingModal,
+        showQuickSearch
+    ]);
 
     const resolveDialog = (result: DialogResult) => {
         dialogResolverRef.current?.(result);
@@ -1475,7 +1567,7 @@ function DashboardContent() {
                         <button
                             onClick={handleToggleSidebarCollapse}
                             className="flex items-center justify-center w-8 h-8 bg-surface-800/90 border border-surface-600/60 rounded-full text-surface-300 hover:text-white hover:border-mandy-500/40 hover:bg-surface-700/80 transition shadow-xl shadow-black/30 backdrop-blur"
-                            title="Mostrar panel de archivos"
+                            title="Mostrar panel de archivos (Ctrl+B)"
                             aria-label="Mostrar panel de archivos"
                         >
                             <PanelLeftOpen className="w-4 h-4" />
@@ -1488,7 +1580,7 @@ function DashboardContent() {
                         <button
                             onClick={handleToggleZenMode}
                             className="flex items-center justify-center w-10 h-10 bg-surface-800/90 border border-mandy-500/40 rounded-full text-mandy-200 hover:text-white hover:border-mandy-500/70 transition shadow-xl shadow-black/30 backdrop-blur"
-                            title="Salir de modo Zen"
+                            title="Salir de modo Zen (Ctrl+K Z)"
                             aria-label="Salir de modo Zen"
                         >
                             <Minimize2 className="w-4 h-4" />

@@ -1424,7 +1424,7 @@ export default function MosaicEditor({
             type="button"
             onClick={() => setShowSnippetGallery((current) => !current)}
             className={clsx(
-              'inline-flex h-6 items-center gap-1 rounded-full px-2 transition',
+              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
               showSnippetGallery
                 ? 'bg-blue-600/25 text-blue-200 hover:bg-blue-600/35'
                 : 'text-slate-400 hover:bg-slate-700 hover:text-white'
@@ -1434,30 +1434,31 @@ export default function MosaicEditor({
             aria-pressed={showSnippetGallery}
           >
             <Library className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Snippets</span>
           </button>
           <button
             type="button"
             onClick={() => setShowSemanticWorkbench((current) => !current)}
             className={clsx(
-              'inline-flex h-6 items-center gap-1 rounded-full px-2 transition',
+              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
               showSemanticWorkbench
                 ? 'bg-blue-600/25 text-blue-200 hover:bg-blue-600/35'
                 : 'text-slate-400 hover:bg-slate-700 hover:text-white'
             )}
-            title={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
-            aria-label={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
+            title={showSemanticWorkbench
+              ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
+              : `Abrir mesa semantica (${semanticItemCount} elementos)`}
+            aria-label={showSemanticWorkbench
+              ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
+              : `Abrir mesa semantica (${semanticItemCount} elementos)`}
             aria-pressed={showSemanticWorkbench}
           >
             <BookMarked className="h-3.5 w-3.5" />
-            <span className="hidden md:inline text-[10px] font-semibold">Semantica</span>
-            <span className="text-[10px] font-semibold">{semanticItemCount}</span>
           </button>
           <button
             type="button"
             onClick={() => setViewModeWithSync(viewMode === 'raw' ? 'edit' : 'raw')}
             className={clsx(
-              'inline-flex h-6 items-center justify-center gap-1 rounded-full px-2 transition',
+              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
               viewMode === 'raw'
                 ? 'bg-violet-600/25 text-violet-300 hover:bg-violet-600/35'
                 : 'text-slate-400 hover:bg-slate-700 hover:text-white'
@@ -1467,13 +1468,12 @@ export default function MosaicEditor({
             aria-pressed={viewMode === 'raw'}
           >
             {viewMode === 'raw' ? <PenLine className="h-4 w-4" /> : <FileCode2 className="h-4 w-4" />}
-            <span className="hidden md:inline text-[10px] font-semibold">{viewMode === 'raw' ? 'Editor' : 'Markdown'}</span>
           </button>
           <button
             type="button"
             onClick={() => setViewModeWithSync(viewMode === 'preview' ? 'edit' : 'preview')}
             className={clsx(
-              'inline-flex h-6 items-center justify-center gap-1 rounded-full px-2 transition',
+              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
               viewMode === 'preview'
                 ? 'bg-blue-600/25 text-blue-300 hover:bg-blue-600/35'
                 : 'text-slate-400 hover:bg-slate-700 hover:text-white'
@@ -1483,7 +1483,6 @@ export default function MosaicEditor({
             aria-pressed={viewMode === 'preview'}
           >
             {viewMode === 'preview' ? <PenLine className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-            <span className="hidden md:inline text-[10px] font-semibold">{viewMode === 'preview' ? 'Editar' : 'Vista'}</span>
           </button>
           <button
             type="button"
@@ -1494,11 +1493,6 @@ export default function MosaicEditor({
           >
             {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
-          {docType !== 'file' && viewMode !== 'preview' && (
-            <span className="hidden xl:inline rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] text-slate-500">
-              Selecciona texto + clic derecho para menu semantico
-            </span>
-          )}
         </div>
         {showCompactMenu && menuPos && ReactDOM.createPortal(
           <div
@@ -1549,7 +1543,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showSemanticWorkbench, showSnippetGallery, showToolsPanel, viewMode, docType, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSemanticWorkbench, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, semanticItemCount]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showSemanticWorkbench, showSnippetGallery, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSemanticWorkbench, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, semanticItemCount]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)

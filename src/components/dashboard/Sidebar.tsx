@@ -679,7 +679,7 @@ const Sidebar = ({
               type="button"
               onClick={onToggleSidebarCollapse}
               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-surface-400 transition hover:bg-surface-700/70 hover:text-surface-200"
-              title="Ocultar panel de archivos"
+              title="Ocultar panel de archivos (Ctrl+B)"
               aria-label="Ocultar panel de archivos"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
