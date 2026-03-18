@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ArrowDown, ArrowUp, BookOpen, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, Info, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -81,9 +81,18 @@ interface SidebarProps {
   onFolderDragLeave: (path: string) => void;
   onCreateDoc?: () => void;
   onCreateFolder?: () => void;
+  onCreateDocInFolder?: (folderPath: string) => void;
+  onCreateFolderInFolder?: (folderPath: string) => void;
   onUploadFile?: () => void;
   onUploadFolder?: () => void;
+  onUploadFileToFolder?: (folderPath: string) => void;
+  onUploadFolderToFolder?: (folderPath: string) => void;
   onCreateStGuide?: () => void;
+  onShowDocProperties?: (doc: DocItem) => void;
+  onShowFolderProperties?: (folder: FolderItem) => void;
+  onShowCurrentLocationProperties?: () => void;
+  onRenameFolder?: (folder: FolderItem) => void;
+  onDeleteFolder?: (folder: FolderItem) => void;
 }
 
 const Sidebar = ({
@@ -118,15 +127,24 @@ const Sidebar = ({
   onFolderDragLeave,
   onCreateDoc,
   onCreateFolder,
+  onCreateDocInFolder,
+  onCreateFolderInFolder,
   onUploadFile,
   onUploadFolder,
-  onCreateStGuide
+  onUploadFileToFolder,
+  onUploadFolderToFolder,
+  onCreateStGuide,
+  onShowDocProperties,
+  onShowFolderProperties,
+  onShowCurrentLocationProperties,
+  onRenameFolder,
+  onDeleteFolder
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
-  const { menu: contextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<{
-    type: 'doc' | 'folder';
+  const { menu: contextMenu, open: openContextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<{
+    type: 'doc' | 'folder' | 'sidebar';
     id?: string;
     path?: string;
     folder?: FolderItem;
@@ -487,6 +505,10 @@ const Sidebar = ({
           ${isCollapsedView ? 'overflow-hidden border-r-0 pointer-events-none' : ''}
         `}
         aria-hidden={isCollapsedView}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openContextMenu(e.clientX, e.clientY, { type: 'sidebar', path: activeFolder });
+        }}
       >
         <div className="flex-1 overflow-hidden p-2 flex flex-col">
           <div className="flex-1 min-h-0 flex flex-col">
@@ -550,6 +572,7 @@ const Sidebar = ({
                     return (
                       <div
                         key={doc.id}
+                        {...getContextTriggerProps({ type: 'doc', id: doc.id, doc })}
                         className={`group flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition ${
                           isSelected ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/30' : 'text-surface-200 hover:bg-surface-800/80'
                         }`}
@@ -702,6 +725,11 @@ const Sidebar = ({
                   label: 'Descargar',
                   icon: <Download className="w-4 h-4" />,
                   onClick: () => onDownloadDoc!(contextMenu.data.doc!)
+                }] : []),
+                ...(onShowDocProperties && contextMenu.data.doc ? [{
+                  label: 'Propiedades',
+                  icon: <Info className="w-4 h-4" />,
+                  onClick: () => onShowDocProperties(contextMenu.data.doc!)
                 }] : [])
               ]
             },
@@ -715,14 +743,84 @@ const Sidebar = ({
                 }
               ]
             }
-          ] : [
+          ] : contextMenu.data.type === 'folder' ? [
             {
               actions: [
                 {
                   label: 'Abrir Carpeta',
                   icon: <Folder className="w-4 h-4" />,
                   onClick: () => { if (contextMenu.data.path) setActiveFolder(contextMenu.data.path); }
-                }
+                },
+                ...(onCreateDocInFolder && contextMenu.data.path ? [{
+                  label: 'Nuevo archivo',
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => onCreateDocInFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onCreateFolderInFolder && contextMenu.data.path ? [{
+                  label: 'Nueva carpeta',
+                  icon: <FolderPlus className="w-4 h-4" />,
+                  onClick: () => onCreateFolderInFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onUploadFileToFolder && contextMenu.data.path ? [{
+                  label: 'Subir archivos',
+                  icon: <Upload className="w-4 h-4" />,
+                  onClick: () => onUploadFileToFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onUploadFolderToFolder && contextMenu.data.path ? [{
+                  label: 'Subir carpeta',
+                  icon: <FolderUp className="w-4 h-4" />,
+                  onClick: () => onUploadFolderToFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onRenameFolder && contextMenu.data.folder?.docId ? [{
+                  label: 'Renombrar',
+                  icon: <Pencil className="w-4 h-4" />,
+                  onClick: () => onRenameFolder(contextMenu.data.folder!)
+                }] : []),
+                ...(onShowFolderProperties && contextMenu.data.folder ? [{
+                  label: 'Propiedades',
+                  icon: <Info className="w-4 h-4" />,
+                  onClick: () => onShowFolderProperties(contextMenu.data.folder!)
+                }] : [])
+              ]
+            },
+            {
+              actions: [
+                ...(onDeleteFolder && contextMenu.data.folder && contextMenu.data.folder.kind !== 'system' ? [{
+                  label: 'Eliminar',
+                  icon: <Trash2 className="w-4 h-4" />,
+                  onClick: () => onDeleteFolder(contextMenu.data.folder!),
+                  destructive: true
+                }] : [])
+              ]
+            }
+          ] : [
+            {
+              actions: [
+                ...(onCreateDoc ? [{
+                  label: 'Nuevo archivo',
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => onCreateDoc()
+                }] : []),
+                ...(onCreateFolder ? [{
+                  label: 'Nueva carpeta',
+                  icon: <FolderPlus className="w-4 h-4" />,
+                  onClick: () => onCreateFolder()
+                }] : []),
+                ...(onUploadFile ? [{
+                  label: 'Subir archivos',
+                  icon: <Upload className="w-4 h-4" />,
+                  onClick: () => onUploadFile()
+                }] : []),
+                ...(onUploadFolder ? [{
+                  label: 'Subir carpeta',
+                  icon: <FolderUp className="w-4 h-4" />,
+                  onClick: () => onUploadFolder()
+                }] : []),
+                ...(onShowCurrentLocationProperties ? [{
+                  label: activeFolder ? 'Propiedades de carpeta' : 'Propiedades del espacio',
+                  icon: <Info className="w-4 h-4" />,
+                  onClick: () => onShowCurrentLocationProperties()
+                }] : [])
               ]
             }
           ]}

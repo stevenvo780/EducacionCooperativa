@@ -1371,9 +1371,9 @@ function DashboardContent() {
                     onSelect={(kind: FileKind) => {
                         setShowNewFileModal(false);
                         if (kind === 'st') {
-                            void createStDoc(activeFolder);
+                            void createStDoc(newFileTargetFolder);
                         } else {
-                            void createDoc(undefined, activeFolder);
+                            void createDoc(undefined, newFileTargetFolder);
                         }
                     }}
                     modalFade={modalFade}
@@ -1507,11 +1507,20 @@ function DashboardContent() {
                         onFolderDragOver={handleFolderDragOver}
                         onFolderDrop={handleFolderDrop}
                         onFolderDragLeave={handleFolderDragLeave}
-                        onCreateDoc={() => setShowNewFileModal(true)}
-                        onCreateFolder={() => createFolder()}
-                        onUploadFile={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); fileInputRef.current?.click(); }}
-                        onUploadFolder={() => { setUploadTargetFolder(DEFAULT_FOLDER_NAME); folderInputRef.current?.click(); }}
+                        onCreateDoc={() => openNewFileModalAt()}
+                        onCreateFolder={() => { void createFolderAtPath(); }}
+                        onCreateDocInFolder={openNewFileModalAt}
+                        onCreateFolderInFolder={(folderPath) => { void createFolderAtPath(folderPath); }}
+                        onUploadFile={() => openUploadFilePickerAt()}
+                        onUploadFolder={() => openUploadFolderPickerAt()}
+                        onUploadFileToFolder={openUploadFilePickerAt}
+                        onUploadFolderToFolder={openUploadFolderPickerAt}
                         onCreateStGuide={() => createStGuide()}
+                        onShowDocProperties={(doc) => { void showDocumentProperties(doc); }}
+                        onShowFolderProperties={(folder) => { void showFolderProperties(folder); }}
+                        onShowCurrentLocationProperties={() => { void showCurrentLocationProperties(); }}
+                        onRenameFolder={(folder) => { void promptRenameFolder(folder); }}
+                        onDeleteFolder={(folder) => { void deleteFolder(folder); }}
                     />
 
                     {/* Resize Handle */}
@@ -1561,16 +1570,14 @@ function DashboardContent() {
                                     onActivateTab={setSelectedDocId}
                                     onDropDocOnTile={handleDropDocOnTile}
                                     onDropDocOnEmpty={handleDropDocOnEmpty}
-                                    onCreateFile={() => setShowNewFileModal(true)}
-                                    onCreateStFile={() => setShowNewFileModal(true)}
-                                    onCreateFolder={() => createFolder()}
+                                    onCreateFile={() => openNewFileModalAt()}
+                                    onCreateStFile={() => openNewFileModalAt()}
+                                    onCreateFolder={() => { void createFolderAtPath(); }}
                                     onUploadFile={() => {
-                                        setUploadTargetFolder(activeFolder);
-                                        fileInputRef.current?.click();
+                                        openUploadFilePickerAt(activeFolder);
                                     }}
                                     onUploadFolder={() => {
-                                        setUploadTargetFolder(activeFolder);
-                                        folderInputRef.current?.click();
+                                        openUploadFolderPickerAt(activeFolder);
                                     }}
                                     onDeleteDoc={(docId) => {
                                         const doc = docs.find(d => d.id === docId);
@@ -1614,17 +1621,15 @@ function DashboardContent() {
                                 onDocDragEnd={handleDocDragEnd}
                                 onActiveFolderChange={setActiveFolderSafe}
                                 onOpenDocument={openDocument}
-                                onCreateDoc={() => setShowNewFileModal(true)}
-                                onCreateStDoc={() => setShowNewFileModal(true)}
-                                onCreateFolder={() => createFolder()}
-                                onUploadFile={() => {
-                                    setUploadTargetFolder(activeFolder);
-                                    fileInputRef.current?.click();
-                                }}
-                                onUploadFolder={() => {
-                                    setUploadTargetFolder(activeFolder);
-                                    folderInputRef.current?.click();
-                                }}
+                                onCreateDoc={() => openNewFileModalAt()}
+                                onCreateStDoc={() => openNewFileModalAt()}
+                                onCreateFolder={() => { void createFolderAtPath(); }}
+                                onCreateDocInFolder={openNewFileModalAt}
+                                onCreateFolderInFolder={(folderPath) => { void createFolderAtPath(folderPath); }}
+                                onUploadFile={() => openUploadFilePickerAt(activeFolder)}
+                                onUploadFolder={() => openUploadFolderPickerAt(activeFolder)}
+                                onUploadFileToFolder={openUploadFilePickerAt}
+                                onUploadFolderToFolder={openUploadFolderPickerAt}
                                 onCopyWorkspaceId={(id) => {
                                     navigator.clipboard.writeText(id);
                                     showDialog({ type: DialogKind.Info, title: 'ID copiado', message: id });
@@ -1633,6 +1638,11 @@ function DashboardContent() {
                                 onMoveDocument={promptMoveDocument}
                                 onDeleteDocument={deleteDocument}
                                 onRenameDocument={promptRenameDocument}
+                                onShowDocProperties={(doc) => { void showDocumentProperties(doc); }}
+                                onShowFolderProperties={(folder) => { void showFolderProperties(folder); }}
+                                onShowCurrentLocationProperties={() => { void showCurrentLocationProperties(); }}
+                                onRenameFolder={(folder) => { void promptRenameFolder(folder); }}
+                                onDeleteFolder={(folder) => { void deleteFolder(folder); }}
                                 onReorderDocs={reorderDocsInFolder}
                                 onReorderFolders={reorderFoldersInParent}
                                 getIcon={getIcon}

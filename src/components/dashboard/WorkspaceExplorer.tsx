@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { Briefcase, Cloud, CloudOff, Code, Copy, Download, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Pencil, Plus, Trash2, Upload, User, FilePlus2 } from 'lucide-react';
+import { Briefcase, Cloud, CloudOff, Code, Copy, Download, FilePlus2, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Info, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { isDocUploaded } from '@/services/dashboardDocUtils';
 import { WorkspaceType } from '@/types/workspace';
@@ -91,15 +91,24 @@ interface WorkspaceExplorerProps {
   onCreateDoc: () => void;
   onCreateStDoc?: () => void;
   onCreateFolder: () => void;
+  onCreateDocInFolder?: (folderPath: string) => void;
+  onCreateFolderInFolder?: (folderPath: string) => void;
   onUploadFile: () => void;
   onUploadFolder: () => void;
+  onUploadFileToFolder?: (folderPath: string) => void;
+  onUploadFolderToFolder?: (folderPath: string) => void;
   onCopyWorkspaceId: (id: string) => void;
   onCopyDocument: (doc: DocItem) => void;
   onRenameDocument: (doc: DocItem) => void;
+  onRenameFolder?: (folder: FolderItem) => void;
   onMoveDocument: (doc: DocItem) => void;
   onReorderDocs?: (payload: { folderPath: string; orderedIds: string[] }) => void;
   onReorderFolders?: (payload: { parentPath: string; orderedPaths: string[] }) => void;
   onDeleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
+  onDeleteFolder?: (folder: FolderItem) => void;
+  onShowDocProperties?: (doc: DocItem) => void;
+  onShowFolderProperties?: (folder: FolderItem) => void;
+  onShowCurrentLocationProperties?: () => void;
   getIcon: (doc: DocItem) => React.ReactNode;
   getDocBadge: (doc: DocItem) => string;
   personalWorkspaceId: string;
@@ -126,15 +135,24 @@ const WorkspaceExplorer = ({
   onCreateDoc,
   onCreateStDoc,
   onCreateFolder,
+  onCreateDocInFolder,
+  onCreateFolderInFolder,
   onUploadFile,
   onUploadFolder,
+  onUploadFileToFolder,
+  onUploadFolderToFolder,
   onCopyWorkspaceId,
   onCopyDocument,
   onRenameDocument,
+  onRenameFolder,
   onMoveDocument,
   onReorderDocs,
   onReorderFolders,
   onDeleteDocument,
+  onDeleteFolder,
+  onShowDocProperties,
+  onShowFolderProperties,
+  onShowCurrentLocationProperties,
   getIcon,
   getDocBadge,
   personalWorkspaceId,
@@ -145,7 +163,7 @@ const WorkspaceExplorer = ({
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
   const { menu: contextMenu, open: openContextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<{
-    type: 'doc' | 'folder';
+    type: 'doc' | 'folder' | 'workspace';
     id?: string;
     path?: string;
     folder?: FolderItem;
@@ -418,7 +436,13 @@ const WorkspaceExplorer = ({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-surface-900">
+    <div
+      className="flex-1 min-h-0 flex flex-col bg-surface-900"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        openContextMenu(e.clientX, e.clientY, { type: 'workspace', path: activeFolder });
+      }}
+    >
       <div className="px-6 py-4 border-b border-surface-700/60 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {currentWorkspace?.type === WorkspaceType.Personal ? <User className="w-6 h-6 text-surface-400" /> : <Briefcase className="w-6 h-6 text-mandy-400" />}
@@ -482,6 +506,7 @@ const WorkspaceExplorer = ({
           <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-4 space-y-1">
             <button
               onClick={() => onActiveFolderChange(rootFolderPath)}
+              {...getContextTriggerProps({ type: 'workspace', path: rootFolderPath })}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${activeFolder === rootFolderPath ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
             >
               {currentWorkspace?.type === WorkspaceType.Personal
@@ -548,7 +573,12 @@ const WorkspaceExplorer = ({
                   label: 'Mover a...',
                   icon: <FolderInput className="w-4 h-4" />,
                   onClick: () => { if (contextMenu.data.doc) onMoveDocument(contextMenu.data.doc); }
-                }
+                },
+                ...(onShowDocProperties && contextMenu.data.doc ? [{
+                  label: 'Propiedades',
+                  icon: <Info className="w-4 h-4" />,
+                  onClick: () => onShowDocProperties(contextMenu.data.doc!)
+                }] : [])
               ]
             },
             {
@@ -561,14 +591,89 @@ const WorkspaceExplorer = ({
                 }
               ]
             }
-          ] : [
+          ] : contextMenu.data.type === 'folder' ? [
             {
               actions: [
                 {
                   label: 'Abrir Carpeta',
                   icon: <Folder className="w-4 h-4" />,
                   onClick: () => { if (contextMenu.data.path) onActiveFolderChange(contextMenu.data.path); }
-                }
+                },
+                ...(onCreateDocInFolder && contextMenu.data.path ? [{
+                  label: 'Nuevo archivo',
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => onCreateDocInFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onCreateFolderInFolder && contextMenu.data.path ? [{
+                  label: 'Nueva carpeta',
+                  icon: <FolderPlus className="w-4 h-4" />,
+                  onClick: () => onCreateFolderInFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onUploadFileToFolder && contextMenu.data.path ? [{
+                  label: 'Subir archivos',
+                  icon: <Upload className="w-4 h-4" />,
+                  onClick: () => onUploadFileToFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onUploadFolderToFolder && contextMenu.data.path ? [{
+                  label: 'Subir carpeta',
+                  icon: <FolderUp className="w-4 h-4" />,
+                  onClick: () => onUploadFolderToFolder(contextMenu.data.path!)
+                }] : []),
+                ...(onRenameFolder && contextMenu.data.folder?.docId ? [{
+                  label: 'Renombrar',
+                  icon: <Pencil className="w-4 h-4" />,
+                  onClick: () => onRenameFolder(contextMenu.data.folder!)
+                }] : []),
+                ...(onShowFolderProperties && contextMenu.data.folder ? [{
+                  label: 'Propiedades',
+                  icon: <Info className="w-4 h-4" />,
+                  onClick: () => onShowFolderProperties(contextMenu.data.folder!)
+                }] : [])
+              ]
+            },
+            {
+              actions: [
+                ...(onDeleteFolder && contextMenu.data.folder && contextMenu.data.folder.kind !== 'system' ? [{
+                  label: 'Eliminar',
+                  icon: <Trash2 className="w-4 h-4" />,
+                  onClick: () => onDeleteFolder(contextMenu.data.folder!),
+                  destructive: true
+                }] : [])
+              ]
+            }
+          ] : [
+            {
+              actions: [
+                {
+                  label: 'Abrir espacio',
+                  icon: <Folder className="w-4 h-4" />,
+                  onClick: () => onActiveFolderChange(rootFolderPath)
+                },
+                {
+                  label: 'Nuevo archivo',
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => onCreateDoc()
+                },
+                {
+                  label: 'Nueva carpeta',
+                  icon: <FolderPlus className="w-4 h-4" />,
+                  onClick: () => onCreateFolder()
+                },
+                {
+                  label: 'Subir archivos',
+                  icon: <Upload className="w-4 h-4" />,
+                  onClick: () => onUploadFile()
+                },
+                {
+                  label: 'Subir carpeta',
+                  icon: <FolderUp className="w-4 h-4" />,
+                  onClick: () => onUploadFolder()
+                },
+                ...(onShowCurrentLocationProperties ? [{
+                  label: activeFolder ? 'Propiedades de carpeta' : 'Propiedades del espacio',
+                  icon: <Info className="w-4 h-4" />,
+                  onClick: () => onShowCurrentLocationProperties()
+                }] : [])
               ]
             }
           ]}
