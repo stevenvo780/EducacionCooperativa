@@ -119,6 +119,8 @@ const stStreamParser = {
     if (stream.match('->')) return 'operator';
     if (stream.match('<-')) return 'operator';
     if (stream.match('<>')) return 'operator';
+    if (stream.match('!&')) return 'operator';
+    if (stream.match('!|')) return 'operator';
     if (stream.match('[]') && stream.string.charAt(stream.pos - 3) !== '[') {
       // Only if not part of [[ (already handled above)
       return 'operator';
@@ -126,11 +128,11 @@ const stStreamParser = {
 
     // ── Single-char operators ──
     const ch = stream.peek();
-    if (ch && '~&|!=+-*/%<>'.includes(ch)) {
+    if (ch && '~&|!=+-*/%^<>'.includes(ch)) {
       stream.next();
       return 'operator';
     }
-    if (ch === '≤' || ch === '≥') {
+    if (ch === '≤' || ch === '≥' || ch === '⊕' || ch === '↑' || ch === '↓') {
       stream.next();
       return 'operator';
     }
@@ -192,7 +194,7 @@ export const stLanguage = StreamLanguage.define(stStreamParser);
 
 /**
  * Indentación inteligente para bloques ST.
- * - Después de `proof {` → indentar +2
+ * - Después de una línea que abre bloque con `{` → indentar +2
  * - `} qed` → des-indentar
  * - Mantener indentación del contexto
  */
@@ -205,8 +207,8 @@ const stIndentService = indentService.of((context, pos) => {
   const prevText = prevLine.text.trimEnd();
   const prevIndent = prevLine.text.match(/^(\s*)/)?.[1].length ?? 0;
 
-  // After "proof {" or lines ending with "{" → indent +2
-  if (prevText.endsWith('{') || /\bproof\s*\{?\s*$/.test(prevText)) {
+  // After lines ending with "{" → indent +2
+  if (prevText.endsWith('{')) {
     return prevIndent + 2;
   }
 

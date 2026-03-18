@@ -15,17 +15,17 @@ export interface Snippet {
 export const ST_SNIPPETS: Snippet[] = [
   {
     trigger: 'proof',
-    label: 'proof { ... } qed',
-    description: 'Bloque de demostración',
-    body: 'proof {\n  assume \n  show \n} qed',
-    cursorOffset: 17, // after "assume "
+    label: 'assume ... show ... qed',
+    description: 'Prueba estructurada',
+    body: 'assume h1 : \nshow \nqed',
+    cursorOffset: 12, // after "assume h1 : "
     kind: 'snippet'
   },
   {
     trigger: 'check',
-    label: 'check valid ... under ...',
-    description: 'Verificar validez con perfil',
-    body: 'check valid  under classical.propositional',
+    label: 'check valid ...',
+    description: 'Verificar validez',
+    body: 'check valid ',
     cursorOffset: 12, // after "check valid "
     kind: 'snippet'
   },
@@ -55,17 +55,17 @@ export const ST_SNIPPETS: Snippet[] = [
   },
   {
     trigger: 'forall',
-    label: 'forall x . (...)',
+    label: 'forall x (...)',
     description: 'Cuantificador universal',
-    body: 'forall  . ()',
+    body: 'forall  ()',
     cursorOffset: 7, // after "forall "
     kind: 'snippet'
   },
   {
     trigger: 'exists',
-    label: 'exists x . (...)',
+    label: 'exists x (...)',
     description: 'Cuantificador existencial',
-    body: 'exists  . ()',
+    body: 'exists  ()',
     cursorOffset: 7, // after "exists "
     kind: 'snippet'
   },
@@ -95,25 +95,25 @@ export const ST_SNIPPETS: Snippet[] = [
   },
   {
     trigger: 'profile',
-    label: '#profile ...',
+    label: 'logic ...',
     description: 'Establecer perfil lógico',
-    body: '#profile classical.propositional',
-    cursorOffset: 9, // after "#profile "
+    body: 'logic classical.propositional',
+    cursorOffset: 6, // after "logic "
     kind: 'snippet'
   },
   {
     trigger: 'render',
-    label: 'render ...',
-    description: 'Renderizar fórmula en Unicode',
-    body: 'render ',
+    label: 'render theory',
+    description: 'Renderizar theory / claims / all',
+    body: 'render theory',
     cursorOffset: 7,
     kind: 'snippet'
   },
   {
     trigger: 'explain',
-    label: 'explain',
-    description: 'Explicar el perfil activo',
-    body: 'explain',
+    label: 'explain ...',
+    description: 'Explicar una fórmula o expresión',
+    body: 'explain ',
     cursorOffset: 7,
     kind: 'snippet'
   },
@@ -129,16 +129,24 @@ export const ST_SNIPPETS: Snippet[] = [
     trigger: 'derive',
     label: 'derive ... from ...',
     description: 'Derivar de premisas',
-    body: 'derive  from ',
+    body: 'derive  from {}',
     cursorOffset: 7, // after "derive "
     kind: 'snippet'
   },
   {
     trigger: 'passage',
-    label: 'passage [[...]] formalize as ...',
+    label: 'let p = passage([[...]])',
     description: 'Formalizar texto natural',
-    body: 'passage [[\n  \n]]\nformalize as ',
-    cursorOffset: 13, // inside the brackets
+    body: 'let p1 = passage([[\n  \n]])\nlet f1 = formalize p1 as ',
+    cursorOffset: 18, // inside [[ ... ]]
+    kind: 'snippet'
+  },
+  {
+    trigger: 'export',
+    label: 'export let ...',
+    description: 'Exportar un símbolo para importarlo desde otro archivo',
+    body: 'export let  = ',
+    cursorOffset: 11,
     kind: 'snippet'
   }
 ];

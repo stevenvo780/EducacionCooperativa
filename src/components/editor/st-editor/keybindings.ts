@@ -207,10 +207,10 @@ export function handleSmartNewline(
   const indentMatch = lineText.match(/^(\s*)/);
   const currentIndent = indentMatch ? indentMatch[1] : '';
 
-  // Increase indent after proof {, assume, show
+  // Increase indent after block openers and proof headers
   const trimmed = lineText.trim();
   let newIndent = currentIndent;
-  if (trimmed.endsWith('{') || /^(proof|assume|asumir|show|demostrar)\b/.test(trimmed)) {
+  if (trimmed.endsWith('{') || /^(assume|asumir|show|demostrar)\b/.test(trimmed)) {
     newIndent = `${currentIndent}  `;
   }
   // Decrease indent for } qed

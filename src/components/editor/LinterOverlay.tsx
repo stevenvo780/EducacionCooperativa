@@ -38,10 +38,10 @@ function generateQuickFixes(d: GenericDiagnostic, content: string): QuickFix[] {
 
   // Missing profile
   if (msg.includes('profile') || msg.includes('perfil')) {
-    if (!content.includes('#profile')) {
+    if (!content.includes('logic ')) {
       fixes.push({
-        label: 'Insertar #profile classical.propositional',
-        replacement: '#profile classical.propositional\n'
+        label: 'Insertar logic classical.propositional',
+        replacement: 'logic classical.propositional\n'
       });
     }
   }

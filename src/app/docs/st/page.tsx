@@ -50,6 +50,8 @@ interface LogicCourse {
   lessonExample: string;
 }
 
+const ST_RUNTIME_VERSION = '2.0.0';
+
 /* ──────────── Data: navigation ──────────── */
 const NAV: NavItem[] = [
   { id: 'intro', label: 'Introducción' },
@@ -104,13 +106,18 @@ const SYNTAX: SyntaxBlock[] = [
     note: 'ST soporta if, else if, else, for y while sobre condiciones lógicas reales.'
   },
   {
-    title: 'Funciones y módulos',
-    code: 'fn revisar(X) {\n  explain X\n  check satisfiable X\n  return X\n}\n\nimport "utilidades.st"\n\ntheory Base {\n  let alias = P -> Q\n  private let secreto = R & S\n}',
-    note: 'ST también soporta fn, return, import y theory para estructurar materiales y librerías.'
+    title: 'Funciones, export e instancias',
+    code: 'fn revisar(X) {\n  explain X\n  check satisfiable X\n  return X\n}\n\nexport let regla = P -> Q\nimport "utilidades.st"\n\ntheory Caja(valor) {\n  let dato = valor\n  fn ver() {\n    print dato\n  }\n}\n\nlet caja = Caja("demo")\ncaja.ver()',
+    note: 'ST soporta fn, return, export, import, theory parametrizadas e invocación de métodos con dot notation.'
   },
   {
     title: 'Operadores proposicionales',
     code: '!P          // negación\nP & Q       // conjunción\nP | Q       // disyunción\nP -> Q      // implicación material\nP <-> Q     // bicondicional'
+  },
+  {
+    title: 'Operadores extendidos',
+    code: 'P ^ Q       // XOR\nP ⊕ Q       // XOR unicode\nP !& Q      // NAND\nP ↑ Q       // NAND unicode\nP !| Q      // NOR\nP ↓ Q       // NOR unicode',
+    note: 'El lexer real acepta tanto formas ASCII como Unicode para XOR, NAND y NOR.'
   },
   {
     title: 'Cuantificadores (FOL)',
@@ -121,6 +128,11 @@ const SYNTAX: SyntaxBlock[] = [
     title: 'Operadores modales / temporales',
     code: '[](P)       // necesidad □ / siempre G / obligación O / conocimiento K\n<>(P)       // posibilidad ◇ / eventualmente F / permisión P̂ / creencia B̂\nX(P)        // next (solo temporal.ltl)',
     note: 'El significado depende del perfil activo.'
+  },
+  {
+    title: 'Helpers nativos del runtime',
+    code: 'print typeof(2 + 3)\nprint is_valid(P -> P)\nprint is_satisfiable(P & Q)\nprint get_atoms((P -> Q) & R)\nlet nombre = input("Nombre:")',
+    note: 'Estas funciones nativas existen en el runtime real y son especialmente útiles en CLI/REPL.'
   }
 ];
 
@@ -177,9 +189,34 @@ const COMMANDS: CommandBlock[] = [
     example: 'logic classical.propositional\naxiom a1 : P -> Q\nrender theory'
   },
   {
+    cmd: 'refute <φ>',
+    desc: 'Alias directo de countermodel para refutar una fórmula.',
+    example: 'refute P -> Q'
+  },
+  {
+    cmd: 'st run <archivo.st>',
+    desc: 'Ejecuta un script completo desde CLI.',
+    example: 'st run teoria.st'
+  },
+  {
+    cmd: 'st check <archivo.st>',
+    desc: 'Valida sintaxis, warnings y resultados negativos relevantes sin abrir el editor.',
+    example: 'st check teoria.st'
+  },
+  {
+    cmd: 'st eval "<expresión>"',
+    desc: 'Evalúa una expresión rápida; si no declaras logic, asume classical.propositional.',
+    example: 'st eval "check valid (P -> P)"'
+  },
+  {
     cmd: 'st profiles',
     desc: 'Lista los perfiles lógicos disponibles desde la CLI real actual.',
     example: 'st profiles'
+  },
+  {
+    cmd: 'st repl / st protocol',
+    desc: 'Abre el REPL interactivo o el modo JSON-RPC para integración con editores.',
+    example: 'st repl\nst protocol'
   }
 ];
 
@@ -226,7 +263,9 @@ const RESERVED_WORD_GROUPS: ReservedWordGroup[] = [
       { keyword: 'prove / probar', purpose: 'Intenta probar una meta usando la teoría cargada.' },
       { keyword: 'check / verificar', purpose: 'Abre una verificación de validez, satisfacibilidad o equivalencia.' },
       { keyword: 'valid / valido', purpose: 'Pregunta si una fórmula es válida.' },
+      { keyword: 'invalid / invalido', purpose: 'Condición derivada útil en if/while cuando una fórmula no es válida.' },
       { keyword: 'satisfiable / satisfacible', purpose: 'Pregunta si una fórmula tiene algún modelo.' },
+      { keyword: 'unsatisfiable / insatisfacible', purpose: 'Condición derivada útil en if/while cuando una fórmula no tiene modelos.' },
       { keyword: 'equivalent / equivalente', purpose: 'Pregunta si dos fórmulas dicen lo mismo lógicamente.' },
       { keyword: 'countermodel / contramodelo', purpose: 'Busca una valuación o modelo que haga fallar una fórmula.' },
       { keyword: 'truth_table / tabla_verdad', purpose: 'Genera tabla de verdad cuando el perfil lo soporta.' },
@@ -252,11 +291,12 @@ const RESERVED_WORD_GROUPS: ReservedWordGroup[] = [
     title: 'Estructuración y prueba',
     items: [
       { keyword: 'import / importar', purpose: 'Carga otro archivo `.st` dentro del contexto actual.' },
+      { keyword: 'export / exportar', purpose: 'Expone un let, axiom, theorem, fn o theory para que sea importable.' },
       { keyword: 'theory / teoria', purpose: 'Agrupa conocimiento con encapsulación.' },
       { keyword: 'extends / extiende', purpose: 'Hace que una teoría herede miembros públicos de otra.' },
       { keyword: 'private / privado', purpose: 'Marca miembros internos no visibles fuera de la teoría.' },
       { keyword: 'assume / asumir', purpose: 'Introduce hipótesis temporales dentro de un bloque de prueba.' },
-      { keyword: 'show / demostrar', purpose: 'Fija la meta de un proof block.' },
+      { keyword: 'show / demostrar', purpose: 'Fija la meta de una prueba estructurada iniciada con assume.' },
       { keyword: 'qed', purpose: 'Cierra un bloque de prueba estructurada.' }
     ]
   },
@@ -282,6 +322,19 @@ const RESERVED_WORD_GROUPS: ReservedWordGroup[] = [
       { keyword: 'exists / existe', purpose: 'Cuantificador existencial de FOL.' },
       { keyword: 'next / siguiente', purpose: 'Operador temporal de próximo estado.' },
       { keyword: 'until / hasta', purpose: 'Operador temporal de persistencia hasta un evento.' }
+    ]
+  },
+  {
+    title: 'Operadores extendidos y helpers',
+    items: [
+      { keyword: 'nand / !& / ↑', purpose: 'Negación de la conjunción.' },
+      { keyword: 'nor / !| / ↓', purpose: 'Negación de la disyunción.' },
+      { keyword: 'xor / ^ / ⊕', purpose: 'Disyunción exclusiva.' },
+      { keyword: 'typeof(...)', purpose: 'Devuelve el tipo inferido de un valor o fórmula.' },
+      { keyword: 'is_valid(...)', purpose: 'Devuelve "True" o "False" según la validez del argumento.' },
+      { keyword: 'is_satisfiable(...)', purpose: 'Devuelve "True" o "False" según la satisfacibilidad del argumento.' },
+      { keyword: 'get_atoms(...)', purpose: 'Lista los átomos usados por una fórmula.' },
+      { keyword: 'input(...)', purpose: 'Solicita entrada interactiva en CLI/REPL.' }
     ]
   }
 ];
@@ -736,7 +789,7 @@ export default function STDocsPage() {
           <div className="flex-1" />
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-800 border border-surface-700 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            v1.5.8
+            v{ST_RUNTIME_VERSION}
           </div>
         </div>
       </header>
@@ -770,7 +823,10 @@ export default function STDocsPage() {
                 explorar y guionar razonamientos. Permite definir axiomas, teoremas, variables, teorías,
                 funciones y comandos de verificación (validez, satisfacibilidad, equivalencia, derivación,
                 tablas de verdad, análisis y explicación) sobre <strong className="text-mandy-400">11 perfiles</strong>
-                distintos, desde la clásica proposicional hasta la probabilística y la aritmética.
+                distintos, desde la clásica proposicional hasta la probabilística y la aritmética. El runtime
+                actual también incluye <strong className="text-white">import/export selectivo</strong>, teorías parametrizadas,
+                operadores extendidos (<code className="text-mandy-400">xor</code>, <code className="text-mandy-400">nand</code>, <code className="text-mandy-400">nor</code>)
+                y helpers nativos para inspección y automatización.
               </p>
               <p className="text-surface-400 text-sm">
                 Cada perfil implementa un motor semántico propio (tablas de verdad, tableaux
@@ -780,8 +836,10 @@ export default function STDocsPage() {
                 <code className="text-mandy-400"> print</code>, <code className="text-mandy-400">if</code>,
                 <code className="text-mandy-400"> for</code>, <code className="text-mandy-400">while</code>,
                 <code className="text-mandy-400"> fn</code>, <code className="text-mandy-400">theory</code>,
-                <code className="text-mandy-400"> import</code>, <code className="text-mandy-400">analyze</code>,
-                <code className="text-mandy-400"> explain</code> y <code className="text-mandy-400">render</code>.
+                <code className="text-mandy-400"> import</code>, <code className="text-mandy-400">export</code>,
+                <code className="text-mandy-400">analyze</code>, <code className="text-mandy-400"> explain</code>,
+                <code className="text-mandy-400">render</code>, <code className="text-mandy-400">typeof</code>,
+                <code className="text-mandy-400">is_valid</code>, <code className="text-mandy-400">get_atoms</code> e <code className="text-mandy-400">input</code>.
               </p>
               <div className="flex flex-wrap gap-2 pt-2">
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">11 perfiles</span>
@@ -1255,9 +1313,19 @@ export default function STDocsPage() {
                   <CopyBlock code={'logic classical.propositional\nfn revisar(X) {\n  print "revisando"\n  explain X\n  check satisfiable X\n  return X\n}\n\nrevisar((P -> Q))'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Módulos y encapsulación</h4>
-                  <p className="text-xs text-surface-400 mb-3">Con <code className="text-mandy-400">import</code> y <code className="text-mandy-400">theory</code> puedes organizar materiales largos y reutilizables.</p>
-                  <CopyBlock code={'logic classical.propositional\n\ntheory Base {\n  let alias = P -> Q\n  private let secreto = R & S\n  axiom regla : P -> Q\n}\n\nprint Base.alias\nrender theory'} />
+                  <h4 className="text-sm font-bold text-white mb-2">Export e import selectivo</h4>
+                  <p className="text-xs text-surface-400 mb-3">Los archivos importados solo exponen lo que marques con <code className="text-mandy-400">export</code>. Eso permite modularizar sin contaminar el scope.</p>
+                  <CopyBlock code={'// utilidades.st\nexport let regla = P -> Q\nexport fn revisar(X) {\n  print X\n}\n\n// curso.st\nimport "utilidades.st"\nprint regla\nrevisar(P)'} />
+                </div>
+                <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                  <h4 className="text-sm font-bold text-white mb-2">Teorías parametrizadas e instancias</h4>
+                  <p className="text-xs text-surface-400 mb-3">Una <code className="text-mandy-400">theory</code> puede declarar parámetros, métodos e incluso heredar miembros públicos con <code className="text-mandy-400">extends</code>.</p>
+                  <CopyBlock code={'logic classical.propositional\n\ntheory Caja(valor) {\n  let dato = valor\n  fn ver() {\n    print dato\n  }\n}\n\nlet caja = Caja("demo")\nprint caja.dato\ncaja.ver()'} />
+                </div>
+                <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                  <h4 className="text-sm font-bold text-white mb-2">Funciones nativas del runtime</h4>
+                  <p className="text-xs text-surface-400 mb-3">El intérprete incluye helpers ya listos para inspección, validación rápida, extracción de átomos y entrada interactiva.</p>
+                  <CopyBlock code={'logic arithmetic\nprint typeof(2 + 3)\nprint is_valid(2 + 3 < 10)\nprint is_satisfiable(5 > 3)\nprint get_atoms((P -> Q) & R)\nlet nombre = input("Nombre:")'} />
                 </div>
               </div>
             </div>
@@ -1406,7 +1474,8 @@ export default function STDocsPage() {
               <p className="text-surface-300 text-sm leading-relaxed">
                 El Text Layer extiende ST para vincular lógica formal con documentos en
                 lenguaje natural. Permite formalizar pasajes, declarar claims verificables
-                y agregar metadatos de soporte y confianza.
+                y agregar metadatos de soporte, confianza y contexto. El runtime renderiza
+                <code className="text-mandy-400">claims</code>, <code className="text-mandy-400">theory</code> y <code className="text-mandy-400">all</code>.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
@@ -1426,8 +1495,8 @@ export default function STDocsPage() {
                 </div>
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                   <h5 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">4. Verificar</h5>
-                  <CopyBlock code={'render claims\nrender theory'} />
-                  <p className="text-xs text-surface-400">Usa render para inspeccionar claims, confianza, soporte y teoría compilada.</p>
+                  <CopyBlock code={'render claims\nrender theory\nrender all'} />
+                  <p className="text-xs text-surface-400">Usa render para inspeccionar claims, confianza, soporte, contexto y teoría compilada.</p>
                 </div>
               </div>
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
@@ -1492,7 +1561,7 @@ export default function STDocsPage() {
               </p>
               <CopyBlock
                 label="Ejecutar validación"
-                code="npm run validate:st-docs\n# Ejecuta los 24 scripts .st contra el CLI de ST\n# Salida esperada: todos PASS"
+                code="npm run validate:st-docs\n# Ejecuta los 24 scripts .st contra el CLI real de ST\n# Salida esperada: ejecución completa sin errores"
               />
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Scripts de validación disponibles</h5>
@@ -1519,7 +1588,7 @@ export default function STDocsPage() {
           {/* Footer */}
           <footer className="border-t border-surface-700/30 pt-8 pb-16 text-center">
             <p className="text-xs text-surface-500">
-              Documentación generada y validada automáticamente contra ST v1.5.8.
+              Documentación generada y validada automáticamente contra ST v{ST_RUNTIME_VERSION}.
             </p>
             <div className="flex justify-center gap-4 mt-4">
               <Link href="/docs" className="text-xs text-mandy-400 hover:text-mandy-300 transition">

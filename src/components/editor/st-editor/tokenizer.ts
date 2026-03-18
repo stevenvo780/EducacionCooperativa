@@ -34,24 +34,26 @@ export const KEYWORDS = new Set([
   'claim', 'support', 'confidence', 'context', 'render', 'explain',
   'forall', 'exists', 'analyze', 'refute',
   'next', 'until', 'import', 'assume', 'show', 'qed',
-  'theory', 'extends', 'private', 'print', 'set', 'if', 'else', 'for', 'in', 'while', 'fn', 'return',
+  'export', 'theory', 'extends', 'private', 'print', 'set', 'if', 'else', 'for', 'in', 'while', 'fn', 'return',
+  'nand', 'nor', 'xor',
   // Aliases en español
   'logica', 'axioma', 'teorema', 'derivar', 'desde', 'verificar',
   'probar', 'contramodelo', 'refutar', 'tabla_verdad', 'sea', 'pasaje',
   'formalizar', 'como', 'afirmacion', 'soporte', 'confianza', 'contexto',
   'mostrar', 'explicar', 'analizar', 'paratodo', 'existe',
   'siguiente', 'hasta', 'importar', 'asumir', 'demostrar',
-  'teoria', 'extiende', 'privado', 'imprimir', 'asignar', 'si', 'sino', 'para', 'en', 'mientras', 'funcion', 'retornar'
+  'exportar', 'teoria', 'extiende', 'privado', 'imprimir', 'asignar', 'si', 'sino', 'para', 'en', 'mientras', 'funcion', 'retornar'
 ]);
 
 export const BUILTINS = new Set([
-  'valid', 'satisfiable', 'equivalent', 'claims',
-  'valido', 'satisfacible', 'equivalente'
+  'valid', 'invalid', 'satisfiable', 'unsatisfiable', 'equivalent', 'claims',
+  'typeof', 'is_valid', 'is_satisfiable', 'get_atoms', 'input',
+  'valido', 'invalido', 'satisfacible', 'insatisfacible', 'equivalente'
 ]);
 
 export const PROFILES = new Set([
-  'classical.propositional', 'classical.first_order', 'classical.first-order',
-  'modal.k', 'modal.s4', 'modal.s5', 'modal.t',
+  'classical.propositional', 'classical.first_order',
+  'modal.k',
   'paraconsistent.belnap',
   'deontic.standard',
   'epistemic.s5',
@@ -176,6 +178,16 @@ export function tokenizeLine(
       i += 2;
       continue;
     }
+    if (line[i] === '!' && line[i + 1] === '&') {
+      tokens.push({ text: '!&', category: 'operator' });
+      i += 2;
+      continue;
+    }
+    if (line[i] === '!' && line[i + 1] === '|') {
+      tokens.push({ text: '!|', category: 'operator' });
+      i += 2;
+      continue;
+    }
     if (line[i] === '-' && line[i + 1] === '>') {
       tokens.push({ text: '->', category: 'operator' });
       i += 2;
@@ -186,7 +198,7 @@ export function tokenizeLine(
       i += 2;
       continue;
     }
-    if ('~&|!=+-*/%<>'.includes(line[i]) || line[i] === '≤' || line[i] === '≥') {
+    if ('~&|!=+-*/%^<>'.includes(line[i]) || line[i] === '≤' || line[i] === '≥' || line[i] === '⊕' || line[i] === '↑' || line[i] === '↓') {
       tokens.push({ text: line[i], category: 'operator' });
       i++;
       continue;
@@ -312,15 +324,15 @@ export function extractDynamicCompletions(code: string): CompletionItem[] {
   const lines = code.split('\n');
   for (const line of lines) {
     const trimmed = line.trim();
-    const axiomMatch = trimmed.match(/^(?:axiom|axioma)\s+(\w+)\s*[=:]/i);
+    const axiomMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:axiom|axioma)\s+(\w+)\s*[=:]/i);
     if (axiomMatch) {
       items.push({ label: axiomMatch[1], kind: 'variable', detail: 'axiom (definido en script)' });
     }
-    const theoremMatch = trimmed.match(/^(?:theorem|teorema)\s+(\w+)\s*[=:]/i);
+    const theoremMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:theorem|teorema)\s+(\w+)\s*[=:]/i);
     if (theoremMatch) {
       items.push({ label: theoremMatch[1], kind: 'variable', detail: 'theorem (definido en script)' });
     }
-    const letMatch = trimmed.match(/^(?:let|sea)\s+(\w+)\s*=/i);
+    const letMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:let|sea)\s+(\w+)\s*=/i);
     if (letMatch) {
       items.push({ label: letMatch[1], kind: 'variable', detail: 'let (definido en script)' });
     }
@@ -328,11 +340,11 @@ export function extractDynamicCompletions(code: string): CompletionItem[] {
     if (claimMatch) {
       items.push({ label: claimMatch[1], kind: 'variable', detail: 'claim (definido en script)' });
     }
-    const theoryMatch = trimmed.match(/^(?:theory|teoria)\s+(\w+)/i);
+    const theoryMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:theory|teoria)\s+(\w+)/i);
     if (theoryMatch) {
       items.push({ label: theoryMatch[1], kind: 'type', detail: 'theory (definida en script)' });
     }
-    const fnMatch = trimmed.match(/^(?:fn|funcion)\s+(\w+)\s*\(/i);
+    const fnMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:fn|funcion)\s+(\w+)\s*\(/i);
     if (fnMatch) {
       items.push({ label: fnMatch[1], kind: 'function', detail: 'función (definida en script)' });
     }
