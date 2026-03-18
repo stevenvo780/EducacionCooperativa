@@ -165,7 +165,7 @@ interface UseDocumentActionsOptions {
 
 interface UseDocumentActionsResult {
     createFolderRecord: (folderName: string, parentOverride?: string) => Promise<boolean>;
-    createFolder: () => Promise<void>;
+    createFolder: (parentFolder?: string) => Promise<void>;
     moveDocumentToFolder: (docId: string, folderPath: string) => Promise<void>;
     renameDocument: (doc: DocItem, nextName: string) => Promise<void>;
     promptRenameDocument: (doc: DocItem) => Promise<void>;
@@ -228,7 +228,7 @@ export function useDocumentActions({
         }
     };
 
-    const createFolder = async () => {
+    const createFolder = async (parentFolder?: string) => {
         const result = await showDialog({
             type: DialogKind.Input,
             title: 'Nueva carpeta',
@@ -238,7 +238,7 @@ export function useDocumentActions({
         if (!result.confirmed) return;
         const trimmed = (result.value ?? '').trim();
         if (!trimmed) return;
-        const parentPath = normalizePath(activeFolder);
+        const parentPath = normalizePath(parentFolder ?? activeFolder);
         const fullPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
         const exists = folders.some(folder => folder.path.toLowerCase() === fullPath.toLowerCase());
         if (exists) {
