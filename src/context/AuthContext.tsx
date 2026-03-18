@@ -254,8 +254,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const resetPassword = async (email: string) => {
         try {
+            const normalizedEmail = email.toLowerCase().trim();
+            const prepareRes = await fetch('/api/auth/prepare-reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: normalizedEmail })
+            });
+
+            if (!prepareRes.ok) {
+                const errorData = await prepareRes.json().catch(() => ({}));
+                throw new Error(typeof errorData?.error === 'string'
+                    ? errorData.error
+                    : 'Error al preparar el correo de recuperacion');
+            }
+
             const firebaseAuth = getAuth();
-            await sendPasswordResetEmail(firebaseAuth, email);
+            await sendPasswordResetEmail(firebaseAuth, normalizedEmail);
         } catch (error: unknown) {
             const errorCode = getErrorCode(error);
             if (errorCode === 'auth/user-not-found') {

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/server-auth';
+import { isAdminUser, requireAuth } from '@/lib/server-auth';
 
 const hasFirestoreCredentials = Boolean(
     process.env.FIREBASE_SERVICE_ACCOUNT ||
@@ -15,6 +15,10 @@ export async function GET(req: NextRequest) {
     const auth = await requireAuth(req);
     if (!auth) {
         return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    if (!(await isAdminUser(auth.uid))) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (!hasFirestoreCredentials) {

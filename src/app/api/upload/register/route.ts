@@ -5,6 +5,9 @@ import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { calculateOwnedStorageUsageBytes } from '@/lib/storage-usage';
+import { formatStorageSize, getStorageLimitMB } from '@/types/subscription';
+import { getActivePlanId } from '@/app/api/payments/helpers';
 
 export const runtime = 'nodejs';
 
@@ -64,6 +67,22 @@ export async function POST(req: NextRequest) {
         }
         const [metadata] = await fileRef.getMetadata();
         const size = parseInt(String(metadata.size || '0'), 10) || 0;
+
+        const planId = await getActivePlanId(auth.uid);
+        const limitMB = getStorageLimitMB(planId);
+        const limitBytes = limitMB * 1024 * 1024;
+        const currentUsageBytes = await calculateOwnedStorageUsageBytes(auth.uid);
+
+        if (currentUsageBytes + size > limitBytes) {
+            await fileRef.delete().catch(() => {});
+            const usedMB = Math.round((currentUsageBytes / (1024 * 1024)) * 100) / 100;
+            return NextResponse.json({
+                error: `Límite de almacenamiento alcanzado. Usas ${formatStorageSize(usedMB)} de ${formatStorageSize(limitMB)}. Mejora tu plan para subir más archivos.`,
+                code: 'STORAGE_LIMIT_EXCEEDED',
+                usedMB,
+                limitMB
+            }, { status: 413 });
+        }
 
         // Generate permanent signed URL
         const [url] = await fileRef.getSignedUrl({

@@ -16,17 +16,11 @@ const getTokenFromRequest = (req: NextRequest) => {
     }
   }
 
-  try {
-    const url = new URL(req.url);
-    const token = url.searchParams.get('token');
-    if (token) {
-      return token;
-    }
-  } catch {
-  }
-
   return null;
 };
+
+const allowInsecureAuth = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+const INSECURE_UID_PATTERN = /^[A-Za-z0-9:_-]{1,128}$/;
 
 export const requireAuth = async (req: NextRequest): Promise<AuthContext | null> => {
   const token = getTokenFromRequest(req);
@@ -38,6 +32,9 @@ export const requireAuth = async (req: NextRequest): Promise<AuthContext | null>
     const email = decoded.email ?? (decoded as { userEmail?: string }).userEmail ?? null;
     return { uid: decoded.uid, email };
   } catch {
+    if (allowInsecureAuth && INSECURE_UID_PATTERN.test(token)) {
+      return { uid: token, email: null };
+    }
     return null;
   }
 };

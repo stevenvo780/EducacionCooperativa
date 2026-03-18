@@ -5,8 +5,9 @@ import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, sanitizeFileName } from '@/lib/storage-path';
 import { calculateOwnedStorageUsageBytes } from '@/lib/storage-usage';
-import { Plan, SubscriptionStatus, formatStorageSize, getStorageLimitMB, type PlanId } from '@/types/subscription';
+import { formatStorageSize, getStorageLimitMB } from '@/types/subscription';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { getActivePlanId } from '@/app/api/payments/helpers';
 
 export const runtime = 'nodejs';
 
@@ -46,23 +47,19 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Check storage limit for the user's plan
-        const subSnap = await adminDb.collection('subscriptions').doc(auth.uid).get();
-        let planId: PlanId = Plan.Free;
-        if (subSnap.exists) {
-            const subData = subSnap.data();
-            if (subData?.status === SubscriptionStatus.Active && subData?.planId) {
-                planId = subData.planId as PlanId;
-            }
+        const fileSize = typeof body.fileSize === 'number' ? body.fileSize : NaN;
+        if (!Number.isFinite(fileSize) || fileSize <= 0) {
+            return NextResponse.json({ error: 'fileSize must be a positive number' }, { status: 400 });
         }
+
+        // Check storage limit for the user's plan
+        const planId = await getActivePlanId(auth.uid);
         const limitMB = getStorageLimitMB(planId);
         const limitBytes = limitMB * 1024 * 1024;
 
         // Calculate current usage
         const totalBytes = await calculateOwnedStorageUsageBytes(auth.uid);
 
-        // Estimate new file size from Content-Length hint (client should send fileSize)
-        const fileSize = typeof body.fileSize === 'number' ? body.fileSize : 0;
         if (totalBytes + fileSize > limitBytes) {
             const usedMB = Math.round((totalBytes / (1024 * 1024)) * 100) / 100;
             return NextResponse.json({
