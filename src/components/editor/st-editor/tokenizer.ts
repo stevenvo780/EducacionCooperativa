@@ -34,12 +34,14 @@ export const KEYWORDS = new Set([
   'claim', 'support', 'confidence', 'context', 'render', 'explain',
   'forall', 'exists', 'analyze', 'refute',
   'next', 'until', 'import', 'assume', 'show', 'qed',
+  'theory', 'extends', 'private', 'print', 'set', 'if', 'else', 'for', 'in', 'while', 'fn', 'return',
   // Aliases en español
   'logica', 'axioma', 'teorema', 'derivar', 'desde', 'verificar',
   'probar', 'contramodelo', 'refutar', 'tabla_verdad', 'sea', 'pasaje',
   'formalizar', 'como', 'afirmacion', 'soporte', 'confianza', 'contexto',
   'mostrar', 'explicar', 'analizar', 'paratodo', 'existe',
-  'siguiente', 'hasta', 'importar', 'asumir', 'demostrar'
+  'siguiente', 'hasta', 'importar', 'asumir', 'demostrar',
+  'teoria', 'extiende', 'privado', 'imprimir', 'asignar', 'si', 'sino', 'para', 'en', 'mientras', 'funcion', 'retornar'
 ]);
 
 export const BUILTINS = new Set([
@@ -56,7 +58,8 @@ export const PROFILES = new Set([
   'intuitionistic.propositional',
   'temporal.ltl',
   'probabilistic.basic',
-  'aristotelian.syllogistic'
+  'aristotelian.syllogistic',
+  'arithmetic'
 ]);
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -153,14 +156,24 @@ export function tokenizeLine(
       i += 2;
       continue;
     }
-    if (line[i] === '<' && line[i + 1] === '>') {
-      tokens.push({ text: '<>', category: 'operator' });
-      i += 2;
-      continue;
-    }
     if (line[i] === '<' && line[i + 1] === '-' && line[i + 2] === '>') {
       tokens.push({ text: '<->', category: 'operator' });
       i += 3;
+      continue;
+    }
+    if (line[i] === '<' && line[i + 1] === '=') {
+      tokens.push({ text: '<=', category: 'operator' });
+      i += 2;
+      continue;
+    }
+    if (line[i] === '>' && line[i + 1] === '=') {
+      tokens.push({ text: '>=', category: 'operator' });
+      i += 2;
+      continue;
+    }
+    if (line[i] === '<' && line[i + 1] === '>') {
+      tokens.push({ text: '<>', category: 'operator' });
+      i += 2;
       continue;
     }
     if (line[i] === '-' && line[i + 1] === '>') {
@@ -173,7 +186,7 @@ export function tokenizeLine(
       i += 2;
       continue;
     }
-    if ('~&|!='.includes(line[i])) {
+    if ('~&|!=+-*/%<>'.includes(line[i]) || line[i] === '≤' || line[i] === '≥') {
       tokens.push({ text: line[i], category: 'operator' });
       i++;
       continue;
@@ -314,6 +327,14 @@ export function extractDynamicCompletions(code: string): CompletionItem[] {
     const claimMatch = trimmed.match(/^(?:claim|afirmacion)\s+(\w+)\s*=/i);
     if (claimMatch) {
       items.push({ label: claimMatch[1], kind: 'variable', detail: 'claim (definido en script)' });
+    }
+    const theoryMatch = trimmed.match(/^(?:theory|teoria)\s+(\w+)/i);
+    if (theoryMatch) {
+      items.push({ label: theoryMatch[1], kind: 'type', detail: 'theory (definida en script)' });
+    }
+    const fnMatch = trimmed.match(/^(?:fn|funcion)\s+(\w+)\s*\(/i);
+    if (fnMatch) {
+      items.push({ label: fnMatch[1], kind: 'function', detail: 'función (definida en script)' });
     }
   }
   return items;

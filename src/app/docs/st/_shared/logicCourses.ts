@@ -56,6 +56,8 @@ export const logicCourses: LogicCoursePageData[] = [
       'Dominar el significado exacto de !, &, |, -> y <->.',
       'Distinguir entre validez, satisfacibilidad, contradicción y contingencia.',
       'Usar derive, truth_table, check valid, check satisfiable, check equivalent y countermodel con soltura.',
+      'Introducir aliases con let para volver más legible una teoría ejecutable.',
+      'Usar analyze y explain para convertir ejercicios lógicos en clases paso a paso.',
       'Leer y construir demostraciones basadas en Modus Ponens, Modus Tollens y reglas estructurales.',
       'Entender las equivalencias fundamentales que permiten reescribir fórmulas sin cambiar su valor lógico.'
     ],
@@ -147,6 +149,16 @@ export const logicCourses: LogicCoursePageData[] = [
         title: 'Contramodelo',
         description: 'Usa countermodel cuando una fórmula no es válida y quieres ver por qué falla.',
         code: 'logic classical.propositional\ncountermodel P -> Q\ncountermodel P <-> Q'
+      },
+      {
+        title: 'Variables lógicas con let',
+        description: 'Usa let para nombrar reglas, hechos y descripciones, y luego reutilizarlos en derivaciones y verificaciones.',
+        code: 'logic classical.propositional\nlet regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = "Estudio hoy" : E\nderive A from {regla, hecho}\nprint regla'
+      },
+      {
+        title: 'Analizar y explicar inferencias',
+        description: 'Usa analyze para evaluar una inferencia completa y explain para desplegar lectura pedagógica de una fórmula.',
+        code: 'logic classical.propositional\nanalyze {E, E -> A} -> A\nexplain (E -> A)'
       }
     ],
     workedExamples: [
@@ -174,6 +186,11 @@ export const logicCourses: LogicCoursePageData[] = [
         title: 'Ejemplo 5 · Mini teoría completa',
         description: 'Un guion más largo que combina teoría, validez, equivalencia, tabla de verdad y contramodelo en un mismo flujo.',
         code: 'logic classical.propositional\naxiom regla1 : Humo -> Fuego\naxiom regla2 : Fuego -> Evacuar\naxiom hecho = Humo\n\nderive Fuego from {regla1, hecho}\nderive Evacuar from {regla1, regla2, hecho}\n\ncheck valid (Humo & (Humo -> Fuego) & (Fuego -> Evacuar)) -> Evacuar\ncheck equivalent Humo -> Fuego, !Humo | Fuego\ntruth_table (Humo & (Humo -> Fuego)) -> Fuego\ncountermodel Humo -> Evacuar'
+      },
+      {
+        title: 'Ejemplo 6 · Clase guiada con ST moderno',
+        description: 'Combina aliases, análisis, explicación y control condicional ligero para convertir una inferencia en material pedagógico ejecutable.',
+        code: 'logic classical.propositional\n\nlet regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = "Estudio hoy" : E\n\nderive A from {regla, hecho}\nanalyze {E, E -> A} -> A\nexplain (E -> A)\n\nif valid (P | !P) {\n  print "tautología detectada"\n} else {\n  print "esto no debería ocurrir"\n}'
       }
     ],
     mistakes: [
@@ -434,6 +451,88 @@ export const logicCourses: LogicCoursePageData[] = [
     downloads: {
       basic: '/downloads/st/07-temporal-ltl.st',
       complete: '/downloads/st/18-temporal-completa.st'
+    }
+  },
+  {
+    slug: 'aritmetica',
+    navLabel: 'Aritmética',
+    title: 'Curso completo de Lógica Aritmética Ejecutable',
+    subtitle: 'Cálculo, comparación y scripting explicativo con el perfil arithmetic de ST.',
+    profile: 'arithmetic',
+    badge: 'ARITH',
+    level: 'Aplicado',
+    intro: 'El perfil arithmetic convierte ST en un pequeño laboratorio ejecutable para expresiones numéricas, comparaciones, control de flujo y ejemplos pedagógicos paso a paso. Es una puerta excelente para enseñar que ST ya no solo verifica fórmulas: también puede guionar procesos lógicos y computacionales simples.',
+    whyItMatters: 'Aritmética es el perfil más claro para mostrar que ST creció hacia un lenguaje explicativo completo. Aquí puedes usar números, operadores aritméticos, comparaciones, let, set, if, for, while, funciones y explain con resultados concretos. Es ideal para talleres, onboarding y cursos introductorios donde conviene mezclar lógica con ejecución visible.',
+    learningGoals: [
+      'Leer expresiones numéricas con la precedencia correcta.',
+      'Distinguir entre resultado numérico y comparación booleana.',
+      'Usar check valid y check satisfiable sobre desigualdades y expresiones aritméticas.',
+      'Usar let, set, if, for y while para construir pequeños scripts ejecutables.',
+      'Escribir funciones con fn y return para encapsular pasos repetibles.',
+      'Aprovechar explain para convertir cálculos en ejemplos pedagógicos claros.'
+    ],
+    concepts: [
+      {
+        title: '1. Aritmética como perfil ejecutable',
+        body: 'En arithmetic, ST interpreta expresiones como 2 + 3, 8 / 2 o 10 % 3 y comparaciones como 5 > 2 o 4 <= 4. Ya no estás trabajando solo con tablas de verdad clásicas, sino con evaluación numérica y condiciones verdaderas o falsas a partir de operaciones aritméticas.'
+      },
+      {
+        title: '2. Comparaciones como fórmulas verificables',
+        body: 'Expresiones como 2 + 3 < 10 o 8 / 2 >= 4 producen fórmulas que el motor puede tratar como válidas o satisfacibles dentro del perfil arithmetic. Esto permite reutilizar comandos como check valid, countermodel o explain sobre expresiones numéricas.'
+      },
+      {
+        title: '3. ST como lenguaje guiado',
+        body: 'Arithmetic es también el mejor lugar para enseñar let, set, print, if, for, while y fn porque los resultados son inmediatos y concretos. El estudiante ve cómo cambia el estado y cómo una condición deja de cumplirse al reasignar una variable.'
+      },
+      {
+        title: '4. Explain con resultados concretos',
+        body: 'Mientras otros perfiles explican estructura lógica, arithmetic además devuelve el resultado evaluado. Así puedes mostrar no solo la forma de una expresión, sino también el valor que produce y el porqué de una comparación verdadera o falsa.'
+      }
+    ],
+    operators: [
+      { symbol: 'A + B', name: 'Suma', meaning: 'Agrega dos expresiones numéricas y devuelve un nuevo valor.', stExample: 'logic arithmetic\nexplain 2 + 3\ncheck valid 2 + 3 < 10' },
+      { symbol: 'A - B', name: 'Resta', meaning: 'Resta una cantidad a otra. También soporta menos unario mediante reescritura interna.', stExample: 'logic arithmetic\nexplain 10 - 4\nexplain -(3 + 2)' },
+      { symbol: 'A * B', name: 'Multiplicación', meaning: 'Multiplica dos expresiones; tiene mayor precedencia que + y -.', stExample: 'logic arithmetic\nexplain 2 + 3 * 4\nexplain (2 + 3) * 4' },
+      { symbol: 'A / B', name: 'División', meaning: 'Divide una expresión por otra; sirve para construir comparaciones evaluables.', stExample: 'logic arithmetic\ncheck valid 8 / 2 >= 4\nexplain 10 / 2' },
+      { symbol: 'A % B', name: 'Módulo', meaning: 'Devuelve el residuo de una división entera.', stExample: 'logic arithmetic\nexplain 10 % 3\ncheck valid 10 % 3 > 0' },
+      { symbol: 'A < B, A > B, A <= B, A >= B', name: 'Comparaciones', meaning: 'Producen fórmulas verdaderas o falsas que pueden usarse en check, if o while.', stExample: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck satisfiable 5 > 3' }
+    ],
+    commands: [
+      { title: 'Validez aritmética', description: 'Comprueba que una desigualdad o comparación sale verdadera en el cálculo planteado.', code: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck valid (2 * 3) >= 6' },
+      { title: 'Explicación numérica', description: 'Usa explain para obtener lectura y resultado de una expresión.', code: 'logic arithmetic\nexplain 2 + 3 * 4\nexplain 10 > 5' },
+      { title: 'Variables y reasignación', description: 'Usa let y set para construir pequeños scripts con estado legible.', code: 'logic arithmetic\nlet X = 2 + 3\nprint X\nset X = 2 * 5\nprint X' },
+      { title: 'Condicionales y loops', description: 'Combina arithmetic con if, for y while para mostrar procesos paso a paso.', code: 'logic arithmetic\nif valid 8 / 2 >= 4 {\n  print "division ok"\n}\n\nfor N in { 1, 2, 3 } {\n  print N\n}\n\nset LOOP = 1\nwhile satisfiable LOOP {\n  print "loop arithmetic"\n  set LOOP = 0\n}' },
+      { title: 'Funciones', description: 'Encapsula secuencias reutilizables con fn y return.', code: 'logic arithmetic\nfn calcular(A, B) {\n  print A\n  print B\n  explain A + B\n  return A + B\n}\n\ncalcular(4, 5)' }
+    ],
+    workedExamples: [
+      { title: 'Ejemplo 1 · Cálculo y comparación', description: 'Empieza por expresiones cortas y comparaciones directas.', code: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck valid (2 * 3) >= 6\ncheck satisfiable 10 % 3 > 0\nexplain 2 + 3 * 4\nexplain 10 > 5' },
+      { title: 'Ejemplo 2 · Variables y mutación', description: 'Muestra cómo el estado puede cambiar de manera controlada.', code: 'logic arithmetic\nlet X = 2 + 3\nprint X\nset X = 2 * 5\nprint X' },
+      { title: 'Ejemplo 3 · Flujo de control', description: 'Convierte una verificación en un flujo legible para una clase o demo.', code: 'logic arithmetic\nif valid 8 / 2 >= 4 {\n  print "division ok"\n} else {\n  print "division fail"\n}\n\nfor N in { 1, 2, 3 } {\n  print N\n}\n\nset LOOP = 1\nwhile satisfiable LOOP {\n  print "loop arithmetic"\n  set LOOP = 0\n}' },
+      { title: 'Ejemplo 4 · Función reutilizable', description: 'Agrupa pasos repetibles y explica resultados en un solo bloque.', code: 'logic arithmetic\nfn calcular(A, B) {\n  print A\n  print B\n  explain A + B\n  return A + B\n}\n\ncalcular(4, 5)' },
+      { title: 'Ejemplo 5 · Script completo de aula', description: 'Una mini lección ejecutable que mezcla cálculo, control de flujo y explicación.', code: 'logic arithmetic\nprint "=== arithmetic-course ==="\nlet base = 2 + 3\nprint base\n\nif valid base < 10 {\n  print "base pequeña"\n}\n\nfor Caso in { 1, 2, 3 } {\n  print Caso\n}\n\nfn revisar(X) {\n  explain X\n  check satisfiable X > 0\n}\n\nrevisar(4 + 5)\ncountermodel 5 < 3' }
+    ],
+    mistakes: [
+      'Confundir explain con check valid: uno explica y evalúa; el otro verifica un estatus lógico.',
+      'Olvidar que la precedencia hace que 2 + 3 * 4 no sea lo mismo que (2 + 3) * 4.',
+      'Usar while sin cambiar el estado con set y provocar iteraciones innecesarias.',
+      'Esperar que una función devuelta por return pueda incrustarse ya como expresión dentro de otra fórmula.',
+      'Tratar una comparación como si fuera un número cuando ya produce un resultado booleano del perfil.'
+    ],
+    limits: [
+      'La división por cero puede producir resultados no útiles para docencia rigurosa; conviene evitarla en materiales introductorios.',
+      'while tiene un límite de seguridad de 1000 iteraciones.',
+      'Las funciones hoy son statements reutilizables; no son expresiones anidadas del lenguaje.',
+      'Arithmetic está orientado a ejemplos pedagógicos y scripting ligero, no a álgebra simbólica avanzada.'
+    ],
+    bridges: [
+      'Es el mejor perfil para enseñar el nuevo ST como lenguaje ejecutable, no solo lógico.',
+      'Sirve como puente entre estudiantes que vienen de programación y estudiantes que vienen de lógica formal.',
+      'Prepara muy bien la entrada a ejemplos con Text Layer, analyze y explain dentro de materiales educativos.',
+      'Ayuda a prototipar mini simulaciones y laboratorios visibles antes de pasar a perfiles más abstractos.'
+    ],
+    downloads: {
+      basic: '/downloads/st/23-aritmetica.st',
+      complete: '/downloads/st/24-aritmetica-completa.st'
     }
   },
   {

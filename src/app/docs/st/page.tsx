@@ -50,11 +50,13 @@ const NAV: NavItem[] = [
   { id: 'course-epistemic', label: 'Curso Epistémico' },
   { id: 'course-intuitionistic', label: 'Curso Intuicionista' },
   { id: 'course-temporal', label: 'Curso Temporal' },
+  { id: 'course-arithmetic', label: 'Curso Aritmética' },
   { id: 'course-aristotelian', label: 'Curso Aristotélico' },
   { id: 'course-belnap', label: 'Curso Belnap' },
   { id: 'course-probabilistic', label: 'Curso Probabilístico' },
   { id: 'syntax', label: 'Sintaxis' },
   { id: 'commands', label: 'Comandos' },
+  { id: 'scripting', label: 'Programación ST' },
   { id: 'profiles', label: 'Perfiles Lógicos' },
   { id: 'text-layer', label: 'Text Layer' },
   { id: 'limits', label: 'Limitaciones' },
@@ -77,6 +79,21 @@ const SYNTAX: SyntaxBlock[] = [
     title: 'Definir teoremas',
     code: 'theorem resultado : Q',
     note: 'Los teoremas representan consecuencias que se desean conservar.'
+  },
+  {
+    title: 'Variables, aliases y descripciones',
+    code: 'let regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nprint regla\nset hecho = A',
+    note: 'let registra aliases reutilizables; set permite reasignar estado para scripts pedagógicos.'
+  },
+  {
+    title: 'Control de flujo',
+    code: 'if valid (P | !P) {\n  print "tautología"\n} else {\n  print "no válida"\n}\n\nfor F in { P, Q, (R -> R) } {\n  print F\n}\n\nwhile satisfiable estado {\n  set estado = P & !P\n}',
+    note: 'ST soporta if, else if, else, for y while sobre condiciones lógicas reales.'
+  },
+  {
+    title: 'Funciones y módulos',
+    code: 'fn revisar(X) {\n  explain X\n  check satisfiable X\n  return X\n}\n\nimport "utilidades.st"\n\ntheory Base {\n  let alias = P -> Q\n  private let secreto = R & S\n}',
+    note: 'ST también soporta fn, return, import y theory para estructurar materiales y librerías.'
   },
   {
     title: 'Operadores proposicionales',
@@ -114,12 +131,12 @@ const COMMANDS: CommandBlock[] = [
   {
     cmd: 'derive <meta> from {<premisas>}',
     desc: 'Intenta demostrar la meta a partir de las premisas listadas.',
-    example: 'derive Q from {P -> Q, P}'
+    example: 'logic classical.propositional\naxiom regla : P -> Q\naxiom base = P\nderive Q from {regla, base}'
   },
   {
     cmd: 'prove <meta> from {<axiomas>}',
     desc: 'Similar a derive, pero verifica contra la teoría registrada.',
-    example: 'prove Q from {modus, base}'
+    example: 'logic classical.propositional\naxiom modus : P -> Q\naxiom base = P\nprove Q from {modus, base}'
   },
   {
     cmd: 'countermodel <φ>',
@@ -132,9 +149,24 @@ const COMMANDS: CommandBlock[] = [
     example: 'truth_table P -> (Q -> P)'
   },
   {
-    cmd: 'st --list-profiles',
-    desc: 'Lista todos los perfiles lógicos disponibles desde la CLI.',
-    example: 'st --list-profiles'
+    cmd: 'analyze {<premisas>} -> <conclusión>',
+    desc: 'Evalúa una inferencia completa y detecta falacias conocidas cuando aplica.',
+    example: 'logic classical.propositional\nanalyze {P, P -> Q} -> Q\nanalyze {P} -> Q'
+  },
+  {
+    cmd: 'explain <φ>',
+    desc: 'Explica una fórmula según el perfil activo; en arithmetic además evalúa resultados concretos.',
+    example: 'logic arithmetic\nexplain 2 + 3 * 4\nexplain 10 > 5'
+  },
+  {
+    cmd: 'render <target>',
+    desc: 'Renderiza teoría, claims o elementos específicos del estado actual.',
+    example: 'logic classical.propositional\naxiom a1 : P -> Q\nrender theory'
+  },
+  {
+    cmd: 'st profiles',
+    desc: 'Lista los perfiles lógicos disponibles desde la CLI real actual.',
+    example: 'st profiles'
   }
 ];
 
@@ -146,6 +178,7 @@ const COURSE_PAGE_HREFS: Record<string, string> = {
   'course-epistemic': '/docs/st/epistemica',
   'course-intuitionistic': '/docs/st/intuicionista',
   'course-temporal': '/docs/st/temporal',
+  'course-arithmetic': '/docs/st/aritmetica',
   'course-aristotelian': '/docs/st/aristotelica',
   'course-belnap': '/docs/st/belnap',
   'course-probabilistic': '/docs/st/probabilistica'
@@ -252,9 +285,23 @@ const COURSES: LogicCourse[] = [
     lessonExample: 'logic temporal.ltl\n\ncheck valid [](P) -> P\ncheck valid [](P) -> <>(P)\ncheck valid <>(P) -> [](P)\ncheck equivalent <>(P), ![](!P)\naxiom regla : []((P -> Q))\naxiom hecho = [](P)\nderive [](Q) from {regla, hecho}'
   },
   {
+    id: 'course-arithmetic',
+    navLabel: 'Aritmética',
+    title: 'Curso 8 · Aritmética Ejecutable y Programación en ST',
+    level: 'Aplicado',
+    focus: 'Usar ST como lenguaje explicativo con números, comparaciones, variables, loops y funciones.',
+    summary: 'El perfil arithmetic muestra con claridad que ST ya es un lenguaje ejecutable completo para docencia y prototipado. Aquí se mezclan cálculo, control de flujo, funciones, explain y scripting visible paso a paso.',
+    questions: ['¿Cómo evalúa ST una expresión numérica?', '¿Cómo usar let y set para construir estado?', '¿Cómo escribir if, for y while sobre condiciones lógicas?', '¿Qué devuelve explain en arithmetic?'],
+    concepts: ['Expresiones numéricas', 'Comparaciones como fórmulas', 'let / set / print', 'if / for / while', 'fn / return'],
+    syntax: ['logic arithmetic', 'let X = 2 + 3', 'set X = 2 * 5', 'if valid 8 / 2 >= 4 { ... }', 'fn calcular(A, B) { ... }'],
+    commands: ['check valid', 'check satisfiable', 'explain', 'countermodel', 'print', 'set'],
+    mistakes: ['Olvidar precedencia en 2 + 3 * 4', 'No mutar la condición dentro de while', 'Esperar que return incruste valores como expresión anidada', 'Confundir explain con check valid'],
+    lessonExample: 'logic arithmetic\n\ncheck valid 2 + 3 < 10\nexplain 2 + 3 * 4\n\nlet X = 2 + 3\nprint X\nset X = 2 * 5\nprint X\n\nif valid 8 / 2 >= 4 {\n  print "division ok"\n}\n\nfor N in { 1, 2, 3 } {\n  print N\n}\n\nfn calcular(A, B) {\n  explain A + B\n  return A + B\n}\n\ncalcular(4, 5)\ncountermodel 5 < 3'
+  },
+  {
     id: 'course-aristotelian',
     navLabel: 'Aristotélica',
-    title: 'Curso 8 · Silogística Aristotélica',
+    title: 'Curso 9 · Silogística Aristotélica',
     level: 'Histórica–Formal',
     focus: 'Entender los modos silogísticos categóricos clásicos.',
     summary: 'Este curso traduce la lógica de términos de Aristóteles a ST: universal afirmativa, universal negativa, particular afirmativa y particular negativa.',
@@ -268,7 +315,7 @@ const COURSES: LogicCourse[] = [
   {
     id: 'course-belnap',
     navLabel: 'Belnap',
-    title: 'Curso 9 · Lógica Paraconsistente Belnap',
+    title: 'Curso 10 · Lógica Paraconsistente Belnap',
     level: 'Avanzado',
     focus: 'Razonar con inconsistencia sin explosión trivial.',
     summary: 'Belnap introduce cuatro valores: verdadero, falso, ambos y ninguno. Permite describir bases de datos incompletas o contradictorias sin colapso lógico.',
@@ -282,7 +329,7 @@ const COURSES: LogicCourse[] = [
   {
     id: 'course-probabilistic',
     navLabel: 'Probabilística',
-    title: 'Curso 10 · Lógica Probabilística',
+    title: 'Curso 11 · Lógica Probabilística',
     level: 'Avanzado',
     focus: 'Medir la fuerza probabilística de fórmulas clásicas.',
     summary: 'En lugar de evaluar solo verdad o falsedad, este perfil calcula probabilidades de fórmulas sobre distribuciones discretas de probabilidad.',
@@ -295,7 +342,7 @@ const COURSES: LogicCourse[] = [
   }
 ];
 
-/* ──────────── Data: 10 profile manuals ──────────── */
+/* ──────────── Data: 11 profile manuals ──────────── */
 const PROFILES: ProfileManual[] = [
   {
     id: 'classical-prop',
@@ -385,6 +432,18 @@ const PROFILES: ProfileManual[] = [
     limits: ['Máximo 200 nodos en el tableau.', 'Operador U (until) tiene soporte limitado en el tableau.', 'Frame S4 asume futuro irreversible.']
   },
   {
+    id: 'arithmetic',
+    name: 'arithmetic',
+    slug: 'Aritmética Ejecutable',
+    badge: 'ARITH',
+    semantics: 'Perfil aritmético con evaluación numérica directa y comparaciones booleanas. Permite usar el mismo runtime de ST para scripting explicativo con números, condiciones y resultados concretos.',
+    engine: 'Evaluador aritmético exacto para expresiones y comparaciones, integrado con let, set, print, if, for, while, fn y explain.',
+    operators: ['+ suma', '- resta', '* multiplicación', '/ división', '% módulo', '< > <= >= comparaciones'],
+    validExample: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck valid (2 * 3) >= 6\nexplain 2 + 3 * 4',
+    invalidExample: 'logic arithmetic\ncheck valid 5 < 3\ncountermodel 5 < 3',
+    limits: ['No está orientado a álgebra simbólica avanzada.', 'while tiene límite de seguridad de 1000 iteraciones.', 'Las funciones todavía se usan como statements, no como expresiones anidadas.']
+  },
+  {
     id: 'aristotelian',
     name: 'aristotelian.syllogistic',
     slug: 'Silogística Aristotélica',
@@ -421,6 +480,20 @@ const PROFILES: ProfileManual[] = [
     limits: ['Muestreo discreto: puede no detectar contraejemplos entre puntos.', 'Si 5ⁿ > 10000 se reduce a 3 puntos de muestreo.', 'Tolerancia numérica: 1e-10.', 'truth_table mezcla columnas booleanas y probabilísticas.']
   }
 ];
+
+const PROFILE_DOWNLOADS: Record<string, string> = {
+  'classical-prop': '/downloads/st/01-clasica-proposicional.st',
+  'classical-fol': '/downloads/st/02-primer-orden.st',
+  'modal-k': '/downloads/st/03-modal-k.st',
+  deontic: '/downloads/st/04-deontica.st',
+  epistemic: '/downloads/st/05-epistemica-s5.st',
+  intuitionistic: '/downloads/st/06-intuicionista.st',
+  temporal: '/downloads/st/07-temporal-ltl.st',
+  aristotelian: '/downloads/st/08-aristotelica.st',
+  belnap: '/downloads/st/09-paraconsistente-belnap.st',
+  probabilistic: '/downloads/st/10-probabilistica.st',
+  arithmetic: '/downloads/st/23-aritmetica.st'
+};
 
 /* ──────────── Components ──────────── */
 function CopyBlock({ code, label }: { code: string; label?: string }) {
@@ -542,12 +615,12 @@ export default function STDocsPage() {
             <div className="p-1.5 rounded-lg bg-gradient-to-tr from-mandy-600 to-violet-600 shadow-lg shadow-mandy-900/20">
               <Scale className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-bold text-white tracking-tight">Manual ST — Motor de Lógica Formal</h1>
+            <h1 className="text-lg font-bold text-white tracking-tight">Manual ST — Lenguaje de Lógica y Programación Explicativa</h1>
           </div>
           <div className="flex-1" />
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-800 border border-surface-700 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            v1.5.2
+            v1.5.8
           </div>
         </div>
       </header>
@@ -576,21 +649,28 @@ export default function STDocsPage() {
             <SectionTitle id="intro" icon={BookOpen} title="¿Qué es ST?" />
             <div className="bg-gradient-to-br from-mandy-600/20 via-surface-800/50 to-surface-900 border border-mandy-500/30 rounded-2xl p-8 space-y-4">
               <p className="text-surface-300 leading-relaxed">
-                <strong className="text-white">ST</strong> es un lenguaje declarativo para lógica formal.
-                Permite definir axiomas, teoremas y ejecutar comandos de verificación
-                (validez, satisfacibilidad, equivalencia, derivación, tablas de verdad)
-                sobre <strong className="text-mandy-400">10 perfiles lógicos</strong> distintos:
-                desde la clásica proposicional hasta la probabilística.
+                <strong className="text-white">ST</strong> ya no es solo un lenguaje declarativo para lógica formal:
+                es un <strong className="text-mandy-400">lenguaje ejecutable</strong> para enseñar, verificar,
+                explorar y guionar razonamientos. Permite definir axiomas, teoremas, variables, teorías,
+                funciones y comandos de verificación (validez, satisfacibilidad, equivalencia, derivación,
+                tablas de verdad, análisis y explicación) sobre <strong className="text-mandy-400">11 perfiles</strong>
+                distintos, desde la clásica proposicional hasta la probabilística y la aritmética.
               </p>
               <p className="text-surface-400 text-sm">
                 Cada perfil implementa un motor semántico propio (tablas de verdad, tableaux
-                analíticos, modelos Kripke, retículos de 4 valores, cálculo probabilístico o
-                validación silogística directa). El Text Layer extiende ST para vincular
-                fórmulas a documentos en lenguaje natural.
+                analíticos, modelos Kripke, retículos de 4 valores, cálculo probabilístico,
+                evaluación aritmética o validación silogística directa). Además, el runtime ahora
+                soporta <code className="text-mandy-400">let</code>, <code className="text-mandy-400">set</code>,
+                <code className="text-mandy-400"> print</code>, <code className="text-mandy-400">if</code>,
+                <code className="text-mandy-400"> for</code>, <code className="text-mandy-400">while</code>,
+                <code className="text-mandy-400"> fn</code>, <code className="text-mandy-400">theory</code>,
+                <code className="text-mandy-400"> import</code>, <code className="text-mandy-400">analyze</code>,
+                <code className="text-mandy-400"> explain</code> y <code className="text-mandy-400">render</code>.
               </p>
               <div className="flex flex-wrap gap-2 pt-2">
-                <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">10 perfiles</span>
+                <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">11 perfiles</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">CLI + API</span>
+                <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">Scripting</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">Text Layer</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">TypeScript / npm</span>
               </div>
@@ -647,9 +727,10 @@ export default function STDocsPage() {
                   <a href="#course-epistemic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">5. Epistémica</a>
                   <a href="#course-intuitionistic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">6. Intuicionista</a>
                   <a href="#course-temporal" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">7. Temporal</a>
-                  <a href="#course-aristotelian" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">8. Aristotélica</a>
-                  <a href="#course-belnap" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">9. Belnap</a>
-                  <a href="#course-probabilistic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">10. Probabilística</a>
+                  <a href="#course-arithmetic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">8. Aritmética</a>
+                  <a href="#course-aristotelian" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">9. Aristotélica</a>
+                  <a href="#course-belnap" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">10. Belnap</a>
+                  <a href="#course-probabilistic" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">11. Probabilística</a>
                 </div>
               </div>
             </div>
@@ -1033,9 +1114,42 @@ export default function STDocsPage() {
             </div>
           </section>
 
+          <section>
+            <SectionTitle id="scripting" icon={Terminal} title="Programación y Control de Flujo en ST" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                ST ahora permite construir lecciones ejecutables y pequeños laboratorios con
+                estado visible. La idea no es competir con un lenguaje generalista, sino dar
+                una capa de <strong className="text-white">programación explicativa</strong> alrededor del razonamiento formal.
+              </p>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                  <h4 className="text-sm font-bold text-white mb-2">Aliases y estado</h4>
+                  <p className="text-xs text-surface-400 mb-3">Usa <code className="text-mandy-400">let</code> para nombrar fórmulas o descripciones y <code className="text-mandy-400">set</code> para mutar una variable durante el script.</p>
+                  <CopyBlock code={'logic classical.propositional\nlet regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nprint regla\nset hecho = A\nprint hecho'} />
+                </div>
+                <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                  <h4 className="text-sm font-bold text-white mb-2">Condicionales y loops</h4>
+                  <p className="text-xs text-surface-400 mb-3">Las condiciones se evalúan con estatus lógicos reales: <code className="text-mandy-400">valid</code>, <code className="text-mandy-400">invalid</code>, <code className="text-mandy-400">satisfiable</code> o <code className="text-mandy-400">unsatisfiable</code>.</p>
+                  <CopyBlock code={'logic classical.propositional\nset estado = P\n\nif valid (P | !P) {\n  print "tautología"\n}\n\nfor Caso in { P, Q, (R -> R) } {\n  print Caso\n}\n\nwhile satisfiable estado {\n  print "iteración"\n  set estado = P & !P\n}'} />
+                </div>
+                <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                  <h4 className="text-sm font-bold text-white mb-2">Funciones</h4>
+                  <p className="text-xs text-surface-400 mb-3">Las funciones encapsulan pasos repetibles y <code className="text-mandy-400">return</code> corta la ejecución del cuerpo.</p>
+                  <CopyBlock code={'logic classical.propositional\nfn revisar(X) {\n  print "revisando"\n  explain X\n  check satisfiable X\n  return X\n}\n\nrevisar((P -> Q))'} />
+                </div>
+                <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                  <h4 className="text-sm font-bold text-white mb-2">Módulos y encapsulación</h4>
+                  <p className="text-xs text-surface-400 mb-3">Con <code className="text-mandy-400">import</code> y <code className="text-mandy-400">theory</code> puedes organizar materiales largos y reutilizables.</p>
+                  <CopyBlock code={'logic classical.propositional\n\ntheory Base {\n  let alias = P -> Q\n  private let secreto = R & S\n  axiom regla : P -> Q\n}\n\nprint Base.alias\nrender theory'} />
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* ── Profiles ── */}
           <section>
-            <SectionTitle id="profiles" icon={Layers3} title="Perfiles Lógicos (10)" />
+            <SectionTitle id="profiles" icon={Layers3} title="Perfiles Lógicos (11)" />
             <p className="text-surface-400 text-sm mb-6">
               Cada perfil activa un motor semántico específico. Haz clic en un perfil para ver su manual completo
               con semántica, operadores, axiomas, ejemplos válidos e inválidos, y limitaciones del motor.
@@ -1102,7 +1216,7 @@ export default function STDocsPage() {
                         {/* Download */}
                         <div className="flex gap-2 pt-2">
                           <a
-                            href={`/downloads/st/${String(PROFILES.indexOf(p) + 1).padStart(2, '0')}-${p.id}.st`}
+                            href={PROFILE_DOWNLOADS[p.id] ?? '#'}
                             download
                             className="flex items-center gap-1.5 text-[10px] font-bold text-mandy-400 hover:text-mandy-300 bg-mandy-500/10 border border-mandy-500/20 px-3 py-1.5 rounded-lg transition"
                           >
@@ -1144,13 +1258,13 @@ export default function STDocsPage() {
                 </div>
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                   <h5 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">4. Verificar</h5>
-                  <CopyBlock code={'derive R from {c1}\ncheck valid c1'} />
-                  <p className="text-xs text-surface-400">Usa claims en cualquier comando estándar de ST.</p>
+                  <CopyBlock code={'render claims\nrender theory'} />
+                  <p className="text-xs text-surface-400">Usa render para inspeccionar claims, confianza, soporte y teoría compilada.</p>
                 </div>
               </div>
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Metadatos opcionales</h5>
-                <CopyBlock code={'support c1 <- "fuente académica"\nconfidence c1 = 0.85\ncontext c1 = "Cláusula de privacidad del contrato"'} />
+                <CopyBlock code={'support c1 <- p1\nconfidence c1 = 0.85\ncontext c1 = "Cláusula de privacidad del contrato"\nrender claims'} />
               </div>
             </div>
           </section>
@@ -1210,7 +1324,7 @@ export default function STDocsPage() {
               </p>
               <CopyBlock
                 label="Ejecutar validación"
-                code="npm run validate:st-docs\n# Ejecuta los 22 scripts .st contra el CLI de ST\n# Salida esperada: todos PASS"
+                code="npm run validate:st-docs\n# Ejecuta los 24 scripts .st contra el CLI de ST\n# Salida esperada: todos PASS"
               />
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Scripts de validación disponibles</h5>
@@ -1227,6 +1341,8 @@ export default function STDocsPage() {
                   <span>10 – Probabilística</span>
                   <span>11 – Text Layer</span>
                   <span>12–22 – Exhaustivos por perfil</span>
+                  <span>23 – Aritmética base</span>
+                  <span>24 – Aritmética completa</span>
                 </div>
               </div>
             </div>
@@ -1235,7 +1351,7 @@ export default function STDocsPage() {
           {/* Footer */}
           <footer className="border-t border-surface-700/30 pt-8 pb-16 text-center">
             <p className="text-xs text-surface-500">
-              Documentación generada y validada automáticamente contra ST v1.5.2.
+              Documentación generada y validada automáticamente contra ST v1.5.8.
             </p>
             <div className="flex justify-center gap-4 mt-4">
               <Link href="/docs" className="text-xs text-mandy-400 hover:text-mandy-300 transition">

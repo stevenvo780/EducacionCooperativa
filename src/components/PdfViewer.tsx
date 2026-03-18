@@ -68,7 +68,7 @@ const pdfViewerStateMemory = new Map<string, PersistedPdfViewerState>();
 let pdfJsPromise: Promise<PDFJSLib> | null = null;
 
 function clampZoomLevel(value: number) {
-  return Math.min(3, Math.max(0.6, Number.isFinite(value) ? value : 1));
+  return Math.min(5, Math.max(0.25, Number.isFinite(value) ? value : 1));
 }
 
 function normalizeViewerState(value?: Partial<PersistedPdfViewerState> | null): PersistedPdfViewerState {
@@ -174,12 +174,15 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
   const [containerWidth, setContainerWidth] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [useIframeFallback, setUseIframeFallback] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
   const lastKnownStateRef = useRef<PersistedPdfViewerState>(initialViewerState);
   const isRestoringRef = useRef(true);
+  const dragStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const lastTouchDistRef = useRef<number | null>(null);
 
   useEffect(() => {
     const nextState = readViewerState(storageKey);
@@ -515,15 +518,110 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
   }, [currentPage, scrollToPage]);
 
   const handleZoomOut = useCallback(() => {
-    setZoomLevel((current) => clampZoomLevel(Number((current / 1.15).toFixed(2))));
+    setZoomLevel((current) => clampZoomLevel(Number((current / 1.25).toFixed(2))));
   }, []);
 
   const handleZoomIn = useCallback(() => {
-    setZoomLevel((current) => clampZoomLevel(Number((current * 1.15).toFixed(2))));
+    setZoomLevel((current) => clampZoomLevel(Number((current * 1.25).toFixed(2))));
   }, []);
 
   const handleResetZoom = useCallback(() => {
     setZoomLevel(1);
+  }, []);
+
+  // Ctrl+rueda para zoom
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || useIframeFallback) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? 1 / 1.15 : 1.15;
+      setZoomLevel((current) => clampZoomLevel(Number((current * delta).toFixed(2))));
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [useIframeFallback]);
+
+  // Atajos de teclado
+  useEffect(() => {
+    if (useIframeFallback) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      if (event.key === '=' || event.key === '+') {
+        event.preventDefault();
+        setZoomLevel((current) => clampZoomLevel(Number((current * 1.25).toFixed(2))));
+      } else if (event.key === '-') {
+        event.preventDefault();
+        setZoomLevel((current) => clampZoomLevel(Number((current / 1.25).toFixed(2))));
+      } else if (event.key === '0') {
+        event.preventDefault();
+        setZoomLevel(1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [useIframeFallback]);
+
+  // Arrastrar para mover (pan)
+  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    if (!container) return;
+    // Solo arrastrar con botón izquierdo y si hay overflow
+    if (event.button !== 0) return;
+    if (container.scrollWidth <= container.clientWidth && container.scrollHeight <= container.clientHeight) return;
+    event.preventDefault();
+    dragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop
+    };
+    setIsDragging(true);
+  }, []);
+
+  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    event.preventDefault();
+    const dx = event.clientX - dragStartRef.current.x;
+    const dy = event.clientY - dragStartRef.current.y;
+    container.scrollLeft = dragStartRef.current.scrollLeft - dx;
+    container.scrollTop = dragStartRef.current.scrollTop - dy;
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    dragStartRef.current = null;
+    setIsDragging(false);
+  }, []);
+
+  // Pellizco táctil para zoom
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length === 2) {
+      const dx = event.touches[0].clientX - event.touches[1].clientX;
+      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      lastTouchDistRef.current = Math.hypot(dx, dy);
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2 || lastTouchDistRef.current === null) return;
+    event.preventDefault();
+    const dx = event.touches[0].clientX - event.touches[1].clientX;
+    const dy = event.touches[0].clientY - event.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    const ratio = dist / lastTouchDistRef.current;
+    lastTouchDistRef.current = dist;
+    setZoomLevel((current) => clampZoomLevel(Number((current * ratio).toFixed(2))));
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    lastTouchDistRef.current = null;
   }, []);
 
   const handleSearchPrev = useCallback(() => {
@@ -668,8 +766,15 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
 
       <div
         ref={containerRef}
-        className="h-full w-full flex-1 overflow-auto bg-slate-900 px-4 py-6"
+        className={`h-full w-full flex-1 overflow-auto bg-slate-900 px-4 py-6 ${isDragging ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
         data-testid="pdf-viewer-scroll-container"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {isLoading && (
           <div className="flex min-h-full items-center justify-center text-slate-400">

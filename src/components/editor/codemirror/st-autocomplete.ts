@@ -15,30 +15,47 @@ import {
   snippetCompletion
 } from '@codemirror/autocomplete';
 import { KEYWORDS, BUILTINS, PROFILES, extractDynamicCompletions } from '../st-editor/tokenizer';
+import { getHoverInfo } from '../st-editor/hover-info';
+
+function buildInfoText(label: string, category: 'keyword' | 'builtin' | 'profile' | 'operator'): string | undefined {
+  const info = getHoverInfo(label, category);
+  if (!info) return undefined;
+  return [info.title, info.description, info.example ? `Ejemplo: ${info.example}` : '']
+    .filter(Boolean)
+    .join('\n\n');
+}
 
 // ── Static keyword completions ──────────────────────────────
 
 function makeKeywordCompletions(): Completion[] {
   const items: Completion[] = [];
   for (const kw of KEYWORDS) {
+    const info = getHoverInfo(kw, 'keyword');
     items.push({
       label: kw,
       type: 'keyword',
+      detail: info?.description ?? 'Palabra reservada ST',
+      info: buildInfoText(kw, 'keyword'),
       boost: 1
     });
   }
   for (const bi of BUILTINS) {
+    const info = getHoverInfo(bi, 'builtin');
     items.push({
       label: bi,
       type: 'function',
+      detail: info?.description ?? 'Operador lógico predefinido',
+      info: buildInfoText(bi, 'builtin'),
       boost: 0
     });
   }
   for (const pf of PROFILES) {
+    const info = getHoverInfo(pf, 'profile');
     items.push({
       label: pf,
       type: 'type',
-      detail: 'perfil lógico',
+      detail: info?.description ?? 'perfil lógico',
+      info: buildInfoText(pf, 'profile'),
       boost: -1
     });
   }
@@ -46,6 +63,19 @@ function makeKeywordCompletions(): Completion[] {
 }
 
 const staticCompletions = makeKeywordCompletions();
+
+function makeOperatorCompletions(): Completion[] {
+  const operators = ['->', '<->', '&', '|', '!', '[]', '<>', '+', '-', '*', '/', '%', '<', '>', '<=', '>=', '≤', '≥'];
+  return operators.map((operator) => ({
+    label: operator,
+    type: 'operator',
+    detail: getHoverInfo(operator, 'operator')?.description ?? 'Operador ST',
+    info: buildInfoText(operator, 'operator'),
+    boost: -2
+  }));
+}
+
+const operatorCompletions = makeOperatorCompletions();
 
 // ── Snippet completions (CM6 native with tab-stop placeholders) ──
 
@@ -157,7 +187,71 @@ function makeSnippetCompletions(): Completion[] {
       label: 'analyze',
       type: 'text',
       detail: 'Analizar fórmula',
+      info: buildInfoText('analyze', 'keyword'),
       boost: 2
+    }),
+    snippetCompletion('logic arithmetic', {
+      label: 'logic arithmetic',
+      type: 'text',
+      detail: 'Activar perfil aritmético',
+      info: buildInfoText('arithmetic', 'profile'),
+      boost: 3
+    }),
+    snippetCompletion('theory ${Name} {\n  ${body}\n}', {
+      label: 'theory',
+      type: 'text',
+      detail: 'Bloque de teoría con miembros reutilizables',
+      info: buildInfoText('theory', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('theory ${Child} extends ${Parent} {\n  ${body}\n}', {
+      label: 'theory extends',
+      type: 'text',
+      detail: 'Teoría que hereda de otra',
+      info: buildInfoText('extends', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('print ${value}', {
+      label: 'print',
+      type: 'text',
+      detail: 'Imprimir salida en tiempo de ejecución',
+      info: buildInfoText('print', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('set ${name} = ${value}', {
+      label: 'set',
+      type: 'text',
+      detail: 'Reasignar variable o alias',
+      info: buildInfoText('set', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('if ${condition} ${formula} {\n  ${body}\n} else {\n  ${fallback}\n}', {
+      label: 'if',
+      type: 'text',
+      detail: 'Condicional ST con rama else',
+      info: buildInfoText('if', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('for ${item} in {${items}} {\n  ${body}\n}', {
+      label: 'for',
+      type: 'text',
+      detail: 'Bucle sobre valores o fórmulas',
+      info: buildInfoText('for', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('while ${condition} ${formula} {\n  ${body}\n}', {
+      label: 'while',
+      type: 'text',
+      detail: 'Bucle mientras la condición siga siendo cierta',
+      info: buildInfoText('while', 'keyword'),
+      boost: 3
+    }),
+    snippetCompletion('fn ${name}(${params}) {\n  ${body}\n  return ${result}\n}', {
+      label: 'fn',
+      type: 'text',
+      detail: 'Declarar función con retorno',
+      info: buildInfoText('fn', 'keyword'),
+      boost: 3
     })
   ];
 }
@@ -216,7 +310,8 @@ function stCompletionSource(context: CompletionContext): CompletionResult | null
   const all: Completion[] = [
     ...snippetCompletions,
     ...getDynamicCompletions(doc),
-    ...staticCompletions
+    ...staticCompletions,
+    ...operatorCompletions
   ];
 
   // Add st-lang API completions if available
@@ -231,6 +326,7 @@ function stCompletionSource(context: CompletionContext): CompletionResult | null
           label: item.label,
           type: item.kind === 'keyword' ? 'keyword' : item.kind === 'snippet' ? 'text' : 'variable',
           detail: item.detail,
+          info: item.detail,
           apply: item.insertText || item.label
         });
       }
