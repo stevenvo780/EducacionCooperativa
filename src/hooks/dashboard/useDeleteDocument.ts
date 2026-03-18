@@ -87,6 +87,9 @@ export function useDeleteDocument({
                 setDeleteStatus({ phase: DeletePhase.Done, name: label });
             }
             scheduleDeleteStatusClear();
+        } catch {
+            setDeleteStatus({ phase: DeletePhase.Error, name: label, error: 'Error al eliminar' });
+            scheduleDeleteStatusClear();
         } finally {
             setDeletingIds(prev => {
                 const next = { ...prev };

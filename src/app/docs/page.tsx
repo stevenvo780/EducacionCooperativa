@@ -86,7 +86,7 @@ export default function DocsPage() {
     { id: 'terminal', label: 'Terminal Multi-sesión' },
     { id: 'kanban', label: 'Tableros Kanban' },
     { id: 'spreadsheet', label: 'Hojas de Cálculo' },
-    { id: 'st-lang', label: 'Lógica ST' },
+    { id: 'st-lang', label: 'Centro ST' },
     { id: 'ui-layout', label: 'Productividad (Layout)' },
     { id: 'offline', label: 'PWA & Offline' },
     { id: 'security', label: 'Seguridad & Planes' },
@@ -374,37 +374,36 @@ export default function DocsPage() {
                 </p>
               </div>
 
-              <h4 className="font-bold text-white mt-5">Tutorial de Lógica Proposicional</h4>
-              <div className="space-y-4 mt-3">
-                <div className="border-l-2 border-indigo-500 pl-4 py-1">
-                  <p className="text-white font-semibold text-sm">Concepto 1: El Contexto</p>
-                  <p className="text-xs text-surface-400 mt-1">Antes de nada, define qué lógica usarás. <code className="text-indigo-300">classical.propositional</code> es el estándar.</p>
-                  <CopyBlock code="logic classical.propositional" />
-                </div>
-
-                <div className="border-l-2 border-indigo-500 pl-4 py-1">
-                  <p className="text-white font-semibold text-sm">Concepto 2: Axiomas y Fórmulas</p>
-                  <p className="text-xs text-surface-400 mt-1">Declara tus verdades iniciales. Soporta operadores <code className="text-surface-300">-&gt;</code> (implicación), <code className="text-surface-300">&amp;</code> (conjunción), <code className="text-surface-300">|</code> (disyunción) y <code className="text-surface-300">!</code> (negación).</p>
-                  <CopyBlock code={`axiom base1 : P -> Q\naxiom base2 : P`} />
-                </div>
-
-                <div className="border-l-2 border-indigo-500 pl-4 py-1">
-                  <p className="text-white font-semibold text-sm">Concepto 3: Derivación Automática</p>
-                  <p className="text-xs text-surface-400 mt-1">Pide al motor que deduzca una conclusión a partir de un conjunto de premisas.</p>
-                  <CopyBlock code="derive Q from {base1, base2}" />
-                </div>
-              </div>
-
-              <div className="bg-surface-950/50 border border-surface-700/30 rounded-xl p-5">
-                <h5 className="text-emerald-400 text-xs font-bold uppercase mb-3 flex items-center gap-2"><Check className="w-4 h-4" /> Comandos de Verificación</h5>
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <code className="text-indigo-400 font-bold shrink-0">check valid &lt;formula&gt;</code>
-                    <p className="text-[11px] text-surface-500 italic">Determina si una fórmula es una tautología (siempre verdadera).</p>
+              <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+                <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 space-y-4">
+                  <h4 className="font-bold text-white">Nuevo Centro ST</h4>
+                  <p className="text-xs text-surface-400 leading-relaxed">
+                    Ahora ST tiene una <strong className="text-white">vista dedicada</strong> dentro de Ágora con tutoriales paso a paso, explicación por perfil lógico, ejemplos descargables y un flujo de validación reproducible contra el CLI real.
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-[11px] font-bold">
+                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">10 perfiles documentados</span>
+                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">11 scripts verificados</span>
+                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">Text Layer incluido</span>
                   </div>
-                  <div className="flex gap-2">
-                    <code className="text-indigo-400 font-bold shrink-0">truth_table &lt;formula&gt;</code>
-                    <p className="text-[11px] text-surface-500 italic">Genera la tabla de verdad completa en la salida del editor.</p>
+                  <div className="flex flex-wrap gap-3">
+                    <Link href="/docs/st" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-mandy-500 text-white text-sm font-bold hover:bg-mandy-400 transition">
+                      <FlaskConical className="w-4 h-4" /> Abrir centro ST
+                    </Link>
+                    <a href="/downloads/st/01-clasica-proposicional.st" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-600/50 text-surface-200 text-sm font-bold hover:border-mandy-500/40 hover:text-white transition">
+                      <Download className="w-4 h-4" /> Descargar ejemplo inicial
+                    </a>
+                  </div>
+                </div>
+
+                <div className="bg-surface-950/50 border border-surface-700/30 rounded-xl p-5">
+                  <h5 className="text-emerald-400 text-xs font-bold uppercase mb-3 flex items-center gap-2"><Check className="w-4 h-4" /> Validación rápida</h5>
+                  <p className="text-[11px] text-surface-500 italic mb-3">
+                    Los ejemplos del Centro ST se comprueban con un script reproducible dentro del repo.
+                  </p>
+                  <CopyBlock code={`npm run validate:st-docs`} />
+                  <div className="space-y-2 mt-3 text-[11px] text-surface-400">
+                    <p><strong className="text-surface-200">Ruta sugerida:</strong> clásica → primer orden → modal → intuicionista → perfiles avanzados.</p>
+                    <p><strong className="text-surface-200">Ideal para:</strong> clases, tutoriales internos, pruebas de consistencia y formalización documental.</p>
                   </div>
                 </div>
               </div>
