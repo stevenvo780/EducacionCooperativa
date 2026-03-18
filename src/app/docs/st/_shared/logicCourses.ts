@@ -30,6 +30,7 @@ export interface LogicCoursePageData {
   concepts: LogicBlock[];
   operators: LogicOperator[];
   commands: LogicCommandExample[];
+  pedagogicalPatterns: LogicCommandExample[];
   workedExamples: LogicCommandExample[];
   mistakes: string[];
   limits: string[];
@@ -161,6 +162,18 @@ export const logicCourses: LogicCoursePageData[] = [
         code: 'logic classical.propositional\nanalyze {E, E -> A} -> A\nexplain (E -> A)'
       }
     ],
+    pedagogicalPatterns: [
+      {
+        title: 'Clase guiada con variables y función explicativa',
+        description: 'Convierte un argumento simple en una mini lección ejecutable donde cada paso tiene nombre, explicación y cierre condicional.',
+        code: 'logic classical.propositional\nlet regla = "Si leo a Frege, entiendo la inferencia" : (L -> I)\nlet hecho = "Hoy leo a Frege" : L\n\nfn revisarPaso(F) {\n  explain F\n  return F\n}\n\nrevisarPaso(regla)\nderive I from {regla, hecho}\n\nif valid ((L & (L -> I)) -> I) {\n  print "modus ponens comprendido"\n} else {\n  print "conviene revisar la forma del argumento"\n}'
+      },
+      {
+        title: 'Formalización filosófica mínima reutilizable',
+        description: 'Usa aliases descriptivos para que el estudiante vea al mismo tiempo el lenguaje natural y su forma lógica.',
+        code: 'logic classical.propositional\nlet P = "Pienso"\nlet E = "Existo"\nlet cogito = "Si pienso, existo" : (P -> E)\n\nfn mostrarInferencia(F) {\n  explain F\n  return F\n}\n\nmostrarInferencia(cogito)\nanalyze {P, P -> E} -> E\nif valid ((P & (P -> E)) -> E) {\n  print "la estructura inferencial es estable"\n}'
+      }
+    ],
     workedExamples: [
       {
         title: 'Ejemplo 1 · Razonamiento encadenado',
@@ -247,6 +260,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Validez elemental', description: 'Comprueba principios básicos del cuantificador universal.', code: 'logic classical.first_order\ncheck valid forall x (P(x) -> P(x))\ncheck valid (forall x P(x)) -> P(a)' },
       { title: 'Existencia', description: 'Explora el paso entre casos particulares y existencia.', code: 'logic classical.first_order\ncheck valid P(a) -> exists x P(x)\ncountermodel exists x P(x) -> forall x P(x)' }
     ],
+    pedagogicalPatterns: [
+      {
+        title: 'Instanciación guiada con alias semánticos',
+        description: 'Hace visible el paso desde una regla universal a un caso particular usando variables nombradas y explicación intermedia.',
+        code: 'logic classical.first_order\nlet regla = "Todo estudiante de lógica practica" : forall x (Estudiante(x) -> Practica(x))\nlet caso = "Ana estudia lógica" : Estudiante(ana)\n\nfn revisarCaso(F) {\n  explain F\n  return F\n}\n\nrevisarCaso(regla)\nderive Practica(ana) from {regla, caso}\n\nif valid (forall x (Estudiante(x) -> Practica(x))) -> (Estudiante(ana) -> Practica(ana)) {\n  print "la instanciación universal quedó clara"\n}'
+      },
+      {
+        title: 'Pequeño laboratorio de cuantificadores',
+        description: 'Agrupa varias fórmulas para que la clase compare qué se conserva y qué no al pasar de universal a existencial.',
+        code: 'logic classical.first_order\nfn revisarFormula(F) {\n  explain F\n  return F\n}\n\nfor Formula in { forall x (Humano(x) -> Mortal(x)), P(a) -> exists x P(x) } {\n  revisarFormula(Formula)\n}\n\nif valid P(a) -> exists x P(x) {\n  print "el paso a existencia es válido"\n}'
+      }
+    ],
     workedExamples: [
       { title: 'Todos los humanos son mortales', description: 'La derivación canónica de la tradición lógica.', code: 'logic classical.first_order\naxiom regla : forall x (Humano(x) -> Mortal(x))\naxiom caso = Humano(socrates)\nderive Mortal(socrates) from {regla, caso}' },
       { title: 'Propiedad universal no invertible', description: 'Muestra que de “existe alguien con P” no se sigue “todos tienen P”.', code: 'logic classical.first_order\ncountermodel exists x P(x) -> forall x P(x)' },
@@ -285,6 +310,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Axioma K', description: 'Practica la ley central del sistema.', code: 'logic modal.k\ncheck valid [](P -> Q) -> ([]P -> []Q)' },
       { title: 'Dualidad modal', description: 'Comprueba la equivalencia entre posibilidad y negación de necesidad.', code: 'logic modal.k\ncheck equivalent <>(P), ![](!P)' },
       { title: 'Contramodelos modales', description: 'Ve por qué una fórmula falla en un frame no reflexivo.', code: 'logic modal.k\ncheck valid []P -> P\ncountermodel <>P -> []P' }
+    ],
+    pedagogicalPatterns: [
+      {
+        title: 'Axioma K explicado como clase interactiva',
+        description: 'Usa una variable descriptiva, una función de revisión y un condicional para fijar la intuición de necesidad distribuida.',
+        code: 'logic modal.k\nlet axiomaK = "Si necesariamente P implica Q, entonces si necesariamente P, necesariamente Q" : ([](P -> Q) -> ([]P -> []Q))\n\nfn revisarTesis(F) {\n  explain F\n  return F\n}\n\nrevisarTesis(axiomaK)\n\nif valid ([](P -> Q) -> ([]P -> []Q)) {\n  print "la distribución modal se sostiene en K"\n} else {\n  print "hay que revisar la accesibilidad"\n}'
+      },
+      {
+        title: 'Comparador de intuiciones modales',
+        description: 'Contrasta una ley válida de K con una ley que no pertenece al sistema, para enseñar por contraste.',
+        code: 'logic modal.k\nlet valida = "Distribución necesaria" : ([](P -> Q) -> ([]P -> []Q))\nlet noValida = "Reflexividad" : ([]P -> P)\n\nexplain valida\nexplain noValida\n\nif valid ([]P -> P) {\n  print "esto sería T o un sistema más fuerte"\n} else {\n  print "K no garantiza reflexividad"\n}'
+      }
     ],
     workedExamples: [
       { title: 'Distribución necesaria', description: 'La ley característica de K.', code: 'logic modal.k\ncheck valid [](P -> Q) -> ([]P -> []Q)' },
@@ -326,6 +363,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'No confundir deber con hecho', description: 'Mira por qué O(P) no implica P actual.', code: 'logic deontic.standard\ncheck valid [](P) -> P\ncountermodel [](P) -> P' },
       { title: 'Derivación normativa', description: 'Propaga un deber a otra consecuencia permitida.', code: 'logic deontic.standard\naxiom norma : [](P -> Q)\naxiom permiso = <>(P)\nderive <>(Q) from {norma, permiso}' }
     ],
+    pedagogicalPatterns: [
+      {
+        title: 'Norma comentada paso a paso',
+        description: 'Muestra cómo una obligación puede enseñarse como guion ejecutable, sin confundir deber con hecho.',
+        code: 'logic deontic.standard\nlet norma = "Si hay promesa, debe cumplirse" : [](P -> C)\nlet permiso = "Prometer sigue siendo posible" : <>(P)\n\nfn revisarNorma(F) {\n  explain F\n  return F\n}\n\nrevisarNorma(norma)\nderive <>(C) from {norma, permiso}\n\nif valid [](P) -> <>(P) {\n  print "toda obligación preserva permiso en KD"\n}'
+      },
+      {
+        title: 'Diferenciar hecho y obligación',
+        description: 'Usa un if para subrayar que el plano normativo no coincide con el plano factual.',
+        code: 'logic deontic.standard\nlet deber = "Debe entregarse el informe" : [](E)\n\nexplain deber\n\nif valid [](E) -> E {\n  print "deber y hecho colapsaron"\n} else {\n  print "ST distingue correctamente lo obligatorio de lo actual"\n}\n\ncheck satisfiable [](E) & !E'
+      }
+    ],
     workedExamples: [
       { title: 'Deber institucional', description: 'Ejemplo simple con entrega y aprobación.', code: 'logic deontic.standard\naxiom norma : [](Entrega -> Registro)\naxiom permiso = <>(Entrega)\nderive <>(Registro) from {norma, permiso}' },
       { title: 'Obligación incumplida', description: 'Una obligación puede coexistir con su incumplimiento factual.', code: 'logic deontic.standard\ncheck satisfiable [](Entrega) & !Entrega' }
@@ -363,6 +412,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Conocimiento verdadero', description: 'Comprueba el axioma T.', code: 'logic epistemic.s5\ncheck valid [](P) -> P' },
       { title: 'Introspección positiva', description: 'El agente sabe que sabe.', code: 'logic epistemic.s5\ncheck valid [](P) -> []([](P))' },
       { title: 'Cierre epistémico', description: 'Si sabe una implicación y sabe el antecedente, sabe el consecuente.', code: 'logic epistemic.s5\naxiom r1 : [](P -> Q)\naxiom r2 = [](P)\nderive [](Q) from {r1, r2}' }
+    ],
+    pedagogicalPatterns: [
+      {
+        title: 'Mapa de conocimiento con alias descriptivos',
+        description: 'Ayuda a enseñar la diferencia entre verdad, conocimiento y posibilidad epistémica con nombres semánticos visibles.',
+        code: 'logic epistemic.s5\nlet verdad = "Si se sabe P, entonces P" : ([]P -> P)\nlet introspeccion = "Si se sabe P, se sabe que se sabe P" : ([]P -> []([]P))\n\nfn revisarConocimiento(F) {\n  explain F\n  return F\n}\n\nrevisarConocimiento(verdad)\nrevisarConocimiento(introspeccion)\n\nif valid ([]P -> P) {\n  print "S5 mantiene veridicidad"\n}'
+      },
+      {
+        title: 'Enseñar ignorancia sin colapso',
+        description: 'Subraya que no saber algo no es lo mismo que saber su negación.',
+        code: 'logic epistemic.s5\nlet ignorancia = "P es posible sin estar sabido" : (<>P & ![]P)\n\nexplain ignorancia\ncheck satisfiable <>P & ![]P\n\nif valid !([]P) -> [](!([]P)) {\n  print "la introspección negativa idealizada está disponible"\n}'
+      }
     ],
     workedExamples: [
       { title: 'Teoremas básicos de S5', description: 'Tríada mínima para empezar.', code: 'logic epistemic.s5\ncheck valid [](P) -> P\ncheck valid [](P) -> []([](P))\ncheck valid !([](P)) -> [](!([](P)))' },
@@ -402,6 +463,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Contramodelos', description: 'Observa por qué fallan ciertas leyes clásicas.', code: 'logic intuitionistic.propositional\ncountermodel P | !P\ncountermodel !!P -> P' },
       { title: 'Satisfacibilidad', description: 'Que una ley no sea válida no significa que nunca pueda cumplirse.', code: 'logic intuitionistic.propositional\ncheck satisfiable P | !P' }
     ],
+    pedagogicalPatterns: [
+      {
+        title: 'Clase por contraste con leyes clásicas',
+        description: 'Usa variables descriptivas y condicionales para mostrar qué se conserva y qué se pierde al pasar a IPC.',
+        code: 'logic intuitionistic.propositional\nlet conservada = "Toda prueba de P implica doble negación" : (P -> !!P)\nlet clasica = "Tercero excluido" : (P | !P)\n\nfn revisarFormula(F) {\n  explain F\n  return F\n}\n\nrevisarFormula(conservada)\nrevisarFormula(clasica)\n\nif valid (P | !P) {\n  print "seguimos en clásica"\n} else {\n  print "en intuicionista no todo enunciado está decidido"\n}'
+      },
+      {
+        title: 'Pequeño guion constructivo',
+        description: 'Ofrece un patrón para ejercicios donde el docente quiere separar no-refutabilidad de prueba efectiva.',
+        code: 'logic intuitionistic.propositional\nlet pasoSeguro = "De P obtenemos !!P" : (P -> !!P)\nlet pasoFallido = "De !!P obtenemos P" : (!!P -> P)\n\nexplain pasoSeguro\nexplain pasoFallido\n\nif valid (!!P -> P) {\n  print "esto ya sería lectura clásica"\n} else {\n  print "ST mantiene la diferencia constructiva"\n}'
+      }
+    ],
     workedExamples: [
       { title: 'Lo que sí se conserva', description: 'Ejemplos de fórmulas válidas intuicionistamente.', code: 'logic intuitionistic.propositional\ncheck valid P -> !!P\ncheck valid ((P -> Q) -> (!Q -> !P))\ncheck valid (P & Q) -> P' },
       { title: 'Lo que no se conserva', description: 'Ejemplos clásicos que fallan en IPC.', code: 'logic intuitionistic.propositional\ncheck valid P | !P\ncheck valid !!P -> P\ncheck valid ((!P -> !Q) -> (Q -> P))' }
@@ -440,6 +513,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Ley básica de G', description: 'Si algo siempre vale, entonces vale ahora.', code: 'logic temporal.ltl\ncheck valid [](P) -> P' },
       { title: 'G implica F', description: 'Lo que siempre vale también ocurre eventualmente.', code: 'logic temporal.ltl\ncheck valid [](P) -> <>(P)' },
       { title: 'F no implica G', description: 'Lo eventual no basta para garantizar permanencia.', code: 'logic temporal.ltl\ncheck valid <>(P) -> [](P)\ncountermodel <>(P) -> [](P)' }
+    ],
+    pedagogicalPatterns: [
+      {
+        title: 'Seguridad y vivacidad en formato de aula',
+        description: 'Nombrar propiedades temporales vuelve mucho más clara la distinción entre “siempre” y “alguna vez”.',
+        code: 'logic temporal.ltl\nlet seguridad = "Si algo siempre vale, vale ahora" : ([]P -> P)\nlet vivacidad = "Si algo siempre vale, eventualmente ocurre" : ([]P -> <>P)\n\nfn revisarTemporal(F) {\n  explain F\n  return F\n}\n\nrevisarTemporal(seguridad)\nrevisarTemporal(vivacidad)\n\nif valid ([]P -> P) {\n  print "la propiedad de seguridad está activa"\n}'
+      },
+      {
+        title: 'Recorrido de operadores temporales',
+        description: 'Usa un bucle corto para recorrer las formas expresivas básicas del perfil temporal.',
+        code: 'logic temporal.ltl\nfor Caso in { [](P), <>(P), X(P) } {\n  explain Caso\n}\n\nif valid <>(P) -> [](P) {\n  print "eventualmente implicaría siempre"\n} else {\n  print "vivacidad no equivale a permanencia"\n}'
+      }
     ],
     workedExamples: [
       { title: 'Dualidades temporales', description: 'Reescrituras fundamentales entre siempre y eventualmente.', code: 'logic temporal.ltl\ncheck equivalent <>(P), ![](!P)\ncheck equivalent [](P), !<>(!P)' },
@@ -504,6 +589,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Condicionales y loops', description: 'Combina arithmetic con if, for y while para mostrar procesos paso a paso.', code: 'logic arithmetic\nif valid 8 / 2 >= 4 {\n  print "division ok"\n}\n\nfor N in { 1, 2, 3 } {\n  print N\n}\n\nset LOOP = 1\nwhile satisfiable LOOP {\n  print "loop arithmetic"\n  set LOOP = 0\n}' },
       { title: 'Funciones', description: 'Encapsula secuencias reutilizables con fn y return.', code: 'logic arithmetic\nfn calcular(A, B) {\n  print A\n  print B\n  explain A + B\n  return A + B\n}\n\ncalcular(4, 5)' }
     ],
+    pedagogicalPatterns: [
+      {
+        title: 'Script docente con estado visible',
+        description: 'Muestra la versión más clara de ST como lenguaje pedagógico: variables, mutación, función y control de flujo en una sola escena.',
+        code: 'logic arithmetic\nlet base = 2 + 3\nprint base\n\nfn revisar(X) {\n  explain X\n  return X\n}\n\nrevisar(base * 4)\n\nif valid base < 10 {\n  print "la base es pequeña"\n}\n\nfor N in { 1, 2, 3 } {\n  explain N + base\n}'
+      },
+      {
+        title: 'Mini simulación de aula',
+        description: 'Enseña cómo una condición cambia al reasignar el estado con set.',
+        code: 'logic arithmetic\nlet contador = 3\n\nwhile satisfiable contador > 0 {\n  print contador\n  set contador = contador - 1\n}\n\nif valid contador < 1 {\n  print "el contador terminó"\n}'
+      }
+    ],
     workedExamples: [
       { title: 'Ejemplo 1 · Cálculo y comparación', description: 'Empieza por expresiones cortas y comparaciones directas.', code: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck valid (2 * 3) >= 6\ncheck satisfiable 10 % 3 > 0\nexplain 2 + 3 * 4\nexplain 10 > 5' },
       { title: 'Ejemplo 2 · Variables y mutación', description: 'Muestra cómo el estado puede cambiar de manera controlada.', code: 'logic arithmetic\nlet X = 2 + 3\nprint X\nset X = 2 * 5\nprint X' },
@@ -563,6 +660,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Celarent', description: 'Una forma negativa válida.', code: 'logic aristotelian.syllogistic\ncheck valid (forall x (M(x) -> !P(x)) & forall x (S(x) -> M(x))) -> forall x (S(x) -> !P(x))' },
       { title: 'Falacia', description: 'Observa un caso de término medio mal distribuido.', code: 'logic aristotelian.syllogistic\naxiom p1 : forall x (P(x) -> M(x))\naxiom p2 : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {p1, p2}' }
     ],
+    pedagogicalPatterns: [
+      {
+        title: 'Silogismo con nombres legibles',
+        description: 'Ideal para aula: cada premisa lleva un alias semántico y la derivación queda más cercana al castellano filosófico.',
+        code: 'logic aristotelian.syllogistic\nlet mayor = "Todo mortal es viviente" : forall x (M(x) -> V(x))\nlet menor = "Todo humano es mortal" : forall x (H(x) -> M(x))\n\nfn revisarPremisa(F) {\n  explain F\n  return F\n}\n\nrevisarPremisa(mayor)\nrevisarPremisa(menor)\nderive forall x (H(x) -> V(x)) from {mayor, menor}'
+      },
+      {
+        title: 'Chequeo didáctico de validez silogística',
+        description: 'Añade un cierre condicional para remarcar cuándo un modo es realmente válido.',
+        code: 'logic aristotelian.syllogistic\nif valid ((forall x (M(x) -> P(x)) & forall x (S(x) -> M(x))) -> forall x (S(x) -> P(x))) {\n  print "Barbara queda validada"\n} else {\n  print "el término medio no está funcionando bien"\n}'
+      }
+    ],
     workedExamples: [
       { title: 'Barbara y Celarent', description: 'Dos formas canónicas para memorizar la estructura inferencial.', code: 'logic aristotelian.syllogistic\naxiom mayor : forall x (M(x) -> P(x))\naxiom menor : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {mayor, menor}\n\ncheck satisfiable forall x (S(x) -> P(x))' },
       { title: 'Darii y Ferio', description: 'Introduce existencia particular en la conclusión.', code: 'logic aristotelian.syllogistic\ncheck satisfiable exists x (S(x) & P(x))\ncheck satisfiable exists x (S(x) & !P(x))' }
@@ -602,6 +711,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Ex falso quodlibet', description: 'Observa cómo deja de ser una ley válida.', code: 'logic paraconsistent.belnap\ncheck valid (P & !P) -> Q\ncountermodel (P & !P) -> Q' },
       { title: 'Equivalencias que sí se conservan', description: 'Algunas leyes de reescritura siguen funcionando.', code: 'logic paraconsistent.belnap\ncheck equivalent P -> Q, !P | Q\ncheck equivalent !(P & Q), !P | !Q' }
     ],
+    pedagogicalPatterns: [
+      {
+        title: 'Contradicción sin explosión, explicada',
+        description: 'Perfecta para clase: un alias nombra la inconsistencia y el if muestra por qué Belnap no colapsa en trivialidad.',
+        code: 'logic paraconsistent.belnap\nlet choque = "Hay evidencia a favor y en contra" : (P & !P)\n\nfn revisarChoque(F) {\n  explain F\n  return F\n}\n\nrevisarChoque(choque)\n\nif valid ((P & !P) -> Q) {\n  print "habría explosión clásica"\n} else {\n  print "Belnap tolera la inconsistencia sin trivializar"\n}\n\ncheck satisfiable P & !P'
+      },
+      {
+        title: 'Comparador con intuición clásica',
+        description: 'Sirve para mostrar que varias fórmulas que parecen obvias dejan de ser válidas cuando aparece el valor N.',
+        code: 'logic paraconsistent.belnap\nfor Caso in { P -> P, P | !P, (P & !P) -> Q } {\n  explain Caso\n}\n\nif valid P -> P {\n  print "la reflexividad material sobrevivió"\n} else {\n  print "en Belnap incluso eso puede fallar"\n}'
+      }
+    ],
     workedExamples: [
       { title: 'Tres sorpresas de Belnap', description: 'Lo que más desconcierta a quien viene de la clásica.', code: 'logic paraconsistent.belnap\ncheck valid P -> P\ncheck valid P | !P\ncheck valid (P & !P) -> Q' },
       { title: 'Lo que sí se puede hacer', description: 'Equivalencias y satisfacibilidad útiles.', code: 'logic paraconsistent.belnap\ncheck satisfiable P & !P\ncheck equivalent P -> Q, !P | Q\ncheck equivalent !(P | Q), !P & !Q' }
@@ -639,6 +760,18 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Validez probabilística', description: 'Comprueba fórmulas que siempre alcanzan probabilidad 1.', code: 'logic probabilistic.basic\ncheck valid P | !P\ncheck valid P -> P' },
       { title: 'No toda fórmula alcanza 1', description: 'Muestra que una contingencia no es válida en este sentido fuerte.', code: 'logic probabilistic.basic\ncheck valid P -> Q\ncountermodel P -> Q' },
       { title: 'Probabilidad positiva', description: 'Satisfacibilidad se interpreta como existencia de asignaciones con probabilidad positiva.', code: 'logic probabilistic.basic\ncheck satisfiable P & Q' }
+    ],
+    pedagogicalPatterns: [
+      {
+        title: 'Tautología y contingencia en clave probabilística',
+        description: 'Usa variables descriptivas para enseñar que probabilidad 1 no es lo mismo que simple posibilidad.',
+        code: 'logic probabilistic.basic\nlet tautologia = "Toda valuación satisface P o no P" : (P | !P)\nlet contingencia = "P implica Q" : (P -> Q)\n\nfn revisarProbabilidad(F) {\n  explain F\n  return F\n}\n\nrevisarProbabilidad(tautologia)\nrevisarProbabilidad(contingencia)\n\nif valid (P | !P) {\n  print "la fórmula tiene probabilidad 1"\n}'
+      },
+      {
+        title: 'Comparación guiada de estatus',
+        description: 'Presenta en una sola cápsula la diferencia entre validez probabilística y mera satisfacibilidad.',
+        code: 'logic probabilistic.basic\ncheck valid P | !P\ncheck satisfiable P\ncountermodel P -> Q\n\nif valid P {\n  print "P sería segura en todo muestreo"\n} else {\n  print "P puede ocurrir sin ser necesaria"\n}'
+      }
     ],
     workedExamples: [
       { title: 'Validez vs posibilidad', description: 'Contrasta una tautología con una simple contingencia.', code: 'logic probabilistic.basic\ncheck valid P | !P\ncheck valid P\ncheck satisfiable P' },

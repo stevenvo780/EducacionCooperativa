@@ -786,7 +786,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
         )}
 
         {!isLoading && (
-          <div className="mx-auto flex w-fit max-w-full flex-col gap-4">
+          <div className="mx-auto flex w-fit flex-col gap-4">
             {Array.from({ length: pageCount }, (_, index) => {
               const pageNumber = index + 1;
               const isMatchedPage = searchMatches.includes(pageNumber);
@@ -819,7 +819,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
                     ref={(node) => {
                       canvasRefs.current[pageNumber] = node;
                     }}
-                    className="block max-w-full"
+                    className="block"
                     data-testid="pdf-page-canvas"
                   />
                 </div>
