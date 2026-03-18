@@ -49,10 +49,12 @@ function generateQuickFixes(d: GenericDiagnostic, content: string): QuickFix[] {
   // Typo suggestions for common keywords
   const typoMap: Record<string, string> = {
     'axion': 'axiom', 'theorm': 'theorem', 'theroem': 'theorem',
-    'chek': 'check', 'proove': 'prove', 'valido': 'valid',
+    'chek': 'check', 'proove': 'prove',
     'satisafiable': 'satisfiable', 'equvalent': 'equivalent',
-    'foall': 'forall', 'exsts': 'exists', 'derivar': 'derive',
-    'asume': 'assume', 'inport': 'import'
+    'foall': 'forall', 'exsts': 'exists',
+    'asume': 'assume', 'inport': 'import', 'exort': 'export',
+    'teory': 'theory', 'extens': 'extends', 'prive': 'private',
+    'whle': 'while', 'prnt': 'print', 'retur': 'return'
   };
 
   // Check first word on error line
