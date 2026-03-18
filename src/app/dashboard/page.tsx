@@ -1289,6 +1289,7 @@ function DashboardContent() {
     }, [folders, activeFolder, folderChildrenMap, setActiveFolderSafe]);
 
     const handleDocDragStart = (e: ReactDragEvent, docItem: DocItem) => {
+        e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc');
         e.dataTransfer.setData('application/x-doc-id', docItem.id);
         e.dataTransfer.setData('text/plain', docItem.id);
         e.dataTransfer.effectAllowed = 'move';
