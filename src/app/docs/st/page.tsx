@@ -11,6 +11,17 @@ import {
 interface NavItem { id: string; label: string }
 interface SyntaxBlock { title: string; code: string; note?: string }
 interface CommandBlock { cmd: string; desc: string; example: string }
+interface PhilosophyFormalization {
+  title: string;
+  source: string;
+  why: string;
+  code: string;
+  note: string;
+}
+interface ReservedWordGroup {
+  title: string;
+  items: Array<{ keyword: string; purpose: string }>;
+}
 interface ProfileManual {
   id: string;
   name: string;
@@ -57,6 +68,8 @@ const NAV: NavItem[] = [
   { id: 'syntax', label: 'Sintaxis' },
   { id: 'commands', label: 'Comandos' },
   { id: 'scripting', label: 'Programación ST' },
+  { id: 'philosophy-formalizations', label: 'Formalizaciones Filosóficas' },
+  { id: 'glossary', label: 'Glosario ST' },
   { id: 'profiles', label: 'Perfiles Lógicos' },
   { id: 'text-layer', label: 'Text Layer' },
   { id: 'limits', label: 'Limitaciones' },
@@ -167,6 +180,109 @@ const COMMANDS: CommandBlock[] = [
     cmd: 'st profiles',
     desc: 'Lista los perfiles lógicos disponibles desde la CLI real actual.',
     example: 'st profiles'
+  }
+];
+
+const PHILOSOPHY_FORMALIZATIONS: PhilosophyFormalization[] = [
+  {
+    title: 'Aristóteles · Principio de no contradicción',
+    source: 'Metafísica, Γ',
+    why: 'Es una formalización excelente para introducir contradicción, negación y validez universal en proposicional.',
+    code: 'logic classical.propositional\n\nlet P = "La misma cosa se afirma del mismo sujeto"\nlet principio = "No es posible afirmar y negar lo mismo al mismo tiempo" : !(P & !P)\n\nprint principio\ncheck valid !(P & !P)\nexplain !(P & !P)\nanalyze {!(P & !P)} -> !(P & !P)',
+    note: 'Aquí usamos una letra proposicional con descripción semántica y una formalización muy cercana al corazón del texto filosófico.'
+  },
+  {
+    title: 'Descartes · Cogito en versión mínima proposicional',
+    source: 'Meditaciones Metafísicas',
+    why: 'Aunque el cogito completo rebasa la proposicional pura, una versión mínima sirve para enseñar dependencia inferencial y pasos explicativos.',
+    code: 'logic classical.propositional\n\nlet P = "Pienso"\nlet E = "Existo"\nlet regla = "Si pienso, existo" : (P -> E)\nlet hecho = "Estoy pensando" : P\n\nderive E from {regla, hecho}\nanalyze {P, P -> E} -> E\nexplain (P -> E)\nrender theory',
+    note: 'No pretende capturar toda la riqueza filosófica del cogito, sino mostrar cómo ST permite convertir un fragmento argumental en un guion verificable.'
+  },
+  {
+    title: 'Epicteto · Distinguir lo que depende de nosotros',
+    source: 'Enquiridión, §1',
+    why: 'Sirve para modelar una inferencia práctica sencilla con variables descriptivas y control pedagógico del script.',
+    code: 'logic classical.propositional\n\nlet D = "Algo depende de nosotros"\nlet T = "Debe trabajarse interiormente"\nlet regla = "Si depende de nosotros, debe trabajarse interiormente" : (D -> T)\nlet caso = "Este juicio depende de nosotros" : D\n\nderive T from {regla, caso}\nif valid (D -> D) {\n  print "la estructura base es coherente"\n}\nanalyze {D, D -> T} -> T',
+    note: 'Aquí el valor didáctico está en mezclar descripción, derivación e inferencia práctica sin perder claridad.'
+  },
+  {
+    title: 'Kant · Esquema normativo mínimo',
+    source: 'Fundamentación de la metafísica de las costumbres',
+    why: 'Aunque Kant se trabaja mejor en deóntica, una versión proposicional mínima ayuda a explicar traducción de lenguaje natural a estructura inferencial.',
+    code: 'logic classical.propositional\n\nlet U = "La máxima puede universalizarse"\nlet M = "La acción es moralmente admisible"\nlet principio = "Si la máxima puede universalizarse, la acción es admisible" : (U -> M)\nlet caso = "Esta máxima puede universalizarse" : U\n\nderive M from {principio, caso}\ncheck equivalent (U -> M), (!U | M)\nexplain (U -> M)',
+    note: 'Este patrón ayuda a mostrar cómo una regla ética se vuelve una implicación formal sin agotar todo el contenido filosófico.'
+  }
+];
+
+const RESERVED_WORD_GROUPS: ReservedWordGroup[] = [
+  {
+    title: 'Núcleo lógico',
+    items: [
+      { keyword: 'logic / logica', purpose: 'Activa el perfil lógico del script.' },
+      { keyword: 'axiom / axioma', purpose: 'Declara una premisa estable dentro de la teoría.' },
+      { keyword: 'theorem / teorema', purpose: 'Registra una consecuencia teórica con nombre.' },
+      { keyword: 'derive / derivar', purpose: 'Deriva una meta desde premisas explícitas.' },
+      { keyword: 'from / desde', purpose: 'Introduce la lista de premisas para derive.' },
+      { keyword: 'prove / probar', purpose: 'Intenta probar una meta usando la teoría cargada.' },
+      { keyword: 'check / verificar', purpose: 'Abre una verificación de validez, satisfacibilidad o equivalencia.' },
+      { keyword: 'valid / valido', purpose: 'Pregunta si una fórmula es válida.' },
+      { keyword: 'satisfiable / satisfacible', purpose: 'Pregunta si una fórmula tiene algún modelo.' },
+      { keyword: 'equivalent / equivalente', purpose: 'Pregunta si dos fórmulas dicen lo mismo lógicamente.' },
+      { keyword: 'countermodel / contramodelo', purpose: 'Busca una valuación o modelo que haga fallar una fórmula.' },
+      { keyword: 'truth_table / tabla_verdad', purpose: 'Genera tabla de verdad cuando el perfil lo soporta.' },
+      { keyword: 'refute / refutar', purpose: 'Alias práctico de búsqueda de contramodelo.' }
+    ]
+  },
+  {
+    title: 'Variables, scripting y salida',
+    items: [
+      { keyword: 'let / sea', purpose: 'Define aliases, fórmulas, descripciones o pasajes.' },
+      { keyword: 'set / asignar', purpose: 'Reasigna una variable lógica ya usada en el script.' },
+      { keyword: 'print / imprimir', purpose: 'Imprime texto o fórmulas resueltas en la salida.' },
+      { keyword: 'if / si', purpose: 'Ejecuta un bloque según una condición lógica.' },
+      { keyword: 'else / sino', purpose: 'Define la rama alternativa de un condicional.' },
+      { keyword: 'for / para', purpose: 'Itera sobre una lista de fórmulas o expresiones.' },
+      { keyword: 'in / en', purpose: 'Conecta la variable del for con su colección.' },
+      { keyword: 'while / mientras', purpose: 'Repite un bloque mientras una condición siga cumpliéndose.' },
+      { keyword: 'fn / funcion', purpose: 'Declara una función reutilizable.' },
+      { keyword: 'return / retornar', purpose: 'Corta la ejecución de una función.' }
+    ]
+  },
+  {
+    title: 'Estructuración y prueba',
+    items: [
+      { keyword: 'import / importar', purpose: 'Carga otro archivo `.st` dentro del contexto actual.' },
+      { keyword: 'theory / teoria', purpose: 'Agrupa conocimiento con encapsulación.' },
+      { keyword: 'extends / extiende', purpose: 'Hace que una teoría herede miembros públicos de otra.' },
+      { keyword: 'private / privado', purpose: 'Marca miembros internos no visibles fuera de la teoría.' },
+      { keyword: 'assume / asumir', purpose: 'Introduce hipótesis temporales dentro de un bloque de prueba.' },
+      { keyword: 'show / demostrar', purpose: 'Fija la meta de un proof block.' },
+      { keyword: 'qed', purpose: 'Cierra un bloque de prueba estructurada.' }
+    ]
+  },
+  {
+    title: 'Text Layer y explicación',
+    items: [
+      { keyword: 'passage / pasaje', purpose: 'Declara una referencia a un documento o ancla textual.' },
+      { keyword: 'formalize / formalizar', purpose: 'Convierte un pasaje en una fórmula lógica.' },
+      { keyword: 'as / como', purpose: 'Une una formalización con su fórmula.' },
+      { keyword: 'claim / afirmacion', purpose: 'Registra un claim verificable.' },
+      { keyword: 'support / soporte', purpose: 'Asocia una fuente o pasaje a un claim.' },
+      { keyword: 'confidence / confianza', purpose: 'Asigna nivel de confianza a un claim.' },
+      { keyword: 'context / contexto', purpose: 'Guarda explicación interpretativa adicional.' },
+      { keyword: 'render / mostrar', purpose: 'Renderiza teoría, claims o entradas específicas.' },
+      { keyword: 'analyze / analizar', purpose: 'Evalúa una inferencia completa y detecta falacias.' },
+      { keyword: 'explain / explicar', purpose: 'Despliega una explicación del contenido lógico o aritmético.' }
+    ]
+  },
+  {
+    title: 'Cuantificadores y operadores temporales',
+    items: [
+      { keyword: 'forall / paratodo', purpose: 'Cuantificador universal de FOL.' },
+      { keyword: 'exists / existe', purpose: 'Cuantificador existencial de FOL.' },
+      { keyword: 'next / siguiente', purpose: 'Operador temporal de próximo estado.' },
+      { keyword: 'until / hasta', purpose: 'Operador temporal de persistencia hasta un evento.' }
+    ]
   }
 ];
 
@@ -1143,6 +1259,58 @@ export default function STDocsPage() {
                   <p className="text-xs text-surface-400 mb-3">Con <code className="text-mandy-400">import</code> y <code className="text-mandy-400">theory</code> puedes organizar materiales largos y reutilizables.</p>
                   <CopyBlock code={'logic classical.propositional\n\ntheory Base {\n  let alias = P -> Q\n  private let secreto = R & S\n  axiom regla : P -> Q\n}\n\nprint Base.alias\nrender theory'} />
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle id="philosophy-formalizations" icon={BookOpen} title="Formalizaciones de Textos Filosóficos Reales" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                Una de las mejores maneras de enseñar ST es tomar fragmentos filosóficos reales
+                y traducirlos a una estructura ejecutable. En estos ejemplos usamos
+                <code className="text-mandy-400">let</code>, descripciones semánticas, derivación,
+                <code className="text-mandy-400"> analyze</code>, <code className="text-mandy-400">explain</code>,
+                condiciones y render para que el lector vea no solo la fórmula, sino el recorrido pedagógico.
+              </p>
+              <div className="grid gap-4">
+                {PHILOSOPHY_FORMALIZATIONS.map((item, index) => (
+                  <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <h4 className="text-sm font-bold text-white">{item.title}</h4>
+                      <span className="text-[10px] font-bold bg-surface-700/70 text-surface-300 px-2 py-1 rounded-md border border-surface-600/40">{item.source}</span>
+                    </div>
+                    <p className="text-xs text-surface-400 mb-3">{item.why}</p>
+                    <CopyBlock code={item.code} />
+                    <p className="text-xs text-surface-500 mt-2 italic">{item.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle id="glossary" icon={Info} title="Glosario de Palabras Reservadas" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                Este glosario resume las keywords más importantes del lenguaje y para qué sirven.
+                Incluye la forma principal en inglés y, cuando existe, su alias en español. La idea
+                es que puedas leer un script ST como si fuera una gramática viva del lenguaje.
+              </p>
+              <div className="grid gap-4">
+                {RESERVED_WORD_GROUPS.map((group, index) => (
+                  <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                    <h4 className="text-sm font-bold text-white mb-3">{group.title}</h4>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {group.items.map((item, itemIndex) => (
+                        <div key={itemIndex} className="bg-surface-900/40 rounded-lg border border-surface-700/30 px-3 py-2">
+                          <div className="text-xs font-bold text-mandy-300 mb-1">{item.keyword}</div>
+                          <div className="text-xs text-surface-400 leading-relaxed">{item.purpose}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </section>

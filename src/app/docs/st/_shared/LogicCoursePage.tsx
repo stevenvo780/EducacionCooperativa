@@ -62,6 +62,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
     { id: 'concepts', label: 'Conceptos' },
     { id: 'operators', label: 'Operadores' },
     { id: 'commands', label: 'Comandos' },
+    { id: 'pedagogy', label: 'ST pedagógico' },
     { id: 'examples', label: 'Ejemplos' },
     { id: 'mistakes', label: 'Errores' },
     { id: 'limits', label: 'Límites' },
@@ -211,6 +212,26 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                   <h4 className="text-sm font-bold text-white mb-2">{command.title}</h4>
                   <p className="text-sm text-surface-300 mb-3">{command.description}</p>
                   <CopyBlock code={command.code} />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section id="pedagogy" className="scroll-mt-24 border border-violet-500/20 rounded-2xl p-6 bg-violet-500/5">
+            <div className="flex items-center gap-2 mb-4">
+              <Terminal className="w-5 h-5 text-violet-300" />
+              <h3 className="text-xl font-bold text-white">ST como herramienta pedagógica en esta lógica</h3>
+            </div>
+            <p className="text-sm text-surface-300 leading-relaxed mb-5">
+              Esta sección no solo enseña la lógica, sino también cómo usar `ST` para explicarla mejor: con aliases semánticos,
+              funciones reutilizables, condicionales, recorridos guiados y salidas legibles para clase, taller o autoestudio.
+            </p>
+            <div className="space-y-4">
+              {course.pedagogicalPatterns.map((pattern, index) => (
+                <div key={index} className="bg-surface-900/40 rounded-xl p-5 border border-violet-500/10">
+                  <h4 className="text-sm font-bold text-white mb-2">{pattern.title}</h4>
+                  <p className="text-sm text-surface-300 mb-3">{pattern.description}</p>
+                  <CopyBlock code={pattern.code} />
                 </div>
               ))}
             </div>
