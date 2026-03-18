@@ -11,13 +11,14 @@ const LIMIT_WINDOW = 60 * 1000; // 1 minute
 const MAX_ATTEMPTS = 5;
 const MAX_RATE_LIMIT_ENTRIES = 10_000; // prevent unbounded growth under DDoS
 
-// Periodically evict expired entries to prevent unbounded Map growth
+// Periodically evict expired entries to prevent unbounded Map growth.
+// .unref() evita que el interval bloquee el cierre del proceso Node.js.
 setInterval(() => {
     const now = Date.now();
     for (const [ip, record] of rateLimit) {
         if (now > record.expires) rateLimit.delete(ip);
     }
-}, LIMIT_WINDOW);
+}, LIMIT_WINDOW).unref();
 
 const checkRateLimit = (ip: string) => {
     const now = Date.now();

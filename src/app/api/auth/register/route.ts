@@ -9,11 +9,21 @@ import { getErrorMessage } from '@/lib/error-utils';
 const rateLimit = new Map<string, { count: number; expires: number }>();
 const LIMIT_WINDOW = 60 * 1000; // 1 minute
 const MAX_ATTEMPTS = 3; // Stricter for register
+const MAX_RATE_LIMIT_ENTRIES = 10_000; // prevent unbounded growth under DDoS
+
+// Periodically evict expired entries. .unref() evita bloquear cierre del proceso.
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of rateLimit) {
+        if (now > record.expires) rateLimit.delete(ip);
+    }
+}, LIMIT_WINDOW).unref();
 
 const checkRateLimit = (ip: string) => {
+    const now = Date.now();
     const record = rateLimit.get(ip);
     if (record) {
-        if (Date.now() > record.expires) {
+        if (now > record.expires) {
             rateLimit.delete(ip);
         } else if (record.count >= MAX_ATTEMPTS) {
             return false;
@@ -22,7 +32,12 @@ const checkRateLimit = (ip: string) => {
             return true;
         }
     }
-    rateLimit.set(ip, { count: 1, expires: Date.now() + LIMIT_WINDOW });
+    // Evict oldest entry if map is too large (DDoS protection)
+    if (rateLimit.size >= MAX_RATE_LIMIT_ENTRIES) {
+        const firstKey = rateLimit.keys().next().value;
+        if (firstKey !== undefined) rateLimit.delete(firstKey);
+    }
+    rateLimit.set(ip, { count: 1, expires: now + LIMIT_WINDOW });
     return true;
 };
 

@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminStorage, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -46,8 +48,6 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const buffer = Buffer.from(await file.arrayBuffer());
-
         const safeName = sanitizeFileName(file.name);
         const filename = buildStoragePath({
             workspaceId,
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         }
         const fileRef = bucket.file(filename);
 
-        await fileRef.save(buffer, {
+        const writeStream = fileRef.createWriteStream({
             contentType: file.type,
             metadata: {
                 metadata: {
@@ -71,6 +71,10 @@ export async function POST(req: NextRequest) {
                 }
             }
         });
+        await pipeline(
+            Readable.fromWeb(file.stream() as import('stream/web').ReadableStream),
+            writeStream
+        );
 
         const [url] = await fileRef.getSignedUrl({
             action: 'read' as const,

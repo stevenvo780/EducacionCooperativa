@@ -187,10 +187,14 @@ export async function GET(req: NextRequest) {
             docs = docs.slice(offsetVal);
         }
 
+        // Para vistas de solo metadatos, permitir stale-while-revalidate para reducir
+        // lecturas de Firestore. Para vistas con contenido, mantener sin cache.
+        const cacheControl = (view === 'metadata' || view === 'list')
+            ? 'private, max-age=0, stale-while-revalidate=5'
+            : 'no-store, no-cache, must-revalidate, proxy-revalidate';
+
         return NextResponse.json(docs, {
-            headers: {
-                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
-            }
+            headers: { 'Cache-Control': cacheControl }
         });
     } catch (error: unknown) {
         console.error('Error listing documents:', getErrorMessage(error));
