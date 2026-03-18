@@ -17,7 +17,9 @@ const MULTI_OPS: Record<string, true> = {
   '->': true,
   '<-': true,
   '[]': true,
-  '<>': true
+  '<>': true,
+  '<=': true,
+  '>=': true
 };
 
 // ── State ───────────────────────────────────────────────────
@@ -112,6 +114,8 @@ const stStreamParser = {
 
     // ── Multi-char operators ──
     if (stream.match('<->')) return 'operator';
+    if (stream.match('<=')) return 'operator';
+    if (stream.match('>=')) return 'operator';
     if (stream.match('->')) return 'operator';
     if (stream.match('<-')) return 'operator';
     if (stream.match('<>')) return 'operator';
@@ -122,7 +126,11 @@ const stStreamParser = {
 
     // ── Single-char operators ──
     const ch = stream.peek();
-    if (ch && '~&|!='.includes(ch)) {
+    if (ch && '~&|!=+-*/%<>'.includes(ch)) {
+      stream.next();
+      return 'operator';
+    }
+    if (ch === '≤' || ch === '≥') {
       stream.next();
       return 'operator';
     }
