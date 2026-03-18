@@ -28,6 +28,20 @@ export interface STHistoryEntryLike {
 
 // ── Formula → Unicode (portada de st-lang v1 format.ts) ─────
 
+function collectAssociativeArgs(
+  f: Formula,
+  kind: 'and' | 'or'
+): Formula[] {
+  if (f.kind !== kind || !f.args?.length) return [f];
+
+  const items: Formula[] = [];
+  for (const arg of f.args) {
+    if (!arg) continue;
+    items.push(...collectAssociativeArgs(arg, kind));
+  }
+  return items;
+}
+
 function formulaToUnicode(f: Formula): string {
   if (!f) return '?';
   switch (f.kind) {
@@ -43,11 +57,11 @@ function formulaToUnicode(f: Formula): string {
     }
     case 'and':
       return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} ∧ ${formulaToUnicode(f.args[1])})`
+        ? `(${collectAssociativeArgs(f, 'and').map(formulaToUnicode).join(' ∧ ')})`
         : '∧?';
     case 'or':
       return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} ∨ ${formulaToUnicode(f.args[1])})`
+        ? `(${collectAssociativeArgs(f, 'or').map(formulaToUnicode).join(' ∨ ')})`
         : '∨?';
     case 'implies':
       return f.args?.length === 2
