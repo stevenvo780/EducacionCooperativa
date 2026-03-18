@@ -2,7 +2,8 @@
  * Go-to-definition para el editor ST en CodeMirror 6.
  *
  * Soporta Ctrl+Click y F12 para saltar a la definición de:
- * - axiom, theorem, let, claim, passage (definidos en el mismo archivo)
+ * - axiom, theorem, let, claim, theory y fn (definidos en el mismo archivo)
+ * - declaraciones exportadas con `export` / `exportar`
  */
 
 import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@codemirror/view';
@@ -10,7 +11,7 @@ import { EditorSelection } from '@codemirror/state';
 
 // ── Regex para encontrar definiciones ───────────────────────
 
-const DEFINITION_RE = /^\s*(?:axiom|axioma|theorem|teorema|let|sea|claim|passage)\s+(\w+)/gm;
+const DEFINITION_RE = /^\s*(?:(?:export|exportar)\s+)?(?:axiom|axioma|theorem|teorema|let|sea|claim|afirmacion|theory|teoria|fn|funcion)\s+(\w+)/gm;
 
 interface SymbolDef {
   name: string;
@@ -29,7 +30,7 @@ function findDefinitions(doc: string): SymbolDef[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const match = line.match(/^\s*(?:axiom|axioma|theorem|teorema|let|sea|claim|passage)\s+(\w+)/);
+    const match = line.match(/^\s*(?:(?:export|exportar)\s+)?(?:axiom|axioma|theorem|teorema|let|sea|claim|afirmacion|theory|teoria|fn|funcion)\s+(\w+)/);
     if (match) {
       const nameStart = offset + line.indexOf(match[1]);
       defs.push({
