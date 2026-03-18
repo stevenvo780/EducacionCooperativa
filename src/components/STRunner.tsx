@@ -6,7 +6,7 @@ import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter'
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
 import EditorSettingsMenu from '@/components/editor/EditorSettingsMenu';
-import { type EditorConfig, loadConfig } from '@/components/editor/codemirror';
+import { type EditorConfig, loadConfig, isTouchDeviceProfile } from '@/components/editor/codemirror';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 
 // ── Constantes ──────────────────────────────────────────────
@@ -29,6 +29,16 @@ check valid ((P -> Q) -> (!Q -> !P))
 // Tabla de verdad
 truth_table (P & Q)
 `;
+
+function runWhenBrowserIdle(task: () => void, timeout: number): () => void {
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    const idleId = window.requestIdleCallback(task, { timeout });
+    return () => window.cancelIdleCallback(idleId);
+  }
+
+  const timer = globalThis.setTimeout(task, 0);
+  return () => globalThis.clearTimeout(timer);
+}
 
 // ── Subcomponentes ──────────────────────────────────────────
 
@@ -230,16 +240,6 @@ export default function STRunner({
     }
   }, [fileMode]);
 
-  // ── Background Validation ──
-  useEffect(() => {
-    if (mode !== 'script') return;
-    const timer = setTimeout(() => {
-      validate(code);
-      setCurrentSymbols(getSymbols(code));
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [code, mode, validate, getSymbols]);
-
   const replInputRef = useRef<HTMLInputElement>(null);
   const [replInput, setReplInput] = useState('');
   const [replHistory, setReplHistory] = useState<string[]>([]);
@@ -251,6 +251,32 @@ export default function STRunner({
   const [showOutput, setShowOutput] = useState(true);
   const [isResizingOutput, setIsResizingOutput] = useState(false);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(loadConfig);
+  const isTouchTablet = useMemo(() => isTouchDeviceProfile(), []);
+
+  const runAnalysis = useCallback(() => {
+    const diagnostics = validate(code);
+    const symbols = getSymbols(code);
+    setCurrentSymbols(symbols);
+    setActiveTab(diagnostics.length > 0 ? 'problems' : symbols.length > 0 ? 'symbols' : 'output');
+    return diagnostics;
+  }, [code, getSymbols, validate]);
+
+  // ── Background Validation ──
+  useEffect(() => {
+    if (mode !== 'script' || isTouchTablet) return;
+
+    let cancelIdleTask = () => {};
+    const timer = window.setTimeout(() => {
+      cancelIdleTask = runWhenBrowserIdle(() => {
+        runAnalysis();
+      }, 1200);
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+      cancelIdleTask();
+    };
+  }, [code, isTouchTablet, mode, runAnalysis]);
 
   const startResizingOutput = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -300,6 +326,10 @@ export default function STRunner({
     }
     onExecute?.(code, result);
   }, [code, run, getSymbols, onExecute]);
+
+  const handleAnalyze = useCallback(() => {
+    runAnalysis();
+  }, [runAnalysis]);
 
   // ── Ejecutar línea REPL ──
   const handleReplSubmit = useCallback(() => {
@@ -478,6 +508,18 @@ export default function STRunner({
           >
             <Play className="w-3.5 h-3.5" />
             Ejecutar
+          </button>
+        )}
+
+        {mode === 'script' && isTouchTablet && (
+          <button
+            onClick={handleAnalyze}
+            disabled={isRunning}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-sky-600/20 hover:bg-sky-600/30 disabled:bg-slate-700 disabled:text-slate-500 text-sky-300 rounded-md transition-colors"
+            title="Analizar sintaxis y símbolos"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Analizar
           </button>
         )}
 

@@ -11,7 +11,7 @@ import {
   type EditorFeature,
   FEATURE_LABELS,
   ALL_FEATURES,
-  DEFAULT_CONFIG,
+  getDefaultConfig,
   saveConfig
 } from './codemirror';
 
@@ -43,8 +43,9 @@ export default function EditorSettingsMenu({ config, onChange }: EditorSettingsM
   };
 
   const resetDefaults = () => {
-    saveConfig(DEFAULT_CONFIG);
-    onChange({ ...DEFAULT_CONFIG });
+    const defaultConfig = getDefaultConfig();
+    saveConfig(defaultConfig);
+    onChange({ ...defaultConfig });
   };
 
   return (
