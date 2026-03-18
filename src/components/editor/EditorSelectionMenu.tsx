@@ -22,6 +22,7 @@ interface EditorSelectionMenuProps {
   busyAction: string | null;
   onClose: () => void;
   onDefineConcept: () => void;
+  onCreateAnalyticalCard: () => void;
   onCreateSemanticBlock: () => void;
   onCreateTask: () => void;
   onMarkEvidence: () => void;
@@ -46,6 +47,7 @@ export function EditorSelectionMenu({
   busyAction,
   onClose,
   onDefineConcept,
+  onCreateAnalyticalCard,
   onCreateSemanticBlock,
   onCreateTask,
   onMarkEvidence,
@@ -86,7 +88,7 @@ export function EditorSelectionMenu({
 
   const position = useMemo(() => {
     const menuWidth = 320;
-    const menuHeight = mode === 'actions' ? 272 : 340;
+    const menuHeight = mode === 'actions' ? 336 : 340;
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 720;
 
@@ -127,6 +129,14 @@ export function EditorSelectionMenu({
         <ActionButton icon={<Quote className="h-3.5 w-3.5" />} label="Marcar evidencia" busy={busyAction === 'mark-evidence'} onClick={onMarkEvidence} />
         <ActionButton icon={<BookmarkPlus className="h-3.5 w-3.5" />} label="Fijar fragmento" busy={busyAction === 'pin-fragment'} onClick={onPinFragment} />
       </div>
+      <button
+        type="button"
+        onClick={onCreateAnalyticalCard}
+        className="mt-2 flex w-full items-center justify-between rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200 transition hover:border-blue-500/40 hover:bg-slate-900"
+      >
+        <span className="flex items-center gap-2"><BookMarked className="h-3.5 w-3.5 text-blue-300" /> Ficha analítica</span>
+        <span className="text-[11px] text-slate-500">Compuesta</span>
+      </button>
       <button
         type="button"
         onClick={() => {

@@ -56,7 +56,7 @@ import { MarkdownPreview } from '@/components/mosaic-editor/MarkdownPreview';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
-import { Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2 } from 'lucide-react';
+import { BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import SnippetGallery from '@/components/SnippetGallery';
@@ -70,10 +70,17 @@ import { normalizePath } from '@/lib/folder-utils';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
+import {
+  buildEvidenceMatrixMarkdown,
+  buildResearchBriefMarkdown,
+  buildSemanticAtlasMarkdown,
+  SemanticWorkbench
+} from '@/components/editor/SemanticWorkbench';
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
 import {
   attachLinkedDocumentToSelection,
+  captureAnalyticalFragment,
   getRecentSemanticItems,
   loadSemanticWorkspaceState,
   markSelectionAsEvidence,
@@ -107,6 +114,7 @@ export default function MosaicEditor({
   const [docName, setDocName] = useState('');
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(PERSONAL_WORKSPACE_ID);
   const [showToolsPanel, setShowToolsPanel] = useState(false);
+  const [showSemanticWorkbench, setShowSemanticWorkbench] = useState(false);
   const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>({ concepts: [], fragments: [], relations: [], updatedAt: 0 });
   const [semanticNotice, setSemanticNotice] = useState<string | null>(null);
   const [semanticBusyAction, setSemanticBusyAction] = useState<string | null>(null);
@@ -167,6 +175,9 @@ export default function MosaicEditor({
   }), [currentWorkspaceId, user?.uid]);
 
   const semanticOverview = useMemo(() => getRecentSemanticItems(semanticState), [semanticState]);
+  const semanticItemCount = useMemo(() => (
+    semanticState.concepts.length + semanticState.fragments.length + semanticState.relations.length
+  ), [semanticState]);
 
   const {
     selection: semanticSelection,
@@ -801,6 +812,23 @@ export default function MosaicEditor({
     handleContentChange(editor.getMarkdown());
   }, [handleContentChange]);
 
+  const appendMarkdownBlock = useCallback((markdown: string) => {
+    const normalizedBlock = markdown.trim();
+    if (!normalizedBlock) return;
+
+    if (viewMode === 'edit' && mdxEditorRef.current) {
+      insertSnippet(`\n${normalizedBlock}\n`);
+      return;
+    }
+
+    const baseContent = (statsContent || contentRef.current).trimEnd();
+    const nextContent = baseContent
+      ? `${baseContent}\n\n${normalizedBlock}\n`
+      : `${normalizedBlock}\n`;
+
+    handleContentChange(nextContent);
+  }, [handleContentChange, insertSnippet, statsContent, viewMode]);
+
   const updateSemanticState = useCallback((nextState: SemanticWorkspaceState) => {
     setSemanticState(nextState);
   }, []);
@@ -984,16 +1012,46 @@ export default function MosaicEditor({
     void runSemanticAction('define-concept', () => {
       const nextState = registerConceptFromSelection(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
+      setShowSemanticWorkbench(true);
       setSemanticNotice('Concepto registrado desde la selección.');
       clearSemanticSelection();
     });
   }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handleCreateAnalyticalCard = useCallback(() => {
+    if (!semanticSelection) return;
+    void runSemanticAction('analytic-card', () => {
+      const quoted = semanticSelection.text
+        .split(/\r?\n/)
+        .map((line) => `> ${line || ' '}`)
+        .join('\n');
+      const analyticalCard = [
+        '> [!analysis] Ficha analitica',
+        `> origen: ${docName || 'Documento actual'}`,
+        quoted,
+        '> interpretacion:',
+        '> - ',
+        '> accion sugerida:',
+        '> - [ ]'
+      ].join('\n');
+      const inserted = applySelectionMarkdown(analyticalCard);
+      if (!inserted) {
+        throw new Error('Analytical card insertion failed');
+      }
+      const nextState = captureAnalyticalFragment(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      updateSemanticState(nextState);
+      setShowSemanticWorkbench(true);
+      setSemanticNotice('Ficha analitica insertada y fragmento guardado como evidencia y fijado.');
+      clearSemanticSelection();
+    });
+  }, [applySelectionMarkdown, clearSemanticSelection, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
 
   const handleRelateConcept = useCallback((conceptId: string) => {
     if (!semanticSelection) return;
     void runSemanticAction('relate-concept', () => {
       const nextState = relateSelectionToConcept(semanticStoreContext, getSemanticPayload(semanticSelection.text), conceptId);
       updateSemanticState(nextState);
+      setShowSemanticWorkbench(true);
       setSemanticNotice('Fragmento relacionado con el concepto elegido.');
       clearSemanticSelection();
     });
@@ -1013,6 +1071,7 @@ export default function MosaicEditor({
       }
       const nextState = registerSemanticBlock(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
+      setShowSemanticWorkbench(true);
       setSemanticNotice('Bloque semántico insertado en el documento.');
       clearSemanticSelection();
     });
@@ -1037,16 +1096,19 @@ export default function MosaicEditor({
         sourceDocName: docName || 'Documento',
         sourceFragment: semanticSelection.text
       });
+      await loadLinkedTasks();
+      setShowSemanticWorkbench(true);
       setSemanticNotice(`Fragmento enviado a “${targetColumn.name}”.`);
       clearSemanticSelection();
     });
-  }, [clearSemanticSelection, currentWorkspaceId, docName, roomId, runSemanticAction, semanticSelection, user?.uid]);
+  }, [clearSemanticSelection, currentWorkspaceId, docName, loadLinkedTasks, roomId, runSemanticAction, semanticSelection, user?.uid]);
 
   const handleMarkEvidence = useCallback(() => {
     if (!semanticSelection) return;
     void runSemanticAction('mark-evidence', () => {
       const nextState = markSelectionAsEvidence(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
+      setShowSemanticWorkbench(true);
       setSemanticNotice('Evidencia guardada en el panel semántico.');
       clearSemanticSelection();
     });
@@ -1057,6 +1119,7 @@ export default function MosaicEditor({
     void runSemanticAction('pin-fragment', () => {
       const nextState = pinSelectionFragment(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
+      setShowSemanticWorkbench(true);
       setSemanticNotice('Fragmento fijado para acceso rápido.');
       clearSemanticSelection();
     });
@@ -1077,10 +1140,45 @@ export default function MosaicEditor({
         documentItem.name
       );
       updateSemanticState(nextState);
+      setShowSemanticWorkbench(true);
       setSemanticNotice(`Enlace interno creado hacia “${documentItem.name}”.`);
       clearSemanticSelection();
     });
   }, [applySelectionMarkdown, clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handleInsertSemanticAtlas = useCallback(() => {
+    if (semanticItemCount === 0) {
+      setSemanticNotice('Todavia no hay material semantico para construir un atlas.');
+      return;
+    }
+    appendMarkdownBlock(buildSemanticAtlasMarkdown({
+      state: semanticState,
+      docName: docName || currentDocMetaRef.current.name || 'Documento'
+    }));
+    setSemanticNotice('Atlas semantico insertado al documento.');
+  }, [appendMarkdownBlock, docName, semanticItemCount, semanticState]);
+
+  const handleInsertEvidenceMatrix = useCallback(() => {
+    if (semanticState.fragments.length === 0) {
+      setSemanticNotice('Marca evidencias o fija fragmentos antes de generar la matriz.');
+      return;
+    }
+    appendMarkdownBlock(buildEvidenceMatrixMarkdown({ state: semanticState }));
+    setSemanticNotice('Matriz de evidencias insertada al documento.');
+  }, [appendMarkdownBlock, semanticState]);
+
+  const handleInsertResearchBrief = useCallback(() => {
+    if (semanticItemCount === 0 && linkedTasks.length === 0) {
+      setSemanticNotice('Todavia no hay conceptos, fragmentos ni tareas para resumir.');
+      return;
+    }
+    appendMarkdownBlock(buildResearchBriefMarkdown({
+      state: semanticState,
+      docName: docName || currentDocMetaRef.current.name || 'Documento',
+      linkedTasks
+    }));
+    setSemanticNotice('Bitacora de investigacion insertada al documento.');
+  }, [appendMarkdownBlock, docName, linkedTasks, semanticItemCount, semanticState]);
 
   // Obsidian-style inline LaTeX rendering (extracted to hook)
   useKatexOverlayDecorations({ editorShellRef, viewMode });
@@ -1227,6 +1325,22 @@ export default function MosaicEditor({
           </button>
           <button
             type="button"
+            onClick={() => setShowSemanticWorkbench((current) => !current)}
+            className={clsx(
+              'inline-flex h-6 items-center gap-1 rounded-full px-2 transition',
+              showSemanticWorkbench
+                ? 'bg-blue-600/25 text-blue-200 hover:bg-blue-600/35'
+                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+            )}
+            title={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
+            aria-label={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
+            aria-pressed={showSemanticWorkbench}
+          >
+            <BookMarked className="h-3.5 w-3.5" />
+            <span className="text-[10px] font-semibold">{semanticItemCount}</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setViewModeWithSync(viewMode === 'raw' ? 'edit' : 'raw')}
             className={clsx(
               'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
@@ -1279,6 +1393,9 @@ export default function MosaicEditor({
               <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Settings2 className="h-3.5 w-3.5 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
               </button>
+              <button type="button" title={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'} aria-label={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'} onClick={() => { setShowSemanticWorkbench((current) => !current); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+                <BookMarked className="h-3.5 w-3.5 text-blue-400" />{showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Mesa semantica'}
+              </button>
               <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />Restaurar barra completa
               </button>
@@ -1311,7 +1428,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showSemanticWorkbench, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSemanticWorkbench, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, semanticItemCount]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)
@@ -1481,6 +1598,22 @@ export default function MosaicEditor({
           </div>
 
           <div className="flex items-center gap-2 text-xs text-slate-500 font-mono shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowSemanticWorkbench((current) => !current)}
+              className={clsx(
+                'mr-1 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition',
+                showSemanticWorkbench
+                  ? 'border-blue-500/40 bg-blue-500/15 text-blue-200'
+                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+              )}
+              title={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
+              aria-label={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'}
+            >
+              <BookMarked className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Semantica</span>
+              <span>{semanticItemCount}</span>
+            </button>
             <span>{stats.words} palabras</span>
             <span>·</span>
             <span>{stats.chars} car.</span>
@@ -1575,6 +1708,29 @@ export default function MosaicEditor({
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Panel semántico</h3>
                   <p className="mt-1 text-[11px] leading-5 text-slate-500">Lo que guardas desde el menú contextual vive aquí: conceptos, evidencias, fijados y relaciones rápidas.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowSemanticWorkbench(true)}
+                      className="rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-[11px] font-medium text-blue-200 transition hover:bg-blue-500/20"
+                    >
+                      Abrir mesa semántica
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleInsertSemanticAtlas}
+                      className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:border-slate-600 hover:text-white"
+                    >
+                      Insertar atlas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleInsertResearchBrief}
+                      className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:border-slate-600 hover:text-white"
+                    >
+                      Insertar bitácora
+                    </button>
+                  </div>
                 </div>
                 <div className="text-[11px] text-slate-500">{semanticState.concepts.length} conceptos · {semanticState.fragments.length} fragmentos</div>
               </div>
@@ -1724,6 +1880,18 @@ export default function MosaicEditor({
             </div>
           )}
         </div>
+
+        {showSemanticWorkbench && (
+          <SemanticWorkbench
+            docName={docName || currentDocMetaRef.current.name || 'Documento'}
+            state={semanticState}
+            linkedTasks={linkedTasks}
+            onClose={() => setShowSemanticWorkbench(false)}
+            onInsertAtlas={handleInsertSemanticAtlas}
+            onInsertEvidenceMatrix={handleInsertEvidenceMatrix}
+            onInsertResearchBrief={handleInsertResearchBrief}
+          />
+        )}
       </div>
 
       {linkedTasks.length > 0 && (
@@ -1775,6 +1943,7 @@ export default function MosaicEditor({
           busyAction={semanticBusyAction}
           onClose={clearSemanticSelection}
           onDefineConcept={handleDefineConcept}
+          onCreateAnalyticalCard={handleCreateAnalyticalCard}
           onCreateSemanticBlock={handleCreateSemanticBlock}
           onCreateTask={handleCreateTask}
           onMarkEvidence={handleMarkEvidence}
