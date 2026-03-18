@@ -13,6 +13,7 @@ test('landing page renders core navigation and goes to login', async ({ page }) 
   await expect(page.getByRole('heading', { name: /Tu entorno de trabajo/i })).toBeVisible();
   await expect(banner.getByRole('link', { name: 'Características', exact: true })).toBeVisible();
   await expect(banner.getByRole('link', { name: 'Planes', exact: true })).toBeVisible();
+  await expect(banner.getByRole('link', { name: 'Documentación', exact: true })).toBeVisible();
 
   const loginLink = banner.getByRole('link', { name: 'Iniciar Sesión', exact: true });
   await expect(loginLink).toHaveAttribute('href', '/login');

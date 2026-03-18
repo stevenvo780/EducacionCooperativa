@@ -108,6 +108,7 @@ export default function LandingPage() {
                 <a href="#features" className="hover:text-mandy-400 transition">Características</a>
                 <a href="#how" className="hover:text-mandy-400 transition">Cómo funciona</a>
                 <a href="#pricing" className="hover:text-mandy-400 transition">Planes</a>
+                <Link href="/docs" className="hover:text-mandy-400 transition">Documentación</Link>
             </nav>
             <nav className="flex items-center gap-4">
                 {loading ? (

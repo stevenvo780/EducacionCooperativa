@@ -394,6 +394,14 @@ function DashboardContent() {
         onSelectDoc: async (doc) => { await openDocumentRef.current(doc); }
     });
 
+    const openQuickSearch = useCallback(() => {
+        setShowQuickSearch(true);
+        setQuickSearchQuery('');
+        setQuickSearchIndex(0);
+        setQuickSearchFilter(ALL_SEARCH_RESULT_FILTER);
+        setTimeout(() => quickSearchInputRef.current?.focus(), 50);
+    }, [quickSearchInputRef, setQuickSearchFilter, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
+
     const deferredDocs = useDeferredValue(docs);
     const deferredSidebarQuery = useDeferredValue(sidebarSearchQuery);
 
@@ -641,14 +649,20 @@ function DashboardContent() {
     });
 
     useEffect(() => {
+        setDocs([]);
+        setFolders([]);
+        setLoadingDocs(true);
+        setSidebarSearchQuery('');
+        setShowQuickSearch(false);
+        setQuickSearchQuery('');
+        setQuickSearchIndex(0);
+    }, [currentWorkspaceId, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch, setSidebarSearchQuery]);
+
+    useEffect(() => {
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
                 e.preventDefault();
-                setShowQuickSearch(true);
-                setQuickSearchQuery('');
-                setQuickSearchIndex(0);
-                setQuickSearchFilter(ALL_SEARCH_RESULT_FILTER);
-                setTimeout(() => quickSearchInputRef.current?.focus(), 50);
+                openQuickSearch();
             }
             if (e.key === 'Escape' && showQuickSearch) {
                 setShowQuickSearch(false);
@@ -658,7 +672,7 @@ function DashboardContent() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [showQuickSearch, quickSearchInputRef, setQuickSearchFilter, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch]);
+    }, [openQuickSearch, setQuickSearchIndex, setQuickSearchQuery, setShowQuickSearch, showQuickSearch]);
 
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
@@ -1406,6 +1420,7 @@ function DashboardContent() {
                         onOpenBoard={openBoard}
                         isStRunnerOpen={isStRunnerOpen}
                         onOpenStRunner={openStRunner}
+                        onOpenQuickSearch={openQuickSearch}
                         onAcceptInvite={acceptInvite}
                         onSelectWorkspace={selectWorkspace}
                         onDeleteWorkspace={deleteWorkspace}
