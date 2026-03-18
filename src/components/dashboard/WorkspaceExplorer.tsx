@@ -280,6 +280,7 @@ const WorkspaceExplorer = ({
                 draggable
                 onDragStart={(e) => {
                   e.stopPropagation();
+                  e.dataTransfer.setData('application/x-dashboard-internal-drag', 'folder-reorder');
                   e.dataTransfer.setData(FOLDER_REORDER_TYPE, folder.path);
                   e.dataTransfer.setData('text/plain', folder.path);
                   e.dataTransfer.effectAllowed = 'move';
@@ -375,6 +376,7 @@ const WorkspaceExplorer = ({
               draggable
               onDragStart={(e) => {
                 e.stopPropagation();
+                e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc-reorder');
                 e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
                 e.dataTransfer.setData('text/plain', doc.id);
                 e.dataTransfer.effectAllowed = 'move';
