@@ -138,6 +138,19 @@ const COMMANDS: CommandBlock[] = [
   }
 ];
 
+const COURSE_PAGE_HREFS: Record<string, string> = {
+  propositional: '/docs/st/proposicional',
+  'course-fol': '/docs/st/primer-orden',
+  'course-modal': '/docs/st/modal-k',
+  'course-deontic': '/docs/st/deontica',
+  'course-epistemic': '/docs/st/epistemica',
+  'course-intuitionistic': '/docs/st/intuicionista',
+  'course-temporal': '/docs/st/temporal',
+  'course-aristotelian': '/docs/st/aristotelica',
+  'course-belnap': '/docs/st/belnap',
+  'course-probabilistic': '/docs/st/probabilistica'
+};
+
 /* ──────────── Data: detailed logic courses ──────────── */
 const COURSES: LogicCourse[] = [
   {
@@ -599,9 +612,8 @@ export default function STDocsPage() {
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {COURSES.map(course => (
-                  <a
+                  <div
                     key={course.id}
-                    href={`#${course.id}`}
                     className="group border border-surface-700/40 rounded-xl p-4 bg-surface-900/35 hover:bg-surface-900/60 hover:border-mandy-500/30 transition"
                   >
                     <div className="flex items-center justify-between gap-3 mb-2">
@@ -610,7 +622,18 @@ export default function STDocsPage() {
                     </div>
                     <h3 className="text-sm font-bold text-white mb-1">{course.navLabel}</h3>
                     <p className="text-xs text-surface-400 leading-relaxed">{course.focus}</p>
-                  </a>
+                    <div className="mt-3 pt-3 border-t border-surface-700/30 flex items-center justify-between gap-2">
+                      <a href={`#${course.id}`} className="text-[11px] font-bold text-surface-300 hover:text-white transition">
+                        Ver resumen ↓
+                      </a>
+                      <Link
+                        href={COURSE_PAGE_HREFS[course.id]}
+                        className="text-[11px] font-bold text-mandy-300 hover:text-mandy-200 transition"
+                      >
+                        Abrir curso completo →
+                      </Link>
+                    </div>
+                  </div>
                 ))}
               </div>
 
@@ -635,6 +658,11 @@ export default function STDocsPage() {
           {/* ── Lógica Proposicional — Curso completo ── */}
           <section>
             <SectionTitle id="propositional" icon={GraduationCap} title="Curso de Lógica Proposicional" />
+            <div className="mb-5 flex flex-wrap gap-2">
+              <Link href="/docs/st/proposicional" className="px-3 py-2 rounded-lg border border-mandy-500/30 bg-mandy-500/10 text-mandy-300 hover:text-mandy-200 transition text-sm font-semibold">
+                Abrir vista dedicada completa de Proposicional
+              </Link>
+            </div>
             <p className="text-surface-300 text-sm leading-relaxed mb-6">
               Esta sección es una guía exhaustiva de lógica proposicional clásica usando el lenguaje ST.
               Todos los ejemplos son ejecutables: cópialos y pégalos en la terminal ST o en el editor integrado.
