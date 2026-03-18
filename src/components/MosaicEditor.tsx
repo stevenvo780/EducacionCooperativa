@@ -527,9 +527,8 @@ export default function MosaicEditor({
     });
   }, [onDocChangeCallback, roomId, loadDoc, isPageVisible]);
 
-  // SSE stream for real-time updates
+  // SSE stream for real-time updates (Firestore onSnapshot via server)
   useEffect(() => {
-    if (embedded) return;
     if (!roomId || !isPageVisible) return;
     const controller = new AbortController();
     let cancelled = false;
@@ -581,7 +580,7 @@ export default function MosaicEditor({
       cancelled = true;
       controller.abort();
     };
-  }, [embedded, roomId, loadDoc, applyDocData, resetDocState, isPageVisible]);
+  }, [roomId, applyDocData, resetDocState, isPageVisible]);
 
   useEffect(() => {
     if (!isPageVisible || !roomId) return;
