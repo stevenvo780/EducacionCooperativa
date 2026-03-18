@@ -216,6 +216,12 @@ export const markSelectionAsEvidence = (context: SemanticStoreContext, payload: 
   return state;
 });
 
+export const captureAnalyticalFragment = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
+  ensureFragment(state, 'evidence', payload);
+  ensureFragment(state, 'pinned', payload);
+  return state;
+});
+
 export const registerSemanticBlock = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
   ensureFragment(state, 'semantic-block', payload);
   return state;

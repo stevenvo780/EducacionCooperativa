@@ -60,6 +60,24 @@ export const QUICK_INSERTS: QuickInsert[] = [
     title: 'Lista de tareas',
     description: 'Crea una lista de tareas lista para editar.',
     markdown: '- [ ] Primer pendiente\n- [ ] Segundo pendiente\n- [ ] Tercer pendiente\n'
+  },
+  {
+    id: 'reading-card',
+    title: 'Ficha de lectura',
+    description: 'Estructura una lectura con tesis, conceptos y evidencias.',
+    markdown: '## Ficha de lectura\n- Texto / obra:\n- Autor:\n- Fecha:\n- Pregunta guia:\n\n### Tesis central\n-\n\n### Conceptos clave\n- \n\n### Evidencias / citas\n> \n\n### Objeciones o tensiones\n- \n\n### Proxima accion\n- [ ]\n'
+  },
+  {
+    id: 'evidence-matrix',
+    title: 'Matriz de evidencias',
+    description: 'Organiza hallazgos, fuentes y usos en una sola tabla.',
+    markdown: '## Matriz de evidencias\n| Hallazgo | Evidencia | Fuente | Uso |\n| --- | --- | --- | --- |\n|  |  |  |  |\n|  |  |  |  |\n'
+  },
+  {
+    id: 'cooperative-minutes',
+    title: 'Acta cooperativa',
+    description: 'Documenta acuerdos, responsables y seguimiento del equipo.',
+    markdown: '## Acta cooperativa\n- Fecha:\n- Participantes:\n- Objetivo comun:\n\n### Acuerdos\n- \n\n### Responsables\n| Tarea | Responsable | Fecha |\n| --- | --- | --- |\n|  |  |  |\n\n### Riesgos y apoyos\n- Riesgo:\n- Apoyo:\n\n### Seguimiento\n- [ ]\n'
   }
 ];
 

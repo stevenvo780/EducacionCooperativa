@@ -158,6 +158,27 @@ export const DEFAULT_SNIPPETS: Omit<SnippetInput, 'workspaceId'>[] = [
     markdown: '```python\ndef hello():\n    print("Hola mundo")\n\nhello()\n```',
     category: 'code',
     order: 30
+  },
+  {
+    title: 'Ficha de lectura',
+    description: 'Plantilla para tesis, conceptos y evidencias',
+    markdown: '## Ficha de lectura\n- Texto / obra:\n- Autor:\n- Fecha:\n- Pregunta guia:\n\n### Tesis central\n-\n\n### Conceptos clave\n- \n\n### Evidencias / citas\n> \n\n### Objeciones o tensiones\n- \n\n### Proxima accion\n- [ ]',
+    category: 'general',
+    order: 40
+  },
+  {
+    title: 'Matriz de evidencias',
+    description: 'Tabla base para organizar hallazgos y fuentes',
+    markdown: '## Matriz de evidencias\n| Hallazgo | Evidencia | Fuente | Uso |\n| --- | --- | --- | --- |\n|  |  |  |  |\n|  |  |  |  |',
+    category: 'structure',
+    order: 41
+  },
+  {
+    title: 'Acta cooperativa',
+    description: 'Acuerdos, responsables y seguimiento del equipo',
+    markdown: '## Acta cooperativa\n- Fecha:\n- Participantes:\n- Objetivo comun:\n\n### Acuerdos\n- \n\n### Responsables\n| Tarea | Responsable | Fecha |\n| --- | --- | --- |\n|  |  |  |\n\n### Riesgos y apoyos\n- Riesgo:\n- Apoyo:\n\n### Seguimiento\n- [ ]',
+    category: 'general',
+    order: 42
   }
 ];
 
