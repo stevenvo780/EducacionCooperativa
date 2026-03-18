@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import {
   TEST_USER,
@@ -7,6 +7,25 @@ import {
   installInsecureAuth,
   installMockApi
 } from './support/mockApp';
+
+const dispatchShortcut = async (
+  page: Page,
+  eventInit: {
+    key: string;
+    code: string;
+    ctrlKey?: boolean;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+    altKey?: boolean;
+  }
+) => {
+  await page.evaluate((payload) => {
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      ...payload,
+      bubbles: true
+    }));
+  }, eventInit);
+};
 
 test.beforeEach(async ({ page }) => {
   await installBrowserStubs(page);
@@ -146,4 +165,35 @@ test('dashboard creates documents and folders and uses sidebar and quick search'
 
   await page.getByRole('button', { name: 'Tablero', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Tablero' })).toBeVisible();
+});
+
+test('dashboard supports VS Code style keyboard shortcuts', async ({ page }) => {
+  await installMockApi(page, {
+    subscription: {
+      planId: 'pro',
+      status: 'active'
+    },
+    storageUsage: {
+      planId: 'pro'
+    }
+  });
+  await gotoDashboard(page, 'ws-shared');
+
+  await dispatchShortcut(page, { key: 'n', code: 'KeyN', ctrlKey: true });
+  await expect(page.getByRole('button', { name: /Documento Markdown/i })).toBeVisible();
+  await page.getByRole('button', { name: /Documento Markdown/i }).click();
+  await expect(page.getByText('Sin título').first()).toBeVisible();
+
+  await dispatchShortcut(page, { key: 'b', code: 'KeyB', ctrlKey: true });
+  await expect(page.getByLabel('Mostrar panel de archivos')).toBeVisible();
+
+  await dispatchShortcut(page, { key: 'b', code: 'KeyB', ctrlKey: true });
+  await expect(page.getByLabel('Mostrar panel de archivos')).toHaveCount(0);
+
+  await page.keyboard.press('Control+`');
+  await expect(page.getByText('Mi Asistente').first()).toBeVisible();
+
+  await dispatchShortcut(page, { key: 'k', code: 'KeyK', ctrlKey: true });
+  await dispatchShortcut(page, { key: 'z', code: 'KeyZ' });
+  await expect(page.getByLabel('Salir de modo Zen')).toBeVisible();
 });

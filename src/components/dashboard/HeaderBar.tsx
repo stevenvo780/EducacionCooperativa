@@ -499,7 +499,7 @@ const HeaderBar = ({
         <button
           onClick={onOpenQuickSearch}
           className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
-          title="Buscar en este espacio (Ctrl+P)"
+          title="Buscar en este espacio (Ctrl+P / Ctrl+Shift+P)"
           aria-label="Buscar en este espacio"
         >
           <Search className="w-3.5 h-3.5" />
@@ -533,7 +533,7 @@ const HeaderBar = ({
               ? 'bg-mandy-500/15 text-mandy-300'
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
-          title={isZenMode ? 'Salir del modo concentración' : 'Modo concentración'}
+          title={isZenMode ? 'Salir del modo concentración (Ctrl+K Z)' : 'Modo concentración (Ctrl+K Z)'}
         >
           {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           <span className="hidden lg:inline">{isZenMode ? 'Salir' : 'Zen'}</span>
