@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { verifyPassword } from '@/lib/crypto';
+import { ensureFirebaseAuthUser, findUserByEmail, normalizeEmailAddress } from '@/lib/custom-auth';
 import { getErrorMessage } from '@/lib/error-utils';
 
 // In-memory rate limiter
@@ -48,20 +49,20 @@ export async function POST(req: NextRequest) {
         }
 
         const { email, password } = await req.json();
+        const rawEmail = typeof email === 'string' ? email.trim() : '';
+        const normalizedEmail = rawEmail ? normalizeEmailAddress(rawEmail) : '';
 
-        if (!email || !password) {
+        if (!normalizedEmail || !password) {
             return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
         }
 
-        const usersRef = adminDb.collection('users');
-        const snapshot = await usersRef.where('email', '==', email).get();
-
-        if (snapshot.empty) {
+        const userLookup = await findUserByEmail(rawEmail || normalizedEmail);
+        if (!userLookup) {
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
-        const userDoc = snapshot.docs[0];
-        const userData = userDoc.data();
+        const userDocRef = userLookup.ref;
+        const userData = userLookup.data;
 
         const verification = await verifyPassword(password, userData?.passwordHash);
 
@@ -70,19 +71,25 @@ export async function POST(req: NextRequest) {
         }
 
         if (verification.needsUpgrade && verification.newHash) {
-            await userDoc.ref.update({
+            await userDocRef.update({
                 passwordHash: verification.newHash,
                 updatedAt: FieldValue.serverTimestamp()
             });
         }
 
-        const customToken = await adminAuth.createCustomToken(userDoc.id, {
-            userEmail: userData.email
+        await ensureFirebaseAuthUser({
+            uid: userLookup.id,
+            email: userData.email || userLookup.normalizedEmail,
+            password
+        });
+
+        const customToken = await adminAuth.createCustomToken(userLookup.id, {
+            userEmail: userData.email || userLookup.normalizedEmail
         });
 
         return NextResponse.json({
-            uid: userDoc.id,
-            email: userData.email,
+            uid: userLookup.id,
+            email: userData.email || normalizedEmail,
             displayName: userData.displayName || 'User',
             photoURL: userData.photoURL || null,
             customToken

@@ -5,6 +5,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
+import { parsePaymentExternalReference } from '@/app/api/payments/payment-reference';
 import { MercadoPagoPaymentStatus } from '@/types/payments';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
@@ -51,7 +52,12 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const endDate = await calculateSmartEndDate(auth.uid);
 
-    const planId = subData?.planId || (payment.external_reference?.split('|')[1]);
+    const paymentReference = parsePaymentExternalReference(payment.external_reference);
+    const planId = subData?.pendingPlanId || paymentReference?.planId || subData?.planId;
+
+    if (!planId) {
+      return NextResponse.json({ error: 'No se pudo resolver el plan asociado al pago' }, { status: 400 });
+    }
 
     if (payment.status === MercadoPagoPaymentStatus.Approved) {
       await adminDb.collection('subscriptions').doc(auth.uid).set({

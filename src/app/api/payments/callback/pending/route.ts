@@ -4,29 +4,47 @@ import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
+import { parsePaymentExternalReference } from '@/app/api/payments/payment-reference';
 import { MercadoPagoPaymentStatus, PaymentRedirectStatus } from '@/types/payments';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
-  const externalReference = searchParams.get('external_reference') || '';
   const paymentId = searchParams.get('payment_id') || searchParams.get('collection_id') || '';
-  const [userId, planId] = externalReference.split('|');
+  const queryReference = parsePaymentExternalReference(searchParams.get('external_reference') || '');
 
   const appUrl = 'https://agora.humanizar.cloud';
   const redirectUrl = new URL(`${appUrl}/dashboard`);
   redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Pending);
-  if (planId) redirectUrl.searchParams.set('plan', planId);
 
   // Verify payment - it might already be approved by the time callback fires
   try {
-    if (paymentId && paymentId !== 'null' && userId && planId) {
-      console.debug(`[Callback/Pending] Processing payment ${paymentId} for user ${userId}, plan: ${planId}`);
+    if (paymentId && paymentId !== 'null') {
+      console.debug(`[Callback/Pending] Processing payment ${paymentId}`);
 
       const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
       const paymentClient = new Payment(client);
       const payment = await paymentClient.get({ id: Number(paymentId) });
+      const paymentReference = parsePaymentExternalReference(payment.external_reference);
+
+      if (!paymentReference) {
+        console.warn(`[Callback/Pending] Missing or invalid external_reference for payment ${paymentId}`);
+        redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Failure);
+        return NextResponse.redirect(redirectUrl.toString());
+      }
+
+      if (
+        queryReference &&
+        (queryReference.userId !== paymentReference.userId || queryReference.planId !== paymentReference.planId)
+      ) {
+        console.warn(
+          `[Callback/Pending] Ignoring mismatched query external_reference for payment ${paymentId}; using payment record reference`
+        );
+      }
+
+      const { userId, planId } = paymentReference;
+      redirectUrl.searchParams.set('plan', planId);
 
       const now = new Date();
 
@@ -81,9 +99,12 @@ export async function GET(req: NextRequest) {
           console.debug(`[Callback/Pending] Payment pending for user ${userId}`);
         }
       }
+    } else {
+      redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Failure);
     }
   } catch (error: unknown) {
     console.error('[Callback/Pending] Error verifying payment:', getErrorMessage(error));
+    redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Failure);
   }
 
   return NextResponse.redirect(redirectUrl.toString());

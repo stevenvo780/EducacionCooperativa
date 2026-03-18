@@ -67,6 +67,10 @@ const nextConfig = {
         ...config.resolve.alias,
         canvas: false,
       };
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      };
     }
     
     // Exclude canvas from bundling (Node.js only module)

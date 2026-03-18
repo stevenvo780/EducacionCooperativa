@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { hashPassword } from '@/lib/crypto';
+import { ensureFirebaseAuthUser, normalizeEmailAddress } from '@/lib/custom-auth';
 import { getErrorMessage } from '@/lib/error-utils';
 
 // In-memory rate limiter (simple implementation)
@@ -33,8 +34,10 @@ export async function POST(req: NextRequest) {
         }
 
         const { email, password } = await req.json();
+        const rawEmail = typeof email === 'string' ? email.trim() : '';
+        const normalizedEmail = rawEmail ? normalizeEmailAddress(rawEmail) : '';
 
-        if (!email || !password) {
+        if (!normalizedEmail || !password) {
             return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
         }
 
@@ -43,32 +46,83 @@ export async function POST(req: NextRequest) {
         }
 
         const usersRef = adminDb.collection('users');
-        const snapshot = await usersRef.where('email', '==', email).get();
-
-        if (!snapshot.empty) {
-            return NextResponse.json({ error: 'User already exists' }, { status: 409 });
-        }
+        const emailIndexRef = adminDb.collection('userEmails').doc(normalizedEmail);
 
         const hashedPassword = await hashPassword(password);
 
         const newUser = {
-            email,
+            email: normalizedEmail,
+            emailNormalized: normalizedEmail,
             passwordHash: hashedPassword,
-            displayName: email.split('@')[0],
+            displayName: normalizedEmail.split('@')[0],
             createdAt: FieldValue.serverTimestamp(),
             role: 'user'
         };
 
-        const userDocRef = await usersRef.add(newUser);
+        const userDocRef = usersRef.doc();
         const userId = userDocRef.id;
+
+        try {
+            await adminDb.runTransaction(async (transaction) => {
+                const indexedEmailSnap = await transaction.get(emailIndexRef);
+                if (indexedEmailSnap.exists) {
+                    const indexedData = indexedEmailSnap.data() as { uid?: unknown } | undefined;
+                    if (typeof indexedData?.uid === 'string' && indexedData.uid.trim()) {
+                        const indexedUserSnap = await transaction.get(usersRef.doc(indexedData.uid));
+                        if (indexedUserSnap.exists) {
+                            throw new Error('USER_ALREADY_EXISTS');
+                        }
+                    }
+                }
+
+                const normalizedMatches = await transaction.get(usersRef.where('emailNormalized', '==', normalizedEmail).limit(1));
+                if (!normalizedMatches.empty) {
+                    throw new Error('USER_ALREADY_EXISTS');
+                }
+
+                if (rawEmail && rawEmail !== normalizedEmail) {
+                    const rawMatches = await transaction.get(usersRef.where('email', '==', rawEmail).limit(1));
+                    if (!rawMatches.empty) {
+                        throw new Error('USER_ALREADY_EXISTS');
+                    }
+                }
+
+                transaction.set(userDocRef, newUser);
+                transaction.set(emailIndexRef, {
+                    uid: userId,
+                    email: normalizedEmail,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+            });
+        } catch (error: unknown) {
+            if (getErrorMessage(error) === 'USER_ALREADY_EXISTS') {
+                return NextResponse.json({ error: 'User already exists' }, { status: 409 });
+            }
+            throw error;
+        }
 
         // Personal workspace se gestiona en el cliente; evitamos duplicados en Firestore.
 
+        try {
+            await ensureFirebaseAuthUser({
+                uid: userId,
+                email: normalizedEmail,
+                password
+            });
+        } catch (error) {
+            await Promise.allSettled([
+                userDocRef.delete(),
+                emailIndexRef.delete()
+            ]);
+            throw error;
+        }
+
         const customToken = await adminAuth.createCustomToken(userId, {
-            userEmail: email
+            userEmail: normalizedEmail
         });
 
-        return NextResponse.json({ uid: userId, email, customToken }, { status: 201 });
+        return NextResponse.json({ uid: userId, email: normalizedEmail, customToken }, { status: 201 });
 
     } catch (error: unknown) {
         console.error('Error creating user (custom auth):', getErrorMessage(error));

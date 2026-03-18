@@ -4,6 +4,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
+import { parsePaymentExternalReference } from '@/app/api/payments/payment-reference';
 import {
   MercadoPagoPaymentStatus,
   PaymentRedirectStatus,
@@ -14,24 +15,41 @@ const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
-  const externalReference = searchParams.get('external_reference') || '';
   const paymentId = searchParams.get('payment_id') || searchParams.get('collection_id') || '';
   const collectionStatus = searchParams.get('collection_status') || searchParams.get('status') || '';
-  const [userId, planId] = externalReference.split('|');
+  const queryReference = parsePaymentExternalReference(searchParams.get('external_reference') || '');
 
   const appUrl = 'https://agora.humanizar.cloud';
   const redirectUrl = new URL(`${appUrl}/dashboard`);
   redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Success);
-  if (planId) redirectUrl.searchParams.set('plan', planId);
 
   // Verify payment and activate subscription immediately
   try {
-    if (paymentId && paymentId !== 'null' && userId && planId) {
-      console.debug(`[Callback/Success] Processing payment ${paymentId} for user ${userId}, plan: ${planId}, status: ${collectionStatus}`);
+    if (paymentId && paymentId !== 'null') {
+      console.debug(`[Callback/Success] Processing payment ${paymentId}, status: ${collectionStatus}`);
 
       const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
       const paymentClient = new Payment(client);
       const payment = await paymentClient.get({ id: Number(paymentId) });
+      const paymentReference = parsePaymentExternalReference(payment.external_reference);
+
+      if (!paymentReference) {
+        console.warn(`[Callback/Success] Missing or invalid external_reference for payment ${paymentId}`);
+        redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Failure);
+        return NextResponse.redirect(redirectUrl.toString());
+      }
+
+      if (
+        queryReference &&
+        (queryReference.userId !== paymentReference.userId || queryReference.planId !== paymentReference.planId)
+      ) {
+        console.warn(
+          `[Callback/Success] Ignoring mismatched query external_reference for payment ${paymentId}; using payment record reference`
+        );
+      }
+
+      const { userId, planId } = paymentReference;
+      redirectUrl.searchParams.set('plan', planId);
 
       const now = new Date();
 
@@ -82,12 +100,15 @@ export async function GET(req: NextRequest) {
         redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Pending);
       } else {
         console.warn(`[Callback/Success] Unexpected status: ${payment.status} for user ${userId}`);
+        redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Failure);
       }
     } else {
-      console.debug(`[Callback/Success] Missing data - paymentId: ${paymentId}, userId: ${userId}, planId: ${planId}`);
+      console.debug(`[Callback/Success] Missing payment ID - paymentId: ${paymentId}`);
+      redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Failure);
     }
   } catch (error: unknown) {
     console.error('[Callback/Success] Error verifying payment:', getErrorMessage(error));
+    redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Failure);
   }
 
   return NextResponse.redirect(redirectUrl.toString());

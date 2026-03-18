@@ -1,4 +1,5 @@
 import { adminDb } from '@/lib/firebase-admin';
+import { Plan, SubscriptionStatus, type PlanId } from '@/types/subscription';
 
 /**
  * Calcula la nueva fecha de expiración de manera inteligente:
@@ -31,4 +32,18 @@ export async function calculateSmartEndDate(userId: string): Promise<Date> {
   const endDate = new Date(now);
   endDate.setMonth(endDate.getMonth() + 1);
   return endDate;
+}
+
+export async function getActivePlanId(userId: string): Promise<PlanId> {
+  const snap = await adminDb.collection('subscriptions').doc(userId).get();
+  if (!snap.exists) {
+    return Plan.Free;
+  }
+
+  const data = snap.data();
+  if (data?.status === SubscriptionStatus.Active && typeof data.planId === 'string') {
+    return data.planId as PlanId;
+  }
+
+  return Plan.Free;
 }

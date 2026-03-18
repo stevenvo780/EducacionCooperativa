@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { hashPassword, verifyPassword } from '@/lib/crypto';
+import { ensureFirebaseAuthUser, normalizeEmailAddress } from '@/lib/custom-auth';
 import { getErrorMessage } from '@/lib/error-utils';
 import { requireAuth } from '@/lib/server-auth';
 
@@ -37,6 +38,9 @@ export async function POST(req: NextRequest) {
         }
 
         const userData = userDoc.data();
+        const normalizedEmail = typeof userData?.email === 'string'
+            ? normalizeEmailAddress(userData.email)
+            : null;
 
         const verification = await verifyPassword(currentPassword, userData?.passwordHash);
         if (!verification.ok) {
@@ -50,8 +54,19 @@ export async function POST(req: NextRequest) {
 
         await adminDb.collection('users').doc(auth.uid).update({
             passwordHash: newPasswordHash,
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            ...(normalizedEmail ? { emailNormalized: normalizedEmail } : {})
         });
+
+        if (normalizedEmail) {
+            await ensureFirebaseAuthUser({
+                uid: auth.uid,
+                email: normalizedEmail,
+                password: newPassword
+            });
+        } else {
+            await adminAuth.updateUser(auth.uid, { password: newPassword }).catch(() => {});
+        }
 
         return NextResponse.json({ success: true, message: 'Contraseña actualizada correctamente' });
     } catch (error: unknown) {
