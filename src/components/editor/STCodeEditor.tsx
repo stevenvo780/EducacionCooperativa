@@ -25,7 +25,8 @@ import {
   buildCompartmentExtensions,
   reconfigureFeature,
   type EditorFeature,
-  loadConfig
+  loadConfig,
+  isTouchDeviceProfile
 } from './codemirror';
 
 // ── Props ───────────────────────────────────────────────────
@@ -59,6 +60,7 @@ export default function STCodeEditor({
   const onChangeRef = useRef(onChange);
   const onKeyDownRef = useRef(onKeyDown);
   const prevConfigRef = useRef<EditorConfig | null>(null);
+  const isTouchDevice = useMemo(() => isTouchDeviceProfile(), []);
 
   // Keep refs in sync
   onChangeRef.current = onChange;
@@ -94,8 +96,7 @@ export default function STCodeEditor({
   const fixedExtensions = useMemo(() => [
     drawSelection(),
     dropCursor(),
-    rectangularSelection(),
-    crosshairCursor(),
+    ...(isTouchDevice ? [] : [rectangularSelection(), crosshairCursor()]),
     indentOnInput(),
     keymap.of(closeBracketsKeymap),
     cmPlaceholder(placeholder),
@@ -118,7 +119,7 @@ export default function STCodeEditor({
         onChangeRef.current(update.state.doc.toString());
       }
     })
-  ], [placeholder, readOnly]);
+  ], [isTouchDevice, placeholder, readOnly]);
 
   // ── Initialize EditorView ──
   useEffect(() => {
