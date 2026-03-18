@@ -67,14 +67,49 @@ export const DEFAULT_CONFIG: EditorConfig = {
   lightTheme: false
 };
 
+export const TOUCH_DEVICE_CONFIG: EditorConfig = {
+  ...DEFAULT_CONFIG,
+  lineNumbers: false,
+  activeLine: false,
+  bracketMatching: false,
+  foldGutter: false,
+  rainbowParens: false,
+  autocomplete: false,
+  lint: false,
+  hover: false
+};
+
+function matchesMediaQuery(query: string): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia(query).matches;
+}
+
+export function isTouchDeviceProfile(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const coarsePointer = matchesMediaQuery('(pointer: coarse)') || matchesMediaQuery('(any-pointer: coarse)');
+  const hasTouchPoints = typeof navigator !== 'undefined'
+    && typeof navigator.maxTouchPoints === 'number'
+    && navigator.maxTouchPoints > 0;
+  const tabletViewport = typeof window.innerWidth === 'number' && window.innerWidth <= 1024;
+
+  return (coarsePointer || hasTouchPoints) && tabletViewport;
+}
+
+export function getDefaultConfig(): EditorConfig {
+  return isTouchDeviceProfile() ? TOUCH_DEVICE_CONFIG : DEFAULT_CONFIG;
+}
+
 export function loadConfig(): EditorConfig {
-  if (typeof window === 'undefined') return DEFAULT_CONFIG;
+  const baseConfig = getDefaultConfig();
+  if (typeof window === 'undefined') return baseConfig;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    if (!raw) return baseConfig;
+    return { ...baseConfig, ...JSON.parse(raw) };
   } catch {
-    return DEFAULT_CONFIG;
+    return baseConfig;
   }
 }
 
