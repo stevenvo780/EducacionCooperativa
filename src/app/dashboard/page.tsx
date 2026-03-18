@@ -285,6 +285,7 @@ function DashboardContent() {
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [showNewFileModal, setShowNewFileModal] = useState(false);
+    const [newFileTargetFolder, setNewFileTargetFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
     const [isResizingSidebar, setIsResizingSidebar] = useState(false);
@@ -902,6 +903,33 @@ function DashboardContent() {
         showDialog
     });
 
+    const openNewFileModalAt = useCallback((folderPath?: string) => {
+        const targetFolder = resolveActiveFolder(folderPath ?? activeFolder);
+        setNewFileTargetFolder(targetFolder);
+        setActiveFolderSafe(targetFolder);
+        setShowNewFileModal(true);
+    }, [activeFolder, resolveActiveFolder, setActiveFolderSafe]);
+
+    const createFolderAtPath = useCallback(async (folderPath?: string) => {
+        const targetFolder = resolveActiveFolder(folderPath ?? activeFolder);
+        setActiveFolderSafe(targetFolder);
+        await createFolder(targetFolder);
+    }, [activeFolder, createFolder, resolveActiveFolder, setActiveFolderSafe]);
+
+    const openUploadFilePickerAt = useCallback((folderPath?: string) => {
+        const targetFolder = resolveActiveFolder(folderPath ?? activeFolder);
+        setActiveFolderSafe(targetFolder);
+        setUploadTargetFolder(targetFolder);
+        fileInputRef.current?.click();
+    }, [activeFolder, resolveActiveFolder, setActiveFolderSafe, setUploadTargetFolder]);
+
+    const openUploadFolderPickerAt = useCallback((folderPath?: string) => {
+        const targetFolder = resolveActiveFolder(folderPath ?? activeFolder);
+        setActiveFolderSafe(targetFolder);
+        setUploadTargetFolder(targetFolder);
+        folderInputRef.current?.click();
+    }, [activeFolder, resolveActiveFolder, setActiveFolderSafe, setUploadTargetFolder]);
+
     const resolveDialog = (result: DialogResult) => {
         dialogResolverRef.current?.(result);
         dialogResolverRef.current = null;
@@ -993,6 +1021,119 @@ function DashboardContent() {
     const activeChildFolders = useMemo(() => {
         return folderChildrenMap[activeFolder] ?? [];
     }, [folderChildrenMap, activeFolder]);
+
+    const formatPropertyDate = useCallback((value: unknown) => {
+        const timestamp = getUpdatedAtValue(value);
+        if (!timestamp) return 'No disponible';
+        return new Intl.DateTimeFormat('es-ES', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        }).format(new Date(timestamp));
+    }, []);
+
+    const formatPropertySize = useCallback((size?: number) => {
+        if (typeof size !== 'number' || Number.isNaN(size)) return 'No disponible';
+        return `${new Intl.NumberFormat('es-ES').format(size)} bytes`;
+    }, []);
+
+    const showDocumentProperties = useCallback(async (doc: DocItem) => {
+        await showDialog({
+            type: DialogKind.Info,
+            title: `Propiedades: ${doc.name}`,
+            message: [
+                `Tipo: ${getDocBadge(doc)}`,
+                `Carpeta: ${normalizeFolderPath(doc.folder)}`,
+                `Tamaño: ${formatPropertySize(doc.size)}`,
+                `Actualizado: ${formatPropertyDate(doc.updatedAt)}`
+            ].join(' | ')
+        });
+    }, [formatPropertyDate, formatPropertySize, showDialog]);
+
+    const showFolderProperties = useCallback(async (folder: FolderItem) => {
+        const directDocCount = docsByFolder[folder.path]?.length ?? 0;
+        const directSubfolderCount = folderChildrenMap[folder.path]?.length ?? 0;
+        const totalDocCount = docs.filter(doc => {
+            const folderPath = normalizeFolderPath(doc.folder);
+            return folderPath === folder.path || folderPath.startsWith(`${folder.path}/`);
+        }).length;
+        const totalSubfolderCount = folders.filter(candidate => (
+            candidate.path !== folder.path && candidate.path.startsWith(`${folder.path}/`)
+        )).length;
+        const kindLabel = folder.kind === 'record' ? 'Carpeta' : folder.kind === 'system' ? 'Sistema' : 'Virtual';
+
+        await showDialog({
+            type: DialogKind.Info,
+            title: `Propiedades: ${folder.name}`,
+            message: [
+                `Ruta: ${folder.path}`,
+                `Tipo: ${kindLabel}`,
+                `Subcarpetas directas: ${directSubfolderCount}`,
+                `Archivos directos: ${directDocCount}`,
+                `Archivos totales: ${totalDocCount}`,
+                `Subcarpetas totales: ${totalSubfolderCount}`
+            ].join(' | ')
+        });
+    }, [docs, docsByFolder, folderChildrenMap, folders, showDialog]);
+
+    const showWorkspaceProperties = useCallback(async () => {
+        await showDialog({
+            type: DialogKind.Info,
+            title: `Propiedades del espacio: ${currentWorkspace?.name || 'Espacio personal'}`,
+            message: [
+                `Tipo: ${currentWorkspace?.type === WorkspaceType.Personal ? 'Personal' : 'Colaborativo'}`,
+                `ID: ${currentWorkspace?.id || PERSONAL_WORKSPACE_ID}`,
+                `Carpetas: ${folders.length}`,
+                `Archivos: ${docs.length}`
+            ].join(' | ')
+        });
+    }, [currentWorkspace?.id, currentWorkspace?.name, currentWorkspace?.type, docs.length, folders.length, showDialog]);
+
+    const showCurrentLocationProperties = useCallback(async () => {
+        if (activeFolder === ROOT_FOLDER_PATH) {
+            await showWorkspaceProperties();
+            return;
+        }
+
+        const folder = folders.find(candidate => candidate.path === activeFolder);
+        if (folder) {
+            await showFolderProperties(folder);
+            return;
+        }
+
+        await showDialog({
+            type: DialogKind.Info,
+            title: `Propiedades: ${activeFolder}`,
+            message: `Ruta: ${activeFolder} | Archivos: ${docsByFolder[activeFolder]?.length ?? 0}`
+        });
+    }, [activeFolder, docsByFolder, folders, showDialog, showFolderProperties, showWorkspaceProperties]);
+
+    const promptRenameFolder = useCallback(async (folder: FolderItem) => {
+        if (folder.kind === 'system') {
+            await showDialog({
+                type: DialogKind.Info,
+                title: 'No se puede renombrar',
+                message: 'La carpeta del sistema no se puede renombrar.'
+            });
+            return;
+        }
+
+        if (!folder.docId) {
+            await showDialog({
+                type: DialogKind.Info,
+                title: 'No se puede renombrar',
+                message: 'Esta carpeta es virtual. Mueve sus archivos o crea una carpeta real para cambiar su estructura.'
+            });
+            return;
+        }
+
+        await promptRenameDocument({
+            id: folder.docId,
+            name: folder.name,
+            type: 'folder',
+            folder: folder.parentPath || DEFAULT_FOLDER_NAME,
+            order: folder.order
+        });
+    }, [promptRenameDocument, showDialog]);
 
     const renderFolderTree = (parentPath: string, depth = 0): ReactNode[] => {
         const children = folderChildrenMap[parentPath] ?? [];
