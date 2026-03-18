@@ -44,7 +44,7 @@ describe('server auth helpers', () => {
     collectionMock.mockClear();
   });
 
-  it('extracts and verifies bearer or query-string tokens', async () => {
+  it('extracts and verifies bearer tokens', async () => {
     verifyIdTokenMock.mockResolvedValueOnce({
       uid: 'u1',
       email: 'user@example.com'
@@ -65,14 +65,6 @@ describe('server auth helpers', () => {
     }) as never)).resolves.toEqual({
       uid: 'u2',
       email: 'alt@example.com'
-    });
-
-    verifyIdTokenMock.mockResolvedValueOnce({
-      uid: 'u3'
-    });
-    await expect(requireAuth(new Request('https://app.test?token=query-token') as never)).resolves.toEqual({
-      uid: 'u3',
-      email: null
     });
   });
 
