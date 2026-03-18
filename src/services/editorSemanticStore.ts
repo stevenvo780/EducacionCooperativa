@@ -1,51 +1,23 @@
 'use client';
 
-export type SemanticFragmentKind = 'concept' | 'evidence' | 'pinned' | 'relation' | 'semantic-block';
+import {
+  EMPTY_SEMANTIC_WORKSPACE_STATE,
+  normalizeSemanticWorkspaceState,
+  type SemanticConceptRecord,
+  type SemanticFragmentKind,
+  type SemanticFragmentRecord,
+  type SemanticRelationRecord,
+  type SemanticWorkspaceState
+} from '@/lib/semantic/workspace-state';
 
-export interface SemanticFragmentRecord {
-  id: string;
-  kind: SemanticFragmentKind;
-  text: string;
-  excerpt: string;
-  docId: string | null;
-  docName: string;
-  workspaceId: string;
-  createdAt: number;
-  updatedAt: number;
-  selectionHash: string;
-  conceptId?: string;
-  conceptTitle?: string;
-  linkedDocId?: string;
-  linkedDocName?: string;
-}
-
-export interface SemanticConceptRecord {
-  id: string;
-  title: string;
-  excerpt: string;
-  docId: string | null;
-  docName: string;
-  workspaceId: string;
-  createdAt: number;
-  updatedAt: number;
-  sourceFragmentId: string;
-}
-
-export interface SemanticRelationRecord {
-  id: string;
-  fragmentId: string;
-  conceptId: string;
-  conceptTitle: string;
-  relationType: 'related-to';
-  createdAt: number;
-}
-
-export interface SemanticWorkspaceState {
-  concepts: SemanticConceptRecord[];
-  fragments: SemanticFragmentRecord[];
-  relations: SemanticRelationRecord[];
-  updatedAt: number;
-}
+export type {
+  SemanticConceptRecord,
+  SemanticFragmentKind,
+  SemanticFragmentRecord,
+  SemanticRelationRecord,
+  SemanticWorkspaceState
+} from '@/lib/semantic/workspace-state';
+export { getRecentSemanticItems } from '@/lib/semantic/workspace-state';
 
 export interface SemanticStoreContext {
   workspaceId: string;
@@ -58,13 +30,6 @@ export interface SemanticSelectionPayload {
   docName: string;
   workspaceId: string;
 }
-
-const EMPTY_STATE: SemanticWorkspaceState = {
-  concepts: [],
-  fragments: [],
-  relations: [],
-  updatedAt: 0
-};
 
 const getStorageKey = ({ workspaceId, userId }: SemanticStoreContext) => (
   `editor-semantic:${workspaceId}:${userId || 'anon'}`
@@ -99,32 +64,21 @@ const excerptFromText = (value: string, maxLength = 140) => {
   return `${compact.slice(0, maxLength - 1)}…`;
 };
 
-const normalizeState = (value: unknown): SemanticWorkspaceState => {
-  if (!value || typeof value !== 'object') return EMPTY_STATE;
-  const raw = value as Partial<SemanticWorkspaceState>;
-  return {
-    concepts: Array.isArray(raw.concepts) ? raw.concepts : [],
-    fragments: Array.isArray(raw.fragments) ? raw.fragments : [],
-    relations: Array.isArray(raw.relations) ? raw.relations : [],
-    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0
-  };
-};
-
 export const loadSemanticWorkspaceState = (context: SemanticStoreContext): SemanticWorkspaceState => {
-  if (!isBrowser()) return EMPTY_STATE;
+  if (!isBrowser()) return EMPTY_SEMANTIC_WORKSPACE_STATE;
   try {
     const raw = window.localStorage.getItem(getStorageKey(context));
-    if (!raw) return EMPTY_STATE;
-    return normalizeState(JSON.parse(raw));
+    if (!raw) return EMPTY_SEMANTIC_WORKSPACE_STATE;
+    return normalizeSemanticWorkspaceState(JSON.parse(raw));
   } catch {
-    return EMPTY_STATE;
+    return EMPTY_SEMANTIC_WORKSPACE_STATE;
   }
 };
 
 export const saveSemanticWorkspaceState = (context: SemanticStoreContext, state: SemanticWorkspaceState) => {
   if (!isBrowser()) return state;
   const nextState: SemanticWorkspaceState = {
-    ...state,
+    ...normalizeSemanticWorkspaceState(state),
     updatedAt: Date.now()
   };
   window.localStorage.setItem(getStorageKey(context), JSON.stringify(nextState));
@@ -248,7 +202,9 @@ export const relateSelectionToConcept = (
       conceptId: concept.id,
       conceptTitle: concept.title,
       relationType: 'related-to',
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      selectionHash: fragment.selectionHash,
+      docId: payload.docId
     });
   }
 
@@ -266,11 +222,4 @@ export const attachLinkedDocumentToSelection = (
     linkedDocName
   });
   return state;
-});
-
-export const getRecentSemanticItems = (state: SemanticWorkspaceState) => ({
-  concepts: state.concepts.slice(0, 5),
-  pinned: state.fragments.filter((item) => item.kind === 'pinned').slice(0, 5),
-  evidence: state.fragments.filter((item) => item.kind === 'evidence').slice(0, 5),
-  relations: state.relations.slice(0, 5)
 });
