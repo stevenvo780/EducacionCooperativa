@@ -101,6 +101,7 @@ import {
   fetchSemanticWorkspaceStateApi,
   saveSemanticWorkspaceStateApi
 } from '@/services/semanticStateApi';
+import PdfViewer from '@/components/PdfViewer';
 
 export default function MosaicEditor({
   initialContent = '',
@@ -1636,7 +1637,10 @@ export default function MosaicEditor({
             )}
           </div>
         </div>
-        <div className="flex-1 p-4 bg-slate-900 flex items-center justify-center">
+        <div className={clsx(
+          'flex-1 bg-slate-900',
+          isPdf ? 'min-h-0' : 'flex items-center justify-center p-4'
+        )}>
           {!fileUrl && <div className="text-sm text-slate-400">No se pudo cargar el archivo.</div>}
           {fileUrl && isImage && (
             <div className="relative h-full w-full">
@@ -1652,8 +1656,15 @@ export default function MosaicEditor({
           )}
           {fileUrl && isVideo && <video src={fileUrl} controls className="max-h-full max-w-full rounded shadow" />}
           {fileUrl && isAudio && <audio src={fileUrl} controls className="w-full max-w-xl" />}
-          {fileUrl && !isImage && !isVideo && !isAudio && (
-            <iframe src={fileUrl} className={`w-full h-full border border-slate-700 rounded bg-white ${isPdf ? '' : 'min-h-[70vh]'}`} title={safeName} />
+          {fileUrl && isPdf && (
+            <PdfViewer
+              fileUrl={fileUrl}
+              fileName={safeName}
+              storageKey={roomId || fileUrl}
+            />
+          )}
+          {fileUrl && !isPdf && !isImage && !isVideo && !isAudio && (
+            <iframe src={fileUrl} className="w-full h-full min-h-[70vh] rounded border border-slate-700 bg-white" title={safeName} />
           )}
         </div>
       </div>
