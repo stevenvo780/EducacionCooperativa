@@ -930,6 +930,11 @@ function DashboardContent() {
         folderInputRef.current?.click();
     }, [activeFolder, resolveActiveFolder, setActiveFolderSafe, setUploadTargetFolder]);
 
+    const handleAddStInstructions = useCallback(async () => {
+        setActiveFolderSafe(DEFAULT_FOLDER_NAME);
+        await createStGuide();
+    }, [createStGuide, setActiveFolderSafe]);
+
     const resolveDialog = (result: DialogResult) => {
         dialogResolverRef.current?.(result);
         dialogResolverRef.current = null;
@@ -1422,6 +1427,7 @@ function DashboardContent() {
                         selectSession={selectSession}
                         destroySession={destroySession}
                         onRenameSession={promptRenameTerminalSession}
+                        onAddStInstructions={() => { void handleAddStInstructions(); }}
                         openTerminal={openTerminal}
                         openTabs={openTabs}
                         closeTabById={closeTabById}
@@ -1515,7 +1521,6 @@ function DashboardContent() {
                         onUploadFolder={() => openUploadFolderPickerAt()}
                         onUploadFileToFolder={openUploadFilePickerAt}
                         onUploadFolderToFolder={openUploadFolderPickerAt}
-                        onCreateStGuide={() => createStGuide()}
                         onShowDocProperties={(doc) => { void showDocumentProperties(doc); }}
                         onShowFolderProperties={(folder) => { void showFolderProperties(folder); }}
                         onShowCurrentLocationProperties={() => { void showCurrentLocationProperties(); }}
