@@ -245,6 +245,10 @@ test('dashboard preserves PDF scroll position when reopening a file', async ({ p
   await page.getByText('Informe.pdf', { exact: true }).first().click();
   const pdfViewer = page.getByTestId('pdf-viewer-scroll-container');
   await expect(pdfViewer).toBeVisible();
+  await expect(page.getByPlaceholder('Buscar en PDF...')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ajustar PDF al ancho' })).toContainText('100%');
+  await page.getByRole('button', { name: 'Acercar PDF' }).click();
+  await expect(page.getByRole('button', { name: 'Ajustar PDF al ancho' })).not.toContainText('100%');
   await expect(page.getByTestId('pdf-page-canvas')).toHaveCount(1);
   await expect.poll(async () => (
     pdfViewer.evaluate((element) => element.scrollHeight > element.clientHeight)
@@ -264,6 +268,7 @@ test('dashboard preserves PDF scroll position when reopening a file', async ({ p
   await page.getByText('Informe.pdf', { exact: true }).first().click();
   const restoredViewer = page.getByTestId('pdf-viewer-scroll-container');
   await expect(restoredViewer).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ajustar PDF al ancho' })).not.toContainText('100%');
   await expect.poll(async () => (
     restoredViewer.evaluate((element) => element.scrollTop)
   )).toBeGreaterThan(400);
