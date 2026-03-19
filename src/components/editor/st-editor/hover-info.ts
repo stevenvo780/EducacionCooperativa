@@ -147,7 +147,7 @@ const profileInfo: Record<string, HoverData> = {
   'classical.propositional':  { title: 'Lógica proposicional clásica', description: 'Operadores: ¬ ∧ ∨ → ↔\nTableaux con ramas abiertas/cerradas.\nSemántica bivalente (V/F).', category: 'profile' },
   'classical.first_order':    { title: 'Lógica de primer orden', description: 'Extensión con cuantificadores ∀ ∃, predicados, funciones e igualdad.', category: 'profile' },
   'modal.k':                  { title: 'Lógica modal K', description: 'Sistema modal mínimo. □ (necesidad) y ◇ (posibilidad).\nModelos Kripke sin restricciones en R.', category: 'profile' },
-  'paraconsistent.belnap':    { title: 'Lógica paraconsistente (Belnap)', description: '4 valores: T, F, Both (⊤), Neither (⊥).\nTolera contradicciones sin trivializar.', category: 'profile' },
+  'paraconsistent.belnap':    { title: 'Lógica paraconsistente (Belnap)', description: '4 valores: T (verdadero), F (falso), B (ambos/⊤), N (ninguno/⊥).\nDesignados: {T, B}. Tolera contradicciones sin trivializar.\ntable de verdad enriquecida con marcadores ⊛ Designado.', category: 'profile' },
   'deontic.standard':         { title: 'Lógica deóntica estándar', description: 'Obligación (O), Permisión (P), Prohibición (F).\nAxioma D: Ob(p) → Perm(p).', category: 'profile' },
   'epistemic.s5':             { title: 'Lógica epistémica S5', description: 'Conocimiento (K) y creencia.\nIntrospección positiva y negativa.', category: 'profile' },
   'intuitionistic.propositional': { title: 'Lógica intuicionista', description: 'Rechaza el tercero excluido (p ∨ ¬p).\nRequiere evidencia constructiva.', category: 'profile' },
@@ -155,6 +155,17 @@ const profileInfo: Record<string, HoverData> = {
   'probabilistic.basic':      { title: 'Lógica probabilística básica', description: 'Asigna probabilidades a fórmulas.\nP(A) ∈ [0,1], axiomas de Kolmogorov.', category: 'profile' },
   'aristotelian.syllogistic': { title: 'Silogística aristotélica', description: 'Proposiciones categóricas: A (todo), E (ninguno), I (alguno), O (alguno no).\nSilogismos con figuras y modos.', category: 'profile' },
   arithmetic:                 { title: 'Lógica arithmetic', description: 'Perfil numérico para evaluar expresiones aritméticas, comparaciones y combinarlas con scripting ST.', category: 'profile' }
+};
+
+// ── Modal Aliases (context-dependent) ────────────────────────
+
+const modalAliasInfo: Record<string, HoverData> = {
+  'K':  { title: 'K — Conocimiento (epistemic.s5)', description: 'Alias modal: K(φ) ≡ □φ. "El agente sabe que φ". Solo activo en el perfil epistemic.s5.', example: 'logic epistemic.s5\ncheck valid K(P) -> P', category: 'alias' },
+  'B':  { title: 'B — Creencia (epistemic.s5)', description: 'Alias modal: B(φ) ≡ ◇φ. "El agente cree que φ". Solo activo en el perfil epistemic.s5.', example: 'logic epistemic.s5\ncheck valid K(P) -> B(P)', category: 'alias' },
+  'O':  { title: 'O — Obligación (deontic.standard)', description: 'Alias modal: O(φ) ≡ □φ. "Es obligatorio que φ". Solo activo en el perfil deontic.standard.', example: 'logic deontic.standard\ncheck valid O(P) -> P(P)', category: 'alias' },
+  'P':  { title: 'P — Permisión (deontic.standard)', description: 'Alias modal: P(φ) ≡ ◇φ. "Está permitido que φ". Solo activo en el perfil deontic.standard. Nota: P sola es un átomo proposicional.', example: 'logic deontic.standard\ncheck valid O(Q) -> P(Q)', category: 'alias' },
+  'F':  { title: 'F — Prohibición / Eventually', description: 'Como alias modal: F(φ) ≡ □¬φ (deontic: "prohibido") o F(φ) ≡ ◇φ (temporal: "eventualmente"). Depende del perfil activo.', example: 'logic temporal.ltl\ncheck valid G(P) -> F(P)', category: 'alias' },
+  'G':  { title: 'G — Siempre / Globally (temporal.ltl)', description: 'Alias modal: G(φ) ≡ □φ. "Siempre se cumple φ". Solo activo en el perfil temporal.ltl.', example: 'logic temporal.ltl\ncheck valid G(P) -> P', category: 'alias' },
 };
 
 // ── Lookup unificado ────────────────────────────────────────
@@ -174,6 +185,6 @@ export function getHoverInfo(text: string, category: string): HoverData | null {
   // Operator
   if (category === 'operator') return operatorInfo[text] ?? null;
 
-  // Fallback: buscar en todos
-  return keywordInfo[lower] ?? builtinInfo[lower] ?? operatorInfo[text] ?? profileInfo[text] ?? null;
+  // Fallback: buscar en todos (incluido aliases modales)
+  return keywordInfo[lower] ?? builtinInfo[lower] ?? operatorInfo[text] ?? profileInfo[text] ?? modalAliasInfo[text] ?? null;
 }

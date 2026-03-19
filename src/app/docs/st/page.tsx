@@ -82,7 +82,7 @@ interface PackageHelper {
   note: string;
 }
 
-const ST_RUNTIME_VERSION = '2.0.4';
+const ST_RUNTIME_VERSION = '2.5.0';
 const DOC_PLAYGROUND = `logic classical.propositional
 set verbose = on
 
@@ -121,7 +121,12 @@ const SYNTAX: SyntaxBlock[] = [
   {
     title: 'Declarar perfil lógico',
     code: 'logic classical.propositional',
-    note: 'Obligatorio como primera línea de cada script.'
+    note: 'Obligatorio para activar un perfil. Si vuelves a declarar logic más abajo, ST cambia el perfil activo desde ese punto.'
+  },
+  {
+    title: 'Cambiar de perfil dentro del mismo archivo',
+    code: 'logic classical.propositional\ncheck valid (P | !P)\n\nlogic arithmetic\ncheck valid (2 + 3) >= 5',
+    note: 'Los tests del runtime confirman que puedes mezclar secciones con distintos perfiles en un mismo script, siempre declarando logic antes de cada bloque.'
   },
   {
     title: 'Definir axiomas',
@@ -169,6 +174,11 @@ const SYNTAX: SyntaxBlock[] = [
     note: 'La importación solo fusiona los símbolos marcados con export y mantiene el archivo importado aislado del scope consumidor.'
   },
   {
+    title: 'Comentarios, precedencia y flechas del parser',
+    code: '// comentario de línea\n/* comentario de bloque */\naxiom mezcla = P | Q & R\naxiom cadena = P -> Q -> R\nsupport c1 <- p1',
+    note: 'El lexer ignora // y /* ... */. Además, & tiene mayor precedencia que |, la implicación asocia a la derecha y support usa <-.'
+  },
+  {
     title: 'Operadores proposicionales',
     code: '!P          // negación\nP & Q       // conjunción\nP | Q       // disyunción\nP -> Q      // implicación material\nP <-> Q     // bicondicional'
   },
@@ -189,8 +199,13 @@ const SYNTAX: SyntaxBlock[] = [
   },
   {
     title: 'Operadores modales / temporales',
-    code: '[](P)       // necesidad □ / siempre G / obligación O / conocimiento K\n<>(P)       // posibilidad ◇ / eventualmente F / permisión P̂ / creencia B̂\nX(P)        // next (solo temporal.ltl)',
-    note: 'El significado depende del perfil activo.'
+    code: '[](P) / K(P) / O(P) / G(P)   // necesidad, conocimiento, obligación, siempre\n<>(P) / B(P) / P(P) / F(P)   // posibilidad, creencia, permisión, eventualmente\nF(P)                         // prohibición deóntica = [](!P)\nX(P) / next P / siguiente P\n(P until Q) / (P hasta Q)',
+    note: 'K/B solo se leen como modalidades en epistemic.s5; O/P/F en deontic.standard; G/F y next/until en temporal.ltl. Fuera de esos perfiles, nombres como K(P) siguen siendo predicados normales.'
+  },
+  {
+    title: 'Modo bilingüe completo',
+    code: 'logica classical.propositional\naxioma regla = P -> Q\nsea hecho = P\nderivar Q desde {regla, hecho}\nsi valido (P -> P) {\n  imprimir "ok"\n}',
+    note: 'La sintaxis en español no se limita al glosario: el parser cubre comandos, scripting, teorías, Text Layer, import/export y pruebas estructuradas.'
   },
   {
     title: 'Helpers nativos del runtime',
@@ -399,6 +414,19 @@ const RUNTIME_FACETS: RuntimeFacet[] = [
     ],
     code: '// utilidades.st\nexport let Ley = P -> P\nexport fn revisar(X) {\n  return X\n}\n\n// curso.st\nimport "utilidades.st"\ncheck valid Ley\nprint typeof(revisar((P -> Q)))',
     note: 'Ese encapsulamiento evita contaminar el script importador con variables internas o salidas accidentales.'
+  },
+  {
+    title: 'Parser real: comentarios, precedencia y cambio de perfil',
+    description: 'La auditoría final contra lexer, parser y tests confirma detalles sintácticos que antes quedaban implícitos o dispersos.',
+    bullets: [
+      'soporta comentarios de línea con // y de bloque con /* ... */',
+      '& tiene mayor precedencia que |',
+      '-> asocia a la derecha: P -> Q -> R se lee como P -> (Q -> R)',
+      'support usa <- como flecha inversa del Text Layer',
+      'puedes redeclarar logic y cambiar de perfil dentro del mismo archivo'
+    ],
+    code: 'logic classical.propositional\n// bloque clásico\ncheck valid (P | Q & R) -> (P | (Q & R))\n\nlogic arithmetic\n/* bloque aritmético */\ncheck valid (2 + 3) >= 5',
+    note: 'Los aliases K/B/O/F/G son contextuales: en perfiles no modales, formas como K(P) vuelven a ser predicados ordinarios.'
   },
   {
     title: 'Bucles y límites de seguridad',
