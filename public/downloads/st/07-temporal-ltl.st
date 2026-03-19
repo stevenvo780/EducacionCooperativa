@@ -1,10 +1,13 @@
 // ST — Temporal LTL
 logic temporal.ltl
 
+set verbose = on
+
 // === SEGURIDAD, VIVACIDAD Y DUALIDADES ===
 check valid ([](P) -> P)
 check valid ([](P) -> <>(P))
 check valid ([](P -> Q) -> ([](P) -> [](Q)))
+check valid ([](P) -> []([](P)))
 check valid ([](P) -> next P)
 check equivalent <>(P), ![](!(P))
 check equivalent [](P), !<>(!(P))
@@ -26,9 +29,9 @@ prove [](R) from {g1, g2, g3}
 analyze {[](P -> Q), []P} -> []Q
 analyze {<>(P)} -> [](P)
 
-// === EXPLICACIÓN Y CONTRAMODELOS ===
-explain next P
-explain (P until Q)
+// === EXPLICACIÓN DE PATRONES Y CONTRAMODELOS ===
+explain [](P -> <>Q)
+explain (!P until Q)
 countermodel (<>(P) -> [](P))
 countermodel (next P -> P)
 render theory

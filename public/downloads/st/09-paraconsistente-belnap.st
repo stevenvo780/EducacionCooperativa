@@ -1,6 +1,8 @@
 // ST — Paraconsistente Belnap
 logic paraconsistent.belnap
 
+set verbose = on
+
 // === SATISFACIBILIDAD E INCONSISTENCIA TOLERADA ===
 check satisfiable (P & !P)
 check satisfiable (P)
@@ -16,6 +18,7 @@ check valid ((P & Q) -> P)
 // === EQUIVALENCIAS CUATRO-VALORADAS ===
 check equivalent (P -> Q), (!P | Q)
 check equivalent !(P & Q), (!P | !Q)
+check equivalent !(P | Q), (!P & !Q)
 check equivalent !!P, P
 
 // === DERIVACIÓN, PRUEBA Y ANÁLISIS ===
@@ -28,6 +31,7 @@ analyze {P & !P} -> Q
 
 // === EXPLICACIÓN Y CONTRAMODELOS ===
 explain (P & !P)
+explain (P -> P)
 countermodel (P | !P)
 countermodel ((P & !P) -> Q)
 render theory

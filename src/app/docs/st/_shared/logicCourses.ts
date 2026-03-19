@@ -40,6 +40,11 @@ export interface LogicCoursePageData {
   };
 }
 
+export interface LogicCourseEnhancement {
+  highlights: string[];
+  example: LogicCommandExample;
+}
+
 export const logicCourses: LogicCoursePageData[] = [
   {
     slug: 'proposicional',
@@ -215,7 +220,7 @@ export const logicCourses: LogicCoursePageData[] = [
     ],
     limits: [
       'truth_table admite hasta 20 variables proposicionales.',
-      'El derivador BFS usa un límite de 200 iteraciones.',
+      'El derivador BFS usa un límite de 100 iteraciones y una guardia de 500 fórmulas conocidas.',
       'La semántica es completamente clásica: no hay tercer valor, ni inconsistencia tolerada, ni persistencia intuicionista.',
       'Si quieres cuantificadores, necesitas pasar a classical.first_order.'
     ],
@@ -638,7 +643,7 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: '1. Proposiciones A/E/I/O', body: 'A: Todo S es P. E: Ningún S es P. I: Algún S es P. O: Algún S no es P.' },
       { title: '2. Términos mayor, menor y medio', body: 'El término medio conecta premisas pero no aparece en la conclusión.' },
       { title: '3. Figuras', body: 'La posición del término medio define la figura del silogismo.' },
-      { title: '4. Modos válidos', body: 'ST reconoce 19 modos válidos codificados directamente en el motor.' }
+      { title: '4. Modos válidos', body: 'ST reconoce los 24 silogismos válidos y además puede sugerir premisas faltantes cuando detecta un entimema.' }
     ],
     operators: [
       { symbol: 'forall x (S(x) -> P(x))', name: 'A universal afirmativa', meaning: 'Todo S es P.', stExample: 'axiom mayor : forall x (M(x) -> P(x))' },
@@ -668,7 +673,7 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Darii y Ferio', description: 'Introduce existencia particular en la conclusión.', code: 'logic aristotelian.syllogistic\ncheck satisfiable exists x (S(x) & P(x))\ncheck satisfiable exists x (S(x) & !P(x))' }
     ],
     mistakes: ['Perder de vista el término medio.', 'Creer que toda frase con “todos” ya forma un silogismo válido.', 'Olvidar que derive exige exactamente dos premisas categóricas.'],
-    limits: ['ST codifica 19 modos, no las 24 formas históricas completas.', 'No toda falacia verbal queda explicada automáticamente si la forma cae cerca de un patrón válido.'],
+    limits: ['ST ya reconoce los 24 modos válidos y varios entimemas frecuentes.', 'No toda falacia verbal queda explicada automáticamente si la forma cae cerca de un patrón válido.'],
     bridges: ['Conecta históricamente con FOL.', 'Ayuda a enseñar estructura inferencial sin cargar demasiada sintaxis moderna al inicio.'],
     downloads: {
       script: '/downloads/st/08-aristotelica.st'
@@ -774,5 +779,142 @@ export const logicCourses: LogicCoursePageData[] = [
     }
   }
 ];
+
+export const logicCourseEnhancements: Record<string, LogicCourseEnhancement> = {
+  proposicional: {
+    highlights: [
+      'La proposicional ahora clasifica fórmulas automáticamente y reconoce leyes conocidas cuando haces check valid o explain.',
+      'derive nombra el patrón de razonamiento, muestra el esquema formal y puede exportar la prueba en LaTeX con set output = latex.',
+      'explain despliega sub-fórmulas, NNF, CNF, DNF, cláusulas de resolución y completitud funcional.',
+      'analyze ya no se queda en dos o tres errores: detecta once falacias formales en argumentos proposicionales.'
+    ],
+    example: {
+      title: 'Salida pedagógica completa en proposicional',
+      description: 'Combina verbosidad, comparación entre sistemas, falacias y explicación estructural de una fórmula.',
+      code: 'logic classical.propositional\nset verbose = on\ncheck valid (P -> (Q -> P))\nanalyze {P -> Q, Q} -> P\nexplain (P -> Q)'
+    }
+  },
+  'primer-orden': {
+    highlights: [
+      'explain ahora distingue variables libres y ligadas, aridad de predicados, alcance de cuantificadores y alternancia ∀∃.',
+      'El motor puede mostrar forma prenex y skolemización cuando la fórmula lo requiere.',
+      'derive ya documenta pasos UI, EI, EG y UG con justificación numerada.',
+      'Los contramodelos incluyen dominio e interpretación concreta de predicados.'
+    ],
+    example: {
+      title: 'FOL con traza más rica',
+      description: 'Este bloque deja ver tanto la derivación cuantificada como la lectura estructural de la regla universal.',
+      code: 'logic classical.first_order\nset verbose = on\naxiom regla = forall x (Humano(x) -> Mortal(x))\naxiom caso = Humano(socrates)\nderive Mortal(socrates) from {regla, caso}\nexplain forall x (Humano(x) -> Mortal(x))'
+    }
+  },
+  'modal-k': {
+    highlights: [
+      'El perfil identifica axiomas modales reconocibles cuando una validez coincide con K, T, D, 4, 5 o B.',
+      'La explicación del sistema deja visibles las propiedades del frame que sí o no están presentes.',
+      'Los contramodelos muestran mundos, accesibilidad y valuación Kripke.'
+    ],
+    example: {
+      title: 'Axiomas y contramodelos en K',
+      description: 'Muestra distribución modal válida y luego un caso que falla por falta de reflexividad.',
+      code: 'logic modal.k\nset verbose = on\ncheck valid ([](P -> Q) -> ([]P -> []Q))\ncountermodel ([]P -> P)'
+    }
+  },
+  deontica: {
+    highlights: [
+      'La deóntica ahora adjunta advertencias de paradoja cuando reconoce Ross, Chisholm o el Buen Samaritano.',
+      'La serialidad del frame aparece explícitamente en explicaciones y checks en modo verbose.',
+      'Las trazas del tableau ayudan a enseñar por qué una obligación no implica el hecho actual.'
+    ],
+    example: {
+      title: 'Paradojas normativas visibles',
+      description: 'Ross aparece marcado como paradoja y además deja ver comparación entre sistemas y traza del tableau.',
+      code: 'logic deontic.standard\nset verbose = on\ncheck valid ([]P -> [](P | Q))'
+    }
+  },
+  epistemica: {
+    highlights: [
+      'S5 ya documenta su relación de equivalencia y las simplificaciones pedagógicas de modalidades iteradas.',
+      'El motor reconoce patrones de omnisciencia lógica, Moore e introspección negativa.',
+      'Los modelos abiertos muestran con claridad cómo puede ser satisfacible P ∧ ¬K(P).'
+    ],
+    example: {
+      title: 'S5 con paradojas y accesibilidad',
+      description: 'Combina un caso satisfacible tipo Moore con una explicación de introspección negativa.',
+      code: 'logic epistemic.s5\nset verbose = on\ncheck satisfiable (P & ![]P)\nexplain (![]P -> [](![]P))'
+    }
+  },
+  intuicionista: {
+    highlights: [
+      'El perfil intuicionista ya venía fuerte y conserva forcing completo, lectura BHK y comparación IPC vs CPC.',
+      'Los contramodelos Kripke muestran la persistencia intuicionista, no solo una fila falsa aislada.',
+      'La documentación nueva aclara que aquí “no válido” no equivale a “refutado”.'
+    ],
+    example: {
+      title: 'Forcing y límites de la clásica',
+      description: 'Se ve una ley constructiva que sí vale y dos principios clásicos que el perfil rechaza con contramodelo.',
+      code: 'logic intuitionistic.propositional\ncheck valid (P -> !!P)\ncountermodel (P | !P)\ncountermodel (!!P -> P)'
+    }
+  },
+  temporal: {
+    highlights: [
+      'explain clasifica patrones LTL estándar como safety, liveness, response, persistence, recurrence y precedence.',
+      'El frame temporal y la intuición de irreversibilidad del futuro aparecen explícitos en la salida.',
+      'Las trazas del tableau ayudan a mostrar por qué “eventualmente” no equivale a “siempre”.'
+    ],
+    example: {
+      title: 'Patrones temporales reconocidos',
+      description: 'Response y contramodelo temporal en un mismo flujo.',
+      code: 'logic temporal.ltl\nset verbose = on\nexplain [](P -> <>Q)\ncountermodel (<>P -> []P)'
+    }
+  },
+  aritmetica: {
+    highlights: [
+      'explain descompone operaciones aritméticas y comparaciones con salida pedagógica concreta.',
+      'Arithmetic sigue siendo la capa de scripting explicativo del runtime y convive con let, set, if, for, while y fn.',
+      'typeof ayuda a distinguir Number, String y Formula dentro del mismo lenguaje.'
+    ],
+    example: {
+      title: 'Aritmética explicativa',
+      description: 'El perfil puede mostrar cálculo paso a paso y seguir usándose como pequeño laboratorio programable.',
+      code: 'logic arithmetic\nexplain 2 + 3 * 4\ncheck valid 10 % 3 > 0\nlet base = 2 + 3\nprint typeof(base)'
+    }
+  },
+  aristotelica: {
+    highlights: [
+      'La silogística actual reconoce los 24 silogismos válidos y ya no se queda en el subconjunto viejo de 19.',
+      'derive muestra figura, modo y distribución de términos por premisa.',
+      'El motor puede sugerir premisa faltante cuando detecta un entimema y explicar inferencias inmediatas como conversión u obversión.'
+    ],
+    example: {
+      title: 'Barbara, figura y falacia de distribución',
+      description: 'Primero se reconoce un modo válido; luego analyze deja ver una forma inválida cercana.',
+      code: 'logic aristotelian.syllogistic\nset verbose = on\naxiom mayor = forall x (M(x) -> P(x))\naxiom menor = forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {mayor, menor}\nanalyze {forall x (P(x) -> M(x)), forall x (S(x) -> M(x))} -> forall x (S(x) -> P(x))'
+    }
+  },
+  belnap: {
+    highlights: [
+      'explain dibuja el retículo A4 y marca los valores designados T y B.',
+      'La salida compara explícitamente qué leyes clásicas fallan y cuáles sí sobreviven en Belnap.',
+      'La doc ahora deja claro que P ∧ ¬P puede ser satisfacible sin que todo colapse.'
+    ],
+    example: {
+      title: 'Retículo y no explosión',
+      description: 'La explicación de una contradicción controlada deja ver el corazón pedagógico de Belnap.',
+      code: 'logic paraconsistent.belnap\nset verbose = on\nexplain (P & !P)\ncheck valid ((P & !P) -> Q)'
+    }
+  },
+  probabilistica: {
+    highlights: [
+      'explain muestra el cálculo paso a paso usando complemento, inclusión-exclusión, independencia y condicional material.',
+      'El motor ya verifica K1, K2 y K3, y añade sensibilidad, probabilidad condicional y Bayes en escenarios simples.',
+      'La tabla probabilística puede desglosar sub-fórmulas en lugar de quedarse en una sola columna final.'
+    ],
+    example: {
+      title: 'Kolmogorov y Bayes desde ST',
+      description: 'Una sola explicación permite ver cálculo, axiomas y sensibilidad probabilística.',
+      code: 'logic probabilistic.basic\nset verbose = on\nexplain (P & Q)\ntruth_table (P -> Q)'
+    }
+  }
+};
 
 export const logicCourseBySlug = Object.fromEntries(logicCourses.map(course => [course.slug, course])) as Record<string, LogicCoursePageData>;

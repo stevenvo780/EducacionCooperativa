@@ -32,6 +32,7 @@ interface ProfileManual {
   engine: string;
   operators: string[];
   axioms?: string[];
+  highlights?: string[];
   validExample: string;
   invalidExample: string;
   limits: string[];
@@ -68,15 +69,29 @@ interface MetaLogicPattern {
   code: string;
   note: string;
 }
+interface PedagogicalFeature {
+  title: string;
+  description: string;
+  code: string;
+  note: string;
+}
+interface PackageHelper {
+  title: string;
+  description: string;
+  code: string;
+  note: string;
+}
 
 const ST_RUNTIME_VERSION = '2.0.4';
 const DOC_PLAYGROUND = `logic classical.propositional
+set verbose = on
 
 let regla = "Si estudio, apruebo" : (E -> A)
 let hecho = "Estudio hoy" : E
 
 derive A from {regla, hecho}
 analyze {E, E -> A} -> A
+check valid (E -> (A -> E))
 explain (E -> A)
 render theory`;
 
@@ -87,9 +102,11 @@ const NAV: NavItem[] = [
   { id: 'academy', label: 'Escuela de Lógicas' },
   { id: 'syntax', label: 'Sintaxis' },
   { id: 'commands', label: 'Comandos' },
+  { id: 'pedagogy-engine', label: 'Motor pedagógico' },
   { id: 'runtime-model', label: 'Runtime Real' },
   { id: 'scripting', label: 'Programación ST' },
   { id: 'meta-logic', label: 'Meta lógica' },
+  { id: 'package-api', label: 'Paquete TS' },
   { id: 'playground', label: 'Laboratorio' },
   { id: 'philosophy-formalizations', label: 'Formalizaciones Filosóficas' },
   { id: 'glossary', label: 'Glosario ST' },
@@ -125,6 +142,11 @@ const SYNTAX: SyntaxBlock[] = [
     title: 'Variables, aliases y descripciones',
     code: 'let regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nprint regla\nset hecho = A\nrender theory',
     note: 'Cuando let recibe una fórmula, ST la registra como alias reutilizable y también como axioma implícito de la teoría actual.'
+  },
+  {
+    title: 'Verbosidad y formato de salida',
+    code: 'set verbose = on\nset verbose = proof\nset verbose = model\nset verbose = off\nset output = latex',
+    note: 'verbose es una variable de control del runtime: on expande notas y comparación entre sistemas; proof y model enfocan el detalle; output=latex exporta árboles de prueba en formato formal cuando la operación genera prueba.'
   },
   {
     title: 'Control de flujo lógico',
@@ -181,13 +203,13 @@ const SYNTAX: SyntaxBlock[] = [
 const COMMANDS: CommandBlock[] = [
   {
     cmd: 'check valid <φ>',
-    desc: 'Verifica si la fórmula es una tautología / válida en la lógica activa.',
-    example: 'check valid P | !P'
+    desc: 'Verifica si la fórmula es válida en la lógica activa; con verbose puede identificar axiomas, clasificaciones, comparación entre sistemas y traza del tableau.',
+    example: 'logic classical.propositional\nset verbose = on\ncheck valid (P -> (Q -> P))'
   },
   {
     cmd: 'check satisfiable <φ>',
-    desc: 'Comprueba si existe al menos un modelo donde φ es verdadera.',
-    example: 'check satisfiable P & Q'
+    desc: 'Comprueba si existe al menos un modelo donde φ es verdadera; en perfiles modales, epistémicos y temporales puede mostrar contramodelos Kripke detallados.',
+    example: 'logic epistemic.s5\nset verbose = model\ncheck satisfiable (P & ![]P)'
   },
   {
     cmd: 'check equivalent <φ>, <ψ>',
@@ -196,8 +218,8 @@ const COMMANDS: CommandBlock[] = [
   },
   {
     cmd: 'derive <meta> from {<premisas>}',
-    desc: 'Intenta demostrar la meta a partir de las premisas listadas.',
-    example: 'logic classical.propositional\naxiom regla : P -> Q\naxiom base = P\nderive Q from {regla, base}'
+    desc: 'Intenta demostrar la meta a partir de las premisas listadas y, en el runtime nuevo, nombra el patrón de razonamiento, el esquema y la prueba paso a paso.',
+    example: 'logic classical.propositional\nset verbose = proof\naxiom regla : P -> Q\naxiom base = P\nderive Q from {regla, base}'
   },
   {
     cmd: 'prove <meta> from {<axiomas>}',
@@ -206,8 +228,8 @@ const COMMANDS: CommandBlock[] = [
   },
   {
     cmd: 'countermodel <φ>',
-    desc: 'Si φ no es válida, muestra un modelo que la falsifica.',
-    example: 'countermodel P -> Q'
+    desc: 'Si φ no es válida, muestra un modelo que la falsifica; en clásica marca la valuación crítica y en perfiles Kripke muestra mundos, accesibilidad y valuación.',
+    example: 'logic modal.k\nset verbose = model\ncountermodel ([]P -> P)'
   },
   {
     cmd: 'truth_table <φ>',
@@ -216,13 +238,13 @@ const COMMANDS: CommandBlock[] = [
   },
   {
     cmd: 'analyze {<premisas>} -> <conclusión>',
-    desc: 'Evalúa una inferencia completa y detecta falacias conocidas cuando aplica.',
-    example: 'logic classical.propositional\nanalyze {P, P -> Q} -> Q\nanalyze {P} -> Q'
+    desc: 'Evalúa una inferencia completa y detecta falacias formales conocidas. El motor actual reconoce once patrones pedagógicos.',
+    example: 'logic classical.propositional\nanalyze {P, P -> Q} -> Q\nanalyze {P -> Q, Q} -> P\nanalyze {P -> Q, !P} -> !Q'
   },
   {
     cmd: 'explain <φ>',
-    desc: 'Explica una fórmula según el perfil activo; en arithmetic además evalúa resultados concretos.',
-    example: 'logic arithmetic\nexplain 2 + 3 * 4\nexplain 10 > 5'
+    desc: 'Explica una fórmula según el perfil activo. En proposicional ya incluye sub-fórmulas, formas normales, cláusulas, completitud funcional y esquemas algebraicos; en otros perfiles despliega marcos, paradojas, patrones o cálculo paso a paso.',
+    example: 'logic classical.propositional\nset verbose = on\nexplain (P -> Q)'
   },
   {
     cmd: 'render <target>',
@@ -260,13 +282,78 @@ const COMMANDS: CommandBlock[] = [
     example: 'st repl\nst protocol'
   },
   {
+    cmd: 'set verbose = on|off|proof|model',
+    desc: 'Controla la riqueza pedagógica de la salida del runtime usando la sintaxis real de set.',
+    example: 'logic classical.propositional\nset verbose = on\ncheck valid (P -> (Q -> P))'
+  },
+  {
+    cmd: 'set output = latex',
+    desc: 'Cuando una operación genera prueba formal, cambia la salida del árbol a formato LaTeX.',
+    example: 'logic classical.propositional\nset verbose = proof\nset output = latex\naxiom regla = P -> Q\naxiom base = P\nderive Q from {regla, base}'
+  },
+  {
     cmd: ':profiles / :profile / :theory / :claims / :reset',
     desc: 'Metacomandos disponibles dentro del REPL para inspeccionar el estado del intérprete.',
     example: 'st repl\n:profiles\n:profile\n:theory\n:claims\n:reset'
   }
 ];
 
+const PEDAGOGICAL_FEATURES: PedagogicalFeature[] = [
+  {
+    title: 'Verbosidad real del runtime',
+    description: 'El motor nuevo usa una variable de control para alternar entre salida compacta, salida total, foco en prueba y foco en modelo. La sintaxis real es con set, no con un comando aparte.',
+    code: 'logic classical.propositional\nset verbose = on\ncheck valid (P -> (Q -> P))\n\nset verbose = proof\nset output = latex\naxiom regla = P -> Q\naxiom base = P\nderive Q from {regla, base}',
+    note: 'on abre comparación entre sistemas, notas pedagógicas y trazas; proof concentra pasos de prueba; model prioriza modelos y contramodelos; output=latex emite árboles de prueba formales.'
+  },
+  {
+    title: 'explain ahora enseña, no solo describe',
+    description: 'En proposicional, explain ya no se limita a decir si algo es tautológico o contingente. Puede desplegar conectivo principal, profundidad, sub-fórmulas, formas normales, cláusulas para resolución, completitud funcional y esquemas algebraicos.',
+    code: 'logic classical.propositional\nset verbose = on\nexplain (P -> Q)',
+    note: 'Cada perfil especializa explain: FOL agrega prenex y Skolem; temporal clasifica patrones; Belnap dibuja el retículo; probabilística explica el cálculo paso a paso.'
+  },
+  {
+    title: 'analyze con once detectores de falacia',
+    description: 'El análisis de inferencias ahora reconoce más que afirmación del consecuente o negación del antecedente. También cubre medio no distribuido, petición de principio, composición, división, generalización apresurada y otros patrones formales.',
+    code: 'logic classical.propositional\nanalyze {P -> Q, Q} -> P\nanalyze {P -> Q, !P} -> !Q',
+    note: 'La salida incluye nombre de la falacia, explicación breve y patrón lógico. En silogística y FOL también aparecen diagnósticos específicos del perfil.'
+  },
+  {
+    title: 'Comparación entre sistemas y trazas visibles',
+    description: 'Los checks con verbose pueden contrastar una misma fórmula entre perfiles compatibles y mostrar tableaux o contramodelos Kripke cuando el sistema lo soporta.',
+    code: 'logic deontic.standard\nset verbose = on\ncheck valid ([]P -> [](P | Q))',
+    note: 'Esta salida puede incluir identificación de axioma o paradoja, comparación cruzada y traza del tableau. En modal, deóntica, epistémica y temporal aparecen además mundos y accesibilidad.'
+  }
+];
+
+const PACKAGE_HELPERS: PackageHelper[] = [
+  {
+    title: 'Ejecutar ST desde TypeScript',
+    description: 'El frontend ya consume el paquete oficial. Puedes crear un intérprete, ejecutar un script y reutilizar la salida para paneles, laboratorios o integraciones pedagógicas.',
+    code: `import { createInterpreter } from '@stevenvo780/st-lang';\n\nconst interpreter = createInterpreter();\nconst result = interpreter.exec(\`logic classical.propositional\nset verbose = on\ncheck valid (P -> (Q -> P))\n\`);\n\nconsole.log(result.stdout);`,
+    note: 'Esta es la misma ruta que usan los bloques ejecutables de la documentación.'
+  },
+  {
+    title: 'Render formal y detección desde el paquete',
+    description: 'El paquete actual expone helpers públicos para Unicode, LaTeX y detección programática de falacias. Los árboles de prueba en LaTeX se obtienen desde ST con set output = latex.',
+    code: `import { parse, formulaToUnicode, formulaToLaTeX, detectFallacies } from '@stevenvo780/st-lang';\n\nconst parsed = parse('logic classical.propositional\\nclaim demo = P -> (Q -> P)');\nif (parsed.ok) {\n  const claim = parsed.program.statements[1];\n  if (claim.kind === 'claim_decl') {\n    console.log(formulaToUnicode(claim.formula));\n    console.log(formulaToLaTeX(claim.formula));\n  }\n}\n\nconsole.log(detectFallacies);`,
+    note: 'formulaToUnicode y formulaToLaTeX forman parte de la API pública del paquete actual. La exportación de pruebas completas se activa dentro del lenguaje con output=latex.'
+  }
+];
+
 const RUNTIME_FACETS: RuntimeFacet[] = [
+  {
+    title: 'Controles pedagógicos por estado',
+    description: 'La verbosidad y el formato de prueba no son comandos mágicos separados: el runtime los lee desde variables del estado actual, por eso la sintaxis real es set verbose = ... y set output = ....',
+    bullets: [
+      'set verbose = off: salida compacta',
+      'set verbose = on: notas pedagógicas, comparación entre sistemas y trazas',
+      'set verbose = proof: enfoca pasos de prueba',
+      'set verbose = model: enfoca modelos y contramodelos',
+      'set output = latex: exporta árboles de prueba cuando la operación genera proof'
+    ],
+    code: 'logic classical.propositional\nset verbose = proof\nset output = latex\naxiom regla = P -> Q\naxiom base = P\nderive Q from {regla, base}',
+    note: 'El changelog interno habla de un “sistema de verbosidad”; en la sintaxis real actual se controla con set sobre verbose y output.'
+  },
   {
     title: 'Qué hace realmente let',
     description: 'Cuando let recibe una fórmula, ST registra un alias reutilizable y además lo incorpora como axioma implícito de la teoría actual. Cuando recibe solo texto, conserva una descripción semántica para explicaciones, modelos y contramodelos.',
@@ -323,6 +410,19 @@ const RUNTIME_FACETS: RuntimeFacet[] = [
     ],
     code: 'logic classical.propositional\nset estado = P\nwhile satisfiable estado {\n  print "iteración"\n  set estado = P & !P\n}',
     note: 'La mutación explícita es parte del modelo de ejecución: la condición se recalcula contra el estado lógico actualizado.'
+  },
+  {
+    title: 'Resultados enriquecidos por comando',
+    description: 'El runtime ya adjunta a muchos resultados metadatos útiles para docencia: patrón de razonamiento, esquema, clasificación de fórmula, formas normales, comparación entre perfiles, notas educativas, warnings de paradoja y traza del tableau.',
+    bullets: [
+      'derive / prove: patrón de razonamiento + esquema + prueba numerada',
+      'check valid / satisfiable: identificación de axioma, comparación cruzada y tableau en verbose',
+      'countermodel: valuación crítica o modelo Kripke con mundos y accesibilidad',
+      'analyze: nombre de falacia y patrón lógico detectado',
+      'explain: salida profundamente especializada por perfil'
+    ],
+    code: 'logic deontic.standard\nset verbose = on\ncheck valid ([]P -> [](P | Q))',
+    note: 'No todos los perfiles llenan todos los campos, pero el núcleo ya está preparado para una salida mucho más rica que la de la documentación vieja.'
   }
 ];
 
@@ -683,11 +783,12 @@ const PROFILES: ProfileManual[] = [
     slug: 'Clásica Proposicional',
     badge: 'CPC',
     semantics: 'Lógica clásica bivalente. Cada proposición es V o F. Una fórmula es válida si es verdadera bajo toda valuación.',
-    engine: 'Tabla de verdad exhaustiva (2ⁿ valuaciones) + derivación BFS con fallback semántico.',
+    engine: 'Tabla de verdad exhaustiva (2ⁿ valuaciones) + derivador BFS con 25 reglas y salida pedagógica enriquecida.',
     operators: ['! (negación)', '& (conjunción)', '| (disyunción)', '-> (implicación)', '<-> (bicondicional)'],
-    validExample: 'logic classical.propositional\ncheck valid P | !P\ncheck valid (P -> Q) <-> (!Q -> !P)\nderive Q from {P -> Q, P}',
+    highlights: ['explain clasifica conectivo principal, sub-fórmulas, NNF/CNF/DNF, cláusulas y completitud funcional', 'derive nombra esquema y patrón de razonamiento', 'analyze detecta 11 falacias formales', 'verbose puede comparar la misma fórmula contra otros sistemas'],
+    validExample: 'logic classical.propositional\nset verbose = on\ncheck valid (P -> (Q -> P))\nderive Q from {P -> Q, P}',
     invalidExample: 'logic classical.propositional\ncheck valid P -> Q\ncountermodel P -> Q',
-    limits: ['Máximo 20 variables para truth_table.', 'Derivación BFS limitada a 200 iteraciones.']
+    limits: ['Máximo 20 variables para truth_table.', 'Derivación BFS limitada a 100 iteraciones y 500 fórmulas conocidas para evitar loops.']
   },
   {
     id: 'classical-fol',
@@ -695,8 +796,9 @@ const PROFILES: ProfileManual[] = [
     slug: 'Primer Orden (FOL)',
     badge: 'FOL',
     semantics: 'Lógica de primer orden con cuantificadores universales y existenciales sobre un dominio de individuos.',
-    engine: 'Tableau analítico sistemático v2 con constantes Skolem y unificación.',
+    engine: 'Tableau analítico sistemático v2 con constantes de Skolem, unificación y salida detallada de cuantificadores.',
     operators: ['forall x (∀)', 'exists x (∃)', 'P(x,y) predicados', '! & | -> <->'],
+    highlights: ['explain muestra variables libres/ligadas, aridad, alcance y alternancia de cuantificadores', 'incluye forma prenex y skolemización', 'derive numera pasos UI/EI/EG/UG', 'countermodel explicita dominio e interpretación de predicados'],
     validExample: 'logic classical.first_order\naxiom a1 : forall x (P(x) -> Q(x))\naxiom a2 : P(c)\nderive Q(c) from {a1, a2}\ncheck valid forall x (P(x) -> P(x))',
     invalidExample: 'logic classical.first_order\ncheck valid forall x P(x)\ncountermodel exists x P(x) -> forall x P(x)',
     limits: ['Profundidad máxima del tableau: 50 pasos.', 'Semi-decidible: puede retornar unknown en lugar de invalid.']
@@ -707,9 +809,10 @@ const PROFILES: ProfileManual[] = [
     slug: 'Modal K',
     badge: 'K',
     semantics: 'Lógica modal normal mínima. Modelos Kripke sin restricciones sobre la relación de accesibilidad.',
-    engine: 'Labeled Tableau con frame K (sin condiciones de marco).',
+    engine: 'Labeled tableau con frame K y clasificación de axiomas modales reconocidos.',
     operators: ['[] necesidad (□)', '<> posibilidad (◇)', '! & | -> <->'],
     axioms: ['K: [](P -> Q) -> ([]P -> []Q)', 'N: si ⊢ φ entonces ⊢ []φ (necessitación)'],
+    highlights: ['explain resume propiedades del frame', 'check valid identifica axiomas K/T/D/4/5/B cuando aplica', 'countermodel usa mundos y accesibilidad Kripke visibles'],
     validExample: 'logic modal.k\ncheck valid [](P -> Q) -> ([]P -> []Q)\ncheck valid [](P & Q) <-> ([]P & []Q)',
     invalidExample: 'logic modal.k\ncheck valid []P -> P\ncountermodel <>P -> []P',
     limits: ['Máximo 200 nodos en el tableau.', 'Sin reflexividad, transitividad ni simetría.']
@@ -720,10 +823,11 @@ const PROFILES: ProfileManual[] = [
     slug: 'Deóntica Estándar',
     badge: 'KD',
     semantics: 'Lógica deóntica basada en K + serialidad. O(φ) = obligación, P(φ) = permisión, F(φ) = prohibición.',
-    engine: 'Labeled Tableau con frame KD (serial: todo mundo tiene al menos un sucesor deóntico).',
+    engine: 'Labeled tableau con frame KD (serialidad) y detección de paradojas normativas conocidas.',
     operators: ['[](φ) obligación O', '<>(φ) permisión P', '[](!) prohibición F', '! & | -> <->'],
     axioms: ['D: O(φ) -> P(φ) (lo obligatorio es permitido)'],
-    validExample: 'logic deontic.standard\ncheck valid [](P) -> <>(P)\nderive <>(Q) from {[](P -> Q), <>(P)}',
+    highlights: ['check valid puede identificar Ross y Chisholm como patrones paradójicos', 'verbose muestra serialidad, comparación entre sistemas y tableau', 'countermodel Kripke deja ver conflicto entre obligación y hecho'],
+    validExample: 'logic deontic.standard\nset verbose = on\ncheck valid [](P) -> <>(P)\nderive <>(Q) from {[](P -> Q), <>(P)}',
     invalidExample: 'logic deontic.standard\ncheck valid [](P) -> P\ncountermodel <>(P) -> [](P)',
     limits: ['Máximo 200 nodos en el tableau.', 'No modela conflictos deónticos genuinos.']
   },
@@ -733,10 +837,11 @@ const PROFILES: ProfileManual[] = [
     slug: 'Epistémica S5',
     badge: 'S5',
     semantics: 'Lógica epistémica con relación de accesibilidad universal (reflexiva, simétrica, transitiva). K(φ) = conocimiento, B(φ) = creencia.',
-    engine: 'Labeled Tableau con frame S5 (relación universal entre mundos).',
+    engine: 'Labeled tableau con frame S5 (equivalencia) y simplificación pedagógica de modalidades iteradas.',
     operators: ['[](φ) conocimiento K', '<>(φ) creencia B', '! & | -> <->'],
     axioms: ['T: Kφ -> φ (veridicidad)', '4: Kφ -> KKφ (introspección +)', 'B: φ -> K¬K¬φ (introspección −)'],
-    validExample: 'logic epistemic.s5\ncheck valid [](P) -> P\ncheck valid [](P) -> []([](P))\nderive P from {[](P)}',
+    highlights: ['explica reflexividad, simetría y transitividad como relación de equivalencia', 'reconoce introspección negativa, omnisciencia lógica y patrones de Moore', 'colapsa pedagógicamente fórmulas como □□P y ◇◇P'],
+    validExample: 'logic epistemic.s5\nset verbose = on\ncheck valid [](P) -> P\ncheck valid ![]P -> [](![]P)\nderive P from {[](P)}',
     invalidExample: 'logic epistemic.s5\ncheck valid <>(P) -> [](P)\ncountermodel <>(P) -> [](P)',
     limits: ['Máximo 200 nodos en el tableau.', 'Frame universal hace crecer rápido el espacio de búsqueda.']
   },
@@ -746,8 +851,9 @@ const PROFILES: ProfileManual[] = [
     slug: 'Intuicionista',
     badge: 'IPC',
     semantics: 'Lógica intuicionista (Heyting). Sin ley del tercero excluido ni doble negación eliminada. Modelos Kripke con valuaciones persistentes.',
-    engine: 'Enumeración exhaustiva de modelos Kripke finitos (preórdenes ≤ 4 mundos).',
+    engine: 'Enumeración de modelos Kripke finitos con traza de forcing y lectura BHK.',
     operators: ['! (negación intuicionista)', '& | -> <->'],
+    highlights: ['ya trae forcing completo, comparación IPC vs CPC y lectura BHK', 'countermodel muestra persistencia intuicionista', 'sigue siendo el perfil más estable y no cambió sintácticamente en v2'],
     validExample: 'logic intuitionistic.propositional\ncheck valid P -> !!P\ncheck valid (P -> Q) -> (P -> Q)\nderive P from {!!P -> P, !!P}',
     invalidExample: 'logic intuitionistic.propositional\ncheck valid P | !P\ncheck valid !!P -> P',
     limits: ['Máximo 4 mundos Kripke.', '≤ 2 átomos: 4 mundos; > 2 átomos: 3 mundos.', 'Complejidad O(2^(n²) · U^a).']
@@ -758,9 +864,10 @@ const PROFILES: ProfileManual[] = [
     slug: 'Temporal LTL',
     badge: 'LTL',
     semantics: 'Linear Temporal Logic. G(φ) = siempre, F(φ) = eventualmente, X(φ) = siguiente paso. Frame S4 (reflexivo + transitivo).',
-    engine: 'Labeled Tableau con frame S4 para G/F y regla delta para X.',
+    engine: 'Labeled tableau con frame S4 para G/F, regla delta para X y clasificación de patrones temporales estándar.',
     operators: ['[](φ) siempre G', '<>(φ) eventualmente F', 'X(φ) next', '! & | -> <->'],
-    validExample: 'logic temporal.ltl\ncheck valid [](P) -> P\ncheck valid [](P) -> []([](P))\nderive <>(P) from {P}',
+    highlights: ['explain identifica safety, liveness, response, persistence, recurrence y precedence', 'verbose muestra frame temporal y trazas Kripke', 'sirve para documentar propiedades de sistemas reactivos en lenguaje pedagógico'],
+    validExample: 'logic temporal.ltl\nset verbose = on\ncheck valid [](P) -> P\nexplain [](P -> <>Q)\nderive <>(P) from {P}',
     invalidExample: 'logic temporal.ltl\ncheck valid <>(P) -> [](P)\ncountermodel <>(P) -> P',
     limits: ['Máximo 200 nodos en el tableau.', 'Operador U (until) tiene soporte limitado en el tableau.', 'Frame S4 asume futuro irreversible.']
   },
@@ -770,8 +877,9 @@ const PROFILES: ProfileManual[] = [
     slug: 'Aritmética Ejecutable',
     badge: 'ARITH',
     semantics: 'Perfil aritmético con evaluación numérica directa y comparaciones booleanas. Permite usar el mismo runtime de ST para scripting explicativo con números, condiciones y resultados concretos.',
-    engine: 'Evaluador aritmético exacto para expresiones y comparaciones, integrado con let, set, print, if, for, while, fn y explain.',
+    engine: 'Evaluador aritmético exacto para expresiones y comparaciones, integrado con let, set, print, if, for, while, fn y explain paso a paso.',
     operators: ['+ suma', '- resta', '* multiplicación', '/ división', '% módulo', '< > <= >= comparaciones'],
+    highlights: ['explain descompone el cálculo y la comparación', 'typeof diferencia Number, String y Formula', 'sirve como capa de scripting explicativo dentro del mismo runtime ST'],
     validExample: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck valid (2 * 3) >= 6\nexplain 2 + 3 * 4',
     invalidExample: 'logic arithmetic\ncheck valid 5 < 3\ncountermodel 5 < 3',
     limits: ['No está orientado a álgebra simbólica avanzada.', 'while tiene límite de seguridad de 1000 iteraciones.', 'Las funciones retornan fórmulas reutilizables, pero print suele mostrar la expresión resultante y no siempre su reducción aritmética final.']
@@ -782,11 +890,12 @@ const PROFILES: ProfileManual[] = [
     slug: 'Silogística Aristotélica',
     badge: 'SYL',
     semantics: 'Silogística categórica. Proposiciones A (Todo S es P), E (Ningún S es P), I (Algún S es P), O (Algún S no es P).',
-    engine: 'Validación directa contra tabla de 19 silogismos válidos en 4 figuras.',
+    engine: 'Validación directa contra los 24 silogismos válidos en 4 figuras, con identificación de figura, modo y distribución.',
     operators: ['forall x (S(x) -> P(x)) = A', 'forall x (S(x) -> !P(x)) = E', 'exists x (S(x) & P(x)) = I', 'exists x (S(x) & !P(x)) = O'],
+    highlights: ['explain muestra cuadro de oposición, distribución y relaciones A/E/I/O', 'derive identifica Barbara, Celarent y el resto de los 24 modos válidos', 'detecta entimemas y sugiere premisa faltante cuando reconoce el patrón'],
     validExample: 'logic aristotelian.syllogistic\n// Barbara (AAA-1)\naxiom mayor : forall x (M(x) -> P(x))\naxiom menor : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {mayor, menor}',
     invalidExample: 'logic aristotelian.syllogistic\n// Término medio no distribuido\naxiom p1 : forall x (P(x) -> M(x))\naxiom p2 : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {p1, p2}',
-    limits: ['Requiere exactamente 2 premisas categóricas para derive.', 'Solo 19 de 24 silogismos (faltan las formas subalternadas: Barbari, Celaront, etc.).', 'Falacias de forma pueden no detectarse si se interpretan como un modo válido con distribución diferente.']
+    limits: ['Requiere premisas categóricas bien formadas para derive.', 'Las falacias verbales fuera de la forma lógica siguen requiriendo interpretación humana.', 'Los entimemas detectados son sugerencias, no reconstrucciones filológicas completas.']
   },
   {
     id: 'belnap',
@@ -794,8 +903,9 @@ const PROFILES: ProfileManual[] = [
     slug: 'Paraconsistente Belnap',
     badge: 'B4',
     semantics: 'Lógica de 4 valores de Belnap-Dunn: T (verdadero), F (falso), B (ambos), N (ninguno). Valores designados: T y B. Tolera contradicción sin trivialización.',
-    engine: 'Tabla de verdad de 4 valores: enumeración exhaustiva de 4ⁿ valuaciones.',
+    engine: 'Tabla de verdad de 4 valores: enumeración exhaustiva de 4ⁿ valuaciones con retículo A4 y comparación explícita con clásica.',
     operators: ['! (negación Belnap)', '& (meet en retículo)', '| (join en retículo)', '-> (implicación material: !A | B)', '<-> (bicondicional)'],
+    highlights: ['explain dibuja el retículo T/B/N/F', 'muestra qué leyes clásicas caen y cuáles sobreviven', 'la salida marca valores designados T y B y explica por qué no hay explosión'],
     validExample: 'logic paraconsistent.belnap\ncheck satisfiable P & !P\ncheck equivalent !(P & Q), (!P | !Q)\ncheck equivalent !(P | Q), (!P & !Q)',
     invalidExample: 'logic paraconsistent.belnap\n// ¡P -> P NO es válida! (N -> N = N, no designado)\ncheck valid P -> P\n// Ex falso quodlibet FALLA\ncheck valid (P & !P) -> Q\n// Tercero excluido FALLA\ncheck valid P | !P',
     limits: ['P -> P NO es válida (N -> N = N).', 'P | !P NO es válida (N | N = N).', 'Ex falso quodlibet falla: la contradicción no trivializa.', 'Crece como 4ⁿ: costoso con muchas variables.']
@@ -806,9 +916,10 @@ const PROFILES: ProfileManual[] = [
     slug: 'Probabilística',
     badge: 'PROB',
     semantics: 'Cálculo probabilístico exacto. P(φ) = Σ P(mundo) · ⟦mundo ⊨ φ⟧ asumiendo independencia entre átomos.',
-    engine: 'Enumeración de 2ⁿ mundos × muestreo discreto de probabilidades [0, 0.25, 0.5, 0.75, 1].',
+    engine: 'Enumeración de 2ⁿ mundos × muestreo discreto de probabilidades con cálculo paso a paso, Kolmogorov y Bayes elemental.',
     operators: ['! & | -> <-> (semántica clásica por mundo)'],
-    validExample: 'logic probabilistic.basic\ncheck valid P | !P\ncheck equivalent !(P & Q), (!P | !Q)\ntruth_table P -> Q',
+    highlights: ['explain detalla complemento, inclusión-exclusión, independencia y condicional material', 'verifica K1/K2/K3 y muestra sensibilidad', 'añade probabilidad condicional y Bayes en escenarios simples'],
+    validExample: 'logic probabilistic.basic\nset verbose = on\ncheck valid P | !P\nexplain (P & Q)\ntruth_table P -> Q',
     invalidExample: 'logic probabilistic.basic\ncheck valid P -> Q\ncountermodel P & !P',
     limits: ['Muestreo discreto: puede no detectar contraejemplos entre puntos.', 'Si 5ⁿ > 10000 se reduce a 3 puntos de muestreo.', 'Tolerancia numérica: 1e-10.', 'truth_table mezcla columnas booleanas y probabilísticas.']
   }
@@ -896,7 +1007,7 @@ function CourseIndexCard({ course }: { course: LogicCourse }) {
             download
             className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-white transition text-xs font-semibold"
           >
-            Descargar script
+            Descargar script completo
           </a>
         </div>
       </div>
@@ -963,7 +1074,7 @@ export default function STDocsPage() {
                 desde la clásica proposicional hasta la probabilística y la aritmética. El runtime actual
                 también incluye <strong className="text-white">import/export selectivo</strong>, operadores
                 extendidos (<code className="text-mandy-400">xor</code>, <code className="text-mandy-400">nand</code>, <code className="text-mandy-400">nor</code>)
-                y helpers nativos para inspección, metalógica y automatización.
+                y helpers nativos para inspección, metalógica, render formal y automatización.
               </p>
               <p className="text-surface-400 text-sm">
                 Cada perfil implementa un motor semántico propio (tablas de verdad, tableaux
@@ -976,7 +1087,8 @@ export default function STDocsPage() {
                 <code className="text-mandy-400"> import</code>, <code className="text-mandy-400">export</code>,
                 <code className="text-mandy-400">analyze</code>, <code className="text-mandy-400"> explain</code>,
                 <code className="text-mandy-400">render</code>, <code className="text-mandy-400">typeof</code>,
-                <code className="text-mandy-400">is_valid</code>, <code className="text-mandy-400">get_atoms</code> e <code className="text-mandy-400">input</code>.
+                <code className="text-mandy-400">is_valid</code>, <code className="text-mandy-400">get_atoms</code>, modos de
+                verbosidad, detección de 11 falacias, warnings de paradoja y exportación formal en LaTeX.
               </p>
               <div className="bg-surface-900/40 border border-surface-700/30 rounded-xl p-4">
                 <p className="text-xs text-surface-400 leading-relaxed">
@@ -1109,6 +1221,26 @@ export default function STDocsPage() {
           </section>
 
           <section>
+            <SectionTitle id="pedagogy-engine" icon={Layers3} title="Motor Pedagógico" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                El salto más grande del runtime nuevo no es solo lógico sino didáctico: muchas operaciones ahora devuelven
+                clasificación, esquema, notas educativas, trazas y comparaciones que antes había que explicar fuera del motor.
+              </p>
+              <div className="grid gap-4">
+                {PEDAGOGICAL_FEATURES.map((feature, index) => (
+                  <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                    <h4 className="text-sm font-bold text-white mb-2">{feature.title}</h4>
+                    <p className="text-xs text-surface-400 mb-3 leading-relaxed">{feature.description}</p>
+                    <CopyBlock code={feature.code} />
+                    <p className="text-xs text-surface-500 mt-2 italic">{feature.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section>
             <SectionTitle id="runtime-model" icon={Layers3} title="Modelo Real de Ejecución" />
             <div className="space-y-4">
               <p className="text-surface-300 text-sm leading-relaxed">
@@ -1199,6 +1331,27 @@ export default function STDocsPage() {
                     <p className="text-xs text-surface-400 mb-3 leading-relaxed">{pattern.description}</p>
                     <CopyBlock code={pattern.code} />
                     <p className="text-xs text-surface-500 mt-2 italic">{pattern.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle id="package-api" icon={Terminal} title="Paquete TypeScript" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                La documentación no solo cubre la sintaxis ST. También documenta el paquete que usa el frontend:
+                desde ahí puedes ejecutar scripts, renderizar fórmulas en Unicode o LaTeX y conectar el motor
+                con tus propias herramientas.
+              </p>
+              <div className="grid gap-4">
+                {PACKAGE_HELPERS.map((helper, index) => (
+                  <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                    <h4 className="text-sm font-bold text-white mb-2">{helper.title}</h4>
+                    <p className="text-xs text-surface-400 mb-3 leading-relaxed">{helper.description}</p>
+                    <CopyBlock code={helper.code} runnable={false} />
+                    <p className="text-xs text-surface-500 mt-2 italic">{helper.note}</p>
                   </div>
                 ))}
               </div>
@@ -1332,6 +1485,12 @@ export default function STDocsPage() {
                             <BulletList items={p.axioms} />
                           </div>
                         )}
+                        {p.highlights && (
+                          <div>
+                            <h5 className="text-xs font-bold text-violet-300 uppercase tracking-widest mb-2">Capacidades nuevas</h5>
+                            <BulletList items={p.highlights} />
+                          </div>
+                        )}
                         {/* Ejemplo válido */}
                         <div>
                           <h5 className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2">✓ Ejemplo Válido</h5>
@@ -1354,7 +1513,7 @@ export default function STDocsPage() {
                             download
                             className="flex items-center gap-1.5 text-[10px] font-bold text-mandy-400 hover:text-mandy-300 bg-mandy-500/10 border border-mandy-500/20 px-3 py-1.5 rounded-lg transition"
                           >
-                            <Download className="w-3 h-3" /> Script del perfil
+                            <Download className="w-3 h-3" /> Script completo
                           </a>
                         </div>
                       </div>
@@ -1416,7 +1575,7 @@ export default function STDocsPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
                     <h5 className="text-xs font-bold text-amber-400 mb-2">Clásica Proposicional</h5>
-                    <BulletList items={['truth_table: máx. 20 variables', 'Derivación BFS: máx. 200 iteraciones']} />
+                    <BulletList items={['truth_table: máx. 20 variables', 'Derivación BFS: máx. 100 iteraciones + guardia de 500 fórmulas conocidas']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
                     <h5 className="text-xs font-bold text-amber-400 mb-2">Primer Orden (FOL)</h5>
@@ -1436,7 +1595,7 @@ export default function STDocsPage() {
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
                     <h5 className="text-xs font-bold text-amber-400 mb-2">Aristotélica</h5>
-                    <BulletList items={['Solo 19 de 24 silogismos (faltan formas subalternadas)', 'Requiere exactamente 2 premisas categóricas', 'Falacias de forma pueden no detectarse']} />
+                    <BulletList items={['Ya reconoce 24 silogismos válidos y entimemas frecuentes', 'Requiere premisas categóricas bien formadas', 'Las falacias verbales fuera de la forma lógica siguen requiriendo lectura humana']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
                     <h5 className="text-xs font-bold text-amber-400 mb-2">Probabilística</h5>

@@ -1,9 +1,12 @@
 // ST — Deóntica estándar
 logic deontic.standard
 
+set verbose = on
+
 // === OBLIGACIÓN, PERMISIÓN Y PROHIBICIÓN ===
 check valid ([](P) -> <>(P))
 check valid ([](P -> Q) -> ([](P) -> [](Q)))
+check valid ([]P -> [](P | Q))
 check valid ([](!P) -> !<>(P))
 check equivalent [](P), !<>(!P)
 check equivalent <>(P), ![](!P)
@@ -25,7 +28,8 @@ prove [](R) from {d1, d2, d3}
 analyze {[](P -> Q), [](P)} -> [](Q)
 analyze {<>(P)} -> P
 
-// === EXPLICACIÓN Y CONTRAMODELOS ===
+// === EXPLICACIÓN, PARADOJAS Y CONTRAMODELOS ===
+explain ([]P -> [](P | Q))
 explain [](P -> <>Q)
 countermodel ([](P) -> P)
 countermodel (<>(P) -> P)

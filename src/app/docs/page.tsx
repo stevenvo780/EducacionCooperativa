@@ -394,7 +394,7 @@ export default function DocsPage() {
                       <FlaskConical className="w-4 h-4" /> Abrir centro ST
                     </Link>
                     <a href="/downloads/st/01-clasica-proposicional.st" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-600/50 text-surface-200 text-sm font-bold hover:border-mandy-500/40 hover:text-white transition">
-                      <Download className="w-4 h-4" /> Descargar script clásico
+                      <Download className="w-4 h-4" /> Descargar script completo
                     </a>
                   </div>
                 </div>
