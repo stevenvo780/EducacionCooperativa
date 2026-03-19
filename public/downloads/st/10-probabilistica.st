@@ -1,13 +1,15 @@
 // ST — Probabilística básica
+// Script canónico exhaustivo del perfil probabilistic.basic
 logic probabilistic.basic
 
-set verbose = on
+set verbose = off
 
-// === VALIDEZ Y EQUIVALENCIA PROBABILÍSTICA ===
+// === VALIDEZ, NO-VALIDEZ Y EQUIVALENCIAS ===
 check valid (P | !P)
 check valid (P -> P)
 check valid ((P & Q) -> P)
 check valid ((P & !P) -> Q)
+check valid P
 check equivalent (P -> Q), (!P | Q)
 check equivalent !(P & Q), (!P | !Q)
 check equivalent (P <-> Q), ((P -> Q) & (Q -> P))
@@ -30,9 +32,15 @@ prove R from {p1, p2, p3}
 analyze {P, P -> Q} -> Q
 analyze {Q, P -> Q} -> P
 
-// === EXPLICACIÓN, TABLAS Y CONTRAMODELOS ===
+// === EXPLICACIÓN PROBABILÍSTICA PASO A PASO ===
+set verbose = on
+explain !P
+explain (P | Q)
 explain (P & Q)
 explain (P -> Q)
+explain (P <-> Q)
+
+// === TABLAS Y CONTRAMODELOS ===
 truth_table (P -> Q)
 truth_table (P & !P)
 truth_table (P | !P)

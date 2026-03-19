@@ -1,13 +1,15 @@
 // ST — Epistémica S5
+// Script canónico exhaustivo del perfil epistemic.s5
 logic epistemic.s5
 
-set verbose = on
+set verbose = off
 
-// === VERIDICIDAD, INTROSPECCIÓN Y DUALIDAD ===
-check valid ([](P) -> P)
-check valid ([](P) -> []([](P)))
+// === K, T, 4, 5, B Y DUALIDADES ===
+check valid ([]P -> P)
+check valid ([]P -> [][]P)
 check valid (![]P -> [](![]P))
-check valid (P -> [](<>P))
+check valid (P -> []<>P)
+check valid (<>P -> []<>P)
 check valid ([](P -> Q) -> ([]P -> []Q))
 check equivalent []P, !<>!P
 check equivalent <>P, ![]!P
@@ -19,6 +21,7 @@ check satisfiable ([](P -> Q) & <>P)
 check satisfiable (P & ![]P)
 
 // === DERIVACIÓN Y PRUEBA ===
+set verbose = on
 axiom s1 = [](P -> Q)
 axiom s2 = []P
 axiom s3 = [](Q -> R)

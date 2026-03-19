@@ -106,10 +106,10 @@ check valid (!!P <-> P)`,
           'Medio no distribuido',
           'Falacia de composición',
           'Posible falso dilema',
-          'Petición de principio',
+          'Petición de principio (Petitio Principii)',
           'Conversión ilícita',
           'Generalización apresurada',
-          'Cuaternio terminorum',
+          'Falacia de cuatro términos (Quaternio terminorum)',
           'Falacia de división'
         ],
         code: `logic classical.propositional
