@@ -238,7 +238,7 @@ const COMMANDS: CommandBlock[] = [
   },
   {
     cmd: 'analyze {<premisas>} -> <conclusión>',
-    desc: 'Evalúa una inferencia completa y detecta falacias formales conocidas. El motor actual reconoce once patrones pedagógicos.',
+    desc: 'Evalúa una inferencia completa y detecta falacias formales conocidas. El runtime activo registra diez detectores explícitos.',
     example: 'logic classical.propositional\nanalyze {P, P -> Q} -> Q\nanalyze {P -> Q, Q} -> P\nanalyze {P -> Q, !P} -> !Q'
   },
   {
@@ -312,10 +312,10 @@ const PEDAGOGICAL_FEATURES: PedagogicalFeature[] = [
     note: 'Cada perfil especializa explain: FOL agrega prenex y Skolem; temporal clasifica patrones; Belnap dibuja el retículo; probabilística explica el cálculo paso a paso.'
   },
   {
-    title: 'analyze con once detectores de falacia',
-    description: 'El análisis de inferencias ahora reconoce más que afirmación del consecuente o negación del antecedente. También cubre medio no distribuido, petición de principio, composición, división, generalización apresurada y otros patrones formales.',
+    title: 'analyze con diez detectores reales',
+    description: 'El análisis de inferencias ya no se queda en dos casos básicos. El runtime activo cubre afirmación del consecuente, negación del antecedente, medio no distribuido, composición, falso dilema, petición de principio, conversión ilícita, generalización apresurada, cuaternio terminorum y división.',
     code: 'logic classical.propositional\nanalyze {P -> Q, Q} -> P\nanalyze {P -> Q, !P} -> !Q',
-    note: 'La salida incluye nombre de la falacia, explicación breve y patrón lógico. En silogística y FOL también aparecen diagnósticos específicos del perfil.'
+    note: 'La salida incluye nombre de la falacia, explicación breve y patrón lógico. El changelog habla de once, pero el detector activo del runtime hoy expone diez checks registrados.'
   },
   {
     title: 'Comparación entre sistemas y trazas visibles',
@@ -784,8 +784,8 @@ const PROFILES: ProfileManual[] = [
     badge: 'CPC',
     semantics: 'Lógica clásica bivalente. Cada proposición es V o F. Una fórmula es válida si es verdadera bajo toda valuación.',
     engine: 'Tabla de verdad exhaustiva (2ⁿ valuaciones) + derivador BFS con 25 reglas y salida pedagógica enriquecida.',
-    operators: ['! (negación)', '& (conjunción)', '| (disyunción)', '-> (implicación)', '<-> (bicondicional)'],
-    highlights: ['explain clasifica conectivo principal, sub-fórmulas, NNF/CNF/DNF, cláusulas y completitud funcional', 'derive nombra esquema y patrón de razonamiento', 'analyze detecta 11 falacias formales', 'verbose puede comparar la misma fórmula contra otros sistemas'],
+    operators: ['! (negación)', '& (conjunción)', '| (disyunción)', '-> (implicación)', '<-> (bicondicional)', '^ / xor / ⊕', '!& / nand / ↑', '!| / nor / ↓'],
+    highlights: ['explain clasifica conectivo principal, sub-fórmulas, NNF/CNF/DNF, cláusulas y completitud funcional', 'derive nombra esquema y patrón de razonamiento', 'analyze detecta 10 falacias formales implementadas', 'verbose puede comparar la misma fórmula contra otros sistemas'],
     validExample: 'logic classical.propositional\nset verbose = on\ncheck valid (P -> (Q -> P))\nderive Q from {P -> Q, P}',
     invalidExample: 'logic classical.propositional\ncheck valid P -> Q\ncountermodel P -> Q',
     limits: ['Máximo 20 variables para truth_table.', 'Derivación BFS limitada a 100 iteraciones y 500 fórmulas conocidas para evitar loops.']
@@ -797,8 +797,8 @@ const PROFILES: ProfileManual[] = [
     badge: 'FOL',
     semantics: 'Lógica de primer orden con cuantificadores universales y existenciales sobre un dominio de individuos.',
     engine: 'Tableau analítico sistemático v2 con constantes de Skolem, unificación y salida detallada de cuantificadores.',
-    operators: ['forall x (∀)', 'exists x (∃)', 'P(x,y) predicados', '! & | -> <->'],
-    highlights: ['explain muestra variables libres/ligadas, aridad, alcance y alternancia de cuantificadores', 'incluye forma prenex y skolemización', 'derive numera pasos UI/EI/EG/UG', 'countermodel explicita dominio e interpretación de predicados'],
+    operators: ['forall x (∀)', 'exists x (∃)', 'P(x,y) predicados', '= igualdad (sintaxis disponible)', '! & | -> <->'],
+    highlights: ['explain muestra variables libres/ligadas, aridad, alcance y alternancia de cuantificadores', 'incluye forma prenex y skolemización', 'derive numera pasos UI/EI/EG/UG', 'la igualdad ya se parsea y se renderiza, pero su semántica todavía es parcial'],
     validExample: 'logic classical.first_order\naxiom a1 : forall x (P(x) -> Q(x))\naxiom a2 : P(c)\nderive Q(c) from {a1, a2}\ncheck valid forall x (P(x) -> P(x))',
     invalidExample: 'logic classical.first_order\ncheck valid forall x P(x)\ncountermodel exists x P(x) -> forall x P(x)',
     limits: ['Profundidad máxima del tableau: 50 pasos.', 'Semi-decidible: puede retornar unknown en lugar de invalid.']
@@ -852,7 +852,7 @@ const PROFILES: ProfileManual[] = [
     badge: 'IPC',
     semantics: 'Lógica intuicionista (Heyting). Sin ley del tercero excluido ni doble negación eliminada. Modelos Kripke con valuaciones persistentes.',
     engine: 'Enumeración de modelos Kripke finitos con traza de forcing y lectura BHK.',
-    operators: ['! (negación intuicionista)', '& | -> <->'],
+    operators: ['! (negación intuicionista)', '& | -> <->', '^ / xor / ⊕', '!& / nand / ↑', '!| / nor / ↓'],
     highlights: ['ya trae forcing completo, comparación IPC vs CPC y lectura BHK', 'countermodel muestra persistencia intuicionista', 'sigue siendo el perfil más estable y no cambió sintácticamente en v2'],
     validExample: 'logic intuitionistic.propositional\ncheck valid P -> !!P\ncheck valid (P -> Q) -> (P -> Q)\nderive P from {!!P -> P, !!P}',
     invalidExample: 'logic intuitionistic.propositional\ncheck valid P | !P\ncheck valid !!P -> P',
@@ -878,8 +878,8 @@ const PROFILES: ProfileManual[] = [
     badge: 'ARITH',
     semantics: 'Perfil aritmético con evaluación numérica directa y comparaciones booleanas. Permite usar el mismo runtime de ST para scripting explicativo con números, condiciones y resultados concretos.',
     engine: 'Evaluador aritmético exacto para expresiones y comparaciones, integrado con let, set, print, if, for, while, fn y explain paso a paso.',
-    operators: ['+ suma', '- resta', '* multiplicación', '/ división', '% módulo', '< > <= >= comparaciones'],
-    highlights: ['explain descompone el cálculo y la comparación', 'typeof diferencia Number, String y Formula', 'sirve como capa de scripting explicativo dentro del mismo runtime ST'],
+    operators: ['+ suma', '- resta', '* multiplicación', '/ división', '% módulo', '< > <= >= ≤ ≥ comparaciones'],
+    highlights: ['explain descompone el cálculo y la comparación', 'typeof diferencia Number, String y Formula', 'acepta menos unario, decimales y comparadores Unicode', 'sirve como capa de scripting explicativo dentro del mismo runtime ST'],
     validExample: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck valid (2 * 3) >= 6\nexplain 2 + 3 * 4',
     invalidExample: 'logic arithmetic\ncheck valid 5 < 3\ncountermodel 5 < 3',
     limits: ['No está orientado a álgebra simbólica avanzada.', 'while tiene límite de seguridad de 1000 iteraciones.', 'Las funciones retornan fórmulas reutilizables, pero print suele mostrar la expresión resultante y no siempre su reducción aritmética final.']
@@ -890,9 +890,9 @@ const PROFILES: ProfileManual[] = [
     slug: 'Silogística Aristotélica',
     badge: 'SYL',
     semantics: 'Silogística categórica. Proposiciones A (Todo S es P), E (Ningún S es P), I (Algún S es P), O (Algún S no es P).',
-    engine: 'Validación directa contra los 24 silogismos válidos en 4 figuras, con identificación de figura, modo y distribución.',
+    engine: 'Validación directa contra 19 modos silogísticos actualmente codificados, con identificación de figura, modo y distribución.',
     operators: ['forall x (S(x) -> P(x)) = A', 'forall x (S(x) -> !P(x)) = E', 'exists x (S(x) & P(x)) = I', 'exists x (S(x) & !P(x)) = O'],
-    highlights: ['explain muestra cuadro de oposición, distribución y relaciones A/E/I/O', 'derive identifica Barbara, Celarent y el resto de los 24 modos válidos', 'detecta entimemas y sugiere premisa faltante cuando reconoce el patrón'],
+    highlights: ['explain muestra cuadro de oposición, distribución y relaciones A/E/I/O', 'derive identifica los 19 modos hoy codificados, incluidos Darapti, Felapton y Bramantip', 'detecta entimemas y sugiere premisa faltante cuando reconoce el patrón'],
     validExample: 'logic aristotelian.syllogistic\n// Barbara (AAA-1)\naxiom mayor : forall x (M(x) -> P(x))\naxiom menor : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {mayor, menor}',
     invalidExample: 'logic aristotelian.syllogistic\n// Término medio no distribuido\naxiom p1 : forall x (P(x) -> M(x))\naxiom p2 : forall x (S(x) -> M(x))\nderive forall x (S(x) -> P(x)) from {p1, p2}',
     limits: ['Requiere premisas categóricas bien formadas para derive.', 'Las falacias verbales fuera de la forma lógica siguen requiriendo interpretación humana.', 'Los entimemas detectados son sugerencias, no reconstrucciones filológicas completas.']
@@ -1088,7 +1088,7 @@ export default function STDocsPage() {
                 <code className="text-mandy-400">analyze</code>, <code className="text-mandy-400"> explain</code>,
                 <code className="text-mandy-400">render</code>, <code className="text-mandy-400">typeof</code>,
                 <code className="text-mandy-400">is_valid</code>, <code className="text-mandy-400">get_atoms</code>, modos de
-                verbosidad, detección de 11 falacias, warnings de paradoja y exportación formal en LaTeX.
+                verbosidad, detección de 10 falacias, warnings de paradoja y exportación formal en LaTeX.
               </p>
               <div className="bg-surface-900/40 border border-surface-700/30 rounded-xl p-4">
                 <p className="text-xs text-surface-400 leading-relaxed">
@@ -1595,7 +1595,7 @@ export default function STDocsPage() {
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
                     <h5 className="text-xs font-bold text-amber-400 mb-2">Aristotélica</h5>
-                    <BulletList items={['Ya reconoce 24 silogismos válidos y entimemas frecuentes', 'Requiere premisas categóricas bien formadas', 'Las falacias verbales fuera de la forma lógica siguen requiriendo lectura humana']} />
+                    <BulletList items={['Hoy codifica 19 modos silogísticos válidos y varios entimemas frecuentes', 'Requiere premisas categóricas bien formadas', 'Las falacias verbales fuera de la forma lógica siguen requiriendo lectura humana']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
                     <h5 className="text-xs font-bold text-amber-400 mb-2">Probabilística</h5>
