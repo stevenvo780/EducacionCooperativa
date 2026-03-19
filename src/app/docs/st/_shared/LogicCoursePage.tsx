@@ -110,11 +110,8 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
               ))}
             </div>
             <div className="border-t border-surface-700/30 pt-3 space-y-2">
-              <a href={course.downloads.basic} download className="flex items-center gap-2 text-xs text-surface-300 hover:text-mandy-300 transition">
-                <Download className="w-3.5 h-3.5" /> Script base
-              </a>
-              <a href={course.downloads.complete} download className="flex items-center gap-2 text-xs text-surface-300 hover:text-mandy-300 transition">
-                <Download className="w-3.5 h-3.5" /> Script completo
+              <a href={course.downloads.script} download className="flex items-center gap-2 text-xs text-surface-300 hover:text-mandy-300 transition">
+                <Download className="w-3.5 h-3.5" /> Script del perfil
               </a>
             </div>
           </div>
@@ -147,8 +144,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                   <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-widest mb-3">Accesos rápidos</p>
                   <div className="flex flex-wrap gap-2 text-xs">
                     <Link href="/docs/st" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver a la academia</Link>
-                    <a href={course.downloads.basic} download className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar base</a>
-                    <a href={course.downloads.complete} download className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar completo</a>
+                    <a href={course.downloads.script} download className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script</a>
                     <a href="https://github.com/stevenvo780/ST" target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition inline-flex items-center gap-1.5">
                       <ExternalLink className="w-3.5 h-3.5" /> Repositorio ST
                     </a>
@@ -285,7 +281,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Link href="/docs/st" className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver a la academia</Link>
-                <a href={course.downloads.complete} download className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar curso completo</a>
+                <a href={course.downloads.script} download className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script del curso</a>
               </div>
             </div>
           </footer>

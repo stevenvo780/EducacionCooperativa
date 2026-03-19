@@ -782,7 +782,7 @@ const PROFILE_DOWNLOADS: Record<string, string> = {
   aristotelian: '/downloads/st/08-aristotelica.st',
   belnap: '/downloads/st/09-paraconsistente-belnap.st',
   probabilistic: '/downloads/st/10-probabilistica.st',
-  arithmetic: '/downloads/st/23-aritmetica.st'
+  arithmetic: '/downloads/st/12-aritmetica.st'
 };
 
 /* ──────────── Components ──────────── */
@@ -1498,7 +1498,7 @@ export default function STDocsPage() {
                 <code className="text-mandy-400">analyze</code> y <code className="text-mandy-400">explain</code>.
               </p>
               <div className="flex flex-wrap gap-3">
-                <a href="/downloads/st/25-meta-logica.st" download className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-mandy-500 text-white text-sm font-bold hover:bg-mandy-400 transition">
+                <a href="/downloads/st/13-meta-logica.st" download className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-mandy-500 text-white text-sm font-bold hover:bg-mandy-400 transition">
                   <Download className="w-4 h-4" /> Descargar ejemplo de meta lógica
                 </a>
               </div>
@@ -1640,7 +1640,7 @@ export default function STDocsPage() {
                             download
                             className="flex items-center gap-1.5 text-[10px] font-bold text-mandy-400 hover:text-mandy-300 bg-mandy-500/10 border border-mandy-500/20 px-3 py-1.5 rounded-lg transition"
                           >
-                            <Download className="w-3 h-3" /> Script básico
+                            <Download className="w-3 h-3" /> Script del perfil
                           </a>
                         </div>
                       </div>
@@ -1749,7 +1749,7 @@ export default function STDocsPage() {
               </p>
               <CopyBlock
                 label="Ejecutar validación"
-                code="npm run validate:st-docs\n# Ejecuta los 25 scripts .st contra el CLI real de ST\n# Salida esperada: ejecución completa sin errores"
+                code="npm run validate:st-docs\n# Ejecuta los 13 scripts .st canónicos contra @stevenvo780/st-lang\n# Salida esperada: ejecución completa sin errores"
               />
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Scripts de validación disponibles</h5>
@@ -1765,10 +1765,8 @@ export default function STDocsPage() {
                   <span>09 – Paraconsistente Belnap</span>
                   <span>10 – Probabilística</span>
                   <span>11 – Text Layer</span>
-                  <span>12–22 – Exhaustivos por perfil</span>
-                  <span>23 – Aritmética base</span>
-                  <span>24 – Aritmética completa</span>
-                  <span>25 – Meta lógica y metaprogramación</span>
+                  <span>12 – Aritmética</span>
+                  <span>13 – Meta lógica y metaprogramación</span>
                 </div>
               </div>
             </div>
