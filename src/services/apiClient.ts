@@ -52,6 +52,18 @@ export const getAuthToken = async () => {
     }
   } catch {
   }
+
+  // Insecure-mode fallback: use the uid stored by AuthContext as the token
+  if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    try {
+      const stored = localStorage.getItem('agora_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.uid) return parsed.uid as string;
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
   return null;
 };
 

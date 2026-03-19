@@ -776,7 +776,33 @@ export const mosaicEditorStyles = `
           background: #1e293b !important;
           border-color: #334155 !important;
           border-radius: 8px !important;
-          overflow: hidden;
+          overflow: visible;
+          min-height: 2.5em;
+        }
+
+        /* Ensure CodeMirror content inside code blocks is always visible */
+        .mdx-editor-dark [class*="_codeBlockEditorWrapper"] .cm-editor,
+        .mdx-editor-dark [class*="_codeMirrorWrapper"] .cm-editor {
+          min-height: 1.5em !important;
+          overflow: visible !important;
+        }
+        .mdx-editor-dark [class*="_codeBlockEditorWrapper"] .cm-content,
+        .mdx-editor-dark [class*="_codeMirrorWrapper"] .cm-content {
+          min-height: 1.5em !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace !important;
+        }
+        .mdx-editor-dark [class*="_codeBlockEditorWrapper"] .cm-line,
+        .mdx-editor-dark [class*="_codeMirrorWrapper"] .cm-line {
+          font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace !important;
+          font-size: 0.88em !important;
+          line-height: 1.6 !important;
+        }
+        /* Ensure the code block never collapses to zero height */
+        .mdx-editor-dark [class*="_codeBlockEditorWrapper"] .cm-scroller {
+          min-height: 1.5em !important;
+          overflow: auto !important;
         }
 
         .mdx-editor-dark [class*="_diffSourceWrapper"] {
@@ -1079,5 +1105,51 @@ export const mosaicEditorStyles = `
           filter: brightness(1.2);
           height: 3px !important;
           margin-top: -1px;
+        }
+
+        /* ─── ASCII-art diagram blocks (preview) ─── */
+        .markdown-preview-container .ascii-diagram-block {
+          background: #1e293b;
+          border: 1px solid #475569;
+          border-radius: 8px;
+          padding: 16px 20px;
+          margin: 1em 0;
+          overflow-x: auto;
+          line-height: 1.35;
+        }
+        .markdown-preview-container .ascii-diagram-block code {
+          background: none !important;
+          border: none !important;
+          padding: 0 !important;
+          color: #93c5fd !important;
+          font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace !important;
+          font-size: 0.85em !important;
+          white-space: pre !important;
+          display: block;
+          tab-size: 4;
+        }
+
+        /* ─── Code blocks in preview: ensure monospace & proper spacing ─── */
+        .markdown-preview-container pre code {
+          font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace !important;
+          white-space: pre !important;
+          tab-size: 4;
+          display: block;
+        }
+
+        /* ─── KaTeX rendering fixes ─── */
+        .markdown-preview-container .katex-html {
+          white-space: normal;
+        }
+        .markdown-preview-container .katex .base {
+          display: inline-block;
+        }
+        .markdown-preview-container .katex-error {
+          color: #f87171 !important;
+          font-size: 0.85em;
+          border: 1px dashed #ef4444;
+          border-radius: 4px;
+          padding: 2px 6px;
+          background: rgba(239, 68, 68, 0.08);
         }
 `;

@@ -378,13 +378,17 @@ export default function DocsPage() {
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 space-y-4">
                   <h4 className="font-bold text-white">Nuevo Centro ST</h4>
                   <p className="text-xs text-surface-400 leading-relaxed">
-                    Ahora ST tiene una <strong className="text-white">vista dedicada</strong> dentro de Ágora con tutoriales paso a paso, explicación por perfil lógico, ejemplos descargables y un flujo de validación reproducible contra el CLI real.
+                    Ahora ST tiene una <strong className="text-white">vista dedicada</strong> dentro de Ágora con manual ampliado del lenguaje, perfiles lógicos, ejemplos descargables, clase <code className="text-surface-200">Meta</code>, metalógica aplicada y un flujo de validación reproducible contra el CLI real.
                   </p>
                   <div className="flex flex-wrap gap-2 text-[11px] font-bold">
-                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">10 perfiles documentados</span>
-                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">11 scripts verificados</span>
+                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">11 perfiles documentados</span>
+                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">25 scripts verificados</span>
                     <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">Text Layer incluido</span>
+                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">Variables, funciones y theory-class</span>
                   </div>
+                  <p className="text-[11px] text-surface-500">
+                    Autoría y derechos de la documentación ST: <span className="text-surface-300 font-semibold">Steven Vallejo Ortiz</span>.
+                  </p>
                   <div className="flex flex-wrap gap-3">
                     <Link href="/docs/st" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-mandy-500 text-white text-sm font-bold hover:bg-mandy-400 transition">
                       <FlaskConical className="w-4 h-4" /> Abrir centro ST
@@ -518,6 +522,7 @@ export default function DocsPage() {
               </a>
             </div>
             <p className="text-[10px] text-surface-600 font-medium">Plataforma Ágora © 2026 — El conocimiento es un bien común.</p>
+            <p className="text-[10px] text-surface-500 font-medium">Documentación y derechos de autor: Steven Vallejo Ortiz.</p>
           </div>
         </div>
       </div>

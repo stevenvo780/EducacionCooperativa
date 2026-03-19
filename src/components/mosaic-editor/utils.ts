@@ -11,11 +11,40 @@ export const isVideoMime = (mime?: string) => (mime ?? '').toLowerCase().startsW
 export const isAudioMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('audio/');
 export const isPdfMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/pdf';
 
+/**
+ * Un-escape LaTeX delimiters that MDXEditor may have escaped, while
+ * **preserving** content inside fenced code blocks (``` … ```) and
+ * inline code (` … `).
+ */
 export function unescapeLatex(md: string): string {
-  let result = md.replace(/\\\$\\\$([\s\S]*?)\\\$\\\$/g, '$$$$$$1$$$$');
-  result = result.replace(/\\\$((?!\$)[^\n]*?)\\\$/g, '$$$1$$');
-  result = result.replace(/\\([=*_{}[\]()#+\-.!|~<>^`])/g, '$1');
-  return result;
+  // Split the document into safe (outside code) and protected (inside code) segments.
+  // We process ONLY safe segments so code blocks are never mangled.
+  const segments: { text: string; isCode: boolean }[] = [];
+  const fenceOrInlineCode = /(```[\s\S]*?```|`[^`\n]+`)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = fenceOrInlineCode.exec(md)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ text: md.slice(lastIndex, match.index), isCode: false });
+    }
+    segments.push({ text: match[0], isCode: true });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < md.length) {
+    segments.push({ text: md.slice(lastIndex), isCode: false });
+  }
+
+  return segments.map(({ text, isCode }) => {
+    if (isCode) return text;
+    // 1. Escaped block math: \$\$…\$\$ → $$…$$
+    let result = text.replace(/\\\$\\\$([\s\S]*?)\\\$\\\$/g, '$$$$$$1$$$$');
+    // 2. Escaped inline math: \$…\$ → $…$
+    result = result.replace(/\\\$((?!\$)[^\n]*?)\\\$/g, '$$$1$$');
+    // 3. Other escaped markdown specials
+    result = result.replace(/\\([=*_{}[\]()#+\-.!|~<>^`])/g, '$1');
+    return result;
+  }).join('');
 }
 
 export const stripQueryAndHash = (href: string) => href.split('#')[0]?.split('?')[0] ?? href;

@@ -78,22 +78,33 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        await ensureFirebaseAuthUser({
-            uid: userLookup.id,
-            email: userData.email || userLookup.normalizedEmail,
-            password
-        });
+        let customToken: string | undefined;
+        try {
+            await ensureFirebaseAuthUser({
+                uid: userLookup.id,
+                email: userData.email || userLookup.normalizedEmail,
+                password
+            });
 
-        const customToken = await adminAuth.createCustomToken(userLookup.id, {
-            userEmail: userData.email || userLookup.normalizedEmail
-        });
+            customToken = await adminAuth.createCustomToken(userLookup.id, {
+                userEmail: userData.email || userLookup.normalizedEmail
+            });
+        } catch (tokenError: unknown) {
+            // When ALLOW_INSECURE_AUTH is enabled (local dev), tolerate Firebase Admin
+            // failures (e.g. missing IAM roles) and fall back to insecure session.
+            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+                console.warn('Firebase Admin token creation failed (insecure mode, continuing):', getErrorMessage(tokenError));
+            } else {
+                throw tokenError;
+            }
+        }
 
         return NextResponse.json({
             uid: userLookup.id,
             email: userData.email || normalizedEmail,
             displayName: userData.displayName || 'User',
             photoURL: userData.photoURL || null,
-            customToken
+            ...(customToken ? { customToken } : {})
         }, { status: 200 });
 
     } catch (error: unknown) {
