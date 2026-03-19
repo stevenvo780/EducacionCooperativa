@@ -1,7 +1,8 @@
 // ST — Intuicionista proposicional
+// Script canónico exhaustivo del perfil intuitionistic.propositional
 logic intuitionistic.propositional
 
-set verbose = on
+set verbose = off
 
 // === VÁLIDAS CONSTRUCTIVAS ===
 check valid (P -> P)
@@ -15,7 +16,14 @@ check valid ((P & Q) -> P)
 check valid (P -> (P | Q))
 check valid (((P -> Q) & (Q -> R)) -> (P -> R))
 
-// === EQUIVALENCIAS ACEPTADAS EN IPC ===
+// === LEYES CLÁSICAS QUE AQUÍ CAEN ===
+check valid (P | !P)
+check valid (!!P -> P)
+check valid (((P -> Q) -> P) -> P)
+
+// === ALIASES DEL PARSER TAMBIÉN DISPONIBLES EN IPC ===
+check equivalent (P !& Q), !(P & Q)
+check equivalent (P !| Q), !(P | Q)
 check equivalent !(P | Q), (!P & !Q)
 check equivalent (P & Q), (Q & P)
 
@@ -25,6 +33,7 @@ check satisfiable ((P -> Q) & P)
 check satisfiable (P | !P)
 
 // === DERIVACIÓN Y PRUEBA ===
+set verbose = on
 axiom i1 = P -> Q
 axiom i2 = Q -> R
 axiom i3 = P
