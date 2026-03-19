@@ -126,18 +126,34 @@ export async function POST(req: NextRequest) {
                 password
             });
         } catch (error) {
-            await Promise.allSettled([
-                userDocRef.delete(),
-                emailIndexRef.delete()
-            ]);
-            throw error;
+            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true') {
+                await Promise.allSettled([
+                    userDocRef.delete(),
+                    emailIndexRef.delete()
+                ]);
+                throw error;
+            }
+            console.warn('Firebase Admin ensureAuthUser failed (insecure mode, continuing):', getErrorMessage(error));
         }
 
-        const customToken = await adminAuth.createCustomToken(userId, {
-            userEmail: normalizedEmail
-        });
+        let customToken: string | undefined;
+        try {
+            customToken = await adminAuth.createCustomToken(userId, {
+                userEmail: normalizedEmail
+            });
+        } catch (tokenError) {
+            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true') {
+                throw tokenError;
+            }
+            console.warn('Firebase Admin createCustomToken failed (insecure mode, continuing):', getErrorMessage(tokenError));
+        }
 
-        return NextResponse.json({ uid: userId, email: normalizedEmail, customToken }, { status: 201 });
+        return NextResponse.json({
+            uid: userId,
+            email: normalizedEmail,
+            displayName: normalizedEmail.split('@')[0],
+            ...(customToken ? { customToken } : {})
+        }, { status: 201 });
 
     } catch (error: unknown) {
         console.error('Error creating user (custom auth):', getErrorMessage(error));

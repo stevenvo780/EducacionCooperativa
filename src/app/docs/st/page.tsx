@@ -49,8 +49,21 @@ interface LogicCourse {
   mistakes: string[];
   lessonExample: string;
 }
+interface RuntimeFacet {
+  title: string;
+  description: string;
+  bullets: string[];
+  code?: string;
+  note?: string;
+}
+interface MetaLogicPattern {
+  title: string;
+  description: string;
+  code: string;
+  note: string;
+}
 
-const ST_RUNTIME_VERSION = '2.0.0';
+const ST_RUNTIME_VERSION = '2.0.4';
 
 /* ──────────── Data: navigation ──────────── */
 const NAV: NavItem[] = [
@@ -69,7 +82,9 @@ const NAV: NavItem[] = [
   { id: 'course-probabilistic', label: 'Curso Probabilístico' },
   { id: 'syntax', label: 'Sintaxis' },
   { id: 'commands', label: 'Comandos' },
+  { id: 'runtime-model', label: 'Runtime Real' },
   { id: 'scripting', label: 'Programación ST' },
+  { id: 'meta-logic', label: 'Meta lógica' },
   { id: 'philosophy-formalizations', label: 'Formalizaciones Filosóficas' },
   { id: 'glossary', label: 'Glosario ST' },
   { id: 'profiles', label: 'Perfiles Lógicos' },
@@ -96,19 +111,34 @@ const SYNTAX: SyntaxBlock[] = [
     note: 'Los teoremas representan consecuencias que se desean conservar.'
   },
   {
+    title: 'Bloques de prueba estructurada',
+    code: 'assume h1 : P -> Q\nassume h2 : P\nshow Q\nderive Q from {h1, h2}\nqed',
+    note: 'Las hipótesis son temporales, el runtime comprueba la meta y registra un teorema interno si la prueba cierra.'
+  },
+  {
     title: 'Variables, aliases y descripciones',
-    code: 'let regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nprint regla\nset hecho = A',
-    note: 'let registra aliases reutilizables; set permite reasignar estado para scripts pedagógicos.'
+    code: 'let regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nprint regla\nset hecho = A\nrender theory',
+    note: 'Cuando let recibe una fórmula, ST la registra como alias reutilizable y también como axioma implícito de la teoría actual.'
   },
   {
-    title: 'Control de flujo',
-    code: 'if valid (P | !P) {\n  print "tautología"\n} else {\n  print "no válida"\n}\n\nfor F in { P, Q, (R -> R) } {\n  print F\n}\n\nwhile satisfiable estado {\n  set estado = P & !P\n}',
-    note: 'ST soporta if, else if, else, for y while sobre condiciones lógicas reales.'
+    title: 'Control de flujo lógico',
+    code: 'if valid (P | !P) {\n  print "tautología"\n} else if satisfiable P {\n  print "contingencia"\n} else {\n  print "contradicción"\n}\n\nfor F in { P, Q, (R -> R) } {\n  print F\n}\n\nwhile satisfiable estado {\n  set estado = P & !P\n}',
+    note: 'ST soporta if, else if, else, for y while sobre condiciones lógicas reales: valid, invalid, satisfiable y unsatisfiable.'
   },
   {
-    title: 'Funciones, export e instancias',
-    code: 'fn revisar(X) {\n  explain X\n  check satisfiable X\n  return X\n}\n\nexport let regla = P -> Q\nimport "utilidades.st"\n\ntheory Caja(valor) {\n  let dato = valor\n  fn ver() {\n    print dato\n  }\n}\n\nlet caja = Caja("demo")\ncaja.ver()',
-    note: 'ST soporta fn, return, export, import, theory parametrizadas e invocación de métodos con dot notation.'
+    title: 'Funciones reutilizables y llamadas dentro de expresiones',
+    code: 'fn identidad(X) {\n  return X\n}\n\ncheck valid identidad((P -> P))\nprint get_atoms(identidad((P -> Q) & R))',
+    note: 'En ST 2.0.4 las llamadas a función también pueden reutilizarse dentro de otros comandos si la función ya fue declarada.'
+  },
+  {
+    title: 'Singletons, clases y acceso con punto',
+    code: 'theory Base {\n  let ley = P -> Q\n}\n\ntheory Caja(valor) {\n  let dato = valor\n  fn ver() {\n    print dato\n  }\n}\n\nprint Base.ley\nlet caja = Caja("demo")\nprint caja.dato\ncaja.ver()',
+    note: 'Una theory sin parámetros se instancia al declararse; una theory con parámetros actúa como plantilla de clase.'
+  },
+  {
+    title: 'Módulos con export e import',
+    code: '// utilidades.st\nexport let Ley = P -> P\nexport fn revisar(X) {\n  return X\n}\n\n// curso.st\nimport "utilidades.st"\ncheck valid Ley\nprint typeof(revisar((P -> Q)))',
+    note: 'La importación solo fusiona los símbolos marcados con export y mantiene el archivo importado aislado del scope consumidor.'
   },
   {
     title: 'Operadores proposicionales',
@@ -125,14 +155,19 @@ const SYNTAX: SyntaxBlock[] = [
     note: 'Solo disponibles en classical.first_order y aristotelian.syllogistic.'
   },
   {
+    title: 'Números, comparaciones y literales',
+    code: '2 + 3 * 4\n(2 + 3) * 4\n2 + 3 < 10\nprint typeof(2)\nprint typeof("hola")\nprint typeof((P -> Q))',
+    note: 'Arithmetic agrega operadores numéricos y comparaciones; typeof distingue Number, String y Formula.'
+  },
+  {
     title: 'Operadores modales / temporales',
     code: '[](P)       // necesidad □ / siempre G / obligación O / conocimiento K\n<>(P)       // posibilidad ◇ / eventualmente F / permisión P̂ / creencia B̂\nX(P)        // next (solo temporal.ltl)',
     note: 'El significado depende del perfil activo.'
   },
   {
     title: 'Helpers nativos del runtime',
-    code: 'print typeof(2 + 3)\nprint is_valid(P -> P)\nprint is_satisfiable(P & Q)\nprint get_atoms((P -> Q) & R)\nlet nombre = input("Nombre:")',
-    note: 'Estas funciones nativas existen en el runtime real y son especialmente útiles en CLI/REPL.'
+    code: 'print is_valid(P -> P)\nprint is_satisfiable(P & Q)\nprint get_atoms((P -> Q) & R)\nlet nombre = input("Nombre:")',
+    note: 'Estas funciones nativas existen en el runtime real. input está orientado a CLI/REPL y las respuestas meta salen como strings legibles.'
   }
 ];
 
@@ -217,6 +252,92 @@ const COMMANDS: CommandBlock[] = [
     cmd: 'st repl / st protocol',
     desc: 'Abre el REPL interactivo o el modo JSON-RPC para integración con editores.',
     example: 'st repl\nst protocol'
+  },
+  {
+    cmd: ':profiles / :profile / :theory / :claims / :reset',
+    desc: 'Metacomandos disponibles dentro del REPL para inspeccionar el estado del intérprete.',
+    example: 'st repl\n:profiles\n:profile\n:theory\n:claims\n:reset'
+  }
+];
+
+const RUNTIME_FACETS: RuntimeFacet[] = [
+  {
+    title: 'Qué hace realmente let',
+    description: 'Cuando let recibe una fórmula, ST registra un alias reutilizable y además lo incorpora como axioma implícito de la teoría actual. Cuando recibe solo texto, conserva una descripción semántica para explicaciones, modelos y contramodelos.',
+    bullets: [
+      'let con fórmula: alias + axioma implícito',
+      'let con "descripción" : fórmula: agrega leyenda semántica a la salida',
+      'let con texto puro: conserva significado humano sin forzar fórmula'
+    ],
+    code: 'logic classical.propositional\nlet regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nderive A from {regla, hecho}\nrender theory',
+    note: 'Por eso derive, prove, render y countermodel pueden reutilizar let como si fueran premisas con nombre.'
+  },
+  {
+    title: 'Qué significa theory en ST 2.0.4',
+    description: 'Una theory sin parámetros es un singleton instanciado al declararse; una theory con parámetros es una plantilla de clase que se instancia al llamarla como función. Los métodos usan notación con punto y los miembros privados no salen del scope.',
+    bullets: [
+      'sin parámetros: objeto o singleton inmediato',
+      'con parámetros: plantilla o clase instanciable',
+      'dot notation: Base.ley, caja.dato, meta.inspeccionar(...)',
+      'private: visible solo dentro de la teoría'
+    ],
+    code: 'logic classical.propositional\n\ntheory Base {\n  let ley = P -> Q\n}\n\ntheory Caja(valor) {\n  let dato = valor\n  fn ver() {\n    print dato\n  }\n}\n\nprint Base.ley\nlet caja = Caja("demo")\nprint caja.dato\ncaja.ver()',
+    note: 'La herencia con extends hoy funciona contra una teoría padre ya instanciada, normalmente un singleton.'
+  },
+  {
+    title: 'Funciones y retorno',
+    description: 'Las funciones restauran los bindings previos al terminar, aceptan varios parámetros y pueden aparecer dentro de otras fórmulas o comandos si ya están declaradas y devuelven una fórmula utilizable.',
+    bullets: [
+      'el scope de parámetros no fuga fuera de la llamada',
+      'return corta el cuerpo de inmediato',
+      'las llamadas pueden usarse dentro de check, print, get_atoms, etc.'
+    ],
+    code: 'logic classical.propositional\n\nfn identidad(X) {\n  return X\n}\n\ncheck valid identidad((P -> P))\nprint get_atoms(identidad((P -> Q) & R))',
+    note: 'Esto corrige una documentación anterior: en el runtime real sí puedes reutilizar llamadas de función dentro de expresiones conocidas por el parser.'
+  },
+  {
+    title: 'Importación aislada y segura',
+    description: 'import carga un archivo en un scope aislado, ejecuta solo declaraciones exportadas y luego fusiona exclusivamente los símbolos marcados con export.',
+    bullets: [
+      'si falta extensión, ST agrega .st',
+      'la ruta relativa se resuelve respecto al archivo actual',
+      'los side effects del archivo importado se ignoran durante la importación',
+      'solo let, axiom, theorem, fn y theory son exportables'
+    ],
+    code: '// utilidades.st\nexport let Ley = P -> P\nexport fn revisar(X) {\n  return X\n}\n\n// curso.st\nimport "utilidades.st"\ncheck valid Ley\nprint typeof(revisar((P -> Q)))',
+    note: 'Ese encapsulamiento evita contaminar el script importador con variables internas o salidas accidentales.'
+  },
+  {
+    title: 'Bucles y límites de seguridad',
+    description: 'for restaura el binding previo de la variable iterada cuando termina. while reevalúa una condición lógica en cada vuelta y corta a las 1000 iteraciones con advertencia.',
+    bullets: [
+      'condiciones válidas: valid, invalid, satisfiable, unsatisfiable',
+      'el estado suele mutarse con set dentro del cuerpo',
+      'si el estado no cambia, el runtime activa el límite de seguridad'
+    ],
+    code: 'logic classical.propositional\nset estado = P\nwhile satisfiable estado {\n  print "iteración"\n  set estado = P & !P\n}',
+    note: 'La mutación explícita es parte del modelo de ejecución: la condición se recalcula contra el estado lógico actualizado.'
+  }
+];
+
+const META_LOGIC_PATTERNS: MetaLogicPattern[] = [
+  {
+    title: 'Clase Meta para inspeccionar fórmulas',
+    description: 'Usa theory Meta(nombre) como clase instanciable. Cada instancia puede clasificar una fórmula, extraer sus átomos y pedir una explicación formal del motor.',
+    code: 'logic classical.propositional\n\ntheory Meta(nombre) {\n  let etiqueta = nombre\n\n  fn inspeccionar(F) {\n    print etiqueta\n    print typeof(F)\n    print get_atoms(F)\n    print is_valid(F)\n    print is_satisfiable(F)\n    explain F\n    return F\n  }\n\n  fn clasificar(F) {\n    if valid F {\n      print "tautologia"\n    } else if satisfiable F {\n      print "contingente"\n    } else {\n      print "contradiccion"\n    }\n    return F\n  }\n}\n\nlet meta = Meta("Meta")\nmeta.inspeccionar((P -> (Q -> P)))\nmeta.clasificar((P & !P))',
+    note: 'La metalógica en ST no requiere una keyword especial: se construye combinando theory, fn, typeof, get_atoms, is_valid, is_satisfiable, if y explain.'
+  },
+  {
+    title: 'Meta-inferencia: razonar sobre argumentos completos',
+    description: 'La metalógica no se limita a fórmulas sueltas. También puede auditar inferencias, detectar falacias y convertir una teoría en un objeto de inspección.',
+    code: 'logic classical.propositional\n\ntheory MetaInferencia {\n  fn auditar() {\n    analyze {P, P -> Q} -> Q\n    analyze {P} -> Q\n  }\n}\n\nMetaInferencia.auditar()',
+    note: 'Aquí ST razona sobre la estructura del argumento, no solo sobre una proposición aislada.'
+  },
+  {
+    title: 'Meta-módulo reutilizable',
+    description: 'Puedes encapsular rutinas metateóricas en un módulo exportable para reutilizarlas en cursos, pruebas internas o material pedagógico compartido.',
+    code: '// meta.st\nexport theory BibliotecaMeta {\n  let identidad = P -> P\n  fn auditar() {\n    print typeof(identidad)\n    print get_atoms(identidad)\n    check valid identidad\n  }\n}\n\n// curso.st\nimport "meta.st"\nBibliotecaMeta.auditar()',
+    note: 'La clave es que import solo trae exports, así que la biblioteca metateórica queda limpia y controlada.'
   }
 ];
 
@@ -464,7 +585,7 @@ const COURSES: LogicCourse[] = [
     concepts: ['Expresiones numéricas', 'Comparaciones como fórmulas', 'let / set / print', 'if / for / while', 'fn / return'],
     syntax: ['logic arithmetic', 'let X = 2 + 3', 'set X = 2 * 5', 'if valid 8 / 2 >= 4 { ... }', 'fn calcular(A, B) { ... }'],
     commands: ['check valid', 'check satisfiable', 'explain', 'countermodel', 'print', 'set'],
-    mistakes: ['Olvidar precedencia en 2 + 3 * 4', 'No mutar la condición dentro de while', 'Esperar que return incruste valores como expresión anidada', 'Confundir explain con check valid'],
+    mistakes: ['Olvidar precedencia en 2 + 3 * 4', 'No mutar la condición dentro de while', 'Esperar que print suma(2, 3) muestre 5 de inmediato: el runtime suele conservar la fórmula retornada y otros comandos la evalúan sobre el perfil', 'Confundir explain con check valid'],
     lessonExample: 'logic arithmetic\n\ncheck valid 2 + 3 < 10\nexplain 2 + 3 * 4\n\nlet X = 2 + 3\nprint X\nset X = 2 * 5\nprint X\n\nif valid 8 / 2 >= 4 {\n  print "division ok"\n}\n\nfor N in { 1, 2, 3 } {\n  print N\n}\n\nfn calcular(A, B) {\n  explain A + B\n  return A + B\n}\n\ncalcular(4, 5)\ncountermodel 5 < 3'
   },
   {
@@ -610,7 +731,7 @@ const PROFILES: ProfileManual[] = [
     operators: ['+ suma', '- resta', '* multiplicación', '/ división', '% módulo', '< > <= >= comparaciones'],
     validExample: 'logic arithmetic\ncheck valid 2 + 3 < 10\ncheck valid (2 * 3) >= 6\nexplain 2 + 3 * 4',
     invalidExample: 'logic arithmetic\ncheck valid 5 < 3\ncountermodel 5 < 3',
-    limits: ['No está orientado a álgebra simbólica avanzada.', 'while tiene límite de seguridad de 1000 iteraciones.', 'Las funciones todavía se usan como statements, no como expresiones anidadas.']
+    limits: ['No está orientado a álgebra simbólica avanzada.', 'while tiene límite de seguridad de 1000 iteraciones.', 'Las funciones retornan fórmulas reutilizables, pero print suele mostrar la expresión resultante y no siempre su reducción aritmética final.']
   },
   {
     id: 'aristotelian',
@@ -820,18 +941,19 @@ export default function STDocsPage() {
               <p className="text-surface-300 leading-relaxed">
                 <strong className="text-white">ST</strong> ya no es solo un lenguaje declarativo para lógica formal:
                 es un <strong className="text-mandy-400">lenguaje ejecutable</strong> para enseñar, verificar,
-                explorar y guionar razonamientos. Permite definir axiomas, teoremas, variables, teorías,
-                funciones y comandos de verificación (validez, satisfacibilidad, equivalencia, derivación,
-                tablas de verdad, análisis y explicación) sobre <strong className="text-mandy-400">11 perfiles</strong>
-                distintos, desde la clásica proposicional hasta la probabilística y la aritmética. El runtime
-                actual también incluye <strong className="text-white">import/export selectivo</strong>, teorías parametrizadas,
-                operadores extendidos (<code className="text-mandy-400">xor</code>, <code className="text-mandy-400">nand</code>, <code className="text-mandy-400">nor</code>)
-                y helpers nativos para inspección y automatización.
+                explorar y guionar razonamientos. Permite definir axiomas, teoremas, variables, bloques
+                de prueba, teorías singleton, teorías-clase parametrizadas, funciones, módulos y comandos
+                de verificación (validez, satisfacibilidad, equivalencia, derivación, tablas de verdad,
+                análisis y explicación) sobre <strong className="text-mandy-400">11 perfiles</strong> distintos,
+                desde la clásica proposicional hasta la probabilística y la aritmética. El runtime actual
+                también incluye <strong className="text-white">import/export selectivo</strong>, operadores
+                extendidos (<code className="text-mandy-400">xor</code>, <code className="text-mandy-400">nand</code>, <code className="text-mandy-400">nor</code>)
+                y helpers nativos para inspección, metalógica y automatización.
               </p>
               <p className="text-surface-400 text-sm">
                 Cada perfil implementa un motor semántico propio (tablas de verdad, tableaux
                 analíticos, modelos Kripke, retículos de 4 valores, cálculo probabilístico,
-                evaluación aritmética o validación silogística directa). Además, el runtime ahora
+                evaluación aritmética o validación silogística directa). Además, el runtime real
                 soporta <code className="text-mandy-400">let</code>, <code className="text-mandy-400">set</code>,
                 <code className="text-mandy-400"> print</code>, <code className="text-mandy-400">if</code>,
                 <code className="text-mandy-400"> for</code>, <code className="text-mandy-400">while</code>,
@@ -841,10 +963,18 @@ export default function STDocsPage() {
                 <code className="text-mandy-400">render</code>, <code className="text-mandy-400">typeof</code>,
                 <code className="text-mandy-400">is_valid</code>, <code className="text-mandy-400">get_atoms</code> e <code className="text-mandy-400">input</code>.
               </p>
+              <div className="bg-surface-900/40 border border-surface-700/30 rounded-xl p-4">
+                <p className="text-xs text-surface-400 leading-relaxed">
+                  Lenguaje, diseño conceptual y documentación base: <span className="text-white font-semibold">Steven Vallejo Ortiz</span>.
+                  Esta edición del manual corrige la semántica real de variables, funciones, clases con <code className="text-mandy-400">theory</code>,
+                  condicionales, módulos, metalógica y límites del runtime.
+                </p>
+              </div>
               <div className="flex flex-wrap gap-2 pt-2">
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">11 perfiles</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">CLI + API</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">Scripting</span>
+                <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">Meta lógica</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">Text Layer</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">TypeScript / npm</span>
               </div>
@@ -1289,44 +1419,98 @@ export default function STDocsPage() {
           </section>
 
           <section>
+            <SectionTitle id="runtime-model" icon={Layers3} title="Modelo Real de Ejecución" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                Esta sección documenta el <strong className="text-white">comportamiento real del runtime</strong>,
+                no una intención futura del lenguaje. Está contrastada con <code className="text-mandy-400">@stevenvo780/st-lang</code> v{ST_RUNTIME_VERSION}
+                y corrige varios puntos que antes estaban simplificados u obsoletos.
+              </p>
+              <div className="grid gap-4">
+                {RUNTIME_FACETS.map((facet, index) => (
+                  <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                    <h4 className="text-sm font-bold text-white mb-2">{facet.title}</h4>
+                    <p className="text-xs text-surface-400 leading-relaxed mb-3">{facet.description}</p>
+                    <div className="mb-3">
+                      <BulletList items={facet.bullets} />
+                    </div>
+                    {facet.code && <CopyBlock code={facet.code} />}
+                    {facet.note && <p className="text-xs text-surface-500 mt-2 italic">{facet.note}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section>
             <SectionTitle id="scripting" icon={Terminal} title="Programación y Control de Flujo en ST" />
             <div className="space-y-4">
               <p className="text-surface-300 text-sm leading-relaxed">
                 ST ahora permite construir lecciones ejecutables y pequeños laboratorios con
                 estado visible. La idea no es competir con un lenguaje generalista, sino dar
                 una capa de <strong className="text-white">programación explicativa</strong> alrededor del razonamiento formal.
+                La diferencia importante es que aquí el flujo del programa depende de propiedades
+                lógicas reales del contenido que estás enseñando.
               </p>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                   <h4 className="text-sm font-bold text-white mb-2">Aliases y estado</h4>
-                  <p className="text-xs text-surface-400 mb-3">Usa <code className="text-mandy-400">let</code> para nombrar fórmulas o descripciones y <code className="text-mandy-400">set</code> para mutar una variable durante el script.</p>
-                  <CopyBlock code={'logic classical.propositional\nlet regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nprint regla\nset hecho = A\nprint hecho'} />
+                  <p className="text-xs text-surface-400 mb-3">Usa <code className="text-mandy-400">let</code> para nombrar fórmulas o descripciones y <code className="text-mandy-400">set</code> para mutar una variable durante el script. Un <code className="text-mandy-400">let</code> con fórmula también queda disponible para <code className="text-mandy-400">derive</code> y <code className="text-mandy-400">prove</code>.</p>
+                  <CopyBlock code={'logic classical.propositional\nlet regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nderive A from {regla, hecho}\nset hecho = A\nprint hecho\nrender theory'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                   <h4 className="text-sm font-bold text-white mb-2">Condicionales y loops</h4>
                   <p className="text-xs text-surface-400 mb-3">Las condiciones se evalúan con estatus lógicos reales: <code className="text-mandy-400">valid</code>, <code className="text-mandy-400">invalid</code>, <code className="text-mandy-400">satisfiable</code> o <code className="text-mandy-400">unsatisfiable</code>.</p>
-                  <CopyBlock code={'logic classical.propositional\nset estado = P\n\nif valid (P | !P) {\n  print "tautología"\n}\n\nfor Caso in { P, Q, (R -> R) } {\n  print Caso\n}\n\nwhile satisfiable estado {\n  print "iteración"\n  set estado = P & !P\n}'} />
+                  <CopyBlock code={'logic classical.propositional\nset estado = P\n\nif valid (P | !P) {\n  print "tautología"\n} else if satisfiable P {\n  print "contingencia"\n} else {\n  print "contradicción"\n}\n\nfor Caso in { P, Q, (R -> R) } {\n  print Caso\n}\n\nwhile satisfiable estado {\n  print "iteración"\n  set estado = P & !P\n}'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                   <h4 className="text-sm font-bold text-white mb-2">Funciones</h4>
-                  <p className="text-xs text-surface-400 mb-3">Las funciones encapsulan pasos repetibles y <code className="text-mandy-400">return</code> corta la ejecución del cuerpo.</p>
-                  <CopyBlock code={'logic classical.propositional\nfn revisar(X) {\n  print "revisando"\n  explain X\n  check satisfiable X\n  return X\n}\n\nrevisar((P -> Q))'} />
+                  <p className="text-xs text-surface-400 mb-3">Las funciones encapsulan pasos repetibles, <code className="text-mandy-400">return</code> corta la ejecución del cuerpo y la llamada puede volver a usarse dentro de otros comandos si devuelve una fórmula.</p>
+                  <CopyBlock code={'logic classical.propositional\nfn revisar(X) {\n  explain X\n  return X\n}\n\ncheck valid revisar((P -> P))\nprint get_atoms(revisar((P -> Q) & R))'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                   <h4 className="text-sm font-bold text-white mb-2">Export e import selectivo</h4>
                   <p className="text-xs text-surface-400 mb-3">Los archivos importados solo exponen lo que marques con <code className="text-mandy-400">export</code>. Eso permite modularizar sin contaminar el scope.</p>
-                  <CopyBlock code={'// utilidades.st\nexport let regla = P -> Q\nexport fn revisar(X) {\n  print X\n}\n\n// curso.st\nimport "utilidades.st"\nprint regla\nrevisar(P)'} />
+                  <CopyBlock code={'// utilidades.st\nexport let Ley = P -> P\nexport fn revisar(X) {\n  return X\n}\n\n// curso.st\nimport "utilidades.st"\ncheck valid Ley\nprint typeof(revisar((P -> Q)))'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Teorías parametrizadas e instancias</h4>
-                  <p className="text-xs text-surface-400 mb-3">Una <code className="text-mandy-400">theory</code> puede declarar parámetros, métodos e incluso heredar miembros públicos con <code className="text-mandy-400">extends</code>.</p>
-                  <CopyBlock code={'logic classical.propositional\n\ntheory Caja(valor) {\n  let dato = valor\n  fn ver() {\n    print dato\n  }\n}\n\nlet caja = Caja("demo")\nprint caja.dato\ncaja.ver()'} />
+                  <h4 className="text-sm font-bold text-white mb-2">Singletons, clases e herencia</h4>
+                  <p className="text-xs text-surface-400 mb-3">Una <code className="text-mandy-400">theory</code> sin parámetros actúa como singleton; con parámetros actúa como clase instanciable. <code className="text-mandy-400">extends</code> reutiliza miembros públicos de una teoría padre ya instanciada.</p>
+                  <CopyBlock code={'logic classical.propositional\n\ntheory Base {\n  let ley = P -> Q\n}\n\ntheory Hija extends Base {\n  fn ver() {\n    print ley\n  }\n}\n\ntheory Caja(valor) {\n  let dato = valor\n}\n\nprint Hija.ley\nlet caja = Caja("demo")\nprint caja.dato\nHija.ver()'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                   <h4 className="text-sm font-bold text-white mb-2">Funciones nativas del runtime</h4>
                   <p className="text-xs text-surface-400 mb-3">El intérprete incluye helpers ya listos para inspección, validación rápida, extracción de átomos y entrada interactiva.</p>
-                  <CopyBlock code={'logic arithmetic\nprint typeof(2 + 3)\nprint is_valid(2 + 3 < 10)\nprint is_satisfiable(5 > 3)\nprint get_atoms((P -> Q) & R)\nlet nombre = input("Nombre:")'} />
+                  <CopyBlock code={'logic arithmetic\nprint typeof(2)\nprint typeof("hola")\nprint typeof((P -> Q))\nprint is_valid(2 + 3 < 10)\nprint is_satisfiable(5 > 3)\nprint get_atoms((P -> Q) & R)\nlet nombre = input("Nombre:")'} />
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle id="meta-logic" icon={Sigma} title="Meta lógica y Metaprogramación" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                ST sí soporta <strong className="text-white">meta lógica operativa</strong>: puedes escribir teoría sobre teorías,
+                clases que inspeccionan fórmulas, módulos que auditan inferencias y rutinas que consultan la semántica del perfil
+                activo mediante <code className="text-mandy-400">typeof</code>, <code className="text-mandy-400">get_atoms</code>,
+                <code className="text-mandy-400">is_valid</code>, <code className="text-mandy-400">is_satisfiable</code>,
+                <code className="text-mandy-400">analyze</code> y <code className="text-mandy-400">explain</code>.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <a href="/downloads/st/25-meta-logica.st" download className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-mandy-500 text-white text-sm font-bold hover:bg-mandy-400 transition">
+                  <Download className="w-4 h-4" /> Descargar ejemplo de meta lógica
+                </a>
+              </div>
+              <div className="grid gap-4">
+                {META_LOGIC_PATTERNS.map((pattern, index) => (
+                  <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                    <h4 className="text-sm font-bold text-white mb-2">{pattern.title}</h4>
+                    <p className="text-xs text-surface-400 mb-3 leading-relaxed">{pattern.description}</p>
+                    <CopyBlock code={pattern.code} />
+                    <p className="text-xs text-surface-500 mt-2 italic">{pattern.note}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </section>
@@ -1544,6 +1728,10 @@ export default function STDocsPage() {
                     <h5 className="text-xs font-bold text-amber-400 mb-2">Probabilística</h5>
                     <BulletList items={['Muestreo discreto (5 o 3 puntos)', 'Asume independencia entre átomos', 'truth_table mezcla columnas booleanas y probabilísticas']} />
                   </div>
+                  <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
+                    <h5 className="text-xs font-bold text-amber-400 mb-2">Runtime de scripting</h5>
+                    <BulletList items={['while: límite de seguridad de 1000 iteraciones', 'extends requiere una teoría padre ya instanciada, normalmente singleton', 'input está pensado para CLI/Node', 'typeof / is_valid / get_atoms devuelven strings legibles, no booleans o arrays nativos']} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1561,7 +1749,7 @@ export default function STDocsPage() {
               </p>
               <CopyBlock
                 label="Ejecutar validación"
-                code="npm run validate:st-docs\n# Ejecuta los 24 scripts .st contra el CLI real de ST\n# Salida esperada: ejecución completa sin errores"
+                code="npm run validate:st-docs\n# Ejecuta los 25 scripts .st contra el CLI real de ST\n# Salida esperada: ejecución completa sin errores"
               />
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Scripts de validación disponibles</h5>
@@ -1580,6 +1768,7 @@ export default function STDocsPage() {
                   <span>12–22 – Exhaustivos por perfil</span>
                   <span>23 – Aritmética base</span>
                   <span>24 – Aritmética completa</span>
+                  <span>25 – Meta lógica y metaprogramación</span>
                 </div>
               </div>
             </div>
@@ -1589,6 +1778,9 @@ export default function STDocsPage() {
           <footer className="border-t border-surface-700/30 pt-8 pb-16 text-center">
             <p className="text-xs text-surface-500">
               Documentación generada y validada automáticamente contra ST v{ST_RUNTIME_VERSION}.
+            </p>
+            <p className="text-xs text-surface-400 mt-2">
+              Lenguaje ST, ejemplos y derechos de autor de esta documentación: Steven Vallejo Ortiz.
             </p>
             <div className="flex justify-center gap-4 mt-4">
               <Link href="/docs" className="text-xs text-mandy-400 hover:text-mandy-300 transition">

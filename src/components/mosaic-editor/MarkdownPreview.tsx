@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import { AlertTriangle } from 'lucide-react';
 import MermaidDiagram from '@/components/MermaidDiagram';
@@ -44,6 +45,33 @@ class DiagramErrorBoundary extends React.Component<
   }
 }
 
+/**
+ * Heuristic: detect whether a plain-text code block looks like an ASCII-art
+ * diagram (box-drawing characters, arrows, alignment pipes, etc.)
+ */
+const looksLikeAsciiDiagram = (text: string): boolean => {
+  const diagramChars = /[┌┐└┘├┤┬┴┼─│╔╗╚╝║═╠╣╦╩╬→←↑↓↔⇒⇐⇑⇓⇔|\\\/\+\-]{3,}/;
+  const boxLine = /^[\s]*[\+\-\|\\\/\[\]]{2,}/m;
+  const arrowLine = /(\-\->|<\-\-|\->|<\-|=>|==>|<==|\|>|<\||\\\/|\/\\)/;
+  const pipeStructure = /^\s*\|.*\|/m;
+  const multiLinePipes = (text.match(/^\s*[\|\\\/]/gm) || []).length >= 3;
+  return diagramChars.test(text) || boxLine.test(text) || arrowLine.test(text) || (pipeStructure.test(text) && multiLinePipes);
+};
+
+/**
+ * Extract plain text from React children (handles nested elements).
+ */
+const extractTextFromChildren = (children: React.ReactNode): string => {
+  if (typeof children === 'string') return children;
+  if (typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(extractTextFromChildren).join('');
+  if (React.isValidElement(children)) {
+    const props = children.props as Record<string, unknown>;
+    return extractTextFromChildren(props.children as React.ReactNode);
+  }
+  return '';
+};
+
 export const MarkdownPreview = React.memo(function MarkdownPreview({
   content,
   onOpenInternalLink
@@ -60,24 +88,42 @@ export const MarkdownPreview = React.memo(function MarkdownPreview({
     <div className="markdown-preview-container overflow-auto h-full">
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm]}
-        rehypePlugins={[rehypeKatex]}
+        rehypePlugins={[rehypeRaw, rehypeKatex]}
         components={{
           pre({ children }) {
-            const child = React.Children.toArray(children)[0] as React.ReactElement;
-            const className: string = (child?.props as Record<string, string>)?.className || '';
+            const childArray = React.Children.toArray(children);
+            const child = childArray[0] as React.ReactElement | undefined;
+            if (!child) return <pre>{children}</pre>;
+
+            const childProps = (child.props ?? {}) as Record<string, unknown>;
+            const className: string = String(childProps.className || '');
+            const code = extractTextFromChildren(childProps.children as React.ReactNode).trim();
+
+            // ── Mermaid diagrams ──
             if (/language-mermaid/.test(className)) {
-              const code = String((child?.props as Record<string, unknown>)?.children || '').trim();
               return (
                 <DiagramErrorBoundary fallback={code}>
                   <MermaidDiagram chart={code} />
                 </DiagramErrorBoundary>
               );
             }
-            return <pre>{children}</pre>;
+
+            // ── ASCII-art diagrams: render with special mono styling ──
+            const hasNoLang = !className || className === 'language-' || className === 'language-text';
+            if (hasNoLang && code && looksLikeAsciiDiagram(code)) {
+              return (
+                <pre className="ascii-diagram-block">
+                  <code>{code}</code>
+                </pre>
+              );
+            }
+
+            // ── Regular code blocks ──
+            return <pre className={className}>{children}</pre>;
           },
           code({ className, children, ...props }) {
             if (/language-mermaid/.test(className || '')) {
-              const code = String(children).trim();
+              const code = extractTextFromChildren(children).trim();
               return (
                 <DiagramErrorBoundary fallback={code}>
                   <MermaidDiagram chart={code} />

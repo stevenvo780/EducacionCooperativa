@@ -110,8 +110,13 @@ const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<Element>
     const el = paragraph as HTMLElement;
     if (el.getAttribute(EDITING_ATTR) === '1') return;
 
+    // Skip elements inside code blocks / code mirrors
+    if (el.closest('[class*="_codeBlockEditorWrapper"], [class*="_codeMirrorWrapper"], pre, code, .cm-editor')) return;
+
     const text = el.textContent || '';
-    const match = text.match(/\$\$([\s\S]*?)\$\$/);
+
+    // Match both escaped (\$\$…\$\$) and unescaped ($$…$$) block math
+    const match = text.match(/(?:\\\$\\\$|\$\$)([\s\S]*?)(?:\\\$\\\$|\$\$)/);
     if (!match || !match[1]?.trim()) return;
 
     blockParagraphs.add(el);
@@ -139,8 +144,13 @@ const collectInlineMath = (
     const el = paragraph as HTMLElement;
     if (el.getAttribute(EDITING_ATTR) === '1' || blockParagraphs.has(el)) return;
 
+    // Skip elements inside code blocks / code mirrors
+    if (el.closest('[class*="_codeBlockEditorWrapper"], [class*="_codeMirrorWrapper"], pre, code, .cm-editor')) return;
+
     const text = el.textContent || '';
-    const inlineRegex = /(?<!\$)\$((?!\$|\s)[^\n$]*?(?<!\s))\$(?!\$)/g;
+
+    // Match both escaped (\$…\$) and unescaped ($…$) inline math
+    const inlineRegex = /(?<!\$)(?:\\\$|\$)((?!\$|\s)[^\n$]*?(?<!\s))(?:\\\$|\$)(?!\$)/g;
     let match: RegExpExecArray | null;
     while ((match = inlineRegex.exec(text)) !== null) {
       const latex = match[1];
@@ -256,7 +266,7 @@ export const useKatexOverlayDecorations = ({
       if (!editable) return;
       const container = ensureOverlayContainer(shell);
       if (!container) return;
-      const paragraphs = editable.querySelectorAll('p, [data-lexical-paragraph]');
+      const paragraphs = editable.querySelectorAll('p, [data-lexical-paragraph], h1, h2, h3, h4, h5, h6, li, td, th, blockquote, [data-lexical-text]');
       const { blocks, blockParagraphs } = collectBlockMath(editable, paragraphs);
       const inlines = collectInlineMath(editable, paragraphs, blockParagraphs);
 

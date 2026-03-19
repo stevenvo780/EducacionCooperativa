@@ -612,13 +612,13 @@ export const logicCourses: LogicCoursePageData[] = [
       'Confundir explain con check valid: uno explica y evalúa; el otro verifica un estatus lógico.',
       'Olvidar que la precedencia hace que 2 + 3 * 4 no sea lo mismo que (2 + 3) * 4.',
       'Usar while sin cambiar el estado con set y provocar iteraciones innecesarias.',
-      'Esperar que una función devuelta por return pueda incrustarse ya como expresión dentro de otra fórmula.',
+      'Esperar que print suma(2, 3) muestre 5 de inmediato: el runtime suele conservar la fórmula retornada y otros comandos la evalúan sobre el perfil.',
       'Tratar una comparación como si fuera un número cuando ya produce un resultado booleano del perfil.'
     ],
     limits: [
       'La división por cero puede producir resultados no útiles para docencia rigurosa; conviene evitarla en materiales introductorios.',
       'while tiene un límite de seguridad de 1000 iteraciones.',
-      'Las funciones hoy son statements reutilizables; no son expresiones anidadas del lenguaje.',
+      'Las funciones retornan fórmulas reutilizables, pero print suele mostrar la expresión resultante y no siempre su reducción aritmética final.',
       'Arithmetic está orientado a ejemplos pedagógicos y scripting ligero, no a álgebra simbólica avanzada.'
     ],
     bridges: [
