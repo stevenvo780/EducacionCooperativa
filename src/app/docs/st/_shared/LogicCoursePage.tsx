@@ -1,14 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowLeft,
   BookOpen,
-  Check,
   ChevronRight,
-  Copy,
   Download,
   ExternalLink,
   GraduationCap,
@@ -16,32 +14,7 @@ import {
   Terminal
 } from 'lucide-react';
 import type { LogicCoursePageData } from './logicCourses';
-
-function CopyBlock({ code, label }: { code: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="group relative my-3">
-      {label && <div className="text-[10px] uppercase tracking-wider text-surface-500 mb-1 font-semibold">{label}</div>}
-      <div className="bg-surface-950 border border-surface-700/50 rounded-lg overflow-hidden font-mono">
-        <div className="flex items-center justify-between px-3 py-1.5 bg-surface-800/50 border-b border-surface-700/30">
-          <span className="text-[10px] text-surface-500">st</span>
-          <button onClick={handleCopy} className="flex items-center gap-1 text-[10px] text-surface-500 hover:text-emerald-400 transition">
-            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            {copied ? 'Copiado' : 'Copiar'}
-          </button>
-        </div>
-        <pre className="p-3 text-sm text-emerald-300 overflow-x-auto leading-relaxed"><code>{code}</code></pre>
-      </div>
-    </div>
-  );
-}
+import STDocCodeBlock from '@/components/docs/STDocCodeBlock';
 
 function BulletList({ items }: { items: string[] }) {
   return (
@@ -159,7 +132,8 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
             <h3 className="text-xl font-bold text-white mb-4">Panorama del curso</h3>
             <p className="text-sm text-surface-300 leading-relaxed">
               Esta vista está pensada como una clase larga y dedicada. No es un resumen corto: es un espacio para estudiar una lógica en serio,
-              practicar con el lenguaje ST y construir intuición semántica y operativa. Puedes recorrer la barra lateral o bajar de forma lineal.
+              practicar con el lenguaje ST y construir intuición semántica y operativa. Los bloques de código de esta página se pueden ejecutar
+              inline y abrir en un editor desplegable para probar variaciones sin salir del curso.
             </p>
           </section>
 
@@ -191,7 +165,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                     <h4 className="text-sm font-bold text-white">{operator.name}</h4>
                   </div>
                   <p className="text-sm text-surface-300 leading-relaxed mb-3">{operator.meaning}</p>
-                  <CopyBlock label="Práctica ST" code={`logic ${course.profile}\n${operator.stExample}`} />
+                  <STDocCodeBlock label="Práctica ST" code={`logic ${course.profile}\n${operator.stExample}`} />
                 </div>
               ))}
             </div>
@@ -207,7 +181,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                 <div key={index} className="bg-surface-900/40 rounded-xl p-5 border border-surface-700/30">
                   <h4 className="text-sm font-bold text-white mb-2">{command.title}</h4>
                   <p className="text-sm text-surface-300 mb-3">{command.description}</p>
-                  <CopyBlock code={command.code} />
+                  <STDocCodeBlock code={command.code} />
                 </div>
               ))}
             </div>
@@ -227,7 +201,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                 <div key={index} className="bg-surface-900/40 rounded-xl p-5 border border-violet-500/10">
                   <h4 className="text-sm font-bold text-white mb-2">{pattern.title}</h4>
                   <p className="text-sm text-surface-300 mb-3">{pattern.description}</p>
-                  <CopyBlock code={pattern.code} />
+                  <STDocCodeBlock code={pattern.code} />
                 </div>
               ))}
             </div>
@@ -243,7 +217,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                 <div key={index} className="bg-surface-900/40 rounded-xl p-5 border border-surface-700/30">
                   <h4 className="text-sm font-bold text-white mb-2">{example.title}</h4>
                   <p className="text-sm text-surface-300 mb-3">{example.description}</p>
-                  <CopyBlock code={example.code} />
+                  <STDocCodeBlock code={example.code} />
                 </div>
               ))}
             </div>
