@@ -343,6 +343,48 @@ function makeSnippetCompletions(): Completion[] {
       type: 'text',
       detail: 'Verificar equivalencia lógica',
       boost: 2
+    }),
+    snippetCompletion('explain (${formula})', {
+      label: 'explain',
+      type: 'text',
+      detail: 'Explicar una fórmula según el perfil activo',
+      info: buildInfoText('explain', 'keyword'),
+      boost: 2
+    }),
+    snippetCompletion('prove ${goal} from {${premises}}', {
+      label: 'prove',
+      type: 'text',
+      detail: 'Demostrar una meta desde premisas',
+      info: buildInfoText('prove', 'keyword'),
+      boost: 2
+    }),
+    snippetCompletion('support ${claim} : ${premises}', {
+      label: 'support',
+      type: 'text',
+      detail: 'Asignar premisas de soporte a un claim',
+      info: buildInfoText('support', 'keyword'),
+      boost: 2
+    }),
+    snippetCompletion('confidence ${claim} : ${value}', {
+      label: 'confidence',
+      type: 'text',
+      detail: 'Asignar nivel de confianza [0..1] a un claim',
+      info: buildInfoText('confidence', 'keyword'),
+      boost: 2
+    }),
+    snippetCompletion('context ${claim} : "${description}"', {
+      label: 'context',
+      type: 'text',
+      detail: 'Asignar contexto semántico a un claim',
+      info: buildInfoText('context', 'keyword'),
+      boost: 2
+    }),
+    snippetCompletion('print is_satisfiable(${formula})', {
+      label: 'is_satisfiable',
+      type: 'text',
+      detail: 'Preguntar si una fórmula es satisfacible',
+      info: buildInfoText('is_satisfiable', 'builtin'),
+      boost: 3
     })
   ];
 }

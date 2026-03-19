@@ -85,7 +85,19 @@ const keywordInfo: Record<string, HoverData> = {
   formalize:   { title: 'formalize', description: 'Formaliza un pasaje como fórmula lógica dentro de una declaración let.', example: 'let f1 = formalize p1 as (p -> q)', category: 'keyword' },
   claim:       { title: 'claim', description: 'Declara una afirmación con soporte y confianza.', example: 'claim c1 = p & q', category: 'keyword' },
   analyze:     { title: 'analyze', description: 'Analiza una inferencia completa y reporta validez o falacias conocidas.', example: 'analyze {p, p -> q} -> q', category: 'keyword' },
-  logic:       { title: 'logic', description: 'Activa el perfil lógico del script ST.', example: 'logic classical.propositional', category: 'keyword' }
+  analizar:    { title: 'analizar (→ analyze)', description: 'Alias en español de analyze.', example: 'analizar {p, p -> q} -> q', category: 'alias' },
+  support:     { title: 'support', description: 'Asigna premisas de soporte a una afirmación (claim).', example: 'support c1 : ax1, ax2', category: 'keyword' },
+  soporte:     { title: 'soporte (→ support)', description: 'Alias en español de support.', example: 'soporte c1 : ax1, ax2', category: 'alias' },
+  confidence:  { title: 'confidence', description: 'Asigna un nivel de confianza numérico [0..1] a una afirmación (claim).', example: 'confidence c1 : 0.95', category: 'keyword' },
+  confianza:   { title: 'confianza (→ confidence)', description: 'Alias en español de confidence.', example: 'confianza c1 : 0.95', category: 'alias' },
+  context:     { title: 'context', description: 'Asigna un contexto semántico a una afirmación (claim).', example: 'context c1 : "ética médica"', category: 'keyword' },
+  contexto:    { title: 'contexto (→ context)', description: 'Alias en español de context.', example: 'contexto c1 : "ética médica"', category: 'alias' },
+  desde:       { title: 'desde (→ from)', description: 'Alias en español de from. Indica las premisas de una derivación.', example: 'derivar q desde {ax1, ax2}', category: 'alias' },
+  pasaje:      { title: 'pasaje (→ passage)', description: 'Alias en español de passage. Referencia un pasaje de documento.', example: 'sea p1 = pasaje([[contrato.md#clausula-1]])', category: 'alias' },
+  formalizar:  { title: 'formalizar (→ formalize)', description: 'Alias en español de formalize. Formaliza un pasaje como fórmula lógica.', example: 'sea f1 = formalizar p1 como (p -> q)', category: 'alias' },
+  afirmacion:  { title: 'afirmacion (→ claim)', description: 'Alias en español de claim. Declara una afirmación con soporte y confianza.', example: 'afirmacion c1 = p & q', category: 'alias' },
+  logic:       { title: 'logic', description: 'Activa el perfil lógico del script ST.', example: 'logic classical.propositional', category: 'keyword' },
+  logica:      { title: 'logica (→ logic)', description: 'Alias en español de logic. Activa el perfil lógico del script ST.', example: 'logica classical.propositional', category: 'alias' }
 };
 
 // ── Operators ───────────────────────────────────────────────
@@ -165,7 +177,7 @@ const modalAliasInfo: Record<string, HoverData> = {
   'O':  { title: 'O — Obligación (deontic.standard)', description: 'Alias modal: O(φ) ≡ □φ. "Es obligatorio que φ". Solo activo en el perfil deontic.standard.', example: 'logic deontic.standard\ncheck valid O(P) -> P(P)', category: 'alias' },
   'P':  { title: 'P — Permisión (deontic.standard)', description: 'Alias modal: P(φ) ≡ ◇φ. "Está permitido que φ". Solo activo en el perfil deontic.standard. Nota: P sola es un átomo proposicional.', example: 'logic deontic.standard\ncheck valid O(Q) -> P(Q)', category: 'alias' },
   'F':  { title: 'F — Prohibición / Eventually', description: 'Como alias modal: F(φ) ≡ □¬φ (deontic: "prohibido") o F(φ) ≡ ◇φ (temporal: "eventualmente"). Depende del perfil activo.', example: 'logic temporal.ltl\ncheck valid G(P) -> F(P)', category: 'alias' },
-  'G':  { title: 'G — Siempre / Globally (temporal.ltl)', description: 'Alias modal: G(φ) ≡ □φ. "Siempre se cumple φ". Solo activo en el perfil temporal.ltl.', example: 'logic temporal.ltl\ncheck valid G(P) -> P', category: 'alias' },
+  'G':  { title: 'G — Siempre / Globally (temporal.ltl)', description: 'Alias modal: G(φ) ≡ □φ. "Siempre se cumple φ". Solo activo en el perfil temporal.ltl.', example: 'logic temporal.ltl\ncheck valid G(P) -> P', category: 'alias' }
 };
 
 // ── Lookup unificado ────────────────────────────────────────
