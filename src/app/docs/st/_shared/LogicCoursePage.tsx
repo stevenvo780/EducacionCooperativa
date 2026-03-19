@@ -14,6 +14,7 @@ import {
   Terminal
 } from 'lucide-react';
 import { logicCourseEnhancements, type LogicCoursePageData } from './logicCourses';
+import { logicCoverageBySlug } from './logicCoverage';
 import STDocCodeBlock from '@/components/docs/STDocCodeBlock';
 
 function BulletList({ items }: { items: string[] }) {
@@ -31,9 +32,11 @@ function BulletList({ items }: { items: string[] }) {
 
 export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
   const runtimeUpdate = logicCourseEnhancements[course.slug];
+  const coverage = logicCoverageBySlug[course.slug];
   const sections = useMemo(() => ([
     { id: 'overview', label: 'Panorama' },
     ...(runtimeUpdate ? [{ id: 'runtime-updates', label: 'Motor v2' }] : []),
+    ...(coverage ? [{ id: 'coverage', label: 'Cobertura exacta' }] : []),
     { id: 'concepts', label: 'Conceptos' },
     { id: 'operators', label: 'Operadores' },
     { id: 'commands', label: 'Comandos' },
@@ -42,7 +45,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
     { id: 'mistakes', label: 'Errores' },
     { id: 'limits', label: 'Límites' },
     { id: 'bridges', label: 'Conexiones' }
-  ]), [runtimeUpdate]);
+  ]), [coverage, runtimeUpdate]);
 
   return (
     <div className="min-h-screen bg-surface-900 text-surface-200 selection:bg-mandy-500/30">
@@ -152,6 +155,31 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                   <p className="text-sm text-surface-300 mb-3">{runtimeUpdate.example.description}</p>
                   <STDocCodeBlock code={runtimeUpdate.example.code} />
                 </div>
+              </div>
+            </section>
+          )}
+
+          {coverage && (
+            <section id="coverage" className="scroll-mt-24 border border-emerald-500/20 rounded-2xl p-6 bg-emerald-500/5">
+              <div className="flex items-center gap-2 mb-4">
+                <BookOpen className="w-5 h-5 text-emerald-300" />
+                <h3 className="text-xl font-bold text-white">Cobertura exacta del perfil</h3>
+              </div>
+              <p className="text-sm text-surface-300 leading-relaxed mb-5">{coverage.summary}</p>
+              <div className="space-y-4">
+                {coverage.blocks.map((block, index) => (
+                  <div key={index} className="bg-surface-900/40 rounded-xl p-5 border border-emerald-500/10">
+                    <h4 className="text-sm font-bold text-white mb-2">{block.title}</h4>
+                    <p className="text-sm text-surface-300 mb-3">{block.description}</p>
+                    {block.items && <BulletList items={block.items} />}
+                    {block.code && (
+                      <div className={block.items ? 'mt-4' : undefined}>
+                        <STDocCodeBlock code={block.code} runnable={block.runnable} />
+                      </div>
+                    )}
+                    {block.note && <p className="text-xs text-surface-500 mt-3 italic">{block.note}</p>}
+                  </div>
+                ))}
               </div>
             </section>
           )}

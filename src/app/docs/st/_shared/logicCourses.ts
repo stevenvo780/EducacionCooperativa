@@ -643,7 +643,7 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: '1. Proposiciones A/E/I/O', body: 'A: Todo S es P. E: Ningún S es P. I: Algún S es P. O: Algún S no es P.' },
       { title: '2. Términos mayor, menor y medio', body: 'El término medio conecta premisas pero no aparece en la conclusión.' },
       { title: '3. Figuras', body: 'La posición del término medio define la figura del silogismo.' },
-      { title: '4. Modos válidos', body: 'ST reconoce los 24 silogismos válidos y además puede sugerir premisas faltantes cuando detecta un entimema.' }
+      { title: '4. Modos válidos', body: 'ST codifica hoy 19 modos silogísticos válidos y además puede sugerir premisas faltantes cuando detecta un entimema.' }
     ],
     operators: [
       { symbol: 'forall x (S(x) -> P(x))', name: 'A universal afirmativa', meaning: 'Todo S es P.', stExample: 'axiom mayor : forall x (M(x) -> P(x))' },
@@ -673,7 +673,7 @@ export const logicCourses: LogicCoursePageData[] = [
       { title: 'Darii y Ferio', description: 'Introduce existencia particular en la conclusión.', code: 'logic aristotelian.syllogistic\ncheck satisfiable exists x (S(x) & P(x))\ncheck satisfiable exists x (S(x) & !P(x))' }
     ],
     mistakes: ['Perder de vista el término medio.', 'Creer que toda frase con “todos” ya forma un silogismo válido.', 'Olvidar que derive exige exactamente dos premisas categóricas.'],
-    limits: ['ST ya reconoce los 24 modos válidos y varios entimemas frecuentes.', 'No toda falacia verbal queda explicada automáticamente si la forma cae cerca de un patrón válido.'],
+    limits: ['ST codifica hoy 19 modos válidos y varios entimemas frecuentes.', 'No toda falacia verbal queda explicada automáticamente si la forma cae cerca de un patrón válido.'],
     bridges: ['Conecta históricamente con FOL.', 'Ayuda a enseñar estructura inferencial sin cargar demasiada sintaxis moderna al inicio.'],
     downloads: {
       script: '/downloads/st/08-aristotelica.st'
@@ -786,7 +786,7 @@ export const logicCourseEnhancements: Record<string, LogicCourseEnhancement> = {
       'La proposicional ahora clasifica fórmulas automáticamente y reconoce leyes conocidas cuando haces check valid o explain.',
       'derive nombra el patrón de razonamiento, muestra el esquema formal y puede exportar la prueba en LaTeX con set output = latex.',
       'explain despliega sub-fórmulas, NNF, CNF, DNF, cláusulas de resolución y completitud funcional.',
-      'analyze ya no se queda en dos o tres errores: detecta once falacias formales en argumentos proposicionales.'
+      'analyze ya no se queda en dos o tres errores: el runtime activo detecta diez falacias formales en argumentos proposicionales.'
     ],
     example: {
       title: 'Salida pedagógica completa en proposicional',
@@ -881,7 +881,7 @@ export const logicCourseEnhancements: Record<string, LogicCourseEnhancement> = {
   },
   aristotelica: {
     highlights: [
-      'La silogística actual reconoce los 24 silogismos válidos y ya no se queda en el subconjunto viejo de 19.',
+      'La silogística actual reconoce 19 modos válidos codificados y no debe documentarse como si ya cubriera las 24 formas históricas.',
       'derive muestra figura, modo y distribución de términos por premisa.',
       'El motor puede sugerir premisa faltante cuando detecta un entimema y explicar inferencias inmediatas como conversión u obversión.'
     ],
