@@ -83,7 +83,7 @@ render theory`;
 /* ──────────── Data: navigation ──────────── */
 const NAV: NavItem[] = [
   { id: 'intro', label: 'Introducción' },
-  { id: 'structure', label: 'Vistas' },
+  { id: 'structure', label: 'Estructura' },
   { id: 'academy', label: 'Escuela de Lógicas' },
   { id: 'syntax', label: 'Sintaxis' },
   { id: 'commands', label: 'Comandos' },
@@ -497,7 +497,7 @@ const COURSE_SCRIPT_DOWNLOADS: Record<string, string> = {
 const COURSE_GROUPS: CourseGroup[] = [
   {
     title: 'Fundamentos',
-    description: 'Empieza por la lógica clásica proposicional y luego sube a primer orden. Estas dos sub vistas sostienen el resto de la escuela.',
+    description: 'Empieza por la lógica clásica proposicional y luego sube a primer orden. Estas dos guías sostienen el resto de la escuela.',
     courses: ['propositional', 'course-fol']
   },
   {
@@ -889,7 +889,7 @@ function CourseIndexCard({ course }: { course: LogicCourse }) {
             href={COURSE_PAGE_HREFS[course.id]}
             className="px-3 py-2 rounded-lg border border-mandy-500/30 bg-mandy-500/10 text-mandy-300 hover:text-mandy-200 transition text-xs font-semibold"
           >
-            Abrir sub vista
+            Abrir guía
           </Link>
           <a
             href={COURSE_SCRIPT_DOWNLOADS[course.id]}
@@ -997,26 +997,26 @@ export default function STDocsPage() {
           </section>
 
           <section>
-            <SectionTitle id="structure" icon={Layers3} title="Vistas y Subvistas" />
+            <SectionTitle id="structure" icon={Layers3} title="Cómo se organiza la documentación" />
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-2xl p-5">
-                <h3 className="text-sm font-bold text-white mb-2">Vista madre</h3>
+                <h3 className="text-sm font-bold text-white mb-2">Página principal</h3>
                 <p className="text-sm text-surface-300 leading-relaxed">
                   <code className="text-mandy-300">/docs/st</code> queda como índice central del lenguaje:
                   sintaxis, comandos, runtime real, metalógica, laboratorio y anexos técnicos.
                 </p>
               </div>
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-2xl p-5">
-                <h3 className="text-sm font-bold text-white mb-2">Sub vistas por lógica</h3>
+                <h3 className="text-sm font-bold text-white mb-2">Guías por lógica</h3>
                 <p className="text-sm text-surface-300 leading-relaxed">
-                  Cada sistema tiene ahora una ruta dedicada en <code className="text-mandy-300">/docs/st/[slug]</code>
-                  para evitar duplicar cursos largos dentro de la portada.
+                  Cada sistema tiene ahora una página dedicada en <code className="text-mandy-300">/docs/st/[slug]</code>
+                  para estudiar un perfil completo sin mezclarlo con los demás.
                 </p>
               </div>
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-2xl p-5">
-                <h3 className="text-sm font-bold text-white mb-2">Scripts canónicos</h3>
+                <h3 className="text-sm font-bold text-white mb-2">Scripts listos para probar</h3>
                 <p className="text-sm text-surface-300 leading-relaxed">
-                  Cada sub vista apunta a un único <code className="text-mandy-300">.st</code> completo por perfil,
+                  Cada guía apunta a un único <code className="text-mandy-300">.st</code> completo por perfil,
                   validado contra el motor real del paquete.
                 </p>
               </div>
@@ -1024,8 +1024,8 @@ export default function STDocsPage() {
             <div className="mt-4 bg-surface-900/35 border border-surface-700/30 rounded-2xl p-5">
               <h3 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Cómo navegar esta documentación</h3>
               <div className="grid gap-3 lg:grid-cols-3 text-sm text-surface-300">
-                <p>1. Usa esta vista para entender el lenguaje, el runtime y las capacidades transversales.</p>
-                <p>2. Entra a una sub vista cuando quieras estudiar un sistema lógico completo sin ruido de otros perfiles.</p>
+                <p>1. Usa esta página para entender el lenguaje, el runtime y las capacidades comunes.</p>
+                <p>2. Entra a una guía por lógica cuando quieras estudiar un sistema completo de principio a fin.</p>
                 <p>3. Descarga el script del perfil y compáralo con la salida inline del editor embebido.</p>
               </div>
             </div>
@@ -1036,9 +1036,8 @@ export default function STDocsPage() {
             <div className="bg-gradient-to-br from-violet-600/10 via-surface-800/50 to-surface-900 border border-violet-500/20 rounded-2xl p-6 space-y-5">
               <div>
                 <p className="text-sm text-surface-300 leading-relaxed">
-                  La escuela queda ordenada como un índice de <strong className="text-white">sub vistas especializadas</strong>.
-                  Esta portada ya no repite cursos completos dentro de sí misma: resume, agrupa y dirige a la vista exacta
-                  donde se estudia cada sistema con detalle.
+                  La escuela queda ordenada como un índice de <strong className="text-white">guías por lógica</strong>.
+                  Esta portada resume y agrupa cada sistema; el detalle completo queda en su página dedicada.
                 </p>
               </div>
 

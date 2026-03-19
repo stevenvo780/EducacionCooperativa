@@ -96,7 +96,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
               <div className="flex flex-wrap gap-2">
                 <span className="text-[10px] font-bold bg-mandy-500/20 text-mandy-300 px-3 py-1.5 rounded-lg border border-mandy-500/30 tracking-wider">{course.badge}</span>
                 <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">{course.profile}</span>
-                <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">Curso dedicado</span>
+                <span className="text-[10px] font-bold bg-surface-700/80 px-3 py-1.5 rounded-lg text-surface-200 border border-surface-600/50">Guía dedicada</span>
               </div>
               <div>
                 <h2 className="text-4xl font-extrabold text-white tracking-tight">{course.title}</h2>
@@ -116,7 +116,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                 <div className="bg-surface-900/40 border border-surface-700/30 rounded-2xl p-5">
                   <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-widest mb-3">Accesos rápidos</p>
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <Link href="/docs/st" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver a la academia</Link>
+                    <Link href="/docs/st" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver al índice ST</Link>
                     <a href={course.downloads.script} download className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script</a>
                     <a href="https://github.com/stevenvo780/ST" target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition inline-flex items-center gap-1.5">
                       <ExternalLink className="w-3.5 h-3.5" /> Repositorio ST
@@ -131,9 +131,8 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
           <section id="overview" className="scroll-mt-24 border border-surface-700/40 rounded-2xl p-6 bg-surface-800/25">
             <h3 className="text-xl font-bold text-white mb-4">Panorama del curso</h3>
             <p className="text-sm text-surface-300 leading-relaxed">
-              Esta vista está pensada como una clase larga y dedicada. No es un resumen corto: es un espacio para estudiar una lógica en serio,
-              practicar con el lenguaje ST y construir intuición semántica y operativa. Los bloques de código de esta página se pueden ejecutar
-              inline y abrir en un editor desplegable para probar variaciones sin salir del curso.
+              Esta guía reúne solo lo necesario para estudiar esta lógica: conceptos, operadores, comandos, ejemplos y límites del motor.
+              Los bloques de código se pueden ejecutar inline y abrir en el editor desplegable para probar variaciones sin salir de la página.
             </p>
           </section>
 
@@ -250,11 +249,11 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
           <footer className="border-t border-surface-700/30 pt-8 pb-16">
             <div className="flex flex-wrap gap-3 items-center justify-between">
               <div>
-                <p className="text-sm text-surface-400">Siguiente paso recomendado: vuelve a `Escuela de Lógicas` y abre otro curso largo.</p>
+                <p className="text-sm text-surface-400">Puedes volver al índice ST o descargar el script de esta lógica para seguir probando.</p>
                 <p className="text-xs text-surface-500 mt-1">También puedes descargar los scripts y probarlos con `npm run validate:st-docs`.</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Link href="/docs/st" className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver a la academia</Link>
+                <Link href="/docs/st" className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver al índice ST</Link>
                 <a href={course.downloads.script} download className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script del curso</a>
               </div>
             </div>
