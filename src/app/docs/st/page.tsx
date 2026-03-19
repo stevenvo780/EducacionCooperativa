@@ -6,6 +6,7 @@ import {
   ArrowLeft, BookOpen, ChevronRight, Download, ExternalLink,
   FlaskConical, GraduationCap, Info, Layers3, Scale, ShieldAlert, Sigma, Terminal
 } from 'lucide-react';
+import CopyBlock from '@/components/docs/STDocCodeBlock';
 
 /* ──────────── Types ──────────── */
 interface NavItem { id: string; label: string }
@@ -64,6 +65,15 @@ interface MetaLogicPattern {
 }
 
 const ST_RUNTIME_VERSION = '2.0.4';
+const DOC_PLAYGROUND = `logic classical.propositional
+
+let regla = "Si estudio, apruebo" : (E -> A)
+let hecho = "Estudio hoy" : E
+
+derive A from {regla, hecho}
+analyze {E, E -> A} -> A
+explain (E -> A)
+render theory`;
 
 /* ──────────── Data: navigation ──────────── */
 const NAV: NavItem[] = [
@@ -85,6 +95,7 @@ const NAV: NavItem[] = [
   { id: 'runtime-model', label: 'Runtime Real' },
   { id: 'scripting', label: 'Programación ST' },
   { id: 'meta-logic', label: 'Meta lógica' },
+  { id: 'playground', label: 'Laboratorio' },
   { id: 'philosophy-formalizations', label: 'Formalizaciones Filosóficas' },
   { id: 'glossary', label: 'Glosario ST' },
   { id: 'profiles', label: 'Perfiles Lógicos' },
@@ -784,30 +795,6 @@ const PROFILE_DOWNLOADS: Record<string, string> = {
   probabilistic: '/downloads/st/10-probabilistica.st',
   arithmetic: '/downloads/st/12-aritmetica.st'
 };
-
-/* ──────────── Components ──────────── */
-function CopyBlock({ code, label }: { code: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <div className="group relative my-3">
-      {label && <div className="text-[10px] uppercase tracking-wider text-surface-500 mb-1 font-semibold">{label}</div>}
-      <div className="bg-surface-950 border border-surface-700/50 rounded-lg overflow-hidden font-mono">
-        <div className="flex items-center justify-between px-3 py-1.5 bg-surface-800/50 border-b border-surface-700/30">
-          <span className="text-[10px] text-surface-500">st</span>
-          <button onClick={handleCopy} className="flex items-center gap-1 text-[10px] text-surface-500 hover:text-emerald-400 transition">
-            {copied ? <span className="text-emerald-400">✓ Copiado</span> : <span>Copiar</span>}
-          </button>
-        </div>
-        <pre className="p-3 text-sm text-emerald-300 overflow-x-auto leading-relaxed"><code>{code}</code></pre>
-      </div>
-    </div>
-  );
-}
 
 function SectionTitle({ id, icon: Icon, title }: { id: string; icon: React.ElementType; title: string }) {
   return (
@@ -1511,6 +1498,30 @@ export default function STDocsPage() {
                     <p className="text-xs text-surface-500 mt-2 italic">{pattern.note}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle id="playground" icon={Terminal} title="Laboratorio Embebido" />
+            <div className="space-y-4">
+              <p className="text-surface-300 text-sm leading-relaxed">
+                Todos los snippets ejecutables de esta página ahora pueden correrse inline. Además, este laboratorio deja un
+                editor ST desplegado dentro de la documentación para que el lector modifique el ejemplo, lo ejecute al instante
+                y compare la salida sin salir del manual.
+              </p>
+              <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
+                <h4 className="text-sm font-bold text-white mb-2">Prueba libre sobre el runtime documentado</h4>
+                <p className="text-xs text-surface-400 mb-3">
+                  Usa el botón <code className="text-mandy-300">Ejecutar</code> o <code className="text-mandy-300">Ctrl/Cmd + Enter</code> cuando el editor esté abierto.
+                </p>
+                <CopyBlock
+                  label="Laboratorio ST"
+                  code={DOC_PLAYGROUND}
+                  defaultExpanded
+                  minEditorHeight={300}
+                  runnable
+                />
               </div>
             </div>
           </section>
