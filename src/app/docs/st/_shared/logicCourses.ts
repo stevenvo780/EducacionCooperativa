@@ -36,8 +36,7 @@ export interface LogicCoursePageData {
   limits: string[];
   bridges: string[];
   downloads: {
-    basic: string;
-    complete: string;
+    script: string;
   };
 }
 
@@ -228,8 +227,7 @@ export const logicCourses: LogicCoursePageData[] = [
       'La Probabilística reusa la clásica dentro de mundos, pero mide grados de probabilidad.'
     ],
     downloads: {
-      basic: '/downloads/st/01-clasica-proposicional.st',
-      complete: '/downloads/st/12-clasica-completa.st'
+      script: '/downloads/st/01-clasica-proposicional.st'
     }
   },
   {
@@ -281,8 +279,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['El tableau FOL del motor usa profundidad máxima 50.', 'Puede devolver unknown en fórmulas complejas.', 'No es un sistema completo para toda la práctica matemática avanzada; está orientado a docencia y experimentación guiada.'],
     bridges: ['Viene después de proposicional.', 'Prepara muy bien el paso a silogística aristotélica y a modelados normativos con entidades.', 'También ayuda a leer mejor fórmulas de Text Layer cuando formalizas documentos.'],
     downloads: {
-      basic: '/downloads/st/02-primer-orden.st',
-      complete: '/downloads/st/13-fol-completa.st'
+      script: '/downloads/st/02-primer-orden.st'
     }
   },
   {
@@ -332,8 +329,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['Tableau modal limitado a 200 nodos.', 'No hay garantías de reflexividad, simetría ni transitividad.'],
     bridges: ['La deóntica y la epistémica reinterpretan [] y <>.', 'Temporal LTL conserva intuiciones modales pero con lectura temporal.'],
     downloads: {
-      basic: '/downloads/st/03-modal-k.st',
-      complete: '/downloads/st/14-modal-completa.st'
+      script: '/downloads/st/03-modal-k.st'
     }
   },
   {
@@ -383,8 +379,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['Máximo 200 nodos en el tableau.', 'No modela todavía conflictos normativos profundos o lógica deóntica dyádica.'],
     bridges: ['Comparte estructura con la lógica modal.', 'Sirve como antesala para discusiones éticas, regulatorias y de agentes.'],
     downloads: {
-      basic: '/downloads/st/04-deontica.st',
-      complete: '/downloads/st/15-deontica-completa.st'
+      script: '/downloads/st/04-deontica.st'
     }
   },
   {
@@ -433,8 +428,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['Frame universal puede crecer rápido.', 'Modelo idealizado: no representa límites cognitivos ni errores humanos finos.'],
     bridges: ['Nace de la modal.', 'Se conecta con agentes, coordinación y teoría de juegos.'],
     downloads: {
-      basic: '/downloads/st/05-epistemica-s5.st',
-      complete: '/downloads/st/16-epistemica-completa.st'
+      script: '/downloads/st/05-epistemica-s5.st'
     }
   },
   {
@@ -483,8 +477,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['Máximo 4 mundos Kripke.', 'Con más átomos el motor reduce mundos para mantener tractabilidad.'],
     bridges: ['Se entiende mucho mejor después de la proposicional clásica.', 'Conecta con teoría de tipos, lambda cálculo y semántica de programación.'],
     downloads: {
-      basic: '/downloads/st/06-intuicionista.st',
-      complete: '/downloads/st/17-intuicionista-completa.st'
+      script: '/downloads/st/06-intuicionista.st'
     }
   },
   {
@@ -534,8 +527,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['El tableau temporal comparte límite de 200 nodos.', 'El operador U tiene soporte parcial en el motor actual.'],
     bridges: ['Conecta con verificación de software y protocolos.', 'Se apoya en intuiciones modales pero con lectura temporal específica.'],
     downloads: {
-      basic: '/downloads/st/07-temporal-ltl.st',
-      complete: '/downloads/st/18-temporal-completa.st'
+      script: '/downloads/st/07-temporal-ltl.st'
     }
   },
   {
@@ -628,8 +620,7 @@ export const logicCourses: LogicCoursePageData[] = [
       'Ayuda a prototipar mini simulaciones y laboratorios visibles antes de pasar a perfiles más abstractos.'
     ],
     downloads: {
-      basic: '/downloads/st/23-aritmetica.st',
-      complete: '/downloads/st/24-aritmetica-completa.st'
+      script: '/downloads/st/12-aritmetica.st'
     }
   },
   {
@@ -680,8 +671,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['ST codifica 19 modos, no las 24 formas históricas completas.', 'No toda falacia verbal queda explicada automáticamente si la forma cae cerca de un patrón válido.'],
     bridges: ['Conecta históricamente con FOL.', 'Ayuda a enseñar estructura inferencial sin cargar demasiada sintaxis moderna al inicio.'],
     downloads: {
-      basic: '/downloads/st/08-aristotelica.st',
-      complete: '/downloads/st/19-aristotelica-completa.st'
+      script: '/downloads/st/08-aristotelica.st'
     }
   },
   {
@@ -731,8 +721,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['El espacio crece como 4^n.', 'Hay fórmulas clásicamente obvias que dejan de ser válidas.'],
     bridges: ['Excelente contraste con la clásica.', 'Prepara discusión sobre inconsistencia controlada y razonamiento robusto.'],
     downloads: {
-      basic: '/downloads/st/09-paraconsistente-belnap.st',
-      complete: '/downloads/st/20-belnap-completa.st'
+      script: '/downloads/st/09-paraconsistente-belnap.st'
     }
   },
   {
@@ -781,8 +770,7 @@ export const logicCourses: LogicCoursePageData[] = [
     limits: ['El muestreo se reduce cuando 5^n supera 10000.', 'truth_table puede mezclar lectura clásica y probabilística en la salida.'],
     bridges: ['Conecta lógica formal con incertidumbre cuantitativa.', 'Se entiende mejor después de dominar proposicional clásica.'],
     downloads: {
-      basic: '/downloads/st/10-probabilistica.st',
-      complete: '/downloads/st/21-probabilistica-completa.st'
+      script: '/downloads/st/10-probabilistica.st'
     }
   }
 ];

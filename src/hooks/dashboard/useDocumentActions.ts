@@ -235,7 +235,7 @@ console.log(listProfiles());
 \\\`\\\`\\\`
 
 ---
-*Runtime documentado para EducacionCooperativa con \\\`@stevenvo780/st-lang\\\` 2.0.0 — https://github.com/stevenvo780/ST*
+*Runtime documentado para EducacionCooperativa con \\\`@stevenvo780/st-lang\\\` 2.0.4 — https://github.com/stevenvo780/ST*
 `;
 
 interface UseDocumentActionsOptions {

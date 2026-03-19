@@ -378,11 +378,11 @@ export default function DocsPage() {
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 space-y-4">
                   <h4 className="font-bold text-white">Nuevo Centro ST</h4>
                   <p className="text-xs text-surface-400 leading-relaxed">
-                    Ahora ST tiene una <strong className="text-white">vista dedicada</strong> dentro de Ágora con manual ampliado del lenguaje, perfiles lógicos, ejemplos descargables, clase <code className="text-surface-200">Meta</code>, metalógica aplicada y un flujo de validación reproducible contra el CLI real.
+                    Ahora ST tiene una <strong className="text-white">vista dedicada</strong> dentro de Ágora con manual ampliado del lenguaje, perfiles lógicos, un script canónico por sistema, clase <code className="text-surface-200">Meta</code>, metalógica aplicada y un flujo de validación reproducible contra el paquete oficial.
                   </p>
                   <div className="flex flex-wrap gap-2 text-[11px] font-bold">
                     <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">11 perfiles documentados</span>
-                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">25 scripts verificados</span>
+                    <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">13 scripts canónicos verificados</span>
                     <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">Text Layer incluido</span>
                     <span className="px-3 py-1 rounded-full bg-surface-900/70 border border-surface-700/40 text-surface-300">Variables, funciones y theory-class</span>
                   </div>
@@ -394,7 +394,7 @@ export default function DocsPage() {
                       <FlaskConical className="w-4 h-4" /> Abrir centro ST
                     </Link>
                     <a href="/downloads/st/01-clasica-proposicional.st" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-600/50 text-surface-200 text-sm font-bold hover:border-mandy-500/40 hover:text-white transition">
-                      <Download className="w-4 h-4" /> Descargar ejemplo inicial
+                      <Download className="w-4 h-4" /> Descargar script clásico
                     </a>
                   </div>
                 </div>
