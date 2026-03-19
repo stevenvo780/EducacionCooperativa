@@ -1,6 +1,8 @@
 // ST — Aritmética
 logic arithmetic
 
+set verbose = on
+
 print "=== curso-aritmetica ==="
 
 // === COMPROBACIONES Y PRUEBAS ===
@@ -58,6 +60,4 @@ theory Calculadora {
 
 Calculadora.revisar(3 * 3)
 countermodel 5 < 3
-// analyze existe en el runtime global, pero hoy no produce inferencias
-// pedagógicamente útiles para arithmetic.
 render theory

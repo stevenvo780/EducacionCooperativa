@@ -5,6 +5,7 @@
 // ============================================================
 
 logic classical.propositional
+set verbose = on
 
 print "=== Meta logica en ST ==="
 
@@ -52,7 +53,7 @@ BibliotecaMeta.auditar()
 theory MetaInferencia {
   fn revisar() {
     analyze {P, P -> Q} -> Q
-    analyze {P} -> Q
+    analyze {P -> Q, Q} -> P
   }
 }
 

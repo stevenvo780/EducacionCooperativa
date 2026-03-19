@@ -1,9 +1,12 @@
 // ST — Modal K
 logic modal.k
 
+set verbose = on
+
 // === NECESIDAD, POSIBILIDAD Y DUALIDAD ===
 check valid ([](P -> Q) -> ([]P -> []Q))
 check valid [](P -> P)
+check valid ([](P & Q) -> ([]P & []Q))
 check equivalent []P, !<>!P
 check equivalent <>P, ![]!P
 
@@ -24,8 +27,9 @@ prove []R from {nec1, nec2, nec3}
 analyze {[](P -> Q), []P} -> []Q
 analyze {[]P} -> P
 
-// === EXPLICACIÓN Y CONTRAMODELOS ===
+// === EXPLICACIÓN DE FRAME Y CONTRAMODELOS ===
 explain [](P -> <>Q)
+explain [](P -> Q)
 countermodel ([]P -> P)
 countermodel (P -> []<>P)
 render theory

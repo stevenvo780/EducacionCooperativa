@@ -13,7 +13,7 @@ import {
   Sigma,
   Terminal
 } from 'lucide-react';
-import type { LogicCoursePageData } from './logicCourses';
+import { logicCourseEnhancements, type LogicCoursePageData } from './logicCourses';
 import STDocCodeBlock from '@/components/docs/STDocCodeBlock';
 
 function BulletList({ items }: { items: string[] }) {
@@ -30,8 +30,10 @@ function BulletList({ items }: { items: string[] }) {
 }
 
 export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
+  const runtimeUpdate = logicCourseEnhancements[course.slug];
   const sections = useMemo(() => ([
     { id: 'overview', label: 'Panorama' },
+    ...(runtimeUpdate ? [{ id: 'runtime-updates', label: 'Motor v2' }] : []),
     { id: 'concepts', label: 'Conceptos' },
     { id: 'operators', label: 'Operadores' },
     { id: 'commands', label: 'Comandos' },
@@ -40,7 +42,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
     { id: 'mistakes', label: 'Errores' },
     { id: 'limits', label: 'Límites' },
     { id: 'bridges', label: 'Conexiones' }
-  ]), []);
+  ]), [runtimeUpdate]);
 
   return (
     <div className="min-h-screen bg-surface-900 text-surface-200 selection:bg-mandy-500/30">
@@ -84,7 +86,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
             </div>
             <div className="border-t border-surface-700/30 pt-3 space-y-2">
               <a href={course.downloads.script} download className="flex items-center gap-2 text-xs text-surface-300 hover:text-mandy-300 transition">
-                <Download className="w-3.5 h-3.5" /> Script del perfil
+                <Download className="w-3.5 h-3.5" /> Script completo
               </a>
             </div>
           </div>
@@ -117,7 +119,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
                   <p className="text-[11px] font-semibold text-surface-500 uppercase tracking-widest mb-3">Accesos rápidos</p>
                   <div className="flex flex-wrap gap-2 text-xs">
                     <Link href="/docs/st" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver al índice ST</Link>
-                    <a href={course.downloads.script} download className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script</a>
+                    <a href={course.downloads.script} download className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script completo</a>
                     <a href="https://github.com/stevenvo780/ST" target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition inline-flex items-center gap-1.5">
                       <ExternalLink className="w-3.5 h-3.5" /> Repositorio ST
                     </a>
@@ -131,10 +133,28 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
           <section id="overview" className="scroll-mt-24 border border-surface-700/40 rounded-2xl p-6 bg-surface-800/25">
             <h3 className="text-xl font-bold text-white mb-4">Panorama del curso</h3>
             <p className="text-sm text-surface-300 leading-relaxed">
-              Esta guía reúne solo lo necesario para estudiar esta lógica: conceptos, operadores, comandos, ejemplos y límites del motor.
-              Los bloques de código se pueden ejecutar inline y abrir en el editor desplegable para probar variaciones sin salir de la página.
+              Esta guía reúne la cobertura completa del perfil: conceptos, operadores, comandos, ejemplos largos, límites reales del motor
+              y un script integral descargable para seguir probando fuera de la página. Los bloques de código se pueden ejecutar inline
+              y abrir en el editor desplegable para probar variaciones sin salir de la documentación.
             </p>
           </section>
+
+          {runtimeUpdate && (
+            <section id="runtime-updates" className="scroll-mt-24 border border-violet-500/20 rounded-2xl p-6 bg-violet-500/5">
+              <div className="flex items-center gap-2 mb-4">
+                <Terminal className="w-5 h-5 text-violet-300" />
+                <h3 className="text-xl font-bold text-white">Capacidades nuevas de este perfil</h3>
+              </div>
+              <div className="space-y-4">
+                <BulletList items={runtimeUpdate.highlights} />
+                <div className="bg-surface-900/40 rounded-xl p-5 border border-violet-500/10">
+                  <h4 className="text-sm font-bold text-white mb-2">{runtimeUpdate.example.title}</h4>
+                  <p className="text-sm text-surface-300 mb-3">{runtimeUpdate.example.description}</p>
+                  <STDocCodeBlock code={runtimeUpdate.example.code} />
+                </div>
+              </div>
+            </section>
+          )}
 
           <section id="concepts" className="scroll-mt-24 border border-surface-700/40 rounded-2xl p-6 bg-surface-800/25">
             <div className="flex items-center gap-2 mb-4">
@@ -249,12 +269,12 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
           <footer className="border-t border-surface-700/30 pt-8 pb-16">
             <div className="flex flex-wrap gap-3 items-center justify-between">
               <div>
-                <p className="text-sm text-surface-400">Puedes volver al índice ST o descargar el script de esta lógica para seguir probando.</p>
+                <p className="text-sm text-surface-400">Puedes volver al índice ST o descargar el script completo de esta lógica para seguir probando.</p>
                 <p className="text-xs text-surface-500 mt-1">También puedes descargar los scripts y probarlos con `npm run validate:st-docs`.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Link href="/docs/st" className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Volver al índice ST</Link>
-                <a href={course.downloads.script} download className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script del curso</a>
+                <a href={course.downloads.script} download className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-mandy-300 hover:border-mandy-500/30 transition">Descargar script completo del curso</a>
               </div>
             </div>
           </footer>

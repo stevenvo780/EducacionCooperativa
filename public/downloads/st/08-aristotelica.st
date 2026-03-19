@@ -1,6 +1,8 @@
 // ST — Silogística aristotélica
 logic aristotelian.syllogistic
 
+set verbose = on
+
 // === MODOS CATEGÓRICOS CLAVE ===
 check valid ((forall x (M(x) -> P(x))) & (forall x (S(x) -> M(x))) -> (forall x (S(x) -> P(x))))
 check valid ((forall x (M(x) -> !P(x))) & (forall x (S(x) -> M(x))) -> (forall x (S(x) -> !P(x))))
@@ -26,11 +28,11 @@ derive exists x (S(x) & P(x)) from {mayor, particular}
 prove forall x (S(x) -> P(x)) from {mayor, menor}
 prove exists x (S(x) & P(x)) from {mayor, particular}
 
-// === EXPLICACIÓN Y CONTRAMODELOS ===
+// === EXPLICACIÓN, ANÁLISIS Y CONTRAMODELOS ===
+analyze {forall x (M(x) -> P(x)), forall x (S(x) -> M(x))} -> forall x (S(x) -> P(x))
+analyze {forall x (P(x) -> M(x)), forall x (S(x) -> M(x))} -> forall x (S(x) -> P(x))
 explain forall x (M(x) -> P(x))
 explain exists x (S(x) & !P(x))
 countermodel ((exists x (M(x) & P(x))) & (forall x (S(x) -> M(x))) -> (forall x (S(x) -> P(x))))
 countermodel ((forall x (P(x) -> M(x))) & (forall x (S(x) -> M(x))) -> (forall x (S(x) -> P(x))))
-// analyze existe en la gramática global, pero hoy la biblioteca silogística
-// concentra su mayor valor pedagógico en check / derive / prove / countermodel.
 render theory

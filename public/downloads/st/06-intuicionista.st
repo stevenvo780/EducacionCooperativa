@@ -1,6 +1,8 @@
 // ST — Intuicionista proposicional
 logic intuitionistic.propositional
 
+set verbose = on
+
 // === VÁLIDAS CONSTRUCTIVAS ===
 check valid (P -> P)
 check valid (P -> (Q -> P))
@@ -35,6 +37,7 @@ analyze {P, P -> Q} -> Q
 analyze {P -> Q, !P} -> !Q
 
 // === EXPLICACIÓN Y CONTRAMODELOS ===
+explain (P -> !!P)
 explain ((P -> Q) -> (!Q -> !P))
 countermodel (P | !P)
 countermodel (!!P -> P)

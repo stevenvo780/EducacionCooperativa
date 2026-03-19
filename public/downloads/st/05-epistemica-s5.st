@@ -1,6 +1,8 @@
 // ST — Epistémica S5
 logic epistemic.s5
 
+set verbose = on
+
 // === VERIDICIDAD, INTROSPECCIÓN Y DUALIDAD ===
 check valid ([](P) -> P)
 check valid ([](P) -> []([](P)))
@@ -14,6 +16,7 @@ check equivalent <>P, ![]!P
 check satisfiable ([]P & ![]Q)
 check satisfiable (<>P & <>!P)
 check satisfiable ([](P -> Q) & <>P)
+check satisfiable (P & ![]P)
 
 // === DERIVACIÓN Y PRUEBA ===
 axiom s1 = [](P -> Q)
@@ -29,6 +32,7 @@ analyze {<>P} -> P
 
 // === EXPLICACIÓN Y CONTRAMODELOS ===
 explain (![]P -> [](![]P))
+explain (P & ![]P)
 countermodel (<>P -> P)
 countermodel ([]P -> []Q)
 render theory
