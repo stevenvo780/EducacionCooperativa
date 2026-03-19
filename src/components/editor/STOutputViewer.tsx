@@ -201,6 +201,10 @@ function OutputLine({ line }: { line: string }) {
   else if (line.startsWith('⊘')) color = 'text-amber-400';
   else if (line.startsWith('◇') || line.startsWith('□')) {
     color = 'text-violet-400';
+  } else if (line.includes('⊛ Designado')) {
+    color = 'text-emerald-400';
+  } else if (line.includes('Valores designados')) {
+    color = 'text-violet-300';
   } else if (line.startsWith('│') || line.startsWith('┌') || line.startsWith('└') || line.startsWith('├')) {
     color = 'text-slate-500';
   } else if (line.startsWith('  ──') || line.startsWith('──')) {
@@ -294,12 +298,40 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-/** Tabla de verdad visual */
+/** Tabla de verdad visual (soporta clásica V/F y Belnap T/F/B/N) */
 function TruthTableView({ table }: { table: TruthTableResult }) {
+  // Detectar si es Belnap (4 valores con resultados string)
+  const isBelnap = table.rows.length > 0 && typeof table.rows[0].result === 'string'
+    && ['T', 'F', 'B', 'N'].includes(table.rows[0].result as string);
+
+  const belnapDesignated = new Set(['T', 'B']);
+
+  function belnapColor(val: string): string {
+    switch (val) {
+      case 'T': return 'text-emerald-400';
+      case 'F': return 'text-red-400';
+      case 'B': return 'text-amber-400';
+      case 'N': return 'text-slate-400';
+      default: return val ? 'text-emerald-400' : 'text-red-400';
+    }
+  }
+
+  function belnapLabel(val: string): string {
+    switch (val) {
+      case 'T': return 'T (verdadero)';
+      case 'F': return 'F (falso)';
+      case 'B': return 'B (ambos)';
+      case 'N': return 'N (ninguno)';
+      default: return String(val);
+    }
+  }
+
   return (
     <div className="overflow-auto">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-semibold text-slate-400">Tabla de verdad</span>
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-xs font-semibold text-slate-400">
+          Tabla de verdad{isBelnap ? ' (Belnap 4-valores)' : ''}
+        </span>
         {table.isTautology && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">
             Tautología
@@ -313,6 +345,11 @@ function TruthTableView({ table }: { table: TruthTableResult }) {
         {!table.isTautology && !table.isContradiction && table.isSatisfiable && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 font-medium">
             Contingente
+          </span>
+        )}
+        {isBelnap && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 font-medium">
+            Designados: {'{'} T, B {'}'}
           </span>
         )}
       </div>
@@ -330,21 +367,35 @@ function TruthTableView({ table }: { table: TruthTableResult }) {
             <th className="px-3 py-1 text-indigo-400 font-bold border-b border-l border-slate-700 text-center">
               Resultado
             </th>
+            {isBelnap && (
+              <th className="px-2 py-1 text-violet-400 font-semibold border-b border-l border-slate-700 text-center">
+                ⊛
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
           {table.rows.map((row: TruthTableRow, i: number) => {
-            const res =
-              typeof row.result === 'boolean' ? row.result : row.result === 'T';
+            const resStr = typeof row.result === 'string' ? row.result : (row.result ? 'T' : 'F');
+            const resBoolean = typeof row.result === 'boolean' ? row.result : row.result === 'T';
+            const isDesignated = isBelnap && belnapDesignated.has(resStr);
+
             return (
               <tr
                 key={i}
                 className={`${
                   i % 2 === 0 ? 'bg-slate-900/30' : 'bg-slate-800/20'
-                } hover:bg-slate-700/30 transition-colors`}
+                } hover:bg-slate-700/30 transition-colors ${isDesignated ? 'ring-1 ring-inset ring-emerald-500/20' : ''}`}
               >
                 {table.variables.map((v) => {
                   const val = row.valuation[v];
+                  if (isBelnap && typeof val === 'string') {
+                    return (
+                      <td key={v} className={`px-2 py-0.5 text-center ${belnapColor(val)}`}>
+                        {val}
+                      </td>
+                    );
+                  }
                   return (
                     <td
                       key={v}
@@ -358,16 +409,29 @@ function TruthTableView({ table }: { table: TruthTableResult }) {
                 })}
                 <td
                   className={`px-3 py-0.5 text-center font-bold border-l border-slate-700 ${
-                    res ? 'text-emerald-400' : 'text-red-400'
+                    isBelnap ? belnapColor(resStr) : (resBoolean ? 'text-emerald-400' : 'text-red-400')
                   }`}
                 >
-                  {res ? 'V' : 'F'}
+                  {isBelnap ? resStr : (resBoolean ? 'V' : 'F')}
                 </td>
+                {isBelnap && (
+                  <td className={`px-2 py-0.5 text-center border-l border-slate-700 ${isDesignated ? 'text-emerald-400' : 'text-slate-600'}`}>
+                    {isDesignated ? '⊛' : '·'}
+                  </td>
+                )}
               </tr>
             );
           })}
         </tbody>
       </table>
+      {isBelnap && (
+        <div className="mt-2 text-[10px] text-slate-500">
+          ⊛ = Designado (portador de verdad). Valores designados: {'{'} T, B {'}'}.
+          <span className="ml-2">
+            T = verdadero · F = falso · B = ambos (⊤) · N = ninguno (⊥)
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -472,10 +536,28 @@ function ModelView({ model }: { model: Model }) {
   );
 }
 
-/** Grid de valuación p:V / q:F */
+/** Grid de valuación p:V / q:F (soporta Belnap strings T/F/B/N) */
 function ValuationGrid({ label, valuation }: { label?: string; valuation: Valuation }) {
   const entries = Object.entries(valuation);
   if (entries.length === 0) return null;
+
+  function valColor(val: unknown): string {
+    if (typeof val === 'string') {
+      switch (val) {
+        case 'T': return 'bg-emerald-500/10 text-emerald-400';
+        case 'F': return 'bg-red-500/10 text-red-400';
+        case 'B': case 'Both': return 'bg-amber-500/10 text-amber-400';
+        case 'N': case 'Neither': return 'bg-slate-500/10 text-slate-400';
+        default: return 'bg-slate-500/10 text-slate-300';
+      }
+    }
+    return val ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400';
+  }
+
+  function valLabel(val: unknown): string {
+    if (typeof val === 'string') return val;
+    return val ? 'V' : 'F';
+  }
 
   return (
     <div>
@@ -486,14 +568,10 @@ function ValuationGrid({ label, valuation }: { label?: string; valuation: Valuat
         {entries.map(([key, val]) => (
           <span
             key={key}
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono ${
-              val
-                ? 'bg-emerald-500/10 text-emerald-400'
-                : 'bg-red-500/10 text-red-400'
-            }`}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono ${valColor(val)}`}
           >
             <span className="text-slate-400">{key}</span>
-            <span className="font-bold">{val ? 'V' : 'F'}</span>
+            <span className="font-bold">{valLabel(val)}</span>
           </span>
         ))}
       </div>

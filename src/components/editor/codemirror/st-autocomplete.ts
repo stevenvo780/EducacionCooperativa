@@ -287,6 +287,62 @@ function makeSnippetCompletions(): Completion[] {
       detail: 'Listar átomos usados en una fórmula',
       info: buildInfoText('get_atoms', 'builtin'),
       boost: 3
+    }),
+    // ── Modal alias snippets ──
+    snippetCompletion('logic epistemic.s5\nK(${formula})', {
+      label: 'K()',
+      type: 'text',
+      detail: 'Conocimiento K(φ) ≡ □φ (epistemic.s5)',
+      boost: 2
+    }),
+    snippetCompletion('logic epistemic.s5\nB(${formula})', {
+      label: 'B()',
+      type: 'text',
+      detail: 'Creencia B(φ) ≡ ◇φ (epistemic.s5)',
+      boost: 2
+    }),
+    snippetCompletion('logic deontic.standard\nO(${formula})', {
+      label: 'O()',
+      type: 'text',
+      detail: 'Obligación O(φ) ≡ □φ (deontic.standard)',
+      boost: 2
+    }),
+    snippetCompletion('logic deontic.standard\nP(${formula})', {
+      label: 'P()',
+      type: 'text',
+      detail: 'Permisión P(φ) ≡ ◇φ (deontic.standard)',
+      boost: 2
+    }),
+    snippetCompletion('logic temporal.ltl\nG(${formula})', {
+      label: 'G()',
+      type: 'text',
+      detail: 'Globally G(φ) ≡ □φ (temporal.ltl)',
+      boost: 2
+    }),
+    snippetCompletion('logic temporal.ltl\nF(${formula})', {
+      label: 'F()',
+      type: 'text',
+      detail: 'Eventually F(φ) ≡ ◇φ (temporal.ltl)',
+      boost: 2
+    }),
+    snippetCompletion('logic paraconsistent.belnap\ntruth_table ${formula}', {
+      label: 'belnap truth_table',
+      type: 'text',
+      detail: 'Tabla de verdad Belnap 4-valores (T/F/B/N)',
+      boost: 2
+    }),
+    snippetCompletion('refute ${formula}', {
+      label: 'refute',
+      type: 'text',
+      detail: 'Refutar fórmula (buscar contramodelo)',
+      info: buildInfoText('refute', 'keyword'),
+      boost: 2
+    }),
+    snippetCompletion('check equivalent (${formula1}), (${formula2})', {
+      label: 'check equivalent',
+      type: 'text',
+      detail: 'Verificar equivalencia lógica',
+      boost: 2
     })
   ];
 }
