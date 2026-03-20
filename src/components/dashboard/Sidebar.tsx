@@ -331,47 +331,9 @@ const Sidebar = ({
             </div>
             <span className="truncate flex-1">{item.doc.name}</span>
             <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{item.doc.folder?.split('/').pop()}</span>
-            <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleFavorite(item.doc);
-                }}
-                className={`p-0.5 ${isFavorite ? 'text-amber-300 hover:text-amber-200' : 'text-surface-500 hover:text-amber-300'}`}
-                title={isFavorite ? 'Quitar de favoritos' : 'Fijar en favoritos'}
-              >
-                <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
-              </button>
-              {onDownloadDoc && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDownloadDoc(item.doc);
-                  }}
-                  className="text-surface-500 hover:text-surface-300 p-0.5"
-                  title="Descargar"
-                >
-                  <Download className="w-3 h-3" />
-                </button>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRenameDocument(item.doc);
-                }}
-                className="text-surface-500 hover:text-surface-300 p-0.5"
-                title="Renombrar"
-              >
-                <Pencil className="w-3 h-3" />
-              </button>
-              <button
-                onClick={(e) => deleteDocument(item.doc, e)}
-                className="text-surface-500 hover:text-mandy-400 p-0.5"
-                title="Eliminar"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
+            {isFavorite && (
+              <Star className="w-3 h-3 text-amber-300 fill-current shrink-0" />
+            )}
           </div>
         </div>
       );
@@ -443,47 +405,9 @@ const Sidebar = ({
             {getIcon(item.doc)}
           </div>
           <span className="truncate flex-1">{item.doc.name}</span>
-          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleFavorite(item.doc);
-              }}
-              className={`p-0.5 ${isFavorite ? 'text-amber-300 hover:text-amber-200' : 'text-surface-500 hover:text-amber-300'}`}
-              title={isFavorite ? 'Quitar de favoritos' : 'Fijar en favoritos'}
-            >
-              <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
-            </button>
-            {onDownloadDoc && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDownloadDoc(item.doc);
-                }}
-                className="text-surface-500 hover:text-surface-300 p-0.5"
-                title="Descargar"
-              >
-                <Download className="w-3 h-3" />
-              </button>
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRenameDocument(item.doc);
-              }}
-              className="text-surface-500 hover:text-surface-300 p-0.5"
-              title="Renombrar"
-            >
-              <Pencil className="w-3 h-3" />
-            </button>
-            <button
-              onClick={(e) => deleteDocument(item.doc, e)}
-              className="text-surface-500 hover:text-mandy-400 p-0.5"
-              title="Eliminar"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
+          {isFavorite && (
+            <Star className="w-3 h-3 text-amber-300 fill-current shrink-0" />
+          )}
         </div>
       </div>
     );

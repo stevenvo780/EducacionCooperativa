@@ -483,39 +483,8 @@ const HeaderBar = ({
 
       </div>
 
-      {/* ── Right: Status + Controls ── */}
+      {/* ── Right: Collapse + Zen + Status + Panels + Utils + User ── */}
       <div className="flex items-center gap-1 shrink-0">
-        <div
-          className={`hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold tracking-wide border ${
-            isOnline
-              ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
-              : 'border-red-500/40 text-red-300 bg-red-500/10'
-          }`}
-          title={isOnline ? 'Conectado' : 'Sin conexión'}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
-          <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
-        </div>
-        <button
-          onClick={onOpenQuickSearch}
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
-          title="Buscar en este espacio (Ctrl+P / Ctrl+Shift+P)"
-          aria-label="Buscar en este espacio"
-        >
-          <Search className="w-3.5 h-3.5" />
-          <span className="hidden xl:inline">Buscar</span>
-        </button>
-        <a
-          href="/docs"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
-          title="Abrir documentación"
-          aria-label="Abrir documentación"
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span className="hidden xl:inline">Ayuda</span>
-        </a>
         <div className="hidden md:flex items-center">
           <button
             onClick={onToggleHeaderCollapse}
@@ -538,6 +507,17 @@ const HeaderBar = ({
           {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           <span className="hidden lg:inline">{isZenMode ? 'Salir' : 'Zen'}</span>
         </button>
+        <div
+          className={`hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold tracking-wide border ${
+            isOnline
+              ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10'
+              : 'border-red-500/40 text-red-300 bg-red-500/10'
+          }`}
+          title={isOnline ? 'Conectado' : 'Sin conexión'}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
+          <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
+        </div>
         <button
           onClick={onOpenBoard}
           className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
@@ -578,6 +558,26 @@ const HeaderBar = ({
           <Users className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">Equipo</span>
         </button>
+        <button
+          onClick={onOpenQuickSearch}
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+          title="Buscar en este espacio (Ctrl+P / Ctrl+Shift+P)"
+          aria-label="Buscar en este espacio"
+        >
+          <Search className="w-3.5 h-3.5" />
+          <span className="hidden xl:inline">Buscar</span>
+        </button>
+        <a
+          href="/docs"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
+          title="Abrir documentación"
+          aria-label="Abrir documentación"
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span className="hidden xl:inline">Ayuda</span>
+        </a>
 
         {/* User menu */}
         <div className="relative">
