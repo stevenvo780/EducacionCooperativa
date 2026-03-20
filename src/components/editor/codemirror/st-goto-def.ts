@@ -8,42 +8,47 @@
 
 import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
+import { getSemanticDefinition, getSemanticSymbols } from './st-semantic';
 
 // ── Regex para encontrar definiciones ───────────────────────
-
-const DEFINITION_RE = /^\s*(?:(?:export|exportar)\s+)?(?:axiom|axioma|theorem|teorema|let|sea|claim|afirmacion|theory|teoria|fn|funcion)\s+(\w+)/gm;
 
 interface SymbolDef {
   name: string;
   from: number;
   to: number;
   line: number;
+  column: number;
 }
 
 /**
  * Escanea el documento para encontrar todas las definiciones de símbolos ST.
  */
 function findDefinitions(doc: string): SymbolDef[] {
-  const defs: SymbolDef[] = [];
   const lines = doc.split('\n');
+  const lineOffsets: number[] = [];
   let offset = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const match = line.match(/^\s*(?:(?:export|exportar)\s+)?(?:axiom|axioma|theorem|teorema|let|sea|claim|afirmacion|theory|teoria|fn|funcion)\s+(\w+)/);
-    if (match) {
-      const nameStart = offset + line.indexOf(match[1]);
-      defs.push({
-        name: match[1],
-        from: nameStart,
-        to: nameStart + match[1].length,
-        line: i + 1
-      });
-    }
+  for (const line of lines) {
+    lineOffsets.push(offset);
     offset += line.length + 1;
   }
 
-  return defs;
+  return getSemanticSymbols(doc)
+    .filter((symbol) => Boolean(symbol.location?.line))
+    .map((symbol) => {
+      const line = Math.max(1, symbol.location.line);
+      const column = Math.max(1, symbol.location.column ?? 1);
+      const from = (lineOffsets[line - 1] ?? 0) + column - 1;
+      const localName = symbol.name.includes('.') ? symbol.name.split('.').pop() || symbol.name : symbol.name;
+
+      return {
+        name: symbol.name,
+        from,
+        to: from + localName.length,
+        line,
+        column
+      };
+    });
 }
 
 /**
@@ -55,8 +60,8 @@ function getWordAt(doc: string, pos: number): { word: string; from: number; to: 
   let from = pos;
   let to = pos;
 
-  while (from > 0 && /\w/.test(doc.charAt(from - 1))) from--;
-  while (to < doc.length && /\w/.test(doc.charAt(to))) to++;
+  while (from > 0 && /[a-zA-Z0-9_.]/.test(doc.charAt(from - 1))) from--;
+  while (to < doc.length && /[a-zA-Z0-9_.]/.test(doc.charAt(to))) to++;
 
   if (from === to) return null;
   return { word: doc.slice(from, to), from, to };
@@ -84,7 +89,8 @@ export function stGotoDef() {
     EditorView.domEventHandlers({
       click(event: MouseEvent, view: EditorView) {
         if (!event.ctrlKey && !event.metaKey) return false;
-        return jumpToDefinition(view);
+        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        return jumpToDefinition(view, pos ?? view.state.selection.main.head);
       }
     }),
 
@@ -96,21 +102,36 @@ export function stGotoDef() {
 /**
  * Intenta saltar a la definición del símbolo bajo el cursor.
  */
-function jumpToDefinition(view: EditorView): boolean {
-  const pos = view.state.selection.main.head;
+function jumpToDefinition(view: EditorView, pos: number = view.state.selection.main.head): boolean {
   const doc = view.state.doc.toString();
   const wordInfo = getWordAt(doc, pos);
 
   if (!wordInfo) return false;
 
   const defs = findDefinitions(doc);
-  const target = defs.find(d => d.name === wordInfo.word && d.from !== wordInfo.from);
+  const semanticTarget =
+    defs.find((definition) => definition.name === wordInfo.word)
+    ?? (() => {
+      const location = getSemanticDefinition(doc, wordInfo.word);
+      if (!location?.line) return null;
 
-  if (!target) return false;
+      const line = view.state.doc.line(location.line);
+      const from = line.from + Math.max(0, (location.column ?? 1) - 1);
+      return {
+        name: wordInfo.word,
+        from,
+        to: from + (wordInfo.word.split('.').pop() || wordInfo.word).length,
+        line: location.line,
+        column: location.column ?? 1
+      };
+    })();
+
+  if (!semanticTarget) return false;
+  if (semanticTarget.from === wordInfo.from) return false;
 
   // Jump to definition
   view.dispatch({
-    selection: EditorSelection.single(target.from, target.to),
+    selection: EditorSelection.single(semanticTarget.from, semanticTarget.to),
     scrollIntoView: true
   });
 
@@ -123,13 +144,17 @@ const ctrlHoverPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     isCtrlHeld = false;
+    definitions: SymbolDef[] = [];
 
     constructor(view: EditorView) {
       this.decorations = Decoration.none;
+      this.definitions = findDefinitions(view.state.doc.toString());
     }
 
     update(update: ViewUpdate) {
-      // decorations are updated via DOM events, not doc changes
+      if (update.docChanged) {
+        this.definitions = findDefinitions(update.state.doc.toString());
+      }
     }
 
     destroy() {
@@ -168,8 +193,9 @@ const ctrlHoverPlugin = ViewPlugin.fromClass(
           return;
         }
 
-        const defs = findDefinitions(doc);
-        const hasDef = defs.some(d => d.name === wordInfo.word && d.from !== wordInfo.from);
+        const hasDef =
+          this.definitions.some((definition) => definition.name === wordInfo.word && definition.from !== wordInfo.from)
+          || Boolean(getSemanticDefinition(doc, wordInfo.word));
 
         if (hasDef) {
           this.decorations = Decoration.set([

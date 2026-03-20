@@ -79,6 +79,12 @@ function makeOperatorCompletions(): Completion[] {
 
 const operatorCompletions = makeOperatorCompletions();
 
+const renderTargetCompletions: Completion[] = [
+  { label: 'theory', type: 'keyword', detail: 'Renderizar la teoría actual', boost: 2 },
+  { label: 'claims', type: 'keyword', detail: 'Renderizar los claims actuales', boost: 2 },
+  { label: 'all', type: 'keyword', detail: 'Renderizar todo el estado actual', boost: 2 }
+];
+
 // ── Snippet completions (CM6 native with tab-stop placeholders) ──
 
 function makeSnippetCompletions(): Completion[] {
@@ -471,6 +477,7 @@ function stCompletionSource(context: CompletionContext): CompletionResult | null
     ...symbolCompletions,
     ...semanticStaticCompletions,
     ...staticCompletions,
+    ...renderTargetCompletions,
     ...operatorCompletions
   ];
 

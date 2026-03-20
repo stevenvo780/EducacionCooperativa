@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useMemo } from 'react';
 import {
+  check,
   evaluate,
   quickEval,
   createInterpreter,
@@ -101,12 +102,22 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
   }, []);
 
   const validate = useCallback((code: string): Diagnostic[] => {
+    const parserDiagnostics = check(code).diagnostics || [];
+    const hasParseErrors = parserDiagnostics.some((diagnostic) => diagnostic.severity === 'error');
+
+    if (hasParseErrors) {
+      setLastDiagnostics(parserDiagnostics);
+      return parserDiagnostics;
+    }
+
     try {
       const result = evaluate(code);
-      setLastDiagnostics(result.diagnostics || []);
-      return result.diagnostics || [];
+      const diagnostics = result.diagnostics || [];
+      setLastDiagnostics(diagnostics);
+      return diagnostics;
     } catch {
-      return [];
+      setLastDiagnostics(parserDiagnostics);
+      return parserDiagnostics;
     }
   }, []);
 
