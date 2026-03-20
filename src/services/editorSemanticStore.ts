@@ -131,9 +131,13 @@ const ensureFragment = (
   return fragment;
 };
 
-export const registerConceptFromSelection = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
+export const registerConceptFromSelection = (
+  context: SemanticStoreContext,
+  payload: SemanticSelectionPayload,
+  options?: { definition?: string; title?: string }
+) => updateState(context, (state) => {
   const sourceFragment = ensureFragment(state, 'concept', payload);
-  const normalizedTitle = excerptFromText(payload.text, 60);
+  const normalizedTitle = options?.title?.trim() || excerptFromText(payload.text, 60);
   const existing = state.concepts.find((concept) => concept.title.toLowerCase() === normalizedTitle.toLowerCase());
 
   if (existing) {
@@ -142,12 +146,14 @@ export const registerConceptFromSelection = (context: SemanticStoreContext, payl
     existing.docId = payload.docId;
     existing.docName = payload.docName;
     existing.sourceFragmentId = sourceFragment.id;
+    if (options?.definition) existing.definition = options.definition;
     return state;
   }
 
   state.concepts.unshift({
     id: makeId('concept'),
     title: normalizedTitle,
+    ...(options?.definition ? { definition: options.definition } : {}),
     excerpt: excerptFromText(payload.text),
     docId: payload.docId,
     docName: payload.docName,
