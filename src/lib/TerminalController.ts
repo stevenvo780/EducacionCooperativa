@@ -284,7 +284,10 @@ export class TerminalController {
     onDocChange?: (event: DocChangeEvent) => void,
     onSessionCreated?: (payload: TerminalSessionCreationPayload) => void
   ) {
-    if (this.socket) this.socket.disconnect();
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+    }
 
     this.onWorkerStatusChange = onWorkerStatusChange;
     this.onDocChange = onDocChange;
@@ -486,7 +489,7 @@ export class TerminalController {
     instance?.term?.focus();
   }
 
-  private scheduleFitSession(sessionId: string) {
+  public scheduleFitSession(sessionId: string) {
     const instance = this.terminals.get(sessionId);
     if (!instance) return;
 
