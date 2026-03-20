@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
-import { buildStoragePath, ensureMarkdownFileName } from '@/lib/storage-path';
+import { buildStoragePath, ensureTextFileName } from '@/lib/storage-path';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
@@ -67,20 +67,27 @@ export async function POST(req: NextRequest) {
              try {
                  const bucket = adminStorage.bucket();
                  if (bucket.name) {
-                     const fname = ensureMarkdownFileName(docName);
-                     const path = buildStoragePath({
+                     const fname = ensureTextFileName(docName);
+                     const storagePath_ = buildStoragePath({
                         workspaceId: resolvedWorkspaceId,
                         ownerId,
                         folder: normalizedFolder,
                         fileName: fname
                      });
 
-                     await bucket.file(path).save(docContent, {
-                        contentType: 'text/markdown',
+                     // Determinar contentType según extensión real
+                     const storageExt = (fname.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase();
+                     const isMarkdownStorage = storageExt === '.md' || storageExt === '.markdown';
+                     const storageContentType = isMarkdownStorage ? 'text/markdown' : (
+                        typeof mimeType === 'string' && mimeType ? mimeType : 'text/plain'
+                     );
+
+                     await bucket.file(storagePath_).save(docContent, {
+                        contentType: storageContentType,
                         metadata: { ownerId }
                      });
 
-                     docData.storagePath = path;
+                     docData.storagePath = storagePath_;
                  }
              } catch (error) {
                  console.warn('Failed to sync document to storage:', getErrorMessage(error));
