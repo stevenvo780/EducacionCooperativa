@@ -12,10 +12,12 @@ import {
   CompletionContext,
   CompletionResult,
   Completion,
+  snippet,
   snippetCompletion
 } from '@codemirror/autocomplete';
-import { KEYWORDS, BUILTINS, PROFILES, extractDynamicCompletions } from '../st-editor/tokenizer';
+import { KEYWORDS, BUILTINS, PROFILES } from '../st-editor/tokenizer';
 import { getHoverInfo } from '../st-editor/hover-info';
+import { getSemanticSymbols, getStaticSemanticCompletions } from './st-semantic';
 
 function buildInfoText(label: string, category: 'keyword' | 'builtin' | 'profile' | 'operator'): string | undefined {
   const info = getHoverInfo(label, category);
@@ -391,95 +393,116 @@ function makeSnippetCompletions(): Completion[] {
 
 const snippetCompletions = makeSnippetCompletions();
 
-// ── Dynamic completions from document ───────────────────────
+// ── Semantic completions from st-lang ───────────────────────
 
-function getDynamicCompletions(doc: string): Completion[] {
-  const items = extractDynamicCompletions(doc);
-  return items.map(item => ({
-    label: item.label,
-    type: 'variable',
-    detail: item.detail,
-    boost: 3
-  }));
-}
-
-// ── st-lang/api completions (async, optional) ───────────────
-
-let stLangApi: null | {
-  completion: (code: string, line: number, col: number) => Array<{
-    label: string;
-    kind: string;
-    detail?: string;
-    insertText?: string;
-  }>;
-} = null;
-
-async function loadStLangApi() {
-  try {
-    const mod = await import('@stevenvo780/st-lang/api');
-    if (typeof (mod as Record<string, unknown>).completion === 'function') {
-      stLangApi = mod as typeof stLangApi;
-    }
-  } catch {
-    // st-lang not available — use fallback completions only
+function mapSemanticKind(kind: string): Completion['type'] {
+  switch (kind) {
+    case 'keyword':
+      return 'keyword';
+    case 'operator':
+      return 'operator';
+    case 'type':
+    case 'value':
+      return 'type';
+    case 'function':
+      return 'function';
+    default:
+      return 'variable';
   }
 }
 
-// Eager load
-loadStLangApi();
+const semanticStaticCompletions: Completion[] = getStaticSemanticCompletions().map((item) => {
+  const insertText = item.insertText || item.label;
+  const apply = /\$\{\d+[:}]?/.test(insertText) ? snippet(insertText) : insertText;
+
+  return {
+    label: item.label,
+    type: mapSemanticKind(item.kind),
+    detail: item.detail,
+    info: item.documentation ?? item.detail,
+    apply,
+    boost: 1
+  };
+});
+
+function getSemanticSymbolCompletions(doc: string): Completion[] {
+  return getSemanticSymbols(doc).map((symbol) => ({
+    label: symbol.name,
+    type:
+      symbol.kind === 'theorem'
+        ? 'type'
+        : symbol.kind === 'formula'
+          ? 'function'
+          : symbol.kind === 'axiom'
+            ? 'constant'
+            : 'variable',
+    detail: symbol.detail || `(${symbol.kind})`,
+    info: symbol.description
+      ? `${symbol.kind}: ${symbol.description}${symbol.detail ? `\n\n${symbol.detail}` : ''}`
+      : symbol.detail || symbol.kind,
+    boost: 4
+  }));
+}
+
+function completionContextKind(linePrefix: string): 'logic' | 'premises' | 'render' | null {
+  if (/^(logic|logica)\s+$/i.test(linePrefix)) return 'logic';
+  if (/(from|desde)\s*\{\s*[^}]*$/i.test(linePrefix)) return 'premises';
+  if (/(render|mostrar)\s+$/i.test(linePrefix)) return 'render';
+  return null;
+}
 
 // ── Main completion source ──────────────────────────────────
 
 function stCompletionSource(context: CompletionContext): CompletionResult | null {
-  // Get current word being typed
   const word = context.matchBefore(/[\w.]+/);
-  if (!word && !context.explicit) return null;
+  const line = context.state.doc.lineAt(context.pos);
+  const linePrefix = line.text.slice(0, context.pos - line.from);
+  const contextualMode = completionContextKind(linePrefix.trimStart());
+
+  if (!word && !context.explicit && !contextualMode) return null;
 
   const from = word ? word.from : context.pos;
   const prefix = word ? word.text.toLowerCase() : '';
   const doc = context.state.doc.toString();
+  const symbolCompletions = getSemanticSymbolCompletions(doc);
 
-  // Gather all completions
   const all: Completion[] = [
     ...snippetCompletions,
-    ...getDynamicCompletions(doc),
+    ...symbolCompletions,
+    ...semanticStaticCompletions,
     ...staticCompletions,
     ...operatorCompletions
   ];
 
-  // Add st-lang API completions if available
-  if (stLangApi) {
-    try {
-      const line = context.state.doc.lineAt(context.pos);
-      const lineNum = line.number;
-      const col = context.pos - line.from;
-      const apiItems = stLangApi.completion(doc, lineNum, col) || [];
-      for (const item of apiItems) {
-        all.push({
-          label: item.label,
-          type: item.kind === 'keyword' ? 'keyword' : item.kind === 'snippet' ? 'text' : 'variable',
-          detail: item.detail,
-          info: item.detail,
-          apply: item.insertText || item.label
-        });
-      }
-    } catch {
-      // ignore api errors
-    }
-  }
-
-  // Filter by prefix (CodeMirror does this too, but pre-filtering helps perf)
-  const filtered = prefix.length > 0
-    ? all.filter(c => c.label.toLowerCase().startsWith(prefix) && c.label.toLowerCase() !== prefix)
+  let filtered = prefix.length > 0
+    ? all.filter((completion) => {
+      const label = completion.label.toLowerCase();
+      return label.startsWith(prefix) && label !== prefix;
+    })
     : all;
+
+  if (contextualMode === 'logic') {
+    filtered = filtered.filter((completion) =>
+      completion.label.startsWith('logic ') || PROFILES.has(completion.label)
+    );
+  } else if (contextualMode === 'premises') {
+    filtered = symbolCompletions.length > 0 ? symbolCompletions : filtered;
+  } else if (contextualMode === 'render') {
+    filtered = filtered.filter((completion) =>
+      completion.label === 'render'
+      || completion.label === 'theory'
+      || completion.label === 'claims'
+      || completion.label === 'all'
+      || symbolCompletions.some((symbolCompletion) => symbolCompletion.label === completion.label)
+    );
+  }
 
   if (filtered.length === 0) return null;
 
-  // Deduplicate by label
   const seen = new Set<string>();
-  const unique = filtered.filter(c => {
-    if (seen.has(c.label)) return false;
-    seen.add(c.label);
+  const unique = filtered.filter((completion) => {
+    if (seen.has(completion.label)) return false;
+    seen.add(completion.label);
     return true;
   });
 
