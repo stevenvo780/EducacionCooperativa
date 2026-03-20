@@ -59,7 +59,8 @@ import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
 import { BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
-import SnippetGallery from '@/components/SnippetGallery';
+import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
+import { createSnippet } from '@/services/snippetApi';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
 import { createDocumentApi, updateDocumentApi } from '@/services/dashboardApi';
@@ -177,6 +178,7 @@ export default function MosaicEditor({
     title: string;
     definition: string;
   } | null>(null);
+  const [snippetDraft, setSnippetDraft] = useState<{ markdown: string } | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
   const semanticSyncRequestIdRef = useRef(0);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -1154,6 +1156,23 @@ export default function MosaicEditor({
       setDefineConceptDraft(null);
     });
   }, [clearSemanticSelection, companionStDocId, defineConceptDraft, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+
+  const handleSaveAsSnippet = useCallback(() => {
+    if (!semanticSelection) return;
+    setSnippetDraft({ markdown: semanticSelection.text });
+    clearSemanticSelection();
+  }, [clearSemanticSelection, semanticSelection]);
+
+  const handleConfirmSnippetSave = useCallback(async (data: { title: string; description: string; markdown: string; category: string }) => {
+    const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
+    const created = await createSnippet({ ...data, workspaceId, order: 0 });
+    if (created) {
+      setSemanticNotice(`Snippet "${data.title}" guardado.`);
+    } else {
+      setSemanticNotice('No se pudo guardar el snippet.');
+    }
+    setSnippetDraft(null);
+  }, [currentWorkspaceId]);
 
   const handleCreateAnalyticalCard = useCallback(() => {
     if (!semanticSelection) return;
@@ -2168,6 +2187,7 @@ export default function MosaicEditor({
           onOpenDocuments={() => { void loadDocumentsForSemanticLinking(); }}
           onRelateConcept={handleRelateConcept}
           onLinkDocument={handleLinkDocument}
+          onSaveAsSnippet={handleSaveAsSnippet}
         />
       )}
 
@@ -2223,6 +2243,14 @@ export default function MosaicEditor({
           </div>
         </div>,
         document.body
+      )}
+
+      {snippetDraft && (
+        <SnippetEditorModal
+          initial={{ markdown: snippetDraft.markdown }}
+          onSave={(data) => { void handleConfirmSnippetSave(data); }}
+          onCancel={() => setSnippetDraft(null)}
+        />
       )}
 
       <style jsx global>{mosaicEditorStyles}</style>

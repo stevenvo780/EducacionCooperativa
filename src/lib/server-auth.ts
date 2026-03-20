@@ -41,6 +41,7 @@ export const requireAuth = async (req: NextRequest): Promise<AuthContext | null>
 
 export const isWorkspaceMember = async (workspaceId: string, uid: string): Promise<boolean> => {
   if (isPersonalWorkspaceId(workspaceId)) return false;
+  if (allowInsecureAuth) return true;
   const snap = await adminDb.collection('workspaces').doc(workspaceId).get();
   if (!snap.exists) return false;
   const data = snap.data() as { members?: string[] } | undefined;

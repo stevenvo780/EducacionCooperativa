@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { BookMarked, BookmarkPlus, Briefcase, FilePlus2, Link2, Network, Quote, Sparkles } from 'lucide-react';
+import { BookMarked, BookmarkPlus, Briefcase, FilePlus2, Link2, Network, Quote, Scissors, Sparkles } from 'lucide-react';
 import type { EditorSelectionSnapshot } from '@/hooks/useEditorSelectionActions';
 import type { SemanticConceptRecord } from '@/services/editorSemanticStore';
 
@@ -31,6 +31,7 @@ interface EditorSelectionMenuProps {
   onOpenDocuments: () => void;
   onRelateConcept: (conceptId: string) => void;
   onLinkDocument: (document: LinkableDocument) => void;
+  onSaveAsSnippet: () => void;
 }
 
 const excerpt = (value: string, maxLength = 110) => {
@@ -55,7 +56,8 @@ export function EditorSelectionMenu({
   onOpenConcepts,
   onOpenDocuments,
   onRelateConcept,
-  onLinkDocument
+  onLinkDocument,
+  onSaveAsSnippet
 }: EditorSelectionMenuProps) {
   const [mode, setMode] = useState<MenuMode>('actions');
   const [query, setQuery] = useState('');
@@ -128,6 +130,7 @@ export function EditorSelectionMenu({
         <ActionButton icon={<Briefcase className="h-3.5 w-3.5" />} label="Enviar a tarea" busy={busyAction === 'create-task'} onClick={onCreateTask} />
         <ActionButton icon={<Quote className="h-3.5 w-3.5" />} label="Marcar evidencia" busy={busyAction === 'mark-evidence'} onClick={onMarkEvidence} />
         <ActionButton icon={<BookmarkPlus className="h-3.5 w-3.5" />} label="Fijar fragmento" busy={busyAction === 'pin-fragment'} onClick={onPinFragment} />
+        <ActionButton icon={<Scissors className="h-3.5 w-3.5" />} label="Guardar snippet" busy={busyAction === 'save-snippet'} onClick={onSaveAsSnippet} />
       </div>
       <button
         type="button"
