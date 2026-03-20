@@ -1004,7 +1004,7 @@ export default function MosaicEditor({
     } finally {
       setLoadingLinkableDocuments(false);
     }
-  }, [currentWorkspaceId, linkableDocuments.length, loadingLinkableDocuments, roomId]);
+  }, [currentWorkspaceId, docName, linkableDocuments.length, loadingLinkableDocuments, roomId]);
 
   const runSemanticAction = useCallback(async (actionKey: string, action: () => Promise<void> | void) => {
     setSemanticBusyAction(actionKey);
