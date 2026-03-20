@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/operador/proyectos/humanizar/**)",
+      "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/src -name *.ts -o -name *.tsx)",
+      "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/services -name *.ts -not -path */node_modules/*)",
+      "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/services/hub/src -name *.ts)"
+    ]
+  }
+}

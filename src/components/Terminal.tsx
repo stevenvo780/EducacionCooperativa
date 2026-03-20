@@ -122,11 +122,11 @@ const Terminal: React.FC<TerminalProps> = ({
         }, [effectiveSessionId, sessionActive, controller, containerEl, sessionId, isPageVisible]);
 
   useEffect(() => {
-            if (!isPageVisible || !effectiveSessionId || !sessionActive || !controller) return;
-      const handleResize = () => controller?.fitSession(effectiveSessionId);
+    if (!isPageVisible || !effectiveSessionId || !sessionActive || !controller) return;
+    const handleResize = () => controller?.scheduleFitSession(effectiveSessionId);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-        }, [controller, effectiveSessionId, sessionActive, isPageVisible]);
+  }, [controller, effectiveSessionId, sessionActive, isPageVisible]);
 
   const handleCreateSession = () => {
       if (!createSession) return;
