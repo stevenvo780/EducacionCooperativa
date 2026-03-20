@@ -165,9 +165,9 @@ interface ViewModeToggleProps {
 
 function ViewModeToggle({ mode, onChange }: ViewModeToggleProps) {
   const modes: { key: OutputViewMode; icon: React.ReactNode; label: string }[] = [
-    { key: 'steps', icon: <Terminal className="w-3 h-3" />, label: 'Texto' },
     { key: 'graphic', icon: <Eye className="w-3 h-3" />, label: 'Visual' },
-    { key: 'json', icon: <Code2 className="w-3 h-3" />, label: 'JSON' }
+    { key: 'json', icon: <Code2 className="w-3 h-3" />, label: 'JSON' },
+    { key: 'steps', icon: <Terminal className="w-3 h-3" />, label: 'Texto' }
   ];
 
   return (
