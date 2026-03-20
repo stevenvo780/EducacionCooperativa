@@ -1135,7 +1135,7 @@ export default function MosaicEditor({
   }, [semanticSelection]);
 
   const handleConfirmDefineConcept = useCallback(() => {
-    if (!defineConceptDraft || !semanticSelection) return;
+    if (!defineConceptDraft) return;
     void runSemanticAction('define-concept', () => {
       const payload = getSemanticPayload(defineConceptDraft.selectionText);
       const nextState = registerConceptFromSelection(
@@ -1155,7 +1155,7 @@ export default function MosaicEditor({
       clearSemanticSelection();
       setDefineConceptDraft(null);
     });
-  }, [clearSemanticSelection, companionStDocId, defineConceptDraft, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+  }, [clearSemanticSelection, companionStDocId, defineConceptDraft, getSemanticPayload, runSemanticAction, semanticStoreContext, updateSemanticState]);
 
   const handleSaveAsSnippet = useCallback(() => {
     if (!semanticSelection) return;
