@@ -124,7 +124,7 @@ const SnippetCard = React.memo(SnippetCardInner);
 /**
  * Modal para la creación y edición de snippets.
  */
-function SnippetEditorModal({
+export function SnippetEditorModal({
   initial,
   onSave,
   onCancel
