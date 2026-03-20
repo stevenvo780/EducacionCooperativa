@@ -58,7 +58,7 @@ export default function STDocCodeBlock({
   const [editorOpen, setEditorOpen] = useState(defaultExpanded);
   const [draft, setDraft] = useState(code);
   const [result, setResult] = useState<STEvalResult | null>(null);
-  const [viewMode, setViewMode] = useState<OutputViewMode>('steps');
+  const [viewMode, setViewMode] = useState<OutputViewMode>('graphic');
   const [injectedProfile, setInjectedProfile] = useState(false);
 
   const isRunnable = useMemo(() => runnable ?? canRunAsST(code), [code, runnable]);

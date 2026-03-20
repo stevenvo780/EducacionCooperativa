@@ -246,7 +246,7 @@ export default function STRunner({
   const [replHistoryIdx, setReplHistoryIdx] = useState(-1);
   const [activeTab, setActiveTab] = useState<OutputTab>('output');
   const [currentSymbols, setCurrentSymbols] = useState<SymbolInfo[]>([]);
-  const [viewMode, setViewMode] = useState<OutputViewMode>('steps');
+  const [viewMode, setViewMode] = useState<OutputViewMode>('graphic');
   const [outputHeight, setOutputHeight] = useState(300); // Height of the output panel in pixels
   const [showOutput, setShowOutput] = useState(true);
   const [isResizingOutput, setIsResizingOutput] = useState(false);
