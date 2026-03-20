@@ -2,8 +2,8 @@
  * Genera código ST (.st) a partir del estado semántico del editor.
  *
  * Convierte conceptos, evidencias y relaciones registradas en la
- * Mesa Semántica en bloques `define`, comentarios de evidencia y
- * claims formales que pueden ser verificados por ST.
+ * Mesa Semántica en declaraciones `interpret` y esqueletos de
+ * verificación ejecutables por ST.
  */
 import type { SemanticWorkspaceState } from '@/services/editorSemanticStore';
 
@@ -28,7 +28,7 @@ const escapeSTString = (text: string): string =>
 /** Genera el bloque de encabezado. */
 const buildHeader = (docName: string): string => [
   `// ═══════════════════════════════════════════════════════`,
-  `// Definiciones formales ST`,
+  `// Interpretaciones ST`,
   `// Generado desde: ${docName}`,
   `// Fecha: ${new Date().toISOString().split('T')[0]}`,
   `// ═══════════════════════════════════════════════════════`,
@@ -37,7 +37,7 @@ const buildHeader = (docName: string): string => [
   ''
 ].join('\n');
 
-/** Genera bloques `define` para cada concepto. */
+/** Genera declaraciones `interpret` para cada concepto semántico. */
 const buildConceptDefines = (
   concepts: SemanticWorkspaceState['concepts']
 ): string => {
@@ -51,14 +51,14 @@ const buildConceptDefines = (
   concepts.forEach((concept) => {
     const id = toSTIdentifier(concept.title);
     const desc = escapeSTString(concept.excerpt || concept.title);
-    lines.push(`define ${id} := ${id} @ "${desc}"`);
+    lines.push(`interpret "${desc}" as ${id}`);
     lines.push('');
   });
 
   return lines.join('\n');
 };
 
-/** Genera sección de evidencias como comentarios + claims. */
+/** Genera sección de evidencias como comentarios + interpret. */
 const buildEvidenceSection = (
   fragments: SemanticWorkspaceState['fragments']
 ): string => {
@@ -75,7 +75,7 @@ const buildEvidenceSection = (
     const text = escapeSTString(ev.excerpt || ev.text).slice(0, 120);
     const origin = ev.docName || 'Documento';
     lines.push(`// [${origin}] ${text}`);
-    lines.push(`define ${id} := ${id} @ "${text}"`);
+    lines.push(`interpret "${text}" as ${id}`);
     lines.push('');
   });
 

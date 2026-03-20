@@ -98,21 +98,20 @@ const keywordInfo: Record<string, HoverData> = {
   afirmacion:  { title: 'afirmacion (→ claim)', description: 'Alias en español de claim. Declara una afirmación con soporte y confianza.', example: 'afirmacion c1 = p & q', category: 'alias' },
   logic:       { title: 'logic', description: 'Activa el perfil lógico del script ST.', example: 'logic classical.propositional', category: 'keyword' },
   logica:      { title: 'logica (→ logic)', description: 'Alias en español de logic. Activa el perfil lógico del script ST.', example: 'logica classical.propositional', category: 'alias' },
-  // v3: define, unfold, fold, source, interpret, glossary, description
-  define:      { title: 'define', description: 'Declara una macro semántica expandible con unfold y plegable con fold. Puede incluir parámetros y una descripción con @.', example: 'define Mortal(x) := Humano(x) -> Muere(x) @ "mortalidad"', category: 'keyword' },
+  define:      { title: 'define', description: 'Declara una macro semántica nombrada, expandible con unfold y plegable con fold. Acepta parámetros. La descripción va en la línea siguiente con description "...".', example: 'define Mortal(x) := Humano(x) -> Muere(x)\ndescription "mortalidad humana"', category: 'keyword' },
   definir:     { title: 'definir (→ define)', description: 'Alias en español de define.', example: 'definir Mortal(x) := Humano(x) -> Muere(x)', category: 'alias' },
-  unfold:      { title: 'unfold', description: 'Expande una definición (define) en una fórmula, verificando la expansión.', example: 'unfold Mortal(Sócrates)', category: 'keyword' },
-  desplegar:   { title: 'desplegar (→ unfold)', description: 'Alias en español de unfold.', example: 'desplegar Mortal(Sócrates)', category: 'alias' },
-  fold:        { title: 'fold', description: 'Contrae una fórmula expandida de vuelta a su forma definida.', example: 'fold Humano(s) -> Muere(s)', category: 'keyword' },
-  plegar:      { title: 'plegar (→ fold)', description: 'Alias en español de fold.', example: 'plegar Humano(s) -> Muere(s)', category: 'alias' },
-  source:      { title: 'source', description: 'Declara una fuente bibliográfica o académica con campos clave-valor.', example: 'source Kant2024 {\n  author: "I. Kant",\n  year: 2024\n}', category: 'keyword' },
-  fuente:      { title: 'fuente (→ source)', description: 'Alias en español de source.', example: 'fuente Kant2024 {\n  author: "I. Kant",\n  year: 2024\n}', category: 'alias' },
-  interpret:   { title: 'interpret', description: 'Asigna una lectura formal (fórmula) a un fragmento de texto o pasaje.', example: 'interpret "todo humano es mortal" as forall x (H(x) -> M(x))', category: 'keyword' },
-  interpretar: { title: 'interpretar (→ interpret)', description: 'Alias en español de interpret.', example: 'interpretar "todo humano es mortal" como paratodo x (H(x) -> M(x))', category: 'alias' },
-  glossary:    { title: 'glossary', description: 'Muestra el glosario de todas las definiciones (define) activas en el script.', example: 'glossary', category: 'keyword' },
+  unfold:      { title: 'unfold', description: 'Expande una definición en su fórmula cuerpo y la verifica.', example: 'unfold Mortal', category: 'keyword' },
+  desplegar:   { title: 'desplegar (→ unfold)', description: 'Alias en español de unfold.', example: 'desplegar Mortal', category: 'alias' },
+  fold:        { title: 'fold', description: 'Contrae una fórmula de vuelta a su nombre de definición si coincide.', example: 'fold (P -> Q)', category: 'keyword' },
+  plegar:      { title: 'plegar (→ fold)', description: 'Alias en español de fold.', example: 'plegar (P -> Q)', category: 'alias' },
+  source:      { title: 'source', description: 'Declara una fuente bibliográfica. Los campos van sin colons: author, work, year, url, section.', example: 'source Kant {\n  author "I. Kant"\n  year 1781\n}', category: 'keyword' },
+  fuente:      { title: 'fuente (→ source)', description: 'Alias en español de source.', example: 'fuente Kant {\n  author "I. Kant"\n  year 1781\n}', category: 'alias' },
+  interpret:   { title: 'interpret', description: 'Vincula texto natural a una fórmula lógica. El vínculo queda registrado en el glosario.', example: 'interpret "todo humano es mortal" as P -> Q', category: 'keyword' },
+  interpretar: { title: 'interpretar (→ interpret)', description: 'Alias en español de interpret.', example: 'interpretar "todo humano es mortal" como P -> Q', category: 'alias' },
+  glossary:    { title: 'glossary', description: 'Muestra el glosario de definiciones, fuentes e interpretaciones activas.', example: 'glossary', category: 'keyword' },
   glosario:    { title: 'glosario (→ glossary)', description: 'Alias en español de glossary.', example: 'glosario', category: 'alias' },
-  description: { title: 'description (@)', description: 'Agrega una descripción en lenguaje natural a un define mediante el operador @.', example: 'define F(x) := P(x) @ "propiedad fundamental"', category: 'keyword' },
-  descripcion: { title: 'descripcion (→ description)', description: 'Alias en español de description.', example: 'definir F(x) := P(x) @ "propiedad fundamental"', category: 'alias' }
+  description: { title: 'description', description: 'Agrega una descripción en lenguaje natural a la definición inmediatamente anterior.', example: 'define F(x) := P(x)\ndescription "propiedad fundamental"', category: 'keyword' },
+  descripcion: { title: 'descripcion (→ description)', description: 'Alias en español de description.', example: 'definir F(x) := P(x)\ndescripcion "propiedad fundamental"', category: 'alias' }
 };
 
 // ── Operators ───────────────────────────────────────────────

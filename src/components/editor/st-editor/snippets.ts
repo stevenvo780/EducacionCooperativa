@@ -149,7 +149,6 @@ export const ST_SNIPPETS: Snippet[] = [
     cursorOffset: 11,
     kind: 'snippet'
   },
-  // ── v3: define, source, interpret, glossary ──
   {
     trigger: 'define',
     label: 'define Name(x) := ...',
@@ -160,9 +159,9 @@ export const ST_SNIPPETS: Snippet[] = [
   },
   {
     trigger: 'defined',
-    label: 'define Name(x) := ... @ "desc"',
+    label: 'define Name(x) := ...\ndescription "..."',
     description: 'Definir macro con descripción',
-    body: 'define (x) :=  @ ""',
+    body: 'define (x) := \ndescription ""',
     cursorOffset: 7,
     kind: 'snippet'
   },
@@ -186,7 +185,7 @@ export const ST_SNIPPETS: Snippet[] = [
     trigger: 'source',
     label: 'source Name { ... }',
     description: 'Declarar fuente bibliográfica',
-    body: 'source  {\n  author: "",\n  year: 2024\n}',
+    body: 'source  {\n  author ""\n  year 2024\n}',
     cursorOffset: 7,
     kind: 'snippet'
   },
