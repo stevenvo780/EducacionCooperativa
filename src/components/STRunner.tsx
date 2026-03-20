@@ -8,6 +8,7 @@ import STCodeEditor from '@/components/editor/STCodeEditor';
 import EditorSettingsMenu from '@/components/editor/EditorSettingsMenu';
 import { type EditorConfig, loadConfig, isTouchDeviceProfile } from '@/components/editor/codemirror';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
+import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 
 // ── Constantes ──────────────────────────────────────────────
 
@@ -277,6 +278,14 @@ export default function STRunner({
       cancelIdleTask();
     };
   }, [code, isTouchTablet, mode, runAnalysis]);
+
+  // ── Sync ST definitions to cross-doc registry ──
+  useEffect(() => {
+    const fileId = fileMode?.docName || 'st-runner-scratch';
+    const defs = STDefinitionsRegistry.extractFromSource(code, fileId);
+    STDefinitionsRegistry.setFileDefinitions(fileId, defs);
+    return () => { STDefinitionsRegistry.removeFile(fileId); };
+  }, [code, fileMode?.docName]);
 
   const startResizingOutput = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

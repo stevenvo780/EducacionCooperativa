@@ -36,13 +36,17 @@ export const KEYWORDS = new Set([
   'next', 'until', 'import', 'assume', 'show', 'qed',
   'export', 'theory', 'extends', 'private', 'print', 'set', 'if', 'else', 'for', 'in', 'while', 'fn', 'return',
   'nand', 'nor', 'xor',
+  // v3: definitions, sources, glossary
+  'define', 'unfold', 'fold', 'source', 'interpret', 'glossary', 'description',
   // Aliases en español
   'logica', 'axioma', 'teorema', 'derivar', 'desde', 'verificar',
   'probar', 'contramodelo', 'refutar', 'tabla_verdad', 'sea', 'pasaje',
   'formalizar', 'como', 'afirmacion', 'soporte', 'confianza', 'contexto',
   'mostrar', 'explicar', 'analizar', 'paratodo', 'existe',
   'siguiente', 'hasta', 'importar', 'asumir', 'demostrar',
-  'exportar', 'teoria', 'extiende', 'privado', 'imprimir', 'asignar', 'si', 'sino', 'para', 'en', 'mientras', 'funcion', 'retornar'
+  'exportar', 'teoria', 'extiende', 'privado', 'imprimir', 'asignar', 'si', 'sino', 'para', 'en', 'mientras', 'funcion', 'retornar',
+  // v3 aliases en español
+  'definir', 'desplegar', 'plegar', 'fuente', 'interpretar', 'glosario', 'descripcion'
 ]);
 
 export const BUILTINS = new Set([
@@ -347,6 +351,14 @@ export function extractDynamicCompletions(code: string): CompletionItem[] {
     const fnMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:fn|funcion)\s+(\w+)\s*\(/i);
     if (fnMatch) {
       items.push({ label: fnMatch[1], kind: 'function', detail: 'función (definida en script)' });
+    }
+    const defineMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:define|definir)\s+(\w+)/i);
+    if (defineMatch) {
+      items.push({ label: defineMatch[1], kind: 'variable', detail: 'define (definido en script)' });
+    }
+    const sourceMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:source|fuente)\s+(\w+)/i);
+    if (sourceMatch) {
+      items.push({ label: sourceMatch[1], kind: 'variable', detail: 'source (definido en script)' });
     }
   }
   return items;

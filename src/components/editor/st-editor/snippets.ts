@@ -148,6 +148,79 @@ export const ST_SNIPPETS: Snippet[] = [
     body: 'export let  = ',
     cursorOffset: 11,
     kind: 'snippet'
+  },
+  // ── v3: define, source, interpret, glossary ──
+  {
+    trigger: 'define',
+    label: 'define Name(x) := ...',
+    description: 'Definir macro semántica expandible',
+    body: 'define (x) := ',
+    cursorOffset: 7, // after "define "
+    kind: 'snippet'
+  },
+  {
+    trigger: 'defined',
+    label: 'define Name(x) := ... @ "desc"',
+    description: 'Definir macro con descripción',
+    body: 'define (x) :=  @ ""',
+    cursorOffset: 7,
+    kind: 'snippet'
+  },
+  {
+    trigger: 'unfold',
+    label: 'unfold ...',
+    description: 'Expandir definición',
+    body: 'unfold ',
+    cursorOffset: 7,
+    kind: 'snippet'
+  },
+  {
+    trigger: 'fold',
+    label: 'fold ...',
+    description: 'Contraer fórmula a su definición',
+    body: 'fold ',
+    cursorOffset: 5,
+    kind: 'snippet'
+  },
+  {
+    trigger: 'source',
+    label: 'source Name { ... }',
+    description: 'Declarar fuente bibliográfica',
+    body: 'source  {\n  author: "",\n  year: 2024\n}',
+    cursorOffset: 7,
+    kind: 'snippet'
+  },
+  {
+    trigger: 'interpret',
+    label: 'interpret "text" as formula',
+    description: 'Interpretar texto como fórmula',
+    body: 'interpret "" as ',
+    cursorOffset: 11, // inside the quotes
+    kind: 'snippet'
+  },
+  {
+    trigger: 'glossary',
+    label: 'glossary',
+    description: 'Mostrar glosario de definiciones activas',
+    body: 'glossary',
+    cursorOffset: 8,
+    kind: 'snippet'
+  },
+  {
+    trigger: 'rglossary',
+    label: 'render glossary',
+    description: 'Renderizar glosario completo',
+    body: 'render glossary',
+    cursorOffset: 15,
+    kind: 'snippet'
+  },
+  {
+    trigger: 'ranalysis',
+    label: 'render analysis',
+    description: 'Renderizar análisis completo del script',
+    body: 'render analysis',
+    cursorOffset: 15,
+    kind: 'snippet'
   }
 ];
 

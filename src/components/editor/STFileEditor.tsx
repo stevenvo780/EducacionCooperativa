@@ -5,6 +5,7 @@ import STRunner from '../STRunner';
 import { fetchDocumentRawApi, updateDocumentApi } from '@/services/dashboardApi';
 import { useTerminal } from '@/context/TerminalContext';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { Loader2 } from 'lucide-react';
 
 interface STFileEditorProps {
@@ -148,6 +149,19 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
     setDirty(true);
     scheduleAutoSave(value);
   }, [scheduleAutoSave]);
+
+  // ── Sync ST definitions to cross-doc registry ──
+  useEffect(() => {
+    if (content) {
+      const fileId = docName || docId;
+      const defs = STDefinitionsRegistry.extractFromSource(content, fileId);
+      STDefinitionsRegistry.setFileDefinitions(fileId, defs);
+    }
+    return () => {
+      const fileId = docName || docId;
+      STDefinitionsRegistry.removeFile(fileId);
+    };
+  }, [content, docId, docName]);
 
   // ── Manual save (Ctrl+S) ──
   const handleSave = useCallback(async () => {
