@@ -66,6 +66,7 @@ import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { useMarkdownLinter } from '@/hooks/useMarkdownLinter';
+import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
 import { normalizePath } from '@/lib/folder-utils';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
@@ -173,7 +174,8 @@ export default function MosaicEditor({
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [rawScrollPos, setRawScrollPos] = useState({ top: 0, left: 0 });
 
-  const { diagnostics: markdownDiagnostics } = useMarkdownLinter(statsContent);
+  const { stDefinitionsRule } = useSTDefinitionsLinter();
+  const { diagnostics: markdownDiagnostics } = useMarkdownLinter(statsContent, [stDefinitionsRule]);
 
   const toggleCompactMenu = useCallback(() => {
     if (!showCompactMenu && menuBtnRef.current) {
