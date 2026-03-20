@@ -101,26 +101,50 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
                     const underline = document.createElement('div');
                     underline.className = 'mdx-linter-marker group pointer-events-auto';
 
+                    const isSTRef = d.source === 'ST-Definitions';
                     const borderColor = d.severity === 'error' ? '#ef4444' :
                                        d.severity === 'warning' ? '#f59e0b' :
-                                       '#3b82f6';
+                                       isSTRef ? '#06b6d4' : '#3b82f6';
 
                     underline.style.position = 'absolute';
                     underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
                     underline.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
                     underline.style.width = `${rect.width}px`;
-                    underline.style.height = '2px';
-                    underline.style.backgroundColor = borderColor;
                     underline.style.cursor = 'help';
                     underline.style.transition = 'opacity 0.2s';
+
+                    if (isSTRef) {
+                      // Dotted cyan underline + subtle background for ST references
+                      underline.style.height = '0px';
+                      underline.style.borderBottom = '2px dotted #06b6d4';
+                      underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 3}px`;
+                      // Also add a soft highlight background
+                      const bg = document.createElement('div');
+                      bg.style.position = 'absolute';
+                      bg.style.top = `${rect.top - editableRect.top + editable.scrollTop}px`;
+                      bg.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
+                      bg.style.width = `${rect.width}px`;
+                      bg.style.height = `${rect.height}px`;
+                      bg.style.backgroundColor = 'rgba(6, 182, 212, 0.08)';
+                      bg.style.borderRadius = '2px';
+                      bg.style.pointerEvents = 'none';
+                      container.appendChild(bg);
+                    } else {
+                      underline.style.height = '2px';
+                      underline.style.backgroundColor = borderColor;
+                    }
 
                     // Tooltip Root
                     const tooltip = document.createElement('div');
                     tooltip.className = 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded shadow-xl p-2 z-[100] min-w-[200px] max-w-[300px] pointer-events-none';
 
+                    const isSTDef = d.source === 'ST-Definitions';
                     const header = document.createElement('div');
                     header.className = 'flex items-center gap-2 mb-1';
-                    header.innerHTML = `
+                    header.innerHTML = isSTDef ? `
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">📐 ST Reference</span>
+                        <span class="text-[10px] text-slate-500 ml-auto">${d.source}</span>
+                    ` : `
                         <span class="text-[10px] font-bold uppercase tracking-wider ${
                             d.severity === 'error' ? 'text-red-400' :
                             d.severity === 'warning' ? 'text-amber-400' :

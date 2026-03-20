@@ -121,42 +121,60 @@ export function LinterOverlay({
           width = charWidth * 3;
         }
 
+        const isSTRef = 'source' in d && d.source === 'ST-Definitions';
         const borderColor = d.severity === 'error' ? '#ef4444'
                            : d.severity === 'warning' ? '#f59e0b'
-                           : '#3b82f6';
+                           : isSTRef ? '#06b6d4' : '#3b82f6';
 
         const severityColor = d.severity === 'error' ? 'rgba(239, 68, 68, 0.4)'
                              : d.severity === 'warning' ? 'rgba(245, 158, 11, 0.4)'
-                             : 'rgba(59, 130, 246, 0.4)';
+                             : isSTRef ? 'rgba(6, 182, 212, 0.15)' : 'rgba(59, 130, 246, 0.4)';
 
         const quickFixes = generateQuickFixes(d, content);
 
         return (
-          <div
-            key={i}
-            className="absolute group pointer-events-auto"
-            style={{
-              top,
-              left,
-              width: Math.max(width, 4),
-              height: 2,
-              backgroundColor: borderColor,
-              boxShadow: `0 1px 2px ${severityColor}`,
-              cursor: 'help'
-            }}
-          >
+          <React.Fragment key={i}>
+            {/* Soft background highlight for ST references */}
+            {isSTRef && (
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  top: (line - 1) * lineHeight + paddingTop - scrollTop,
+                  left,
+                  width: Math.max(width, 4),
+                  height: lineHeight,
+                  backgroundColor: 'rgba(6, 182, 212, 0.06)',
+                  borderRadius: '2px'
+                }}
+              />
+            )}
+            <div
+              className="absolute group pointer-events-auto"
+              style={{
+                top,
+                left,
+                width: Math.max(width, 4),
+                height: isSTRef ? 0 : 2,
+                backgroundColor: isSTRef ? 'transparent' : borderColor,
+                borderBottom: isSTRef ? `2px dotted ${borderColor}` : 'none',
+                boxShadow: isSTRef ? 'none' : `0 1px 2px ${severityColor}`,
+                cursor: 'help'
+              }}
+            >
             {/* Tooltip */}
             <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100] min-w-[220px] max-w-[320px]">
               <div className="flex items-center gap-2 mb-1">
-                {d.severity === 'error' ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" /> :
+                {isSTRef ? <span className="text-sm">📐</span> :
+                 d.severity === 'error' ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" /> :
                  d.severity === 'warning' ? <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" /> :
                  <Info className="w-3 h-3 text-blue-400 flex-shrink-0" />}
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                  isSTRef ? 'text-cyan-400' :
                   d.severity === 'error' ? 'text-red-400' :
                   d.severity === 'warning' ? 'text-amber-400' :
                   'text-blue-400'
                 }`}>
-                  {d.severity}
+                  {isSTRef ? 'ST Reference' : d.severity}
                 </span>
                 {'source' in d && <span className="text-[10px] text-slate-500 ml-auto">{d.source}</span>}
               </div>
@@ -190,6 +208,7 @@ export function LinterOverlay({
               )}
             </div>
           </div>
+          </React.Fragment>
         );
       })}
     </div>
