@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
-import { buildStoragePath, buildStoragePrefix, ensureMarkdownFileName, sanitizeFileName, getStorageBaseName } from '@/lib/storage-path';
+import { buildStoragePath, buildStoragePrefix, ensureTextFileName, sanitizeFileName, getStorageBaseName } from '@/lib/storage-path';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         const nextName = typeof body.name === 'string' ? body.name : existingName;
         const nextFileName = isFileDoc
             ? sanitizeFileName(nextName || 'archivo')
-            : ensureMarkdownFileName(nextName || 'Sin titulo');
+            : ensureTextFileName(nextName || 'Sin titulo');
 
         let storagePath = existingStoragePath;
         let targetStoragePath = storagePath;
@@ -130,8 +130,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
             const bucket = adminStorage.bucket();
             if (bucket.name && storagePath) {
                 try {
+                    // Determinar contentType según extensión del storagePath
+                    const storageExt = (storagePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase();
+                    const isMarkdownStorage = storageExt === '.md' || storageExt === '.markdown';
+                    const storageContentType = isMarkdownStorage ? 'text/markdown' : (
+                        typeof existingData?.mimeType === 'string' ? existingData.mimeType : 'text/plain'
+                    );
                     await bucket.file(storagePath).save(body.content, {
-                        contentType: 'text/markdown',
+                        contentType: storageContentType,
                         metadata: { ownerId: existingOwnerId }
                     });
                 } catch (error) {
