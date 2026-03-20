@@ -20,17 +20,35 @@ function stToCMSeverity(severity: string): 'error' | 'warning' | 'info' {
   return 'info';
 }
 
-function convertDiagnostics(doc: { toString: () => string; line: (n: number) => { from: number; to: number } }, diags: STDiagnostic[]): CMDiagnostic[] {
+function clampPosition(position: number, min: number, max: number): number {
+  return Math.max(min, Math.min(position, max));
+}
+
+function convertDiagnostics(
+  doc: { toString: () => string; line: (n: number) => { from: number; to: number } },
+  diags: STDiagnostic[]
+): CMDiagnostic[] {
   const text = doc.toString();
+  const lineCount = text.split('\n').length;
   const cmDiags: CMDiagnostic[] = [];
 
   for (const d of diags) {
-    const lineNum = Math.max(1, Math.min(d.line ?? 1, text.split('\n').length));
+    const lineNum = clampPosition(d.line ?? 1, 1, lineCount);
+    const endLineNum = clampPosition(d.endLine ?? lineNum, 1, lineCount);
+
     try {
       const line = doc.line(lineNum);
+      const endLine = doc.line(endLineNum);
+      const startColumn = clampPosition((d.column ?? 1) - 1, 0, Math.max(0, line.to - line.from));
+      const endColumn = clampPosition(
+        (d.endColumn ?? d.column ?? 1) - 1,
+        startColumn + 1,
+        Math.max(startColumn + 1, endLine.to - endLine.from)
+      );
+
       cmDiags.push({
-        from: line.from,
-        to: line.to,
+        from: line.from + startColumn,
+        to: endLine.from + endColumn,
         severity: stToCMSeverity(d.severity),
         message: d.message,
         source: 'st-lang'

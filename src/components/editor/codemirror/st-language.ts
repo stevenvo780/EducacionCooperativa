@@ -6,7 +6,7 @@
  * Incluye indentación inteligente para bloques ST (proof/qed, etc.)
  */
 
-import { StreamLanguage, StringStream, LanguageSupport, indentService } from '@codemirror/language';
+import { StreamLanguage, StringStream, LanguageSupport, indentService, foldService } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import { KEYWORDS, BUILTINS, PROFILES } from '../st-editor/tokenizer';
 
@@ -226,9 +226,54 @@ const stIndentService = indentService.of((context, pos) => {
   return null; // Fall back to default
 });
 
+const stFoldService = foldService.of((state, lineStart, lineEnd) => {
+  const doc = state.doc;
+  const line = doc.lineAt(lineStart);
+  const text = line.text;
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith('//')) {
+    let endLine = line.number;
+    while (endLine < doc.lines && doc.line(endLine + 1).text.trim().startsWith('//')) {
+      endLine += 1;
+    }
+
+    if (endLine > line.number) {
+      return { from: line.to, to: doc.line(endLine).to };
+    }
+  }
+
+  if (trimmed.startsWith('/*')) {
+    const closingIndex = doc.sliceString(line.to, doc.length).indexOf('*/');
+    if (closingIndex >= 0) {
+      return { from: line.from + text.indexOf('/*') + 2, to: line.to + closingIndex + 2 };
+    }
+  }
+
+  const openBraceIndex = text.indexOf('{');
+  if (openBraceIndex >= 0) {
+    let depth = 0;
+    for (let position = line.from + openBraceIndex; position < doc.length; position += 1) {
+      const ch = doc.sliceString(position, position + 1);
+      if (ch === '{') depth += 1;
+      if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          return {
+            from: line.from + openBraceIndex + 1,
+            to: position
+          };
+        }
+      }
+    }
+  }
+
+  return null;
+});
+
 /**
  * Full language support for ST files in CodeMirror 6.
  */
 export function stLanguageSupport(): LanguageSupport {
-  return new LanguageSupport(stLanguage, [stIndentService]);
+  return new LanguageSupport(stLanguage, [stIndentService, stFoldService]);
 }

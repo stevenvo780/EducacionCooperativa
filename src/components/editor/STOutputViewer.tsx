@@ -298,33 +298,31 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-/** Tabla de verdad visual (soporta clásica V/F y Belnap T/F/B/N) */
-function TruthTableView({ table }: { table: TruthTableResult }) {
-  // Detectar si es Belnap (4 valores con resultados string)
-  const isBelnap = table.rows.length > 0 && typeof table.rows[0].result === 'string'
-    && ['T', 'F', 'B', 'N'].includes(table.rows[0].result as string);
-
-  const belnapDesignated = new Set(['T', 'B']);
-
-  function belnapColor(val: string): string {
-    switch (val) {
+function truthValueColor(value: unknown, isBelnap: boolean): string {
+  if (isBelnap && typeof value === 'string') {
+    switch (value) {
       case 'T': return 'text-emerald-400';
       case 'F': return 'text-red-400';
       case 'B': return 'text-amber-400';
       case 'N': return 'text-slate-400';
-      default: return val ? 'text-emerald-400' : 'text-red-400';
+      default: return 'text-slate-300';
     }
   }
 
-  function belnapLabel(val: string): string {
-    switch (val) {
-      case 'T': return 'T (verdadero)';
-      case 'F': return 'F (falso)';
-      case 'B': return 'B (ambos)';
-      case 'N': return 'N (ninguno)';
-      default: return String(val);
-    }
-  }
+  return value ? 'text-emerald-400' : 'text-red-400';
+}
+
+function truthValueLabel(value: unknown, isBelnap: boolean): string {
+  if (isBelnap && typeof value === 'string') return value;
+  return value ? 'V' : 'F';
+}
+
+/** Tabla de verdad visual (soporta clásica V/F y Belnap T/F/B/N) */
+function TruthTableView({ table }: { table: TruthTableResult }) {
+  const isBelnap = table.rows.length > 0 && typeof table.rows[0].result === 'string'
+    && ['T', 'F', 'B', 'N'].includes(table.rows[0].result as string);
+  const hasSubFormulaColumns = Boolean(table.subFormulas?.length && table.subFormulaValues?.length === table.rows.length);
+  const belnapDesignated = new Set(['T', 'B']);
 
   return (
     <div className="overflow-auto">
@@ -352,6 +350,11 @@ function TruthTableView({ table }: { table: TruthTableResult }) {
             Designados: {'{'} T, B {'}'}
           </span>
         )}
+        {table.satisfyingCount !== undefined && table.totalCount !== undefined && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
+            {table.satisfyingCount}/{table.totalCount} verdaderas
+          </span>
+        )}
       </div>
       <table className="text-[11px] font-mono border-collapse">
         <thead>
@@ -362,6 +365,15 @@ function TruthTableView({ table }: { table: TruthTableResult }) {
                 className="px-2 py-1 text-slate-400 font-semibold border-b border-slate-700 text-center"
               >
                 {v}
+              </th>
+            ))}
+            {hasSubFormulaColumns && table.subFormulas?.map((subFormula) => (
+              <th
+                key={subFormula.label}
+                className="px-2 py-1 text-cyan-400 font-semibold border-b border-slate-700 text-center"
+                title={subFormula.label}
+              >
+                {subFormula.label}
               </th>
             ))}
             <th className="px-3 py-1 text-indigo-400 font-bold border-b border-l border-slate-700 text-center">
@@ -377,8 +389,8 @@ function TruthTableView({ table }: { table: TruthTableResult }) {
         <tbody>
           {table.rows.map((row: TruthTableRow, i: number) => {
             const resStr = typeof row.result === 'string' ? row.result : (row.result ? 'T' : 'F');
-            const resBoolean = typeof row.result === 'boolean' ? row.result : row.result === 'T';
             const isDesignated = isBelnap && belnapDesignated.has(resStr);
+            const subFormulaValues = table.subFormulaValues?.[i] ?? {};
 
             return (
               <tr
@@ -389,30 +401,30 @@ function TruthTableView({ table }: { table: TruthTableResult }) {
               >
                 {table.variables.map((v) => {
                   const val = row.valuation[v];
-                  if (isBelnap && typeof val === 'string') {
-                    return (
-                      <td key={v} className={`px-2 py-0.5 text-center ${belnapColor(val)}`}>
-                        {val}
-                      </td>
-                    );
-                  }
                   return (
                     <td
                       key={v}
-                      className={`px-2 py-0.5 text-center ${
-                        val ? 'text-emerald-400' : 'text-red-400'
-                      }`}
+                      className={`px-2 py-0.5 text-center ${truthValueColor(val, isBelnap)}`}
                     >
-                      {val ? 'V' : 'F'}
+                      {truthValueLabel(val, isBelnap)}
+                    </td>
+                  );
+                })}
+                {hasSubFormulaColumns && table.subFormulas?.map((subFormula) => {
+                  const subValue = subFormulaValues[subFormula.label];
+                  return (
+                    <td
+                      key={`${i}-${subFormula.label}`}
+                      className={`px-2 py-0.5 text-center ${truthValueColor(subValue, isBelnap)}`}
+                    >
+                      {truthValueLabel(subValue, isBelnap)}
                     </td>
                   );
                 })}
                 <td
-                  className={`px-3 py-0.5 text-center font-bold border-l border-slate-700 ${
-                    isBelnap ? belnapColor(resStr) : (resBoolean ? 'text-emerald-400' : 'text-red-400')
-                  }`}
+                  className={`px-3 py-0.5 text-center font-bold border-l border-slate-700 ${truthValueColor(row.result, isBelnap)}`}
                 >
-                  {isBelnap ? resStr : (resBoolean ? 'V' : 'F')}
+                  {truthValueLabel(row.result, isBelnap)}
                 </td>
                 {isBelnap && (
                   <td className={`px-2 py-0.5 text-center border-l border-slate-700 ${isDesignated ? 'text-emerald-400' : 'text-slate-600'}`}>
@@ -593,12 +605,180 @@ function FormulaDisplay({ formula, label }: { formula: Formula; label?: string }
   );
 }
 
+function InfoBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300">
+      {label}
+    </span>
+  );
+}
+
+function ResultMetadata({ result }: { result: RunResult }) {
+  const badges = [
+    result.reasoningType ? `Tipo: ${result.reasoningType}` : null,
+    result.reasoningSchema ? `Esquema: ${result.reasoningSchema}` : null,
+    result.formulaClassification ? `Clasificación: ${result.formulaClassification}` : null
+  ].filter(Boolean) as string[];
+
+  if (badges.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {badges.map((badge) => (
+        <InfoBadge key={badge} label={badge} />
+      ))}
+    </div>
+  );
+}
+
+function FormulaAnalysisView({ result }: { result: RunResult }) {
+  const analysis = result.formulaAnalysis;
+  const hasAnalysis = analysis || result.normalForms;
+  if (!hasAnalysis) return null;
+
+  return (
+    <div className="space-y-2">
+      {analysis && (
+        <div>
+          <div className="text-xs font-semibold text-slate-400 mb-1">Análisis de fórmula</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {analysis.mainConnective && <InfoBadge label={`Conectivo: ${analysis.mainConnective}`} />}
+            {analysis.depth !== undefined && <InfoBadge label={`Profundidad: ${analysis.depth}`} />}
+            {analysis.complexity !== undefined && <InfoBadge label={`Complejidad: ${analysis.complexity}`} />}
+            {analysis.atomCount !== undefined && <InfoBadge label={`Átomos: ${analysis.atomCount}`} />}
+          </div>
+          {analysis.connectivesUsed && analysis.connectivesUsed.length > 0 && (
+            <div className="mt-2 text-[11px] text-slate-400">
+              Conectivos usados:{' '}
+              <span className="text-slate-300 font-mono">{analysis.connectivesUsed.join(', ')}</span>
+            </div>
+          )}
+          {analysis.subFormulas && analysis.subFormulas.length > 0 && (
+            <div className="mt-2">
+              <div className="text-[10px] text-slate-500 mb-1">Subfórmulas</div>
+              <div className="flex flex-wrap gap-1">
+                {analysis.subFormulas.map((subFormula) => (
+                  <span
+                    key={subFormula}
+                    className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800/80 text-cyan-300 text-[10px] font-mono"
+                  >
+                    {subFormula}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {result.normalForms && (
+        <div>
+          <div className="text-xs font-semibold text-slate-400 mb-1">Formas normales</div>
+          <div className="space-y-1">
+            {Object.entries(result.normalForms).map(([key, value]) => value ? (
+              <div key={key} className="flex items-start gap-2 text-[11px]">
+                <span className="text-slate-500 uppercase min-w-10">{key}</span>
+                <code className="text-amber-300 font-mono whitespace-pre-wrap">{value}</code>
+              </div>
+            ) : null)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CrossSystemComparisonView({ comparison }: { comparison?: Record<string, string> }) {
+  if (!comparison || Object.keys(comparison).length === 0) return null;
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-slate-400 mb-1">Comparación entre sistemas</div>
+      <div className="space-y-1">
+        {Object.entries(comparison).map(([system, summary]) => (
+          <div key={system} className="flex items-start gap-2 text-[11px]">
+            <span className="text-slate-500 min-w-24">{system}</span>
+            <span className="text-slate-300">{summary}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TableauTraceView({ trace }: { trace?: unknown[] }) {
+  if (!trace || trace.length === 0) return null;
+
+  return (
+    <details className="group">
+      <summary className="text-xs font-semibold text-slate-400 cursor-pointer hover:text-slate-200 transition-colors">
+        Traza de tableau ({trace.length})
+      </summary>
+      <div className="mt-2 space-y-1">
+        {trace.map((step, index) => (
+          <div key={index} className="font-mono text-[11px] text-slate-400 whitespace-pre-wrap">
+            {index + 1}. {typeof step === 'string' ? step : String(step)}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function NotesView({ result }: { result: RunResult }) {
+  if (!result.educationalNote && !result.paradoxWarning) return null;
+
+  return (
+    <div className="space-y-2">
+      {result.educationalNote && (
+        <div className="rounded border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-[11px] text-sky-100 whitespace-pre-wrap">
+          <div className="text-[10px] uppercase tracking-wide text-sky-300 mb-1">Nota pedagógica</div>
+          {result.educationalNote}
+        </div>
+      )}
+      {result.paradoxWarning && (
+        <div className="rounded border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-100 whitespace-pre-wrap">
+          <div className="text-[10px] uppercase tracking-wide text-amber-300 mb-1">Advertencia de paradoja</div>
+          {result.paradoxWarning}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConsoleBlock({ title, text, tone = 'neutral' }: { title: string; text: string; tone?: 'neutral' | 'error' }) {
+  const toneClass = tone === 'error'
+    ? 'border-red-800/40 bg-red-950/20 text-red-200'
+    : 'border-slate-700/40 bg-slate-950/40 text-slate-300';
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClass}`}>
+      <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{title}</div>
+      <div className="font-mono text-[11px] whitespace-pre-wrap leading-4">{text}</div>
+    </div>
+  );
+}
+
 // ── RunResult individual (tarjeta gráfica) ──────────────────
 
 function RunResultCard({ result, index }: { result: RunResult; index: number }) {
   const [expanded, setExpanded] = useState(true);
 
-  const hasRichContent = result.proof || result.truthTable || result.model || result.formula;
+  const hasRichContent = Boolean(
+    result.proof
+    || result.truthTable
+    || result.model
+    || result.formula
+    || result.formulaAnalysis
+    || result.normalForms
+    || result.crossSystemComparison
+    || result.tableauTrace
+    || result.educationalNote
+    || result.paradoxWarning
+    || result.reasoningType
+    || result.reasoningSchema
+    || result.formulaClassification
+  );
 
   return (
     <div className="border border-slate-700/40 rounded-lg overflow-hidden bg-slate-900/30 mb-2">
@@ -640,6 +820,8 @@ function RunResultCard({ result, index }: { result: RunResult; index: number }) 
             <FormulaDisplay formula={result.formula} label="Fórmula:" />
           )}
 
+          <ResultMetadata result={result} />
+
           {/* Tabla de verdad */}
           {result.truthTable && <TruthTableView table={result.truthTable} />}
 
@@ -648,6 +830,14 @@ function RunResultCard({ result, index }: { result: RunResult; index: number }) 
 
           {/* Modelo */}
           {result.model && <ModelView model={result.model} />}
+
+          <FormulaAnalysisView result={result} />
+
+          <CrossSystemComparisonView comparison={result.crossSystemComparison} />
+
+          <TableauTraceView trace={result.tableauTrace} />
+
+          <NotesView result={result} />
 
           {/* Output text adicional si también hay datos ricos */}
           {result.output && hasRichContent && (
@@ -690,9 +880,9 @@ function RunResultCard({ result, index }: { result: RunResult; index: number }) 
 // ── Vista gráfica completa de un STEvalResult ───────────────
 
 function GraphicView({ result }: { result: STEvalResult }) {
-  const { results, stderr } = result;
+  const { results, stderr, stdout } = result;
 
-  if (results.length === 0 && !stderr) {
+  if (results.length === 0 && !stderr && !stdout.trim()) {
     return (
       <div className="text-xs text-slate-500 italic py-2">
         Sin resultados estructurados. Prueba la vista &quot;Texto&quot;.
@@ -702,13 +892,24 @@ function GraphicView({ result }: { result: STEvalResult }) {
 
   return (
     <div className="space-y-1">
+      {results.length === 0 && stdout.trim() && (
+        <ConsoleBlock title="Salida" text={stdout} />
+      )}
       {results.map((r, i) => (
         <RunResultCard key={i} result={r} index={i} />
       ))}
+      {results.length > 0 && stdout.trim() && (
+        <details className="group">
+          <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors">
+            Salida de consola
+          </summary>
+          <div className="mt-2">
+            <ConsoleBlock title="Salida" text={stdout} />
+          </div>
+        </details>
+      )}
       {stderr && (
-        <div className="font-mono text-xs text-red-400 whitespace-pre-wrap border-t border-red-500/20 pt-1 mt-1">
-          {stderr}
-        </div>
+        <ConsoleBlock title="Errores" text={stderr} tone="error" />
       )}
     </div>
   );
