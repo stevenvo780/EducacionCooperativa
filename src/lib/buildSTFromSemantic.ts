@@ -37,7 +37,7 @@ const buildHeader = (docName: string): string => [
   ''
 ].join('\n');
 
-/** Genera declaraciones `interpret` para cada concepto semántico. */
+/** Genera declaraciones `interpret` y `define` para cada concepto semántico. */
 const buildConceptDefines = (
   concepts: SemanticWorkspaceState['concepts']
 ): string => {
@@ -51,7 +51,13 @@ const buildConceptDefines = (
   concepts.forEach((concept) => {
     const id = toSTIdentifier(concept.title);
     const desc = escapeSTString(concept.excerpt || concept.title);
-    lines.push(`interpret "${desc}" as ${id}`);
+    if (concept.definition) {
+      const def = escapeSTString(concept.definition);
+      lines.push(`// Definición: ${def}`);
+      lines.push(`define ${id} = interpret "${desc}" as ${id}`);
+    } else {
+      lines.push(`interpret "${desc}" as ${id}`);
+    }
     lines.push('');
   });
 

@@ -90,3 +90,54 @@ theory Calculadora {
 Calculadora.revisar(3 * 3)
 countermodel 5 < 3
 render theory
+
+// === RECURSIÓN PROFUNDA — TCO ===
+// ST aplica optimización de recursión de cola (TCO): no hay límite rígido de pila
+fn countdown(N) {
+  if valid N <= 0 {
+    return 0
+  }
+  let prev = N - 1
+  return countdown(prev)
+}
+let r1000 = countdown(1000)
+print r1000
+
+fn factorial(N) {
+  if valid N <= 1 {
+    return 1
+  }
+  let prev = N - 1
+  let res = factorial(prev)
+  return N * res
+}
+print factorial(10)
+
+// === LOOPS LARGOS ===
+// Bucles de cientos de iteraciones sin límite rígido
+let acc = 0
+for i in {1,2,3,4,5,6,7,8,9,10} {
+  for j in {1,2,3,4,5,6,7,8,9,10} {
+    set acc = acc + 1
+  }
+}
+print acc
+
+// === DEFINICIONES ARITMÉTICAS ===
+// define funciona también con expresiones aritméticas
+define SumaBase := 2 + 3
+description "Suma de demostración"
+
+define Mayor(x, y) := x > y
+description "x es mayor que y"
+
+check valid SumaBase >= 5
+check valid Mayor(10, 3)
+glossary
+
+// === CAPTURA DE RESULTADOS ARITMÉTICOS ===
+let verif = check valid 3 < 5
+print verif.status  // "valid"
+
+let sat = check satisfiable 10 % 3 > 0
+print sat.status  // "satisfiable"

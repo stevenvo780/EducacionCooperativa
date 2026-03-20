@@ -172,6 +172,11 @@ export default function MosaicEditor({
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
   const [companionStDocId, setCompanionStDocId] = useState<string | null>(null);
+  const [defineConceptDraft, setDefineConceptDraft] = useState<{
+    selectionText: string;
+    title: string;
+    definition: string;
+  } | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
   const semanticSyncRequestIdRef = useRef(0);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -1121,8 +1126,24 @@ export default function MosaicEditor({
 
   const handleDefineConcept = useCallback(() => {
     if (!semanticSelection) return;
+    const text = semanticSelection.text;
+    const compact = text.replace(/\s+/g, ' ').trim();
+    const title = compact.length > 60 ? `${compact.slice(0, 59)}…` : compact;
+    setDefineConceptDraft({ selectionText: text, title, definition: '' });
+  }, [semanticSelection]);
+
+  const handleConfirmDefineConcept = useCallback(() => {
+    if (!defineConceptDraft || !semanticSelection) return;
     void runSemanticAction('define-concept', () => {
-      const nextState = registerConceptFromSelection(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      const payload = getSemanticPayload(defineConceptDraft.selectionText);
+      const nextState = registerConceptFromSelection(
+        semanticStoreContext,
+        payload,
+        {
+          title: defineConceptDraft.title.trim() || undefined,
+          definition: defineConceptDraft.definition.trim() || undefined
+        }
+      );
       updateSemanticState(nextState);
       setShowSemanticWorkbench(true);
       const hint = companionStDocId
@@ -1130,8 +1151,9 @@ export default function MosaicEditor({
         : '📐 Concepto registrado. Genera un archivo ST desde la mesa semántica para formalizarlo.';
       setSemanticNotice(hint);
       clearSemanticSelection();
+      setDefineConceptDraft(null);
     });
-  }, [clearSemanticSelection, companionStDocId, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+  }, [clearSemanticSelection, companionStDocId, defineConceptDraft, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
 
   const handleCreateAnalyticalCard = useCallback(() => {
     if (!semanticSelection) return;
@@ -1937,7 +1959,7 @@ export default function MosaicEditor({
                 <SemanticPanelColumn
                   title="Conceptos"
                   emptyLabel="Aún no defines conceptos desde una selección."
-                  items={semanticOverview.concepts.map((concept) => ({ title: concept.title, subtitle: concept.excerpt, meta: concept.docName }))}
+                  items={semanticOverview.concepts.map((concept) => ({ title: concept.title, subtitle: concept.definition || concept.excerpt, meta: concept.definition ? `${concept.docName} · con def.` : concept.docName }))}
                 />
                 <SemanticPanelColumn
                   title="Fijados"
@@ -2147,6 +2169,60 @@ export default function MosaicEditor({
           onRelateConcept={handleRelateConcept}
           onLinkDocument={handleLinkDocument}
         />
+      )}
+
+      {defineConceptDraft && ReactDOM.createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setDefineConceptDraft(null); }}
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+            <h3 className="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-blue-400" />
+              Definir concepto
+            </h3>
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">Nombre del concepto</label>
+            <input
+              type="text"
+              value={defineConceptDraft.title}
+              onChange={(e) => setDefineConceptDraft({ ...defineConceptDraft, title: e.target.value })}
+              className="mb-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none focus:border-blue-500/60"
+              autoFocus
+            />
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">Definición (opcional)</label>
+            <textarea
+              value={defineConceptDraft.definition}
+              onChange={(e) => setDefineConceptDraft({ ...defineConceptDraft, definition: e.target.value })}
+              placeholder="Escribe una definición propia del concepto…"
+              rows={3}
+              className="mb-4 w-full resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-blue-500/60"
+            />
+            <div className="text-[11px] text-slate-500 mb-4 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2">
+              <span className="font-medium text-slate-400">Selección:</span>{' '}
+              {defineConceptDraft.selectionText.length > 200
+                ? `${defineConceptDraft.selectionText.slice(0, 197)}…`
+                : defineConceptDraft.selectionText}
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDefineConceptDraft(null)}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDefineConcept}
+                disabled={!defineConceptDraft.title.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Definir concepto
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       <style jsx global>{mosaicEditorStyles}</style>

@@ -20,6 +20,7 @@ export interface SemanticFragmentRecord {
 export interface SemanticConceptRecord {
   id: string;
   title: string;
+  definition?: string;
   excerpt: string;
   docId: string | null;
   docName: string;
@@ -79,6 +80,7 @@ const normalizeConcept = (value: unknown): SemanticConceptRecord | null => {
   return {
     id: raw.id,
     title: raw.title,
+    ...(typeof raw.definition === 'string' && raw.definition ? { definition: raw.definition } : {}),
     excerpt: typeof raw.excerpt === 'string' ? raw.excerpt : '',
     docId: typeof raw.docId === 'string' ? raw.docId : null,
     docName: typeof raw.docName === 'string' ? raw.docName : 'Documento',

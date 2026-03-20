@@ -167,3 +167,60 @@ truth_table ((P ⊕ Q) <-> ((P | Q) & !(P & Q)))
 countermodel (P -> Q)
 countermodel (((P -> Q) & Q) -> P)
 render theory
+
+// === DEFINICIONES FORMALES (define · unfold · fold) ===
+set verbose = on
+define Implicacion(x, y) := x -> y
+description "Implicación material parametrizada"
+
+define LeyDeMorgan := !(P & Q) <-> (!P | !Q)
+description "Primera ley de De Morgan"
+
+check valid LeyDeMorgan
+check valid Implicacion(P, P)
+
+unfold LeyDeMorgan
+fold (!(P & Q) <-> (!P | !Q))
+
+// === FUENTES E INTERPRETACIONES ===
+source Frege {
+  author "Gottlob Frege"
+  work "Begriffsschrift"
+  year 1879
+}
+
+interpret "si llueve entonces la calle se moja" as P -> Q
+interpret "está lloviendo" as P
+
+glossary
+render glossary as markdown
+
+// === FÓRMULAS CON MUCHOS ÁTOMOS — DPLL ===
+// ST usa bitset (hasta 26 átomos) y DPLL para 27+, sin límite rígido
+let f21 = A & B & C & D & E & F & G & H & I & J & K & L & M & N & O & P & Q & R & S & T & U
+check satisfiable f21
+
+let f27 = A & B & C & D & E & F & G & H & I & J & K & L & M & N & O & P & Q & R & S & T & U & V & W & X & Y & Z & AA
+check satisfiable f27
+
+// Anidamiento profundo: 20 capas de negación se simplifican
+let deep = !!!!!!!!!!!!!!!!!!!!(P)
+check equivalent deep, P
+
+// === CAPTURA DE RESULTADOS EN VARIABLES ===
+// let var = acción — captura el resultado con campos .status, .formula, .command
+axiom cap1 = P -> Q
+axiom cap2 = P
+let derivacion = derive Q from {cap1, cap2}
+print derivacion
+print derivacion.status   // "provable"
+print derivacion.command  // "derive"
+
+let comprobacion = check valid (P -> P)
+print comprobacion.status  // "valid"
+
+let tabla = truth_table (P & Q)
+print tabla.rows_count  // 4
+print tabla.variables   // [P, Q]
+
+render analysis as markdown

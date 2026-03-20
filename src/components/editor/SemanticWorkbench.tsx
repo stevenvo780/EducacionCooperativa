@@ -97,9 +97,10 @@ export const buildSemanticAtlasMarkdown = ({
     '',
     '### Conceptos activos',
     ...(state.concepts.length > 0
-      ? state.concepts.slice(0, 10).map((concept, index) => (
-          `${index + 1}. **${concept.title}** — ${compactText(concept.excerpt, 120)} _(fuente: ${concept.docName}; relaciones: ${relationCounts.get(concept.id) ?? 0})_`
-        ))
+      ? state.concepts.slice(0, 10).map((concept, index) => {
+          const base = `${index + 1}. **${concept.title}** — ${compactText(concept.excerpt, 120)} _(fuente: ${concept.docName}; relaciones: ${relationCounts.get(concept.id) ?? 0})_`;
+          return concept.definition ? `${base}\n   > Definición: ${compactText(concept.definition, 200)}` : base;
+        })
       : ['- Aun no hay conceptos registrados desde el editor.']),
     '',
     '### Fragmentos fijados',
@@ -188,7 +189,10 @@ export const buildResearchBriefMarkdown = ({
     '',
     '### Conceptos prioritarios',
     ...(state.concepts.length > 0
-      ? state.concepts.slice(0, 5).map((concept) => `- **${concept.title}** — ${compactText(concept.excerpt, 120)}`)
+      ? state.concepts.slice(0, 5).map((concept) => {
+          const base = `- **${concept.title}** — ${compactText(concept.excerpt, 120)}`;
+          return concept.definition ? `${base}\n  > ${compactText(concept.definition, 200)}` : base;
+        })
       : ['- Todavia no hay conceptos priorizados.']),
     '',
     '### Evidencias clave',
@@ -385,8 +389,8 @@ export function SemanticWorkbench({
           icon={<Network className="h-4 w-4" />}
           items={state.concepts.slice(0, 6).map((concept) => ({
             title: concept.title,
-            subtitle: concept.excerpt,
-            meta: concept.docName
+            subtitle: concept.definition || concept.excerpt,
+            meta: concept.definition ? `${concept.docName} · con definición` : concept.docName
           }))}
           emptyLabel="Todavia no hay conceptos registrados."
         />
