@@ -62,12 +62,15 @@ import 'katex/dist/katex.min.css';
 import SnippetGallery from '@/components/SnippetGallery';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
+import { createDocumentApi, updateDocumentApi } from '@/services/dashboardApi';
 import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { useMarkdownLinter } from '@/hooks/useMarkdownLinter';
 import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
 import { normalizePath } from '@/lib/folder-utils';
+import { buildSTFromSemantic, companionSTName } from '@/lib/buildSTFromSemantic';
+import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
@@ -168,6 +171,7 @@ export default function MosaicEditor({
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
+  const [companionStDocId, setCompanionStDocId] = useState<string | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
   const semanticSyncRequestIdRef = useRef(0);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -980,11 +984,20 @@ export default function MosaicEditor({
         throw new Error('No se pudo cargar la lista de documentos');
       }
       const docs = await res.json() as Array<{ id: string; name?: string; folder?: string; type?: string }>;
-      setLinkableDocuments(
-        docs
-          .filter((doc) => doc.id !== roomId && doc.type !== 'folder')
-          .map((doc) => ({ id: doc.id, name: doc.name || 'Documento', folder: doc.folder || '' }))
-      );
+      const filteredDocs = docs
+        .filter((doc) => doc.id !== roomId && doc.type !== 'folder')
+        .map((doc) => ({ id: doc.id, name: doc.name || 'Documento', folder: doc.folder || '' }));
+      setLinkableDocuments(filteredDocs);
+
+      // Detectar companion .st existente
+      const currentName = docName || currentDocMetaRef.current.name || '';
+      if (currentName) {
+        const expectedSTName = companionSTName(currentName);
+        const companion = filteredDocs.find((d) => d.name === expectedSTName);
+        if (companion) {
+          setCompanionStDocId(companion.id);
+        }
+      }
     } catch (error) {
       console.error('Error loading linkable documents:', error);
       setSemanticNotice('No pude cargar documentos para enlazar.');
@@ -1112,10 +1125,13 @@ export default function MosaicEditor({
       const nextState = registerConceptFromSelection(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
       setShowSemanticWorkbench(true);
-      setSemanticNotice('Concepto registrado desde la selección.');
+      const hint = companionStDocId
+        ? '📐 Concepto registrado. Actualiza el archivo ST desde la mesa semántica.'
+        : '📐 Concepto registrado. Genera un archivo ST desde la mesa semántica para formalizarlo.';
+      setSemanticNotice(hint);
       clearSemanticSelection();
     });
-  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+  }, [clearSemanticSelection, companionStDocId, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
 
   const handleCreateAnalyticalCard = useCallback(() => {
     if (!semanticSelection) return;
@@ -1278,6 +1294,51 @@ export default function MosaicEditor({
     }));
     setSemanticNotice('Bitacora de investigacion insertada al documento.');
   }, [appendMarkdownBlock, docName, linkedTasks, semanticItemCount, semanticState]);
+
+  const handleGenerateSTFile = useCallback(async () => {
+    if (semanticState.concepts.length === 0) {
+      setSemanticNotice('Define al menos un concepto para generar el archivo ST.');
+      return;
+    }
+    const currentName = docName || currentDocMetaRef.current.name || 'Documento';
+    const stFileName = companionSTName(currentName);
+    const stContent = buildSTFromSemantic(semanticState, currentName);
+    const folder = currentDocMetaRef.current.folder || 'Material';
+    const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
+
+    try {
+      if (companionStDocId) {
+        // Actualizar el archivo .st existente
+        await updateDocumentApi(companionStDocId, { content: stContent });
+        STDefinitionsRegistry.setFileDefinitions(
+          stFileName,
+          STDefinitionsRegistry.extractFromSource(stContent, stFileName)
+        );
+        setSemanticNotice(`Archivo ${stFileName} actualizado con ${semanticState.concepts.length} definiciones.`);
+      } else {
+        // Crear nuevo archivo .st
+        const result = await createDocumentApi({
+          name: stFileName,
+          content: stContent,
+          type: 'text',
+          ownerId: user?.uid,
+          workspaceId,
+          folder
+        });
+        if (result?.id) {
+          setCompanionStDocId(result.id);
+        }
+        STDefinitionsRegistry.setFileDefinitions(
+          stFileName,
+          STDefinitionsRegistry.extractFromSource(stContent, stFileName)
+        );
+        setSemanticNotice(`Archivo ${stFileName} creado en ${folder}/ con ${semanticState.concepts.length} definiciones.`);
+      }
+    } catch (error) {
+      console.error('Error generating ST file:', error);
+      setSemanticNotice('Error al generar el archivo ST.');
+    }
+  }, [companionStDocId, currentWorkspaceId, docName, semanticState, user?.uid]);
 
   // Obsidian-style inline LaTeX rendering (extracted to hook)
   useKatexOverlayDecorations({ editorShellRef, viewMode });
@@ -1859,6 +1920,14 @@ export default function MosaicEditor({
                     >
                       Insertar bitácora
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateSTFile}
+                      className="rounded-full border border-emerald-700/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                      title={companionStDocId ? 'Actualizar archivo .st companion' : 'Crear archivo .st con definiciones'}
+                    >
+                      {companionStDocId ? '↻ Actualizar ST' : '📐 Generar ST'}
+                    </button>
                   </div>
                 </div>
                 <div className="text-[11px] text-slate-500">{semanticState.concepts.length} conceptos · {semanticState.fragments.length} fragmentos</div>
@@ -2013,6 +2082,8 @@ export default function MosaicEditor({
             onInsertAtlas={handleInsertSemanticAtlas}
             onInsertEvidenceMatrix={handleInsertEvidenceMatrix}
             onInsertResearchBrief={handleInsertResearchBrief}
+            onGenerateSTFile={handleGenerateSTFile}
+            companionSTExists={!!companionStDocId}
           />
         )}
       </div>

@@ -5,6 +5,7 @@ import {
   BookMarked,
   Briefcase,
   ClipboardList,
+  FileCode2,
   Link2,
   Network,
   Pin,
@@ -25,6 +26,8 @@ interface SemanticWorkbenchProps {
   onInsertAtlas: () => void;
   onInsertEvidenceMatrix: () => void;
   onInsertResearchBrief: () => void;
+  onGenerateSTFile?: () => void;
+  companionSTExists?: boolean;
 }
 
 const compactText = (value: string, maxLength = 140) => {
@@ -294,7 +297,9 @@ export function SemanticWorkbench({
   onClose,
   onInsertAtlas,
   onInsertEvidenceMatrix,
-  onInsertResearchBrief
+  onInsertResearchBrief,
+  onGenerateSTFile,
+  companionSTExists
 }: SemanticWorkbenchProps) {
   const pinned = getPinnedFragments(state);
   const evidence = getEvidenceFragments(state);
@@ -355,6 +360,16 @@ export function SemanticWorkbench({
               description="Resume estado, tareas, documentos conectados y proximos pasos sugeridos."
               onClick={onInsertResearchBrief}
             />
+            {onGenerateSTFile && (
+              <WorkbenchAction
+                icon={<FileCode2 className="h-4 w-4" />}
+                title={companionSTExists ? 'Actualizar archivo ST' : 'Generar archivo ST'}
+                description={companionSTExists
+                  ? 'Sincroniza las definiciones formales con los conceptos actuales.'
+                  : 'Crea un archivo .st con definiciones formales de tus conceptos y evidencias.'}
+                onClick={onGenerateSTFile}
+              />
+            )}
           </div>
         </section>
 
