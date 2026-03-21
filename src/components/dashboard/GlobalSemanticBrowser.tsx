@@ -6,6 +6,7 @@ import {
   loadSemanticWorkspaceState,
   saveSemanticWorkspaceState,
   deleteConcept,
+  deleteFragmentsByDocBlockId,
   deleteFragment,
   deleteRelation,
   updateConcept,
@@ -15,11 +16,13 @@ import {
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
   mergeSemanticWorkspaceStates,
+  type SemanticFragmentRecord,
   type SemanticDocumentRef
 } from '@/lib/semantic/workspace-state';
 import type { BoardCard } from '@/components/dashboard/types';
 import { fetchSemanticWorkspaceStateApi, saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
 import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
+import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
 
 interface GlobalSemanticBrowserProps {
   workspaceId?: string;
@@ -75,6 +78,20 @@ export default function GlobalSemanticBrowser({
     });
   }, [ctx]);
 
+  const deleteReferencedFragment = useCallback(async (fragment: SemanticFragmentRecord) => {
+    if (!ctx) return;
+
+    if (fragment.docId && fragment.docBlockId) {
+      await removeSemanticBlockFromDocument(fragment.docId, fragment.docBlockId);
+    }
+
+    const nextState = fragment.docBlockId
+      ? deleteFragmentsByDocBlockId(ctx, fragment.docBlockId)
+      : deleteFragment(ctx, fragment.id);
+
+    await persistAndSync(nextState, [{ docId: fragment.docId, docName: fragment.docName }]);
+  }, [ctx, persistAndSync]);
+
   const handleDeleteConcept = useCallback((conceptId: string) => {
     if (!ctx) return;
     const concept = state.concepts.find((item) => item.id === conceptId);
@@ -85,17 +102,25 @@ export default function GlobalSemanticBrowser({
   const handleDeleteFragment = useCallback((fragmentId: string) => {
     if (!ctx) return;
     const fragment = state.fragments.find((item) => item.id === fragmentId);
-    const nextState = deleteFragment(ctx, fragmentId);
-    void persistAndSync(nextState, fragment ? [{ docId: fragment.docId, docName: fragment.docName }] : []);
-  }, [ctx, persistAndSync, state.fragments]);
+    if (!fragment) return;
+    void deleteReferencedFragment(fragment);
+  }, [ctx, deleteReferencedFragment, state.fragments]);
 
   const handleDeleteRelation = useCallback((relationId: string) => {
     if (!ctx) return;
     const relation = state.relations.find((item) => item.id === relationId);
-    const concept = relation ? state.concepts.find((item) => item.id === relation.conceptId) : undefined;
+    if (!relation) return;
+
+    const relationFragment = state.fragments.find((item) => item.id === relation.fragmentId);
+    if (relationFragment) {
+      void deleteReferencedFragment(relationFragment);
+      return;
+    }
+
+    const concept = state.concepts.find((item) => item.id === relation.conceptId);
     const nextState = deleteRelation(ctx, relationId);
     void persistAndSync(nextState, concept ? [{ docId: concept.docId, docName: concept.docName }] : []);
-  }, [ctx, persistAndSync, state.concepts, state.relations]);
+  }, [ctx, deleteReferencedFragment, persistAndSync, state.concepts, state.fragments, state.relations]);
 
   const handleEditConcept = useCallback((conceptId: string, updates: { title?: string; definition?: string; formula?: string }) => {
     if (!ctx) return;

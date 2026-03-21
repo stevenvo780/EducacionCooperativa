@@ -31,6 +31,10 @@ export interface SemanticSelectionPayload {
   workspaceId: string;
 }
 
+export interface SemanticDocumentReference {
+  docBlockId?: string;
+}
+
 const getStorageKey = ({ workspaceId, userId }: SemanticStoreContext) => (
   `editor-semantic:${workspaceId}:${userId || 'anon'}`
 );
@@ -186,8 +190,27 @@ export const captureAnalyticalFragment = (context: SemanticStoreContext, payload
   return state;
 });
 
+export const captureAnalyticalFragmentWithReference = (
+  context: SemanticStoreContext,
+  payload: SemanticSelectionPayload,
+  reference: SemanticDocumentReference
+) => updateState(context, (state) => {
+  ensureFragment(state, 'evidence', payload, reference);
+  ensureFragment(state, 'pinned', payload, reference);
+  return state;
+});
+
 export const registerSemanticBlock = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
   ensureFragment(state, 'semantic-block', payload);
+  return state;
+});
+
+export const registerSemanticBlockWithReference = (
+  context: SemanticStoreContext,
+  payload: SemanticSelectionPayload,
+  reference: SemanticDocumentReference
+) => updateState(context, (state) => {
+  ensureFragment(state, 'semantic-block', payload, reference);
   return state;
 });
 
@@ -234,6 +257,21 @@ export const attachLinkedDocumentToSelection = (
   return state;
 });
 
+export const attachLinkedDocumentToSelectionWithReference = (
+  context: SemanticStoreContext,
+  payload: SemanticSelectionPayload,
+  linkedDocId: string,
+  linkedDocName: string,
+  reference: SemanticDocumentReference
+) => updateState(context, (state) => {
+  ensureFragment(state, 'relation', payload, {
+    linkedDocId,
+    linkedDocName,
+    ...reference
+  });
+  return state;
+});
+
 /* ── Delete / Edit operations ── */
 
 export const deleteConcept = (context: SemanticStoreContext, conceptId: string) => updateState(context, (state) => {
@@ -253,6 +291,18 @@ export const deleteConcept = (context: SemanticStoreContext, conceptId: string) 
 export const deleteFragment = (context: SemanticStoreContext, fragmentId: string) => updateState(context, (state) => {
   state.fragments = state.fragments.filter(f => f.id !== fragmentId);
   state.relations = state.relations.filter(r => r.fragmentId !== fragmentId);
+  return state;
+});
+
+export const deleteFragmentsByDocBlockId = (context: SemanticStoreContext, docBlockId: string) => updateState(context, (state) => {
+  const fragmentIds = new Set(
+    state.fragments
+      .filter((fragment) => fragment.docBlockId === docBlockId)
+      .map((fragment) => fragment.id)
+  );
+
+  state.fragments = state.fragments.filter((fragment) => fragment.docBlockId !== docBlockId);
+  state.relations = state.relations.filter((relation) => !fragmentIds.has(relation.fragmentId));
   return state;
 });
 

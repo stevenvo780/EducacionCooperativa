@@ -1,12 +1,16 @@
 import {
   attachLinkedDocumentToSelection,
+  attachLinkedDocumentToSelectionWithReference,
+  captureAnalyticalFragmentWithReference,
   createSelectionHash,
+  deleteFragmentsByDocBlockId,
   getRecentSemanticItems,
   loadSemanticWorkspaceState,
   markSelectionAsEvidence,
   pinSelectionFragment,
   registerConceptFromSelection,
   registerSemanticBlock,
+  registerSemanticBlockWithReference,
   relateSelectionToConcept,
   saveSemanticWorkspaceState
 } from '@/services/editorSemanticStore';
@@ -115,6 +119,15 @@ describe('editor semantic store', () => {
 
     const block = registerSemanticBlock(context, payload);
     expect(block.fragments[0].kind).toBe('semantic-block');
+
+    const referencedBlock = registerSemanticBlockWithReference(context, payload, { docBlockId: 'blk-1' });
+    expect(referencedBlock.fragments[0]).toMatchObject({
+      kind: 'semantic-block',
+      docBlockId: 'blk-1'
+    });
+
+    const analytical = captureAnalyticalFragmentWithReference(context, payload, { docBlockId: 'blk-analysis' });
+    expect(analytical.fragments.filter((fragment) => fragment.docBlockId === 'blk-analysis')).toHaveLength(2);
   });
 
   it('relates selections to concepts and linked documents', () => {
@@ -145,6 +158,27 @@ describe('editor semantic store', () => {
       linkedDocId: 'doc-2',
       linkedDocName: 'Referencia'
     });
+
+    const attachedWithReference = attachLinkedDocumentToSelectionWithReference(
+      context,
+      { ...payload, text: 'Documento relacionado con ref' },
+      'doc-3',
+      'Referencia con bloque',
+      { docBlockId: 'blk-link' }
+    );
+    expect(attachedWithReference.fragments[0]).toMatchObject({
+      linkedDocId: 'doc-3',
+      linkedDocName: 'Referencia con bloque',
+      docBlockId: 'blk-link'
+    });
+  });
+
+  it('removes all semantic records tied to a document block id', () => {
+    const withAnalysis = captureAnalyticalFragmentWithReference(context, payload, { docBlockId: 'blk-analysis' });
+    expect(withAnalysis.fragments.some((fragment) => fragment.docBlockId === 'blk-analysis')).toBe(true);
+
+    const cleaned = deleteFragmentsByDocBlockId(context, 'blk-analysis');
+    expect(cleaned.fragments.some((fragment) => fragment.docBlockId === 'blk-analysis')).toBe(false);
   });
 
   it('saves recent items and supports the non-browser fallback id path', () => {

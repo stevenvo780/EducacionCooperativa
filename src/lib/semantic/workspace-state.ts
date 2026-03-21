@@ -11,6 +11,7 @@ export interface SemanticFragmentRecord {
   createdAt: number;
   updatedAt: number;
   selectionHash: string;
+  docBlockId?: string;
   conceptId?: string;
   conceptTitle?: string;
   linkedDocId?: string;
@@ -117,6 +118,7 @@ const normalizeFragment = (value: unknown): SemanticFragmentRecord | null => {
     createdAt: toNumber(raw.createdAt),
     updatedAt: toNumber(raw.updatedAt),
     selectionHash: raw.selectionHash,
+    docBlockId: typeof raw.docBlockId === 'string' ? raw.docBlockId : undefined,
     conceptId: typeof raw.conceptId === 'string' ? raw.conceptId : undefined,
     conceptTitle: typeof raw.conceptTitle === 'string' ? raw.conceptTitle : undefined,
     linkedDocId: typeof raw.linkedDocId === 'string' ? raw.linkedDocId : undefined,
@@ -202,7 +204,8 @@ const getConceptKey = (concept: SemanticConceptRecord) => (
 const getFragmentKey = (fragment: SemanticFragmentRecord) => {
   const conceptKey = fragment.conceptId || '-';
   const linkedDocKey = fragment.linkedDocId || '-';
-  return `${fragment.kind}:${fragment.docId || 'sin-doc'}:${fragment.selectionHash}:${conceptKey}:${linkedDocKey}`;
+  const blockKey = fragment.docBlockId || '-';
+  return `${fragment.kind}:${fragment.docId || 'sin-doc'}:${fragment.selectionHash}:${conceptKey}:${linkedDocKey}:${blockKey}`;
 };
 
 const getRelationKey = (relation: SemanticRelationRecord) => {
