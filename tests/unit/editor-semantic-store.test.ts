@@ -157,12 +157,12 @@ describe('editor semantic store', () => {
     expect(saved.updatedAt).toBe(1_710_000_000_000);
 
     const recent = getRecentSemanticItems({
-      concepts: Array.from({ length: 6 }, (_, index) => ({ id: `c${index}` })) as never[],
+      concepts: Array.from({ length: 6 }, (_, index) => ({ id: `c${index}`, title: `Concepto ${index}` })) as never[],
       fragments: [
-        ...Array.from({ length: 6 }, (_, index) => ({ id: `p${index}`, kind: 'pinned' })),
-        ...Array.from({ length: 6 }, (_, index) => ({ id: `e${index}`, kind: 'evidence' }))
+        ...Array.from({ length: 6 }, (_, index) => ({ id: `p${index}`, kind: 'pinned', selectionHash: `ph${index}` })),
+        ...Array.from({ length: 6 }, (_, index) => ({ id: `e${index}`, kind: 'evidence', selectionHash: `eh${index}` }))
       ] as never[],
-      relations: Array.from({ length: 6 }, (_, index) => ({ id: `r${index}` })) as never[],
+      relations: Array.from({ length: 6 }, (_, index) => ({ id: `r${index}`, conceptId: `c${index}`, fragmentId: `f${index}` })) as never[],
       updatedAt: 0
     });
     expect(recent.concepts).toHaveLength(5);

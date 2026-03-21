@@ -134,7 +134,7 @@ const ensureFragment = (
 export const registerConceptFromSelection = (
   context: SemanticStoreContext,
   payload: SemanticSelectionPayload,
-  options?: { definition?: string; title?: string }
+  options?: { definition?: string; title?: string; logicProfile?: string; formula?: string }
 ) => updateState(context, (state) => {
   const sourceFragment = ensureFragment(state, 'concept', payload);
   const normalizedTitle = options?.title?.trim() || excerptFromText(payload.text, 60);
@@ -147,6 +147,8 @@ export const registerConceptFromSelection = (
     existing.docName = payload.docName;
     existing.sourceFragmentId = sourceFragment.id;
     if (options?.definition) existing.definition = options.definition;
+    if (options?.logicProfile) existing.logicProfile = options.logicProfile;
+    if (options?.formula) existing.formula = options.formula;
     return state;
   }
 
@@ -154,6 +156,8 @@ export const registerConceptFromSelection = (
     id: makeId('concept'),
     title: normalizedTitle,
     ...(options?.definition ? { definition: options.definition } : {}),
+    ...(options?.logicProfile ? { logicProfile: options.logicProfile } : {}),
+    ...(options?.formula ? { formula: options.formula } : {}),
     excerpt: excerptFromText(payload.text),
     docId: payload.docId,
     docName: payload.docName,
