@@ -29,6 +29,8 @@ import {
   consecutiveBlankLinesRule,
   unclosedBracketsRule,
   todoMarkersRule,
+  accentPatternRule,
+  suspiciousPatternsRule,
   ALL_BUILTIN_RULES
 } from '@/lib/markdown-linter/rules';
 import { MarkdownLinterRegistry, _MarkdownLinterRegistryClass, type RuleState } from '@/lib/markdown-linter/registry';
@@ -231,6 +233,98 @@ describe('doubledWordsRule', () => {
 
   it('maneja texto vacío', () => {
     expectClean(doubledWordsRule, '');
+  });
+});
+
+// ── 2.2b accentPatternRule ──────────────────────────────
+
+describe('accentPatternRule', () => {
+  it('tiene metadatos correctos', () => {
+    expect(accentPatternRule.id).toBe('spelling_accent_patterns');
+    expect(accentPatternRule.category).toBe('spelling');
+  });
+
+  it('detecta -cion sin tilde (alimentacion)', () => {
+    const diags = accentPatternRule.check('La alimentacion es importante');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags[0].replacements).toContain('alimentación');
+  });
+
+  it('detecta -sion sin tilde (emision)', () => {
+    const diags = accentPatternRule.check('Una emision de radio');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags[0].replacements).toContain('emisión');
+  });
+
+  it('detecta -gion sin tilde (region)', () => {
+    const diags = accentPatternRule.check('En la region norte');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags[0].replacements).toContain('región');
+  });
+
+  it('NO reporta si ya tiene tilde (investigación)', () => {
+    expectClean(accentPatternRule, 'La investigación fue exitosa');
+  });
+
+  it('ignora bloques de código', () => {
+    expectClean(accentPatternRule, '```\ninvestigacion\n```');
+  });
+
+  it('detecta -logico sin tilde', () => {
+    const diags = accentPatternRule.check('Es un problema biologico');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags.some(d => d.replacements?.some(r => r.includes('lógico')))).toBe(true);
+  });
+
+  it('detecta -grafico sin tilde', () => {
+    const diags = accentPatternRule.check('El analisis demografico muestra');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags.some(d => d.replacements?.some(r => r.includes('gráfico')))).toBe(true);
+  });
+
+  it('maneja texto vacío', () => {
+    expectClean(accentPatternRule, '');
+  });
+});
+
+// ── 2.2c suspiciousPatternsRule ─────────────────────────
+
+describe('suspiciousPatternsRule', () => {
+  it('tiene metadatos correctos', () => {
+    expect(suspiciousPatternsRule.id).toBe('spelling_suspicious_patterns');
+    expect(suspiciousPatternsRule.category).toBe('spelling');
+  });
+
+  it('detecta consonantes dobles inválidas (hh, tt, pp, ff)', () => {
+    const diags = suspiciousPatternsRule.check('La palahra ahhorrar');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('permite consonantes dobles válidas (rr, ll, cc, nn)', () => {
+    expectClean(suspiciousPatternsRule, 'El perro corre por la calle con acción');
+  });
+
+  it('detecta inicio de palabra imposible (nmal)', () => {
+    const diags = suspiciousPatternsRule.check('Esto esta nmal escrito');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('detecta triple letra', () => {
+    const diags = suspiciousPatternsRule.check('errror de escritura');
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags[0].severity).toBe('warning');
+  });
+
+  it('ignora bloques de código', () => {
+    expectClean(suspiciousPatternsRule, '```\nnmal ahhorrar\n```');
+  });
+
+  it('permite palabras válidas con nn (innato, innovar)', () => {
+    expectClean(suspiciousPatternsRule, 'Es un talento innato para innovar');
+  });
+
+  it('maneja texto vacío', () => {
+    expectClean(suspiciousPatternsRule, '');
   });
 });
 
@@ -751,8 +845,8 @@ describe('todoMarkersRule', () => {
 // ═══════════════════════════════════════════════════════════
 
 describe('ALL_BUILTIN_RULES', () => {
-  it('contiene exactamente 17 reglas', () => {
-    expect(ALL_BUILTIN_RULES.length).toBe(17);
+  it('contiene exactamente 19 reglas', () => {
+    expect(ALL_BUILTIN_RULES.length).toBe(19);
   });
 
   it('cada regla tiene un id único', () => {

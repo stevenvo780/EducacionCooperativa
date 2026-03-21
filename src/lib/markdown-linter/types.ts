@@ -19,6 +19,8 @@ export interface LinterDiagnostic {
   endColumn?: number;
   source: string;
   suggestion?: string;
+  /** Replacement text(s) for quick-fix. Each entry is a clickable option. */
+  replacements?: string[];
 }
 
 // ── Categorías de regla ─────────────────────────────────────
