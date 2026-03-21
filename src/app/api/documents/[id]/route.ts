@@ -15,6 +15,7 @@ const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 const urlRefreshThrottle = new Map<string, number>();
 const URL_REFRESH_THROTTLE_MS = 50 * 60 * 1000;
 type StoredDocumentRecord = Record<string, unknown>;
+type RouteContext = { params: Promise<{ id: string }> };
 
 const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: string) => {
     const workspaceId = typeof data?.workspaceId === 'string' ? data.workspaceId : null;
@@ -27,22 +28,22 @@ const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: stri
     return isWorkspaceMember(workspaceId, uid);
 };
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: RouteContext) {
     try {
         const auth = await requireAuth(req);
         if (!auth) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
+        const { id } = await context.params;
+
         if (isInsecure) {
-            const { id } = params;
             const body = await req.json();
             const ok = mockUpdateDoc(id, body as Record<string, unknown>);
             if (!ok) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
             return NextResponse.json({ status: 'success' });
         }
 
-        const { id } = params;
         const body = await req.json();
 
         const docRef = adminDb.collection('documents').doc(id);
@@ -211,20 +212,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: RouteContext) {
     try {
         const auth = await requireAuth(req);
         if (!auth) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
+        const { id } = await context.params;
+
         if (isInsecure) {
-            const doc = mockGetDoc(params.id);
+            const doc = mockGetDoc(id);
             if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
             return NextResponse.json(doc);
         }
 
-        const { id } = params;
         const docSnap = await adminDb.collection('documents').doc(id).get();
         if (!docSnap.exists) {
              return NextResponse.json({ error: 'Document not found' }, { status: 404 });
@@ -263,19 +265,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: RouteContext) {
     try {
         const auth = await requireAuth(req);
         if (!auth) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
+        const { id } = await context.params;
+
         if (isInsecure) {
-            mockDeleteDoc(params.id);
+            mockDeleteDoc(id);
             return NextResponse.json({ status: 'deleted' });
         }
 
-        const { id } = params;
         const docRef = adminDb.collection('documents').doc(id);
         const snap = await docRef.get();
         if (!snap.exists) {

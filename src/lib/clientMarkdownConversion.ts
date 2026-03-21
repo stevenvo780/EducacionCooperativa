@@ -30,11 +30,30 @@ interface PDFJSLib {
   version: string;
 }
 
+type SpreadsheetSheet = unknown;
+
+interface SpreadsheetWorkbook {
+  SheetNames: string[];
+  Sheets: Record<string, SpreadsheetSheet>;
+}
+
+interface SpreadsheetModule {
+  read(data: ArrayBuffer, options: { type: 'array' }): SpreadsheetWorkbook;
+  write(workbook: unknown, options: { type: 'array'; bookType: 'xls' | 'xlsx' }): ArrayBuffer | Uint8Array;
+  utils: {
+    sheet_to_json<T extends unknown[]>(sheet: SpreadsheetSheet, options: { header: 1; defval: string; blankrows: boolean }): T[];
+    aoa_to_sheet(rows: string[][]): SpreadsheetSheet;
+    sheet_to_csv(sheet: SpreadsheetSheet, options: { FS: string }): string;
+    book_new(): unknown;
+    book_append_sheet(workbook: unknown, worksheet: SpreadsheetSheet, name: string): void;
+  };
+}
+
 // Dynamic import cache
 let pdfjsLib: PDFJSLib | null = null;
 let mammoth: typeof import('mammoth') | null = null;
 let TurndownService: typeof import('turndown').default | null = null;
-let xlsxLib: typeof import('xlsx') | null = null;
+let xlsxLib: SpreadsheetModule | null = null;
 
 /**
  * Load PDF.js from CDN (avoids build issues with Next.js/Terser)
@@ -203,11 +222,14 @@ async function docxToMarkdown(file: File, onProgress?: (progress: number) => voi
 }
 
 /**
- * Lazy load SheetJS (xlsx) library
+ * Lazy load SheetJS from the patched CDN build.
  */
-export async function loadXlsx() {
+export async function loadXlsx(): Promise<SpreadsheetModule> {
   if (xlsxLib) return xlsxLib;
-  xlsxLib = await import('xlsx');
+  xlsxLib = await import(
+    /* webpackIgnore: true */
+    'https://cdn.sheetjs.com/xlsx-0.20.2/package/xlsx.mjs'
+  ) as SpreadsheetModule;
   return xlsxLib;
 }
 

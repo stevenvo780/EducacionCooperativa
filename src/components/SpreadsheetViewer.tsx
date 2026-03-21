@@ -367,8 +367,12 @@ export default function SpreadsheetViewer({
       bookType: ext === 'xls' ? 'xls' : 'xlsx'
     });
 
+    const blobBytes = data instanceof ArrayBuffer
+      ? new Uint8Array(data)
+      : Uint8Array.from(data);
+
     return {
-      blob: new Blob([data], { type: mimeType }),
+      blob: new Blob([blobBytes], { type: mimeType }),
       mimeType
     };
   }, [currentSheet, ext, sheets]);

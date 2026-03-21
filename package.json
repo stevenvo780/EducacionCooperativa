@@ -12,7 +12,7 @@
     "test:unit": "vitest run",
     "test:unit:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "lint": "next lint --dir src --dir tests",
+    "lint": "eslint src tests --ext .js,.jsx,.ts,.tsx",
     "lint:all": "npm run lint && npm --prefix services/hub run lint && npm --prefix services/worker run lint"
   },
   "dependencies": {
@@ -44,15 +44,14 @@
     "cors": "^2.8.5",
     "dictionary-es": "^4.0.0",
     "firebase": "^12.8.0",
-    "firebase-admin": "^12.0.0",
+    "firebase-admin": "^13.7.0",
     "framer-motion": "^12.29.2",
     "jszip": "^3.10.1",
     "katex": "^0.16.28",
     "lucide-react": "^0.344.0",
     "mammoth": "^1.11.0",
     "mercadopago": "^2.12.0",
-    "multer": "^1.4.5-lts.1",
-    "next": "14.1.0",
+    "next": "^15.5.14",
     "next-pwa": "^5.6.0",
     "nodemon": "^3.1.11",
     "nspell": "^2.1.5",
@@ -73,25 +72,31 @@
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.6.0",
     "ts-node": "^10.9.2",
-    "turndown": "^7.2.2",
-    "xlsx": "^0.18.5"
+    "turndown": "^7.2.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@types/cors": "^2.8.17",
-    "@types/multer": "^1.4.11",
     "@types/node": "^20.19.30",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@vitest/coverage-v8": "^4.1.0",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
-    "eslint-config-next": "14.1.0",
+    "eslint-config-next": "^15.5.14",
     "jsdom": "^29.0.0",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
     "terser-webpack-plugin": "^5.3.16",
     "typescript": "^5.9.3",
     "vitest": "^4.1.0"
+  },
+  "overrides": {
+    "minimatch": "^3.1.5",
+    "socket.io-parser": "^4.2.6",
+    "underscore": "^1.13.8",
+    "workbox-build": "^7.4.0",
+    "workbox-webpack-plugin": "^7.4.0",
+    "serialize-javascript": "^7.0.4"
   }
 }

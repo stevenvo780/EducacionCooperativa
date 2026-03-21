@@ -40,14 +40,16 @@ const deleteBoardData = async (workspaceId: string) => {
   return true;
 };
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function PATCH(req: NextRequest, context: RouteContext) {
   try {
     const auth = await requireAuth(req);
     if (!auth) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await context.params;
     const body = await req.json();
     const { action, email } = body;
 
@@ -115,14 +117,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
     const auth = await requireAuth(req);
     if (!auth) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await context.params;
     if (!id) {
       return NextResponse.json({ error: 'workspace id is required' }, { status: 400 });
     }

@@ -5,12 +5,15 @@ import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 
 export const runtime = 'nodejs';
+type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: RouteContext) {
     const auth = await requireAuth(req);
     if (!auth) {
         return new Response('No autorizado', { status: 401 });
     }
+
+    const { id } = await context.params;
 
     if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
         const encoder = new TextEncoder();
@@ -27,7 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                 send({
                     type: 'snapshot',
                     data: {
-                        id: params.id,
+                        id,
                         name: 'Documento de Prueba.md',
                         content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
                         type: DocumentType.Text,
@@ -55,7 +58,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         });
     }
 
-    const { id } = params;
     const encoder = new TextEncoder();
 
     const docSnap = await adminDb.collection('documents').doc(id).get();

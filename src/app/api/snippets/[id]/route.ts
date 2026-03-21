@@ -13,16 +13,18 @@ const canAccessSnippet = async (snippet: Record<string, unknown> | undefined, ui
   return isWorkspaceMember(workspaceId, uid);
 };
 
+type RouteContext = { params: Promise<{ id: string }> };
+
 /* ──────────────────────────────────────────────────────────
    PUT /api/snippets/[id]
    Actualiza un snippet existente.
    ────────────────────────────────────────────────────────── */
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: RouteContext) {
   try {
     const auth = await requireAuth(req);
     if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await context.params;
     const body = await req.json();
     const allowed = ['title', 'description', 'markdown', 'category', 'order'] as const;
     const ref = adminDb.collection('snippets').doc(id);
@@ -51,12 +53,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
    DELETE /api/snippets/[id]
    Elimina un snippet.
    ────────────────────────────────────────────────────────── */
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
     const auth = await requireAuth(req);
     if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await context.params;
     const ref = adminDb.collection('snippets').doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
