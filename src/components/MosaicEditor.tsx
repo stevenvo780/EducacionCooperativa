@@ -83,6 +83,7 @@ import {
 } from '@/components/editor/SemanticWorkbench';
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
+import { LinterConfigPanel } from '@/components/mosaic-editor/LinterConfigPanel';
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
   filterSemanticWorkspaceStateByDocument,
@@ -1946,6 +1947,8 @@ export default function MosaicEditor({
             >
               <BookMarked className="h-3.5 w-3.5" />
             </button>
+            <LinterConfigPanel />
+            <span className="w-px h-3 bg-slate-700 mx-1" />
             <span>{stats.words} palabras</span>
             <span>·</span>
             <span>{stats.chars} car.</span>
@@ -2244,6 +2247,7 @@ export default function MosaicEditor({
         <div className="shrink-0 h-7 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-3 text-[11px] text-slate-400">
           <div className="flex items-center gap-3">
             <span>Markdown</span>
+            <LinterConfigPanel />
             <span>{stats.words} palabras</span>
             <span>{stats.chars} car.</span>
           </div>

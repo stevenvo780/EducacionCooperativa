@@ -81,7 +81,11 @@ export function useSTDefinitionsLinter() {
 
   /** Regla de linter que detecta términos ST en markdown */
   const stDefinitionsRule: LinterRule = useMemo(() => ({
+    id: 'semantic_st_definitions',
     name: 'STDefinitions',
+    description: 'Resalta términos definidos en archivos .st del espacio de trabajo.',
+    category: 'semantic' as const,
+    defaultEnabled: true,
     check: (text: string): LinterDiagnostic[] => {
       if (definedNamesMap.size === 0 && naturalPhrases.length === 0) return [];
 
