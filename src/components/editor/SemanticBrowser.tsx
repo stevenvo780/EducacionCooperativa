@@ -23,7 +23,7 @@ import type {
 } from '@/services/editorSemanticStore';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 
-type SemanticTab = 'resumen' | 'conceptos' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
+export type SemanticTab = 'resumen' | 'conceptos' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
 
 const TABS: { key: SemanticTab; label: string; icon: React.ReactNode }[] = [
   { key: 'resumen', label: 'Resumen', icon: <BookMarked className="h-3.5 w-3.5" /> },
@@ -44,6 +44,12 @@ interface SemanticBrowserProps {
   onInsertResearchBrief: () => void;
   onGenerateSTFile?: () => void;
   companionSTExists?: boolean;
+  /** Override the default starting tab. */
+  initialTab?: SemanticTab;
+  /** When true, hide insert/materialise actions (no editor context). */
+  standalone?: boolean;
+  /** When set, the "Archivos ST" tab filters to definitions from this file only. */
+  filterSTFile?: string;
 }
 
 const compactText = (value: string, maxLength = 140) => {
@@ -227,12 +233,13 @@ function RelationCard({ relation, fragment }: { relation: SemanticRelationRecord
 }
 
 /* ── ST Files Section ── */
-function STFilesPanel() {
+function STFilesPanel({ filterFileName }: { filterFileName?: string }) {
   const allFiles = STDefinitionsRegistry.getRegisteredFiles();
   const entries = allFiles.map(fileName => ({
     fileName,
     definitions: STDefinitionsRegistry.getFileDefinitions(fileName)
-  })).filter(e => e.definitions.length > 0);
+  })).filter(e => e.definitions.length > 0)
+    .filter(e => !filterFileName || e.fileName.toLowerCase().includes(filterFileName.toLowerCase()));
 
   if (entries.length === 0) {
     return (
@@ -311,9 +318,12 @@ export function SemanticBrowser({
   onInsertEvidenceMatrix,
   onInsertResearchBrief,
   onGenerateSTFile,
-  companionSTExists
+  companionSTExists,
+  initialTab,
+  standalone,
+  filterSTFile
 }: SemanticBrowserProps) {
-  const [activeTab, setActiveTab] = useState<SemanticTab>('resumen');
+  const [activeTab, setActiveTab] = useState<SemanticTab>(initialTab ?? 'resumen');
   const [searchQuery, setSearchQuery] = useState('');
 
   const evidence = useMemo(() => state.fragments.filter(f => f.kind === 'evidence'), [state.fragments]);
@@ -382,14 +392,16 @@ export function SemanticBrowser({
       <div className="shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider shrink-0 transition"
-            >
-              <ChevronLeftIcon className="w-4 h-4" /> Editor
-            </button>
-            <div className="h-4 w-px bg-slate-700 shrink-0" />
+            {!standalone && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider shrink-0 transition"
+              >
+                <ChevronLeftIcon className="w-4 h-4" /> Editor
+              </button>
+            )}
+            {!standalone && <div className="h-4 w-px bg-slate-700 shrink-0" />}
             <div className="flex items-center gap-2 min-w-0">
               <BookMarked className="h-4 w-4 text-blue-400 shrink-0" />
               <span className="text-sm font-semibold text-slate-200 truncate">Mesa Semántica</span>
@@ -468,6 +480,7 @@ export function SemanticBrowser({
             </div>
 
             {/* Actions */}
+            {!standalone && (
             <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Materializar el trabajo</h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -503,6 +516,7 @@ export function SemanticBrowser({
                 )}
               </div>
             </div>
+            )}
 
             {/* Quick preview of concepts */}
             {state.concepts.length > 0 && (
@@ -531,6 +545,7 @@ export function SemanticBrowser({
             )}
 
             {/* Workflow */}
+            {!standalone && (
             <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/70 p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Flujo recomendado</div>
               <div className="mt-3 grid gap-2 sm:grid-cols-4">
@@ -547,6 +562,7 @@ export function SemanticBrowser({
                 ))}
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -633,7 +649,7 @@ export function SemanticBrowser({
 
         {activeTab === 'archivos' && (
           <div className="max-w-4xl mx-auto">
-            <STFilesPanel />
+            <STFilesPanel filterFileName={filterSTFile} />
           </div>
         )}
       </div>

@@ -17,6 +17,7 @@ const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: f
 const KanbanBoard = dynamic(() => import('@/components/dashboard/KanbanBoard'), { ssr: false });
 const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false });
 const STFileEditor = dynamic(() => import('@/components/editor/STFileEditor'), { ssr: false });
+const GlobalSemanticBrowser = dynamic(() => import('@/components/dashboard/GlobalSemanticBrowser'), { ssr: false });
 
 function isStFileDoc(doc: { name: string }): boolean {
   const lower = doc.name.toLowerCase();
@@ -29,6 +30,7 @@ function isTextSearchableDoc(doc: { type?: string; name: string; mimeType?: stri
     || doc.type === DocumentType.Files
     || doc.type === DocumentType.Board
     || doc.type === DocumentType.STRunner
+    || doc.type === DocumentType.SemanticBrowser
     || isStFileDoc(doc)
   ) {
     return false;
@@ -596,7 +598,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isFileExplorer = doc.type === 'files';
     const isBoard = doc.type === 'board';
     const isStRunner = doc.type === 'st-runner';
-    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && isStFileDoc(doc);
+    const isSemanticBrowser = doc.type === 'semantic-browser';
+    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && isStFileDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
     const dropInfo = dragOverInfo?.tileId === doc.id ? dragOverInfo : null;
@@ -679,6 +682,11 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       />
                   ) : isStRunner ? (
                       <STRunner height="100%" />
+                  ) : isSemanticBrowser ? (
+                      <GlobalSemanticBrowser
+                        workspaceId={currentWorkspaceId}
+                        userId={currentUserId}
+                      />
                   ) : isStFile ? (
                       <STFileEditor
                         docId={doc.id}

@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   AlertCircle,
+  BookMarked,
   BookOpen,
   Briefcase,
   Check,
@@ -57,6 +58,8 @@ interface HeaderBarProps {
   onOpenBoard: () => void;
   isStRunnerOpen: boolean;
   onOpenStRunner: () => void;
+  isSemanticBrowserOpen: boolean;
+  onOpenSemanticBrowser: () => void;
   onOpenQuickSearch: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
@@ -110,6 +113,8 @@ const HeaderBar = ({
   onOpenBoard,
   isStRunnerOpen,
   onOpenStRunner,
+  isSemanticBrowserOpen,
+  onOpenSemanticBrowser,
   onOpenQuickSearch,
   onAcceptInvite,
   onSelectWorkspace,
@@ -541,6 +546,18 @@ const HeaderBar = ({
         >
           <FlaskConical className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">ST</span>
+        </button>
+        <button
+          onClick={onOpenSemanticBrowser}
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
+            isSemanticBrowserOpen
+              ? 'bg-blue-500/15 text-blue-300'
+              : 'text-surface-500 hover:text-blue-400 hover:bg-blue-500/10'
+          }`}
+          title="Mesa Semántica"
+        >
+          <BookMarked className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Semántica</span>
         </button>
         <button
           onClick={openFilesTab}

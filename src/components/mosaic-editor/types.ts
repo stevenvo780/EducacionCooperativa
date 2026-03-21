@@ -1,6 +1,6 @@
 import type React from 'react';
 
-export type ViewMode = 'edit' | 'preview' | 'raw' | 'semantic';
+export type ViewMode = 'edit' | 'preview' | 'raw';
 
 export interface SearchState {
   currentMatch: number;
