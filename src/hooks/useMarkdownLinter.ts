@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { MarkdownLinterRegistry } from '@/lib/markdown-linter/registry';
+import { initSpellEngine, isSpellEngineReady } from '@/lib/markdown-linter/spell-engine';
 import type { LinterDiagnostic, LinterRule } from '@/lib/markdown-linter/types';
 
 // Re-export types for backward compatibility
@@ -37,6 +38,8 @@ function diagnosticsEqual(a: LinterDiagnostic[], b: LinterDiagnostic[]): boolean
  */
 export function useMarkdownLinter(content: string, customRules: LinterRule[] = []) {
   const [diagnostics, setDiagnostics] = useState<LinterDiagnostic[]>([]);
+  const contentRef = useRef(content);
+  contentRef.current = content;
 
   // Reactive: re-render when registry enabled rules change
   const enabledRules = useSyncExternalStore(subscribeRegistry, getRegistrySnapshot, getRegistrySnapshot);
@@ -61,6 +64,25 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     }, 800);
     return () => clearTimeout(timer);
   }, [content, runLint, enabledRules, customRules]);
+
+  useEffect(() => {
+    if (isSpellEngineReady()) return;
+
+    let cancelled = false;
+    initSpellEngine()
+      .then(() => {
+        if (!cancelled) {
+          runLint(contentRef.current);
+        }
+      })
+      .catch(() => {
+        // fail-open: el linter sigue funcionando con reglas locales
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runLint]);
 
   return { diagnostics, runLint };
 }
