@@ -186,7 +186,8 @@ export default function MosaicEditor({
   const [rawScrollPos, setRawScrollPos] = useState({ top: 0, left: 0 });
 
   const { stDefinitionsRule } = useSTDefinitionsLinter();
-  const { diagnostics: markdownDiagnostics } = useMarkdownLinter(statsContent, [stDefinitionsRule]);
+  const linterRules = useMemo(() => [stDefinitionsRule], [stDefinitionsRule]);
+  const { diagnostics: markdownDiagnostics } = useMarkdownLinter(statsContent, linterRules);
 
   const toggleCompactMenu = useCallback(() => {
     if (!showCompactMenu && menuBtnRef.current) {
@@ -211,22 +212,38 @@ export default function MosaicEditor({
   }, [semanticState]);
 
   // Auto-register ST definitions from semantic state so the linter works on page load
+  // Debounced to avoid rebuilds on every small semantic change
+  const prevConceptsHashRef = useRef('');
   useEffect(() => {
     const definedConcepts = semanticState.concepts.filter(c => c.definition);
+    // Hash rápido para detectar cambios reales en las definiciones
+    const hash = definedConcepts.map(c => `${c.id}:${c.definition}`).join('|');
+    if (hash === prevConceptsHashRef.current) return;
+
     const currentName = docName || currentDocMetaRef.current.name || 'Documento';
-    if (definedConcepts.length > 0) {
+    const timer = setTimeout(() => {
+      prevConceptsHashRef.current = hash;
       const stFileName = companionSTName(currentName);
-      const stContent = buildSTFromSemantic(semanticState, currentName);
-      STDefinitionsRegistry.setFileDefinitions(
-        stFileName,
-        STDefinitionsRegistry.extractFromSource(stContent, stFileName)
-      );
-    }
-    return () => {
-      const stFileName = companionSTName(currentName);
-      STDefinitionsRegistry.removeFile(stFileName);
-    };
+      if (definedConcepts.length > 0) {
+        const stContent = buildSTFromSemantic(semanticState, currentName);
+        STDefinitionsRegistry.setFileDefinitions(
+          stFileName,
+          STDefinitionsRegistry.extractFromSource(stContent, stFileName)
+        );
+      } else {
+        STDefinitionsRegistry.removeFile(stFileName);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [semanticState, docName]);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const currentName = docName || currentDocMetaRef.current.name || 'Documento';
+      STDefinitionsRegistry.removeFile(companionSTName(currentName));
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const {
     selection: semanticSelection,

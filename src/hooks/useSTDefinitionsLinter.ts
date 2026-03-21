@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { STDefinitionsRegistry, type STDefinition } from '@/lib/st-definitions-registry';
 import type { LinterRule, LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 
@@ -32,12 +32,20 @@ function kindIcon(kind: STDefinition['kind']): string {
 export function useSTDefinitionsLinter() {
   const [definitions, setDefinitions] = useState<STDefinition[]>([]);
 
+  const prevDefsRef = useRef<STDefinition[]>([]);
   useEffect(() => {
     // Inicializar con definiciones existentes
-    setDefinitions(STDefinitionsRegistry.getAllDefinitions());
+    const initial = STDefinitionsRegistry.getAllDefinitions();
+    prevDefsRef.current = initial;
+    setDefinitions(initial);
 
-    // Suscribirse a cambios
+    // Suscribirse a cambios — con comparación shallow para evitar re-renders innecesarios
     const unsub = STDefinitionsRegistry.subscribe((defs) => {
+      const prev = prevDefsRef.current;
+      if (prev.length === defs.length && prev.every((d, i) => d.name === defs[i].name && d.file === defs[i].file && d.line === defs[i].line)) {
+        return; // sin cambios reales
+      }
+      prevDefsRef.current = defs;
       setDefinitions(defs);
     });
 
