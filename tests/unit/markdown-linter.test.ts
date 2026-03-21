@@ -10,6 +10,28 @@
 
 import { describe, it, expect, beforeEach, vi, type MockInstance } from 'vitest';
 
+vi.mock('@/lib/markdown-linter/spell-engine', () => {
+  const validWords = new Set([
+    'entonces', 'vamos', 'conocer', 'la', 'verdad', 'y', 'cosas', 'linea', 'línea', 'algo', 'es', 'hecho',
+    'texto', 'esta', 'está', 'escrito', 'por', 'calle', 'con', 'accion', 'acción', 'perro', 'corre',
+    'esto', 'de', 'escritura', 'talento', 'para', 'innovar', 'innato'
+  ]);
+
+  const suggestions = new Map<string, string[]>([
+    ['entonses', ['entonces']],
+    ['conoser', ['conocer']],
+    ['haser', ['hacer']],
+    ['haver', ['haber', 'a ver']],
+    ['echo', ['hecho']]
+  ]);
+
+  return {
+    isSpellEngineReady: () => true,
+    isCorrect: (word: string) => validWords.has(word.toLowerCase()),
+    suggest: (word: string) => suggestions.get(word.toLowerCase()) ?? []
+  };
+});
+
 import { getCodeBlockLines, escapeRegex, type LinterDiagnostic, type LinterRule, type RuleCategory } from '@/lib/markdown-linter/types';
 import {
   spellingRule,

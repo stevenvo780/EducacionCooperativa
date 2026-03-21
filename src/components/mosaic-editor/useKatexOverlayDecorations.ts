@@ -266,7 +266,7 @@ export const useKatexOverlayDecorations = ({
       if (!editable) return;
       const container = ensureOverlayContainer(shell);
       if (!container) return;
-      const paragraphs = editable.querySelectorAll('p, [data-lexical-paragraph], h1, h2, h3, h4, h5, h6, li, td, th, blockquote, [data-lexical-text]');
+      const paragraphs = editable.querySelectorAll('p, [data-lexical-paragraph], h1, h2, h3, h4, h5, h6, li, td, th, blockquote');
       const { blocks, blockParagraphs } = collectBlockMath(editable, paragraphs);
       const inlines = collectInlineMath(editable, paragraphs, blockParagraphs);
 
