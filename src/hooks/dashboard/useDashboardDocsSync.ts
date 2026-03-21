@@ -279,6 +279,18 @@ export const useDashboardDocsSync = ({
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;
   }, [currentWorkspace, user, onDocChangeCallback, personalWorkspaceId, scheduleSyncFetch]);
 
+  // Escuchar evento global para refrescar docs (usado por MosaicEditor al crear .st companions)
+  useEffect(() => {
+    const handler = () => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[Sync] agora:docs-changed event received, refreshing…');
+      }
+      void requestDocsRefresh({ force: true, delayMs: 0 });
+    };
+    window.addEventListener('agora:docs-changed', handler);
+    return () => window.removeEventListener('agora:docs-changed', handler);
+  }, [requestDocsRefresh]);
+
   return {
     fetchDocs,
     requestDocsRefresh

@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { mockGetDoc } from '@/lib/insecure-mock-store';
 
 type StoredDocumentRecord = Record<string, unknown>;
+const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
     try {
@@ -13,9 +15,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
-            const mockContent = 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.';
-            return new Response(mockContent, {
+        if (isInsecure) {
+            const doc = mockGetDoc(params.id);
+            const content = doc?.content ?? '';
+            return new Response(content, {
                 headers: { 'Content-Type': 'text/plain; charset=utf-8' }
             });
         }
