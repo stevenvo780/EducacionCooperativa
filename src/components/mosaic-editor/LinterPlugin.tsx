@@ -106,20 +106,17 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
           if (rects.length === 0) return;
 
           Array.from(rects).forEach(rect => {
-            const underline = document.createElement('div');
-            underline.className = 'mdx-linter-marker group pointer-events-auto';
-
             const isSTRef = d.source === 'ST-Definitions';
             const borderColor = d.severity === 'error' ? '#ef4444' :
                                d.severity === 'warning' ? '#f59e0b' :
                                isSTRef ? '#06b6d4' : '#3b82f6';
 
+            /* ── Visual underline (no pointer events) ── */
+            const underline = document.createElement('div');
             underline.style.position = 'absolute';
-            underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
             underline.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
             underline.style.width = `${rect.width}px`;
-            underline.style.cursor = 'help';
-            underline.style.transition = 'opacity 0.2s';
+            underline.style.pointerEvents = 'none';
 
             if (isSTRef) {
               underline.style.height = '0px';
@@ -138,16 +135,33 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
             } else {
               underline.style.height = '2px';
               underline.style.backgroundColor = borderColor;
+              underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
             }
+            container.appendChild(underline);
+
+            /* ── Transparent hit area covering the full text line ── */
+            const hitArea = document.createElement('div');
+            hitArea.className = 'mdx-linter-marker group pointer-events-auto';
+            hitArea.style.position = 'absolute';
+            hitArea.style.top = `${rect.top - editableRect.top + editable.scrollTop}px`;
+            hitArea.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
+            hitArea.style.width = `${rect.width}px`;
+            hitArea.style.height = `${rect.height}px`;
+            hitArea.style.cursor = 'help';
+            hitArea.style.transition = 'opacity 0.2s';
 
             const tooltip = document.createElement('div');
-            tooltip.className = 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded shadow-xl p-2 z-[100] min-w-[200px] max-w-[300px] pointer-events-none';
+            tooltip.className = 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100] min-w-[220px] max-w-[320px] pointer-events-none';
 
             const isSTDef = d.source === 'ST-Definitions';
             const header = document.createElement('div');
             header.className = 'flex items-center gap-2 mb-1';
+
+            const svgRuler = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-cyan-400"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg>';
+
             header.innerHTML = isSTDef ? `
-              <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">📐 ST Reference</span>
+              ${svgRuler}
+              <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">ST Reference</span>
               <span class="text-[10px] text-slate-500 ml-auto">${d.source}</span>
             ` : `
               <span class="text-[10px] font-bold uppercase tracking-wider ${
@@ -167,13 +181,14 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
 
             if (d.suggestion) {
               const sug = document.createElement('div');
-              sug.className = 'mt-1 text-[11px] text-cyan-400 font-medium';
-              sug.innerText = `💡 ${d.suggestion}`;
+              sug.className = 'mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium';
+              const svgBulb = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-px"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>';
+              sug.innerHTML = `${svgBulb}<span>${d.suggestion}</span>`;
               tooltip.appendChild(sug);
             }
 
-            underline.appendChild(tooltip);
-            container.appendChild(underline);
+            hitArea.appendChild(tooltip);
+            container.appendChild(hitArea);
           });
         } catch {
           // ignore range errors

@@ -6,6 +6,7 @@ import {
   Check,
   ClipboardList,
   FileCode2,
+  FileText,
   Link2,
   Network,
   Pencil,
@@ -404,8 +405,8 @@ function FragmentCard({ fragment, onDelete, onEdit }: {
               </span>
             )}
             {fragment.linkedDocName && (
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
-                📄 {fragment.linkedDocName}
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300 inline-flex items-center gap-1">
+                <FileText className="h-2.5 w-2.5" /> {fragment.linkedDocName}
               </span>
             )}
           </div>

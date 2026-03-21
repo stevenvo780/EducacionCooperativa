@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useCallback } from 'react';
-import { AlertCircle, AlertTriangle, Info, Wrench } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Info, Lightbulb, Ruler, Wrench } from 'lucide-react';
 import type { LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import type { Diagnostic as STDiagnostic } from '@stevenvo780/st-lang/api';
 
@@ -148,8 +148,9 @@ export function LinterOverlay({
                 }}
               />
             )}
+            {/* Visual underline — no pointer events */}
             <div
-              className="absolute group pointer-events-auto"
+              className="absolute pointer-events-none"
               style={{
                 top,
                 left,
@@ -157,14 +158,24 @@ export function LinterOverlay({
                 height: isSTRef ? 0 : 2,
                 backgroundColor: isSTRef ? 'transparent' : borderColor,
                 borderBottom: isSTRef ? `2px dotted ${borderColor}` : 'none',
-                boxShadow: isSTRef ? 'none' : `0 1px 2px ${severityColor}`,
+                boxShadow: isSTRef ? 'none' : `0 1px 2px ${severityColor}`
+              }}
+            />
+            {/* Transparent hit area covering full text line */}
+            <div
+              className="absolute group pointer-events-auto"
+              style={{
+                top: (line - 1) * lineHeight + paddingTop - scrollTop,
+                left,
+                width: Math.max(width, 4),
+                height: lineHeight,
                 cursor: 'help'
               }}
             >
             {/* Tooltip */}
             <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100] min-w-[220px] max-w-[320px]">
               <div className="flex items-center gap-2 mb-1">
-                {isSTRef ? <span className="text-sm">📐</span> :
+                {isSTRef ? <Ruler className="w-3 h-3 text-cyan-400 flex-shrink-0" /> :
                  d.severity === 'error' ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" /> :
                  d.severity === 'warning' ? <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" /> :
                  <Info className="w-3 h-3 text-blue-400 flex-shrink-0" />}
@@ -182,8 +193,9 @@ export function LinterOverlay({
                 {d.message}
               </div>
               {'suggestion' in d && d.suggestion && (
-                <div className="mt-1 text-[11px] text-cyan-400 font-medium">
-                  💡 {d.suggestion}
+                <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium">
+                  <Lightbulb className="w-3 h-3 shrink-0 mt-px" />
+                  <span>{d.suggestion}</span>
                 </div>
               )}
 
