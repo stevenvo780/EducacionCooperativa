@@ -69,6 +69,7 @@ import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { useMarkdownLinter, type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
+import { addToPersonalDictionary, getPersonalDictionary } from '@/lib/markdown-linter/spell-engine';
 import { normalizePath } from '@/lib/folder-utils';
 import { buildSTFromSemantic, companionSTName } from '@/lib/buildSTFromSemantic';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
@@ -194,7 +195,7 @@ export default function MosaicEditor({
 
   const { stDefinitionsRule } = useSTDefinitionsLinter();
   const linterRules = useMemo(() => [stDefinitionsRule], [stDefinitionsRule]);
-  const { diagnostics: markdownDiagnostics } = useMarkdownLinter(statsContent, linterRules);
+  const { diagnostics: markdownDiagnostics, runLint } = useMarkdownLinter(statsContent, linterRules);
 
   const toggleCompactMenu = useCallback(() => {
     if (!showCompactMenu && menuBtnRef.current) {
@@ -268,6 +269,19 @@ export default function MosaicEditor({
     docId: roomId ?? null,
     enabled: docType !== 'file' && viewMode !== 'preview'
   });
+
+  const dictionaryCandidate = useMemo(() => {
+    if (!semanticSelection) return null;
+    const value = semanticSelection.text.replace(/\s+/g, ' ').trim();
+    if (!value) return null;
+    if (!/^[\p{L}\p{M}'’-]+$/u.test(value)) return null;
+    return value;
+  }, [semanticSelection]);
+
+  const canAddSelectionToDictionary = useMemo(() => {
+    if (!dictionaryCandidate) return false;
+    return !new Set(getPersonalDictionary()).has(dictionaryCandidate.toLowerCase());
+  }, [dictionaryCandidate]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1189,6 +1203,13 @@ export default function MosaicEditor({
     const title = compact.length > 60 ? `${compact.slice(0, 59)}…` : compact;
     setDefineConceptDraft({ selectionText: text, title, definition: '', logicProfile: '', formula: '' });
   }, [semanticSelection]);
+
+  const handleAddSelectionToDictionary = useCallback(() => {
+    if (!dictionaryCandidate) return;
+    addToPersonalDictionary(dictionaryCandidate);
+    runLint(contentRef.current);
+    clearSemanticSelection();
+  }, [clearSemanticSelection, dictionaryCandidate, runLint]);
 
   const handleConfirmDefineConcept = useCallback(() => {
     if (!defineConceptDraft) return;
@@ -2216,6 +2237,7 @@ export default function MosaicEditor({
                   paddingLeft={20}
                   scrollTop={rawScrollPos.top}
                   scrollLeft={rawScrollPos.left}
+                  interactive={!semanticSelection}
                 />
               </div>
             </>
@@ -2237,6 +2259,7 @@ export default function MosaicEditor({
                 viewMode="edit"
                 content={statsContent}
                 onApplyFix={handleLinterFix}
+                interactive={!semanticSelection}
               />
             </div>
           )}
@@ -2324,6 +2347,8 @@ export default function MosaicEditor({
           onRelateConcept={handleRelateConcept}
           onLinkDocument={handleLinkDocument}
           onSaveAsSnippet={handleSaveAsSnippet}
+          canAddToDictionary={canAddSelectionToDictionary}
+          onAddToDictionary={handleAddSelectionToDictionary}
         />
       )}
 

@@ -81,6 +81,7 @@ interface LinterOverlayProps {
   scrollTop?: number;
   scrollLeft?: number;
   onApplyFix?: (line: number, replacement: string) => void;
+  interactive?: boolean;
 }
 
 export function LinterOverlay({
@@ -92,7 +93,8 @@ export function LinterOverlay({
   paddingLeft = 20,
   scrollTop = 0,
   scrollLeft = 0,
-  onApplyFix
+  onApplyFix,
+  interactive = true
 }: LinterOverlayProps) {
   const lines = useMemo(() => content.split('\n'), [content]);
 
@@ -163,17 +165,17 @@ export function LinterOverlay({
             />
             {/* Transparent hit area covering full text line */}
             <div
-              className="absolute group pointer-events-auto"
+              className={interactive ? 'absolute group pointer-events-auto' : 'absolute pointer-events-none'}
               style={{
                 top: (line - 1) * lineHeight + paddingTop - scrollTop,
                 left,
                 width: Math.max(width, 4),
                 height: lineHeight,
-                cursor: 'help'
+                cursor: interactive ? 'help' : 'default'
               }}
             >
             {/* Tooltip */}
-            <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100] min-w-[220px] max-w-[320px]">
+            <div className={interactive ? 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100] min-w-[220px] max-w-[320px]' : 'hidden'}>
               <div className="flex items-center gap-2 mb-1">
                 {isSTRef ? <Ruler className="w-3 h-3 text-cyan-400 flex-shrink-0" /> :
                  d.severity === 'error' ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" /> :

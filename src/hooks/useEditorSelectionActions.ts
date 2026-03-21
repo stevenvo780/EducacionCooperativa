@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type SelectionKind = 'contenteditable' | 'textarea';
 
@@ -87,8 +87,10 @@ const isValidText = (text: string) => text.replace(/\s+/g, ' ').trim().length >=
 
 export function useEditorSelectionActions({ editorShellRef, docId, enabled }: UseEditorSelectionActionsOptions) {
   const [selection, setSelection] = useState<EditorSelectionSnapshot | null>(null);
+  const suppressClearUntilRef = useRef(0);
 
   const clearSelection = useCallback(() => {
+    suppressClearUntilRef.current = 0;
     setSelection(null);
   }, []);
 
@@ -125,6 +127,7 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled }: Us
         createdAt: Date.now(),
         textareaRange: { start, end }
       };
+      suppressClearUntilRef.current = Date.now() + 800;
       setSelection(snapshot);
       return snapshot;
     }
@@ -179,6 +182,7 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled }: Us
       }
     };
 
+    suppressClearUntilRef.current = Date.now() + 800;
     setSelection(snapshot);
     return snapshot;
   }, [docId, editorShellRef, enabled]);
@@ -273,6 +277,7 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled }: Us
     };
 
     const handleSelectionChange = () => {
+      if (Date.now() < suppressClearUntilRef.current) return;
       const domSelection = window.getSelection();
       if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
         const activeElement = document.activeElement;

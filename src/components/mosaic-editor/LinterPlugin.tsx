@@ -12,6 +12,7 @@ interface LinterPluginProps {
   viewMode: 'edit' | 'preview' | 'raw';
   content: string;
   onApplyFix?: (diag: LinterDiagnostic, replacement: string) => void;
+  interactive?: boolean;
 }
 
 /**
@@ -89,7 +90,7 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, onApplyFix }: LinterPluginProps) {
+export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, onApplyFix, interactive = true }: LinterPluginProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const diagnosticsRef = useRef(diagnostics);
   diagnosticsRef.current = diagnostics;
@@ -204,6 +205,10 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
             }
             container.appendChild(underline);
+
+            if (!interactive) {
+              return;
+            }
 
             /* ── Hit area ── */
             const hitArea = document.createElement('div');
@@ -349,7 +354,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       if (containerRef.current) containerRef.current.innerHTML = '';
       decorateRef.current = null;
     };
-  }, [editorShellRef, viewMode]); // NO depende de diagnostics
+  }, [editorShellRef, interactive, viewMode]); // NO depende de diagnostics
 
   // ── Efecto de DECORACIÓN: se ejecuta cuando diagnostics cambian ──
   useEffect(() => {
