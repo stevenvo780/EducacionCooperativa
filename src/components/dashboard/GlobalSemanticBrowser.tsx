@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { SemanticBrowser, type SemanticTab } from '@/components/editor/SemanticBrowser';
 import {
   loadSemanticWorkspaceState,
+  saveSemanticWorkspaceState,
   deleteConcept,
   deleteFragment,
   deleteRelation,
@@ -11,8 +12,14 @@ import {
   updateFragment,
   type SemanticWorkspaceState
 } from '@/services/editorSemanticStore';
-import { EMPTY_SEMANTIC_WORKSPACE_STATE } from '@/lib/semantic/workspace-state';
+import {
+  EMPTY_SEMANTIC_WORKSPACE_STATE,
+  mergeSemanticWorkspaceStates,
+  type SemanticDocumentRef
+} from '@/lib/semantic/workspace-state';
 import type { BoardCard } from '@/components/dashboard/types';
+import { fetchSemanticWorkspaceStateApi, saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
+import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
 
 interface GlobalSemanticBrowserProps {
   workspaceId?: string;
@@ -30,7 +37,17 @@ export default function GlobalSemanticBrowser({
 
   const reload = useCallback(() => {
     if (!workspaceId) return;
-    setState(loadSemanticWorkspaceState({ workspaceId, userId }));
+    const localState = loadSemanticWorkspaceState({ workspaceId, userId });
+    setState(localState);
+    void fetchSemanticWorkspaceStateApi(workspaceId)
+      .then((remoteState) => {
+        const mergedState = mergeSemanticWorkspaceStates(remoteState ?? EMPTY_SEMANTIC_WORKSPACE_STATE, localState);
+        saveSemanticWorkspaceState({ workspaceId, userId }, mergedState);
+        setState(mergedState);
+      })
+      .catch(() => {
+        setState(localState);
+      });
   }, [workspaceId, userId]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -44,35 +61,55 @@ export default function GlobalSemanticBrowser({
 
   const ctx = useMemo(() => workspaceId ? { workspaceId, userId: userId ?? undefined } : null, [workspaceId, userId]);
 
+  const persistAndSync = useCallback(async (nextState: SemanticWorkspaceState, affectedDocs: SemanticDocumentRef[]) => {
+    if (!ctx) return;
+
+    const persistedState = await saveSemanticWorkspaceStateApi(ctx.workspaceId, nextState) ?? nextState;
+    saveSemanticWorkspaceState({ workspaceId: ctx.workspaceId, userId: ctx.userId ?? null }, persistedState);
+    setState(persistedState);
+
+    await syncSemanticCompanionFiles({
+      workspaceId: ctx.workspaceId,
+      state: persistedState,
+      documentRefs: affectedDocs
+    });
+  }, [ctx]);
+
   const handleDeleteConcept = useCallback((conceptId: string) => {
     if (!ctx) return;
-    deleteConcept(ctx, conceptId);
-    reload();
-  }, [ctx, reload]);
+    const concept = state.concepts.find((item) => item.id === conceptId);
+    const nextState = deleteConcept(ctx, conceptId);
+    void persistAndSync(nextState, concept ? [{ docId: concept.docId, docName: concept.docName }] : []);
+  }, [ctx, persistAndSync, state.concepts]);
 
   const handleDeleteFragment = useCallback((fragmentId: string) => {
     if (!ctx) return;
-    deleteFragment(ctx, fragmentId);
-    reload();
-  }, [ctx, reload]);
+    const fragment = state.fragments.find((item) => item.id === fragmentId);
+    const nextState = deleteFragment(ctx, fragmentId);
+    void persistAndSync(nextState, fragment ? [{ docId: fragment.docId, docName: fragment.docName }] : []);
+  }, [ctx, persistAndSync, state.fragments]);
 
   const handleDeleteRelation = useCallback((relationId: string) => {
     if (!ctx) return;
-    deleteRelation(ctx, relationId);
-    reload();
-  }, [ctx, reload]);
+    const relation = state.relations.find((item) => item.id === relationId);
+    const concept = relation ? state.concepts.find((item) => item.id === relation.conceptId) : undefined;
+    const nextState = deleteRelation(ctx, relationId);
+    void persistAndSync(nextState, concept ? [{ docId: concept.docId, docName: concept.docName }] : []);
+  }, [ctx, persistAndSync, state.concepts, state.relations]);
 
   const handleEditConcept = useCallback((conceptId: string, updates: { title?: string; definition?: string; formula?: string }) => {
     if (!ctx) return;
-    updateConcept(ctx, conceptId, updates);
-    reload();
-  }, [ctx, reload]);
+    const concept = state.concepts.find((item) => item.id === conceptId);
+    const nextState = updateConcept(ctx, conceptId, updates);
+    void persistAndSync(nextState, concept ? [{ docId: concept.docId, docName: concept.docName }] : []);
+  }, [ctx, persistAndSync, state.concepts]);
 
   const handleEditFragment = useCallback((fragmentId: string, updates: { text?: string }) => {
     if (!ctx) return;
-    updateFragment(ctx, fragmentId, updates);
-    reload();
-  }, [ctx, reload]);
+    const fragment = state.fragments.find((item) => item.id === fragmentId);
+    const nextState = updateFragment(ctx, fragmentId, updates);
+    void persistAndSync(nextState, fragment ? [{ docId: fragment.docId, docName: fragment.docName }] : []);
+  }, [ctx, persistAndSync, state.fragments]);
 
   const initialTab = useMemo<SemanticTab | undefined>(
     () => filterDocName ? 'archivos' : undefined,

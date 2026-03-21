@@ -52,6 +52,11 @@ export interface SemanticWorkspaceState {
   updatedAt: number;
 }
 
+export interface SemanticDocumentRef {
+  docId?: string | null;
+  docName?: string | null;
+}
+
 export const EMPTY_SEMANTIC_WORKSPACE_STATE: SemanticWorkspaceState = {
   concepts: [],
   fragments: [],
@@ -175,6 +180,21 @@ const normalizeTitleKey = (value: string) => (
     .trim()
 );
 
+const matchesSemanticDocument = (
+  target: SemanticDocumentRef,
+  item: { docId?: string | null; docName?: string | null }
+) => {
+  if (target.docId && item.docId && target.docId === item.docId) {
+    return true;
+  }
+
+  if (target.docName && item.docName) {
+    return normalizeTitleKey(target.docName) === normalizeTitleKey(item.docName);
+  }
+
+  return false;
+};
+
 const getConceptKey = (concept: SemanticConceptRecord) => (
   concept.id || `title:${normalizeTitleKey(concept.title)}`
 );
@@ -230,6 +250,39 @@ export const mergeSemanticWorkspaceStates = (...states: SemanticWorkspaceState[]
     fragments: sortByUpdatedAt(Array.from(fragments.values())),
     relations: Array.from(relations.values()).sort((left, right) => right.createdAt - left.createdAt),
     updatedAt
+  };
+};
+
+export const filterSemanticWorkspaceStateByDocument = (
+  state: SemanticWorkspaceState,
+  target: SemanticDocumentRef
+): SemanticWorkspaceState => {
+  const normalized = normalizeSemanticWorkspaceState(state);
+
+  if (!target.docId && !target.docName) {
+    return normalized;
+  }
+
+  const concepts = normalized.concepts.filter((concept) => matchesSemanticDocument(target, concept));
+  const conceptIds = new Set(concepts.map((concept) => concept.id));
+
+  const fragments = normalized.fragments.filter((fragment) => (
+    matchesSemanticDocument(target, fragment)
+    || (fragment.conceptId ? conceptIds.has(fragment.conceptId) : false)
+  ));
+  const fragmentIds = new Set(fragments.map((fragment) => fragment.id));
+
+  const relations = normalized.relations.filter((relation) => (
+    conceptIds.has(relation.conceptId)
+    || fragmentIds.has(relation.fragmentId)
+    || (target.docId ? relation.docId === target.docId : false)
+  ));
+
+  return {
+    concepts,
+    fragments,
+    relations,
+    updatedAt: normalized.updatedAt
   };
 };
 
