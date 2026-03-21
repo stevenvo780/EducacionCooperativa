@@ -7,6 +7,9 @@ import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, ensureTextFileName } from '@/lib/storage-path';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { mockCreateDoc, mockListDocs } from '@/lib/insecure-mock-store';
+
+const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 
 export async function POST(req: NextRequest) {
     try {
@@ -15,8 +18,20 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
-             return NextResponse.json({ id: `mock-doc-${Date.now()}`, status: 'success' });
+        if (isInsecure) {
+            const body = (await req.json()) as Record<string, unknown>;
+            const folder = normalizeFolderPath(typeof body.folder === 'string' ? body.folder : undefined);
+            const doc = mockCreateDoc({
+                name: typeof body.name === 'string' && body.name.trim() ? body.name : 'Sin titulo',
+                content: typeof body.content === 'string' ? body.content : '',
+                type: typeof body.type === 'string' ? body.type : DocumentType.Text,
+                workspaceId: typeof body.workspaceId === 'string' && body.workspaceId ? body.workspaceId : PERSONAL_WORKSPACE_ID,
+                folder,
+                ownerId: auth.uid,
+                mimeType: typeof body.mimeType === 'string' ? body.mimeType : null,
+                order: typeof body.order === 'number' ? body.order : undefined
+            });
+            return NextResponse.json({ id: doc.id, status: 'success' });
         }
 
         const body = (await req.json()) as Record<string, unknown>;
@@ -110,18 +125,16 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
-             return NextResponse.json([{
-                     id: 'mock-doc-1',
-                     name: 'Documento de Prueba.md',
-                     content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
-                     type: DocumentType.Text,
-                     workspaceId: PERSONAL_WORKSPACE_ID,
-                     folder: 'No estructurado',
-                     updatedAt: { seconds: Date.now() / 1000 },
-                     createdAt: { seconds: Date.now() / 1000 },
-                     ownerId: auth.uid
-             }]);
+        if (isInsecure) {
+            const { searchParams } = new URL(req.url);
+            const workspaceId = searchParams.get('workspaceId') || undefined;
+            const all = mockListDocs({
+                workspaceId: workspaceId || undefined,
+                ownerId: auth.uid
+            });
+            return NextResponse.json(all, {
+                headers: { 'Cache-Control': 'no-store' }
+            });
         }
 
         const { searchParams } = new URL(req.url);

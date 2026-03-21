@@ -7,6 +7,9 @@ import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, buildStoragePrefix, ensureTextFileName, sanitizeFileName, getStorageBaseName } from '@/lib/storage-path';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { mockGetDoc, mockUpdateDoc, mockDeleteDoc } from '@/lib/insecure-mock-store';
+
+const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 
 // Throttle Firestore URL updates: max once per 50 minutes per document
 const urlRefreshThrottle = new Map<string, number>();
@@ -29,6 +32,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         const auth = await requireAuth(req);
         if (!auth) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
+        if (isInsecure) {
+            const { id } = params;
+            const body = await req.json();
+            const ok = mockUpdateDoc(id, body as Record<string, unknown>);
+            if (!ok) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+            return NextResponse.json({ status: 'success' });
         }
 
         const { id } = params;
@@ -207,19 +218,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
-            const mockDoc = {
-                id: params.id,
-                name: 'Documento de Prueba.md',
-                content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
-                type: DocumentType.Text,
-                workspaceId: PERSONAL_WORKSPACE_ID,
-                folder: 'No estructurado',
-                updatedAt: { seconds: Date.now() / 1000 },
-                createdAt: { seconds: Date.now() / 1000 },
-                ownerId: auth.uid
-            };
-            return NextResponse.json(mockDoc);
+        if (isInsecure) {
+            const doc = mockGetDoc(params.id);
+            if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+            return NextResponse.json(doc);
         }
 
         const { id } = params;
@@ -266,6 +268,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
         const auth = await requireAuth(req);
         if (!auth) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
+        if (isInsecure) {
+            mockDeleteDoc(params.id);
+            return NextResponse.json({ status: 'deleted' });
         }
 
         const { id } = params;

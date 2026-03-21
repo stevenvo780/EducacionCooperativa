@@ -1136,7 +1136,7 @@ export default function MosaicEditor({
 
   const handleConfirmDefineConcept = useCallback(() => {
     if (!defineConceptDraft) return;
-    void runSemanticAction('define-concept', () => {
+    void runSemanticAction('define-concept', async () => {
       const payload = getSemanticPayload(defineConceptDraft.selectionText);
       const nextState = registerConceptFromSelection(
         semanticStoreContext,
@@ -1148,14 +1148,49 @@ export default function MosaicEditor({
       );
       updateSemanticState(nextState);
       setShowSemanticWorkbench(true);
-      const hint = companionStDocId
-        ? '📐 Concepto registrado. Actualiza el archivo ST desde la mesa semántica.'
-        : '📐 Concepto registrado. Genera un archivo ST desde la mesa semántica para formalizarlo.';
-      setSemanticNotice(hint);
       clearSemanticSelection();
       setDefineConceptDraft(null);
+
+      // --- Auto-crear / actualizar archivo .st companion ---
+      const currentName = docName || currentDocMetaRef.current.name || 'Documento';
+      const stFileName = companionSTName(currentName);
+      const stContent = buildSTFromSemantic(nextState, currentName);
+      const folder = currentDocMetaRef.current.folder || 'Material';
+      const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
+
+      try {
+        if (companionStDocId) {
+          await updateDocumentApi(companionStDocId, { content: stContent });
+          STDefinitionsRegistry.setFileDefinitions(
+            stFileName,
+            STDefinitionsRegistry.extractFromSource(stContent, stFileName)
+          );
+          setSemanticNotice(`📐 Concepto registrado → ${stFileName} actualizado.`);
+        } else {
+          const result = await createDocumentApi({
+            name: stFileName,
+            content: stContent,
+            type: 'text',
+            ownerId: user?.uid,
+            workspaceId,
+            folder
+          });
+          if (result?.id) {
+            setCompanionStDocId(result.id);
+          }
+          STDefinitionsRegistry.setFileDefinitions(
+            stFileName,
+            STDefinitionsRegistry.extractFromSource(stContent, stFileName)
+          );
+          setSemanticNotice(`📐 Concepto registrado → ${stFileName} creado en ${folder}/.`);
+          window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+        }
+      } catch (error) {
+        console.error('Error auto-generating ST companion:', error);
+        setSemanticNotice('📐 Concepto registrado, pero falló la generación del archivo ST.');
+      }
     });
-  }, [clearSemanticSelection, companionStDocId, defineConceptDraft, getSemanticPayload, runSemanticAction, semanticStoreContext, updateSemanticState]);
+  }, [clearSemanticSelection, companionStDocId, currentWorkspaceId, defineConceptDraft, docName, getSemanticPayload, runSemanticAction, semanticStoreContext, updateSemanticState, user?.uid]);
 
   const handleSaveAsSnippet = useCallback(() => {
     if (!semanticSelection) return;
@@ -1374,6 +1409,7 @@ export default function MosaicEditor({
           STDefinitionsRegistry.extractFromSource(stContent, stFileName)
         );
         setSemanticNotice(`Archivo ${stFileName} creado en ${folder}/ con ${semanticState.concepts.length} definiciones.`);
+        window.dispatchEvent(new CustomEvent('agora:docs-changed'));
       }
     } catch (error) {
       console.error('Error generating ST file:', error);
