@@ -67,10 +67,15 @@ export function EditorSelectionMenu({
   const [query, setQuery] = useState('');
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({ left: 12, top: 12, maxHeight: 340 });
+  const [isPositionReady, setIsPositionReady] = useState(false);
 
   useEffect(() => {
     setMode('actions');
     setQuery('');
+  }, [selection.id]);
+
+  useEffect(() => {
+    setIsPositionReady(false);
   }, [selection.id]);
 
   useLayoutEffect(() => {
@@ -99,18 +104,18 @@ export function EditorSelectionMenu({
         top,
         maxHeight: Math.max(180, viewportHeight - gutter * 2)
       });
+      setIsPositionReady(true);
     };
 
-    const rafId = requestAnimationFrame(computePosition);
+    computePosition();
 
-    if (typeof ResizeObserver === 'undefined') return () => cancelAnimationFrame(rafId);
+    if (typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(() => computePosition());
     observer.observe(menuRef.current);
     window.addEventListener('resize', computePosition);
     window.visualViewport?.addEventListener('resize', computePosition);
 
     return () => {
-      cancelAnimationFrame(rafId);
       observer.disconnect();
       window.removeEventListener('resize', computePosition);
       window.visualViewport?.removeEventListener('resize', computePosition);
@@ -231,7 +236,13 @@ export function EditorSelectionMenu({
     <div
       ref={menuRef}
       className="fixed z-[100000] w-[320px] rounded-xl border border-slate-700 bg-slate-950/98 p-3 shadow-2xl shadow-black/60 backdrop-blur"
-      style={{ left: position.left, top: position.top, maxHeight: position.maxHeight, overflowY: 'auto' }}
+      style={{
+        left: position.left,
+        top: position.top,
+        maxHeight: position.maxHeight,
+        overflowY: 'auto',
+        visibility: isPositionReady ? 'visible' : 'hidden'
+      }}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
