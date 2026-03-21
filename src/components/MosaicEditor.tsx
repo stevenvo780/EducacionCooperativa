@@ -2191,6 +2191,24 @@ export default function MosaicEditor({
             <span>{stats.chars} car.</span>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setViewModeWithSync(viewMode === 'semantic' ? 'edit' : 'semantic')}
+              className={clsx(
+                'inline-flex h-5 w-5 items-center justify-center rounded-full border transition',
+                viewMode === 'semantic'
+                  ? 'border-blue-500/40 bg-blue-500/15 text-blue-200'
+                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+              )}
+              title={viewMode === 'semantic'
+                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
+                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
+              aria-label={viewMode === 'semantic'
+                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
+                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
+            >
+              <BookMarked className="h-3 w-3" />
+            </button>
             {saving ? (
               <span className="text-blue-400 flex items-center gap-1"><Cloud className="w-3 h-3" /> Guardando</span>
             ) : (
