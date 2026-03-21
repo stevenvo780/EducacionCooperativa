@@ -15,12 +15,23 @@ import {
   getCodeBlockLines,
 } from './types';
 
+/**
+ * Parses a correction string like "a ver / haber" or "hecho (¿participio?)"
+ * into an array of clean replacement options: ["a ver", "haber"] or ["hecho"].
+ */
+function parseReplacements(correction: string): string[] {
+  // Strip parenthetical notes like "(¿participio?)"
+  const cleaned = correction.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  // Split by " / " separator
+  return cleaned.split(/\s*\/\s*/).map(s => s.trim()).filter(Boolean);
+}
+
 // ═══════════════════════════════════════════════════════════
 // 1. SPELLING — Ortografía
 // ═══════════════════════════════════════════════════════════
 
 const COMMON_TYPOS: Record<string, string> = {
-  // b/v confusion
+  /* ─── b / v confusion ─── */
   'entonses': 'entonces',
   'haver': 'haber / a ver',
   'valla': 'vaya',
@@ -34,7 +45,33 @@ const COMMON_TYPOS: Record<string, string> = {
   'alla': 'allá / haya',
   'ahi': 'ahí',
   'ay': 'hay',
-  // s/c/z confusion
+  'berdad': 'verdad',
+  'berde': 'verde',
+  'bida': 'vida',
+  'biejo': 'viejo',
+  'bolber': 'volver',
+  'boluntad': 'voluntad',
+  'benir': 'venir',
+  'beneno': 'veneno',
+  'bentaja': 'ventaja',
+  'bentana': 'ventana',
+  'berbo': 'verbo',
+  'botar': 'votar (emitir voto)',
+  'cavo': 'cabo',
+  'rebelion': 'rebelión',
+  'savia': 'sabía (si es verbo saber)',
+  'tubo': 'tuvo (si es verbo tener)',
+  'iva': 'iba',
+  'savemos': 'sabemos',
+  'recivir': 'recibir',
+  'escrivir': 'escribir',
+  'pruevas': 'pruebas',
+  'prueva': 'prueba',
+  'aprovacion': 'aprobación',
+  'govierno': 'gobierno',
+  'inbierno': 'invierno',
+
+  /* ─── s / c / z confusion ─── */
   'conoser': 'conocer',
   'desir': 'decir',
   'haser': 'hacer',
@@ -48,7 +85,76 @@ const COMMON_TYPOS: Record<string, string> = {
   'exepto': 'excepto',
   'exeso': 'exceso',
   'escases': 'escasez',
-  // h omission/addition
+  'correccion': 'corrección',
+  'correcion': 'corrección',
+  'ortografico': 'ortográfico',
+  'ortograficos': 'ortográficos',
+  'ortografia': 'ortografía',
+  'ortografica': 'ortográfica',
+  'corresion': 'corrección',
+  'diresion': 'dirección',
+  'direccion': 'dirección',
+  'situasion': 'situación',
+  'situacion': 'situación',
+  'evaluasion': 'evaluación',
+  'evaluacion': 'evaluación',
+  'informasion': 'información',
+  'informacion': 'información',
+  'comunicasion': 'comunicación',
+  'comunicacion': 'comunicación',
+  'organisacion': 'organización',
+  'organizacion': 'organización',
+  'educacion': 'educación',
+  'funcion': 'función',
+  'operacion': 'operación',
+  'relacion': 'relación',
+  'investigacion': 'investigación',
+  'participacion': 'participación',
+  'presentacion': 'presentación',
+  'solucion': 'solución',
+  'construccion': 'construcción',
+  'condision': 'condición',
+  'condicion': 'condición',
+  'nasion': 'nación',
+  'nacion': 'nación',
+  'posision': 'posición',
+  'posicion': 'posición',
+  'desision': 'decisión',
+  'decision': 'decisión',
+  'tradision': 'tradición',
+  'tradicion': 'tradición',
+  'conclucion': 'conclusión',
+  'conclusion': 'conclusión',
+  'expresion': 'expresión',
+  'comprecion': 'comprensión',
+  'comprension': 'comprensión',
+  'dimencion': 'dimensión',
+  'dimension': 'dimensión',
+  'extencion': 'extensión',
+  'extension': 'extensión',
+  'sesion': 'sesión',
+  'ocacion': 'ocasión',
+  'ocasion': 'ocasión',
+  'atencion': 'atención',
+  'calificasion': 'calificación',
+  'calificacion': 'calificación',
+  'redaccion': 'redacción',
+  'introducion': 'introducción',
+  'introduccion': 'introducción',
+  'aplicasion': 'aplicación',
+  'aplicacion': 'aplicación',
+  'produsion': 'producción',
+  'produccion': 'producción',
+  'institucion': 'institución',
+  'resolucion': 'resolución',
+  'explicasion': 'explicación',
+  'explicacion': 'explicación',
+  'suposicion': 'suposición',
+  'proposicion': 'proposición',
+  'asignasion': 'asignación',
+  'asignacion': 'asignación',
+
+  /* ─── h omission / addition ─── */
   'aver': 'a ver / haber',
   'aora': 'ahora',
   'asta': 'hasta',
@@ -56,17 +162,103 @@ const COMMON_TYPOS: Record<string, string> = {
   'echo': 'hecho (¿participio?)',
   'allar': 'hallar',
   'eredar': 'heredar',
-  // double letters
+  'error': 'error',
+  'herrores': 'errores',
+  'herrror': 'error',
+  'heror': 'error',
+  'errror': 'error',
+
+  /* ─── tildes / accents ─── */
+  'tambien': 'también',
+  'todavia': 'todavía',
+  'mas': 'más (si es comparativo)',
+  'aqui': 'aquí',
+  'asi': 'así',
+  'facil': 'fácil',
+  'dificil': 'difícil',
+  'rapido': 'rápido',
+  'ultimo': 'último',
+  'numero': 'número',
+  'pagina': 'página',
+  'articulo': 'artículo',
+  'metodo': 'método',
+  'capitulo': 'capítulo',
+  'titulo': 'título',
+  'analisis': 'análisis',
+  'proposito': 'propósito',
+  'especifico': 'específico',
+  'tecnico': 'técnico',
+  'teorico': 'teórico',
+  'practica': 'práctica (si es sustantivo)',
+  'logico': 'lógico',
+  'basico': 'básico',
+  'publico': 'público',
+  'politica': 'política',
+  'economico': 'económico',
+  'historico': 'histórico',
+  'filosofico': 'filosófico',
+  'automatico': 'automático',
+  'semantico': 'semántico',
+  'pedagogico': 'pedagógico',
+  'sistematico': 'sistemático',
+  'matematico': 'matemático',
+  'gramatico': 'gramático',
+  'linguistico': 'lingüístico',
+  'ademas': 'además',
+  'detras': 'detrás',
+  'traves': 'través',
+  'quiza': 'quizá',
+  'segun': 'según',
+  'despues': 'después',
+  'ingles': 'inglés',
+  'frances': 'francés',
+  'portugues': 'portugués',
+  'interes': 'interés',
+
+  /* ─── double / missing letters ─── */
   'oportunitad': 'oportunidad',
   'nesecitar': 'necesitar',
+  'nesecitamos': 'necesitamos',
+  'nesecitas': 'necesitas',
+  'nesecita': 'necesita',
   'nesesario': 'necesario',
+  'nesesaria': 'necesaria',
+  'nesecesario': 'necesario',
   'combeniente': 'conveniente',
-  'govierno': 'gobierno',
-  'inbierno': 'invierno',
   'obio': 'obvio',
   'travajo': 'trabajo',
   'deveria': 'debería',
-  // common mistakes
+  'deverian': 'deberían',
+  'develar': 'develar',
+  'vien': 'bien',
+  'biene': 'viene / bien',
+  'vienes': 'vienes',
+  'tanbien': 'también',
+  'tamvien': 'también',
+  'tengamos': 'tengamos',
+  'nmal': 'mal',
+  'mmal': 'mal',
+
+  /* ─── ll / y confusion ─── */
+  'llendo': 'yendo',
+  'callendo': 'cayendo',
+  'calleron': 'cayeron',
+  'rallar': 'rayar (línea)',
+  'arrollar': 'arrollar',
+  'halla': 'haya (si es subjuntivo)',
+
+  /* ─── g / j confusion ─── */
+  'cojer': 'coger',
+  'cojido': 'cogido',
+  'dije': 'dije',
+  'jente': 'gente',
+  'jeneral': 'general',
+  'rejistro': 'registro',
+  'rejion': 'región',
+  'lenguaje': 'lenguaje',
+  'pasaje': 'pasaje',
+
+  /* ─── common word-join mistakes ─── */
   'atravez': 'a través',
   'enserio': 'en serio',
   'deveras': 'de veras',
@@ -86,10 +278,93 @@ const COMMON_TYPOS: Record<string, string> = {
   'asimismo': 'asimismo / así mismo',
   'conque': 'con que (si es "con el que")',
   'nose': 'no sé',
-  // gender/number common errors
+  'enseñansa': 'enseñanza',
+  'aprendisaje': 'aprendizaje',
+  'aprendizage': 'aprendizaje',
+  'lenguage': 'lenguaje',
+  'porsentaje': 'porcentaje',
+  'porcentage': 'porcentaje',
+
+  /* ─── gender / number common errors ─── */
   'hubieron': 'hubo',
   'habemos': 'hay / somos',
   'habian': 'había',
+
+  /* ─── very common everyday typos ─── */
+  'qe': 'que',
+  'qeu': 'que',
+  'teh': 'the / te',
+  'depsues': 'después',
+  'porq': 'porque / por qué',
+  'xq': 'porque / por qué',
+  'cundo': 'cuando',
+  'cuadno': 'cuando',
+  'peusto': 'puesto',
+  'peustos': 'puestos',
+  'tiepo': 'tiempo',
+  'tiemppo': 'tiempo',
+  'perosna': 'persona',
+  'persoan': 'persona',
+  'probelma': 'problema',
+  'porblema': 'problema',
+  'problmea': 'problema',
+  'ejemlpo': 'ejemplo',
+  'ejmplo': 'ejemplo',
+  'depdende': 'depende',
+  'depnede': 'depende',
+  'resutlado': 'resultado',
+  'resulatdo': 'resultado',
+  'perimtir': 'permitir',
+  'permtiir': 'permitir',
+  'obigetivo': 'objetivo',
+  'obejtiov': 'objetivo',
+  'documetno': 'documento',
+  'documneto': 'documento',
+  'recusos': 'recursos',
+  'recuross': 'recursos',
+  'diferetne': 'diferente',
+  'diferenet': 'diferente',
+  'importatne': 'importante',
+  'importnate': 'importante',
+  'necesraio': 'necesario',
+  'neceasrio': 'necesario',
+  'siguietne': 'siguiente',
+  'sigueinte': 'siguiente',
+  'desarollo': 'desarrollo',
+  'desarrolo': 'desarrollo',
+  'dessarrollo': 'desarrollo',
+  'procesoo': 'proceso',
+  'porceso': 'proceso',
+  'estrcutura': 'estructura',
+  'esturctura': 'estructura',
+  'contenidoo': 'contenido',
+  'conetindo': 'contenido',
+  'sistmea': 'sistema',
+  'sisetma': 'sistema',
+  'elemtno': 'elemento',
+  'elemneto': 'elemento',
+  'seccion': 'sección',
+  'seecion': 'sección',
+  'capitlo': 'capítulo',
+  'capiutlo': 'capítulo',
+  'hervir': 'hervir',
+  'escojido': 'escogido',
+  'exijir': 'exigir',
+  'exijencia': 'exigencia',
+  'dijimos': 'dijimos',
+  'dijeron': 'dijeron',
+  'trajimos': 'trajimos',
+  'reduje': 'reduje',
+  'conduje': 'conduje',
+  'produje': 'produje',
+  'introduje': 'introduje',
+  'estracto': 'extracto',
+  'estraño': 'extraño',
+  'espectativa': 'expectativa',
+  'esperiencia': 'experiencia',
+  'esplicar': 'explicar',
+  'esponer': 'exponer',
+  'espresion': 'expresión',
 };
 
 export const spellingRule: LinterRule = {
@@ -111,6 +386,7 @@ export const spellingRule: LinterRule = {
         const regex = new RegExp(`\\b${typo}\\b`, 'gi');
         let match;
         while ((match = regex.exec(line)) !== null) {
+          const replacements = parseReplacements(correction);
           results.push({
             message: `Posible error ortográfico: "${match[0]}"`,
             suggestion: `¿Quisiste decir "${correction}"?`,
@@ -120,6 +396,7 @@ export const spellingRule: LinterRule = {
             endLine: lineIdx + 1,
             endColumn: match.index + 1 + match[0].length,
             source: 'Spelling',
+            replacements,
           });
         }
       }
@@ -154,7 +431,238 @@ export const doubledWordsRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: match.index + 1 + match[0].length,
           source: 'Spelling',
+          replacements: [match[1]],
         });
+      }
+    }
+    return results;
+  },
+};
+
+// ───────────────────────────────────────────────────────────
+// 1c. ACCENT PATTERNS — Detección algorítmica de tildes faltantes
+// ───────────────────────────────────────────────────────────
+
+/**
+ * Detecta palabras que necesitan tilde usando PATRONES, no diccionario.
+ * Cubre:
+ *  - Terminaciones -cion, -sion, -gion (→ -ción, -sión, -gión)
+ *  - Palabras esdrújulas comunes sin tilde
+ *  - Adverbios -mente derivados de adjetivos con tilde
+ */
+const ACCENT_SUFFIX_RULES: Array<{
+  pattern: RegExp;
+  fix: (m: string) => string;
+  msg: string;
+}> = [
+  // -cion → -ción  (educacion → educación)
+  {
+    pattern: /\b([a-záéíóúñü]{2,})cion\b/gi,
+    fix: (m) => m.slice(0, -4) + 'ción',
+    msg: 'Falta tilde: las palabras terminadas en "-ción" llevan acento.',
+  },
+  // -sion → -sión  (expresion → expresión)
+  {
+    pattern: /\b([a-záéíóúñü]{2,})sion\b/gi,
+    fix: (m) => m.slice(0, -4) + 'sión',
+    msg: 'Falta tilde: las palabras terminadas en "-sión" llevan acento.',
+  },
+  // -gion → -gión  (region → región)
+  {
+    pattern: /\b([a-záéíóúñü]{2,})gion\b/gi,
+    fix: (m) => m.slice(0, -4) + 'gión',
+    msg: 'Falta tilde: las palabras terminadas en "-gión" llevan acento.',
+  },
+  // -tico/a/os/as → -tico  (automatico → automático) — esdrújulas
+  {
+    pattern: /\b([a-záéíóúñü]{2,}[^áéíóú])tico(s|a|as)?\b/gi,
+    fix: (m) => {
+      const idx = m.lastIndexOf('tico');
+      if (idx < 0) return m;
+      const prefix = m.slice(0, idx);
+      // Find the vowel before 'tico' and add accent
+      const lastVowel = prefix.match(/[aeiou]$/i);
+      if (lastVowel) {
+        const accentMap: Record<string, string> = { a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' };
+        const accented = accentMap[lastVowel[0].toLowerCase()] ?? lastVowel[0];
+        return prefix.slice(0, -1) + accented + m.slice(idx);
+      }
+      return m;
+    },
+    msg: 'Posible esdrújula sin tilde (terminación "-tico").',
+  },
+  // -logico/a → -lógico/a
+  {
+    pattern: /\b([a-záéíóúñü]+)logico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/logico/i, 'lógico'),
+    msg: 'Falta tilde: "-lógico" es esdrújula.',
+  },
+  // -grafico/a → -gráfico/a
+  {
+    pattern: /\b([a-záéíóúñü]+)grafico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/grafico/i, 'gráfico'),
+    msg: 'Falta tilde: "-gráfico" es esdrújula.',
+  },
+  // -nomico/a → -nómico/a
+  {
+    pattern: /\b([a-záéíóúñü]+)nomico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/nomico/i, 'nómico'),
+    msg: 'Falta tilde: "-nómico" es esdrújula.',
+  },
+  // -metrico/a → -métrico/a
+  {
+    pattern: /\b([a-záéíóúñü]+)metrico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/metrico/i, 'métrico'),
+    msg: 'Falta tilde: "-métrico" es esdrújula.',
+  },
+];
+
+/** Words already handled by COMMON_TYPOS — skip in accent rule to avoid duplicates */
+const ACCENT_SKIP = new Set(
+  Object.keys(COMMON_TYPOS).map(k => k.toLowerCase()),
+);
+
+export const accentPatternRule: LinterRule = {
+  id: 'spelling_accent_patterns',
+  name: 'Tildes faltantes (patrones)',
+  description: 'Detecta palabras que necesitan tilde usando patrones morfológicos del español (-ción, -sión, esdrújulas, etc.)',
+  category: 'spelling',
+  defaultEnabled: true,
+  check: (text: string): LinterDiagnostic[] => {
+    const results: LinterDiagnostic[] = [];
+    const lines = text.split('\n');
+    const codeLines = getCodeBlockLines(lines);
+
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+      if (codeLines.has(lineIdx)) continue;
+      const line = lines[lineIdx];
+
+      for (const rule of ACCENT_SUFFIX_RULES) {
+        let match;
+        // Reset lastIndex since regex is global
+        rule.pattern.lastIndex = 0;
+        while ((match = rule.pattern.exec(line)) !== null) {
+          const word = match[0];
+          // Skip words already in COMMON_TYPOS dict (avoid duplicate alerts)
+          if (ACCENT_SKIP.has(word.toLowerCase())) continue;
+          // Skip words that already have accents
+          if (/[áéíóú]/i.test(word)) continue;
+
+          const fixed = rule.fix(word);
+          // If fix didn't change anything, skip
+          if (fixed.toLowerCase() === word.toLowerCase()) continue;
+
+          results.push({
+            message: `${rule.msg} "${word}" → "${fixed}"`,
+            suggestion: `Cambiar a "${fixed}"`,
+            severity: 'warning',
+            line: lineIdx + 1,
+            column: match.index + 1,
+            endLine: lineIdx + 1,
+            endColumn: match.index + 1 + word.length,
+            source: 'Spelling',
+            replacements: [fixed],
+          });
+        }
+      }
+    }
+    return results;
+  },
+};
+
+// ───────────────────────────────────────────────────────────
+// 1d. SUSPICIOUS PATTERNS — Secuencias imposibles en español
+// ───────────────────────────────────────────────────────────
+
+/**
+ * Detects character sequences that are invalid or extremely rare in Spanish,
+ * suggesting the word is likely a typo. This is ALGORITHMIC — no dictionary needed.
+ *
+ * Spanish only allows these double consonants: rr, ll, cc, nn
+ * Spanish doesn't allow certain consonant clusters at word start/end.
+ */
+const INVALID_DOUBLE_CONSONANTS = /([bdfghjkmpqstvwxyz])\1/gi;
+const TRIPLE_LETTER = /([a-záéíóúñü])\1\1/gi;
+const WORD_START_IMPOSSIBLE = /\b([nm][bcdfgjklmnpqrstvwxyz](?=[a-záéíóúñü]))/gi;
+
+export const suspiciousPatternsRule: LinterRule = {
+  id: 'spelling_suspicious_patterns',
+  name: 'Secuencias de caracteres sospechosas',
+  description: 'Detecta combinaciones de letras imposibles o muy raras en español (consonantes dobles inválidas, triples letras, inicios imposibles).',
+  category: 'spelling',
+  defaultEnabled: true,
+  check: (text: string): LinterDiagnostic[] => {
+    const results: LinterDiagnostic[] = [];
+    const lines = text.split('\n');
+    const codeLines = getCodeBlockLines(lines);
+    // Common valid words with unusual patterns to whitelist
+    const whitelist = new Set([
+      'innato', 'innata', 'innovar', 'innovación', 'innovador', 'innecesario',
+      'innoble', 'innombrable', 'perenne', 'biennal', 'connotar', 'connotación',
+      'ennegrecer', 'cannabis', 'connectar',
+    ]);
+
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+      if (codeLines.has(lineIdx)) continue;
+      const line = lines[lineIdx];
+
+      // Extract words (skip URLs, code spans, etc.)
+      const wordRegex = /\b[a-záéíóúñü]{3,}\b/gi;
+      let wordMatch;
+      while ((wordMatch = wordRegex.exec(line)) !== null) {
+        const word = wordMatch[0];
+        const lower = word.toLowerCase();
+        if (whitelist.has(lower)) continue;
+
+        // Check 1: Invalid double consonants (not rr, ll, cc, nn)
+        INVALID_DOUBLE_CONSONANTS.lastIndex = 0;
+        const dblMatch = INVALID_DOUBLE_CONSONANTS.exec(lower);
+        if (dblMatch) {
+          const pair = dblMatch[0];
+          results.push({
+            message: `Secuencia sospechosa "${pair}" en "${word}" — en español solo "rr", "ll", "cc" y "nn" son consonantes dobles válidas.`,
+            suggestion: `Revisa la ortografía de "${word}".`,
+            severity: 'info',
+            line: lineIdx + 1,
+            column: wordMatch.index + 1,
+            endLine: lineIdx + 1,
+            endColumn: wordMatch.index + 1 + word.length,
+            source: 'Spelling',
+          });
+          continue; // One diagnostic per word max
+        }
+
+        // Check 2: Triple letters (never valid in Spanish)
+        TRIPLE_LETTER.lastIndex = 0;
+        const tripleMatch = TRIPLE_LETTER.exec(lower);
+        if (tripleMatch) {
+          results.push({
+            message: `Triple letra "${tripleMatch[0]}" en "${word}" — probablemente un error de tecleo.`,
+            suggestion: `Revisa la ortografía de "${word}".`,
+            severity: 'warning',
+            line: lineIdx + 1,
+            column: wordMatch.index + 1,
+            endLine: lineIdx + 1,
+            endColumn: wordMatch.index + 1 + word.length,
+            source: 'Spelling',
+          });
+          continue;
+        }
+
+        // Check 3: Impossible word-start sequences (e.g., "nm", "nb", "mk")
+        WORD_START_IMPOSSIBLE.lastIndex = 0;
+        if (WORD_START_IMPOSSIBLE.test(lower)) {
+          results.push({
+            message: `"${word}" empieza con una secuencia de consonantes inusual en español.`,
+            suggestion: `Revisa la ortografía de "${word}".`,
+            severity: 'info',
+            line: lineIdx + 1,
+            column: wordMatch.index + 1,
+            endLine: lineIdx + 1,
+            endColumn: wordMatch.index + 1 + word.length,
+            source: 'Spelling',
+          });
+        }
       }
     }
     return results;
@@ -190,6 +698,7 @@ export const headingSpaceRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: hashes.length + 1,
           source: 'Structure',
+          replacements: [`${hashes} `],
         });
       }
     }
@@ -326,6 +835,7 @@ export const linkSpacesRule: LinterRule = {
             endLine: lineIdx + 1,
             endColumn: match.index + match[0].indexOf(match[2]) + 1 + match[2].length,
             source: 'Links',
+            replacements: [match[2].replace(/ /g, '%20')],
           });
         }
       }
@@ -642,6 +1152,7 @@ export const trailingWhitespaceRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: line.length + 1,
           source: 'Whitespace',
+          replacements: [''],
         });
       }
     }
@@ -776,6 +1287,8 @@ export const ALL_BUILTIN_RULES: LinterRule[] = [
   // Spelling
   spellingRule,
   doubledWordsRule,
+  accentPatternRule,
+  suspiciousPatternsRule,
   // Structure
   headingSpaceRule,
   headingHierarchyRule,

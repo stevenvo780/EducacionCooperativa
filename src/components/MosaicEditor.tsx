@@ -67,7 +67,7 @@ import { createDocumentApi, fetchDocsApi, updateDocumentApi } from '@/services/d
 import type { BoardCard, DocItem } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
-import { useMarkdownLinter } from '@/hooks/useMarkdownLinter';
+import { useMarkdownLinter, type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
 import { normalizePath } from '@/lib/folder-utils';
 import { buildSTFromSemantic, companionSTName } from '@/lib/buildSTFromSemantic';
@@ -1526,6 +1526,19 @@ export default function MosaicEditor({
   // Obsidian-style inline LaTeX rendering (extracted to hook)
   useKatexOverlayDecorations({ editorShellRef, viewMode });
 
+  // Disable native browser spellcheck on MDXEditor's contentEditable so only our
+  // LinterPlugin underlines are shown (avoids conflicting red wavy + yellow marks).
+  useEffect(() => {
+    const shell = editorShellRef.current;
+    if (!shell) return;
+    const ce = shell.querySelector<HTMLElement>('[contenteditable="true"]');
+    if (ce) {
+      ce.setAttribute('spellcheck', 'false');
+      ce.setAttribute('autocorrect', 'off');
+      ce.setAttribute('autocapitalize', 'off');
+    }
+  }, [editorKey, viewMode]);
+
   const toggleFullscreen = useCallback(async () => {
     if (typeof document === 'undefined') return;
 
@@ -1807,6 +1820,23 @@ export default function MosaicEditor({
       toolbarContents: () => renderToolbarContentsRef.current?.() ?? null
     })
   ], []);
+
+  // ── Linter quick-fix: replace text at diagnostic position ──
+  const handleLinterFix = useCallback((diag: LinterDiagnostic, replacement: string) => {
+    const md = mdxEditorRef.current?.getMarkdown() ?? contentRef.current;
+    const lines = md.split('\n');
+    const lineIdx = diag.line - 1;
+    if (lineIdx < 0 || lineIdx >= lines.length) return;
+
+    const line = lines[lineIdx];
+    const startCol = diag.column - 1;
+    const endCol = (diag.endColumn ?? diag.column) - 1;
+    lines[lineIdx] = line.slice(0, startCol) + replacement + line.slice(endCol);
+
+    const newMd = lines.join('\n');
+    mdxEditorRef.current?.setMarkdown(newMd);
+    handleContentChange(newMd);
+  }, [handleContentChange]);
 
   const handleMdxChange = useCallback((md: string) => {
     // Skip if this is MDXEditor's initial markdown normalization
@@ -2205,6 +2235,8 @@ export default function MosaicEditor({
                 diagnostics={markdownDiagnostics}
                 editorShellRef={editorShellRef}
                 viewMode="edit"
+                content={statsContent}
+                onApplyFix={handleLinterFix}
               />
             </div>
           )}
