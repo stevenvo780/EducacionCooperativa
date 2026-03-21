@@ -56,7 +56,7 @@ import { MarkdownPreview } from '@/components/mosaic-editor/MarkdownPreview';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
-import { BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2 } from 'lucide-react';
+import { BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
@@ -78,9 +78,9 @@ import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import {
   buildEvidenceMatrixMarkdown,
   buildResearchBriefMarkdown,
-  buildSemanticAtlasMarkdown,
-  SemanticWorkbench
+  buildSemanticAtlasMarkdown
 } from '@/components/editor/SemanticWorkbench';
+import { SemanticBrowser } from '@/components/editor/SemanticBrowser';
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
 import {
@@ -131,7 +131,6 @@ export default function MosaicEditor({
   const [docName, setDocName] = useState('');
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(PERSONAL_WORKSPACE_ID);
   const [showToolsPanel, setShowToolsPanel] = useState(false);
-  const [showSemanticWorkbench, setShowSemanticWorkbench] = useState(false);
   const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>({ concepts: [], fragments: [], relations: [], updatedAt: 0 });
   const [semanticNotice, setSemanticNotice] = useState<string | null>(null);
   const [semanticBusyAction, setSemanticBusyAction] = useState<string | null>(null);
@@ -1186,7 +1185,6 @@ export default function MosaicEditor({
         }
       );
       updateSemanticState(nextState);
-      setShowSemanticWorkbench(true);
       clearSemanticSelection();
       setDefineConceptDraft(null);
 
@@ -1270,7 +1268,6 @@ export default function MosaicEditor({
       }
       const nextState = captureAnalyticalFragment(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
-      setShowSemanticWorkbench(true);
       setSemanticNotice('Ficha analitica insertada y fragmento guardado como evidencia y fijado.');
       clearSemanticSelection();
     });
@@ -1281,7 +1278,6 @@ export default function MosaicEditor({
     void runSemanticAction('relate-concept', () => {
       const nextState = relateSelectionToConcept(semanticStoreContext, getSemanticPayload(semanticSelection.text), conceptId);
       updateSemanticState(nextState);
-      setShowSemanticWorkbench(true);
       setSemanticNotice('Fragmento relacionado con el concepto elegido.');
       clearSemanticSelection();
     });
@@ -1301,7 +1297,6 @@ export default function MosaicEditor({
       }
       const nextState = registerSemanticBlock(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
-      setShowSemanticWorkbench(true);
       setSemanticNotice('Bloque semántico insertado en el documento.');
       clearSemanticSelection();
     });
@@ -1327,7 +1322,6 @@ export default function MosaicEditor({
         sourceFragment: semanticSelection.text
       });
       await loadLinkedTasks();
-      setShowSemanticWorkbench(true);
       setSemanticNotice(`Fragmento enviado a “${targetColumn.name}”.`);
       clearSemanticSelection();
     });
@@ -1338,7 +1332,6 @@ export default function MosaicEditor({
     void runSemanticAction('mark-evidence', () => {
       const nextState = markSelectionAsEvidence(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
-      setShowSemanticWorkbench(true);
       setSemanticNotice('Evidencia guardada en el panel semántico.');
       clearSemanticSelection();
     });
@@ -1349,7 +1342,6 @@ export default function MosaicEditor({
     void runSemanticAction('pin-fragment', () => {
       const nextState = pinSelectionFragment(semanticStoreContext, getSemanticPayload(semanticSelection.text));
       updateSemanticState(nextState);
-      setShowSemanticWorkbench(true);
       setSemanticNotice('Fragmento fijado para acceso rápido.');
       clearSemanticSelection();
     });
@@ -1370,7 +1362,6 @@ export default function MosaicEditor({
         documentItem.name
       );
       updateSemanticState(nextState);
-      setShowSemanticWorkbench(true);
       setSemanticNotice(`Enlace interno creado hacia “${documentItem.name}”.`);
       clearSemanticSelection();
     });
@@ -1568,7 +1559,7 @@ export default function MosaicEditor({
         />
         <ToolbarShortcutButton
           title="Bloque LaTeX"
-          icon={<Sigma className="h-3.5 w-3.5" />}
+          icon={<Braces className="h-3.5 w-3.5" />}
           onClick={() => insertSnippet('\n$$\n\\int_{a}^{b} f(x) \\, dx = F(b) - F(a)\n$$\n')}
         />
         <ToolbarShortcutButton
@@ -1598,40 +1589,6 @@ export default function MosaicEditor({
             aria-label="Más opciones del editor"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowSnippetGallery((current) => !current)}
-            className={clsx(
-              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-              showSnippetGallery
-                ? 'bg-blue-600/25 text-blue-200 hover:bg-blue-600/35'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-            )}
-            title={showSnippetGallery ? 'Ocultar galeria de snippets' : 'Abrir galeria de snippets'}
-            aria-label={showSnippetGallery ? 'Ocultar galeria de snippets' : 'Abrir galeria de snippets'}
-            aria-pressed={showSnippetGallery}
-          >
-            <Library className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowSemanticWorkbench((current) => !current)}
-            className={clsx(
-              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-              showSemanticWorkbench
-                ? 'bg-blue-600/25 text-blue-200 hover:bg-blue-600/35'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-            )}
-            title={showSemanticWorkbench
-              ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
-              : `Abrir mesa semantica (${semanticItemCount} elementos)`}
-            aria-label={showSemanticWorkbench
-              ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
-              : `Abrir mesa semantica (${semanticItemCount} elementos)`}
-            aria-pressed={showSemanticWorkbench}
-          >
-            <BookMarked className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
@@ -1687,8 +1644,8 @@ export default function MosaicEditor({
               <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Settings2 className="h-3.5 w-3.5 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
               </button>
-              <button type="button" title={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'} aria-label={showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Abrir mesa semantica'} onClick={() => { setShowSemanticWorkbench((current) => !current); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-                <BookMarked className="h-3.5 w-3.5 text-blue-400" />{showSemanticWorkbench ? 'Ocultar mesa semantica' : 'Mesa semantica'}
+              <button type="button" title={viewMode === 'semantic' ? 'Volver al editor' : 'Abrir mesa semantica'} aria-label={viewMode === 'semantic' ? 'Volver al editor' : 'Abrir mesa semantica'} onClick={() => { setViewModeWithSync(viewMode === 'semantic' ? 'edit' : 'semantic'); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+                <BookMarked className="h-3.5 w-3.5 text-blue-400" />{viewMode === 'semantic' ? 'Volver al editor' : 'Mesa semantica'}
               </button>
               <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />Restaurar barra completa
@@ -1722,7 +1679,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showSemanticWorkbench, showSnippetGallery, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSemanticWorkbench, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, semanticItemCount]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)
@@ -1904,19 +1861,19 @@ export default function MosaicEditor({
           <div className="flex items-center gap-2 text-xs text-slate-500 font-mono shrink-0">
             <button
               type="button"
-              onClick={() => setShowSemanticWorkbench((current) => !current)}
+              onClick={() => setViewModeWithSync(viewMode === 'semantic' ? 'edit' : 'semantic')}
               className={clsx(
                 'mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full border transition',
-                showSemanticWorkbench
+                viewMode === 'semantic'
                   ? 'border-blue-500/40 bg-blue-500/15 text-blue-200'
                   : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
               )}
-              title={showSemanticWorkbench
-                ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
-                : `Abrir mesa semantica (${semanticItemCount} elementos)`}
-              aria-label={showSemanticWorkbench
-                ? `Ocultar mesa semantica (${semanticItemCount} elementos)`
-                : `Abrir mesa semantica (${semanticItemCount} elementos)`}
+              title={viewMode === 'semantic'
+                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
+                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
+              aria-label={viewMode === 'semantic'
+                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
+                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
             >
               <BookMarked className="h-3.5 w-3.5" />
             </button>
@@ -2017,7 +1974,7 @@ export default function MosaicEditor({
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowSemanticWorkbench(true)}
+                      onClick={() => setViewModeWithSync('semantic')}
                       className="rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-[11px] font-medium text-blue-200 transition hover:bg-blue-500/20"
                     >
                       Abrir mesa semántica
@@ -2090,7 +2047,19 @@ export default function MosaicEditor({
 
         {/* ── Editor area ── */}
         <div className="flex-1 relative overflow-hidden flex flex-col">
-          {viewMode === 'preview' ? (
+          {viewMode === 'semantic' ? (
+            <SemanticBrowser
+              docName={docName || currentDocMetaRef.current.name || 'Documento'}
+              state={semanticState}
+              linkedTasks={linkedTasks}
+              onBack={() => setViewModeWithSync('edit')}
+              onInsertAtlas={handleInsertSemanticAtlas}
+              onInsertEvidenceMatrix={handleInsertEvidenceMatrix}
+              onInsertResearchBrief={handleInsertResearchBrief}
+              onGenerateSTFile={handleGenerateSTFile}
+              companionSTExists={!!companionStDocId}
+            />
+          ) : viewMode === 'preview' ? (
             <>
               <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
                 <button
@@ -2175,7 +2144,7 @@ export default function MosaicEditor({
               <LinterPlugin
                 diagnostics={markdownDiagnostics}
                 editorShellRef={editorShellRef}
-                viewMode={viewMode}
+                viewMode="edit"
               />
             </div>
           )}
@@ -2189,19 +2158,6 @@ export default function MosaicEditor({
           )}
         </div>
 
-        {showSemanticWorkbench && (
-          <SemanticWorkbench
-            docName={docName || currentDocMetaRef.current.name || 'Documento'}
-            state={semanticState}
-            linkedTasks={linkedTasks}
-            onClose={() => setShowSemanticWorkbench(false)}
-            onInsertAtlas={handleInsertSemanticAtlas}
-            onInsertEvidenceMatrix={handleInsertEvidenceMatrix}
-            onInsertResearchBrief={handleInsertResearchBrief}
-            onGenerateSTFile={handleGenerateSTFile}
-            companionSTExists={!!companionStDocId}
-          />
-        )}
       </div>
 
       {linkedTasks.length > 0 && (
