@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, Info, Lightbulb, Ruler, Wrench } from 'lucide-react';
 import type { LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import type { Diagnostic as STDiagnostic } from '@stevenvo780/st-lang/api';
@@ -97,19 +97,42 @@ export function LinterOverlay({
   interactive = true
 }: LinterOverlayProps) {
   const lines = useMemo(() => content.split('\n'), [content]);
+  const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
 
   const handleFixClick = useCallback(
     (line: number, replacement: string) => {
       onApplyFix?.(line, replacement);
+      setOpenTooltipKey(null);
     },
     [onApplyFix]
   );
 
+  useEffect(() => {
+    if (!interactive) {
+      setOpenTooltipKey(null);
+    }
+  }, [interactive]);
+
+  useEffect(() => {
+    const handleMouseDown = (event: MouseEvent) => {
+      const overlay = overlayRef.current;
+      if (!overlay) return;
+      if (event.target instanceof Node && overlay.contains(event.target)) return;
+      setOpenTooltipKey(null);
+    };
+
+    document.addEventListener('mousedown', handleMouseDown, true);
+    return () => document.removeEventListener('mousedown', handleMouseDown, true);
+  }, []);
+
   if (diagnostics.length === 0) return null;
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden z-[50]">
+    <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-[50]">
       {diagnostics.map((d, i) => {
+        const tooltipKey = `${d.line ?? 1}:${d.column ?? 1}:${d.message}:${i}`;
+        const isTooltipOpen = interactive && openTooltipKey === tooltipKey;
         const line = d.line ?? 1;
         const col = d.column ?? 1;
 
@@ -171,11 +194,21 @@ export function LinterOverlay({
                 left,
                 width: Math.max(width, 4),
                 height: lineHeight,
-                cursor: interactive ? 'help' : 'default'
+                cursor: interactive ? 'pointer' : 'default'
+              }}
+              onMouseDown={(event) => {
+                if (!interactive) return;
+                event.preventDefault();
+                event.stopPropagation();
+                setOpenTooltipKey((current) => current === tooltipKey ? null : tooltipKey);
               }}
             >
             {/* Tooltip */}
-            <div className={interactive ? 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100] min-w-[220px] max-w-[320px]' : 'hidden'}>
+            <div
+              className={interactive ? 'absolute bottom-full left-0 mb-2 flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100] min-w-[220px] max-w-[320px]' : 'hidden'}
+              style={{ display: isTooltipOpen ? 'flex' : 'none' }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
               <div className="flex items-center gap-2 mb-1">
                 {isSTRef ? <Ruler className="w-3 h-3 text-cyan-400 flex-shrink-0" /> :
                  d.severity === 'error' ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" /> :
