@@ -26,6 +26,7 @@ interface UseMosaicTabsOptions {
 interface UseMosaicTabsResult {
     openBoard: () => Promise<void>;
     openStRunner: () => Promise<void>;
+    openSemanticBrowser: () => Promise<void>;
     openFilesTab: () => Promise<void>;
     closeTabById: (docId: string) => Promise<void>;
     openDocument: (doc: DocItem) => Promise<void>;
@@ -102,6 +103,33 @@ export function useMosaicTabs({
         });
         setShowMobileSidebar(false);
         setSelectedDocId(stId);
+    }, [currentWorkspace, user, openTabs, setShowMobileSidebar]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const openSemanticBrowser = useCallback(async () => {
+        if (!currentWorkspace || !user) return;
+        const semId = `semantic-browser-${currentWorkspace.id}`;
+        if (openTabs.find(tab => tab.id === semId)) {
+            setSelectedDocId(semId);
+            setShowMobileSidebar(false);
+            return;
+        }
+        const newSemItem: DocItem = {
+            id: semId,
+            name: 'Mesa Semántica',
+            type: 'semantic-browser',
+            workspaceId: currentWorkspace.id,
+            ownerId: user.uid,
+            updatedAt: new Date()
+        };
+        setOpenTabs(prev => [...prev, newSemItem]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(semId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, semId]);
+        });
+        setShowMobileSidebar(false);
+        setSelectedDocId(semId);
     }, [currentWorkspace, user, openTabs, setShowMobileSidebar]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const closeTabById = useCallback(async (docId: string) => {
@@ -371,6 +399,7 @@ export function useMosaicTabs({
     return {
         openBoard,
         openStRunner,
+        openSemanticBrowser,
         openFilesTab,
         closeTabById,
         openDocument,

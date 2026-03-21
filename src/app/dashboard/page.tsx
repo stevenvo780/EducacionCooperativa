@@ -89,6 +89,7 @@ import { useDocumentActions } from '@/hooks/dashboard/useDocumentActions';
 import { useWorkspaceActions } from '@/hooks/dashboard/useWorkspaceActions';
 import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
+import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -282,6 +283,8 @@ function DashboardContent() {
     const isBoardOpen = boardTabId ? openTabs.some(tab => tab.id === boardTabId) : false;
     const stRunnerTabId = currentWorkspaceId ? `st-runner-${currentWorkspaceId}` : null;
     const isStRunnerOpen = stRunnerTabId ? openTabs.some(tab => tab.id === stRunnerTabId) : false;
+    const semanticBrowserTabId = currentWorkspaceId ? `semantic-browser-${currentWorkspaceId}` : null;
+    const isSemanticBrowserOpen = semanticBrowserTabId ? openTabs.some(tab => tab.id === semanticBrowserTabId) : false;
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [showNewFileModal, setShowNewFileModal] = useState(false);
@@ -742,6 +745,7 @@ function DashboardContent() {
     const {
         openBoard,
         openStRunner,
+        openSemanticBrowser,
         openFilesTab,
         closeTabById,
         openDocument,
@@ -767,6 +771,13 @@ function DashboardContent() {
     openBoardRef.current = openBoard;
     openDocumentRef.current = openDocument;
     openDocumentInTileRef.current = openDocumentInTile;
+
+    /* Subscribe to semantic-browser-bus so editors can open the global tab */
+    useEffect(() => {
+        return semanticBrowserBus.subscribe(() => {
+            void openSemanticBrowser();
+        });
+    }, [openSemanticBrowser]);
 
     const showDialog = useCallback((config: DialogConfig) => {
         return new Promise<DialogResult>((resolve) => {
@@ -1513,6 +1524,8 @@ function DashboardContent() {
                         onOpenBoard={openBoard}
                         isStRunnerOpen={isStRunnerOpen}
                         onOpenStRunner={openStRunner}
+                        isSemanticBrowserOpen={isSemanticBrowserOpen}
+                        onOpenSemanticBrowser={openSemanticBrowser}
                         onOpenQuickSearch={openQuickSearch}
                         onAcceptInvite={acceptInvite}
                         onSelectWorkspace={selectWorkspace}

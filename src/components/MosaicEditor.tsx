@@ -72,6 +72,7 @@ import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
 import { normalizePath } from '@/lib/folder-utils';
 import { buildSTFromSemantic, companionSTName } from '@/lib/buildSTFromSemantic';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
+import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
@@ -80,7 +81,6 @@ import {
   buildResearchBriefMarkdown,
   buildSemanticAtlasMarkdown
 } from '@/components/editor/SemanticWorkbench';
-import { SemanticBrowser } from '@/components/editor/SemanticBrowser';
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
 import {
@@ -1644,8 +1644,8 @@ export default function MosaicEditor({
               <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Settings2 className="h-3.5 w-3.5 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
               </button>
-              <button type="button" title={viewMode === 'semantic' ? 'Volver al editor' : 'Abrir mesa semantica'} aria-label={viewMode === 'semantic' ? 'Volver al editor' : 'Abrir mesa semantica'} onClick={() => { setViewModeWithSync(viewMode === 'semantic' ? 'edit' : 'semantic'); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-                <BookMarked className="h-3.5 w-3.5 text-blue-400" />{viewMode === 'semantic' ? 'Volver al editor' : 'Mesa semantica'}
+              <button type="button" title="Abrir mesa semántica" aria-label="Abrir mesa semántica" onClick={() => { semanticBrowserBus.open(docName || currentDocMetaRef.current.name); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
+                <BookMarked className="h-3.5 w-3.5 text-blue-400" />Mesa semántica
               </button>
               <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />Restaurar barra completa
@@ -1679,7 +1679,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)
@@ -1861,19 +1861,13 @@ export default function MosaicEditor({
           <div className="flex items-center gap-2 text-xs text-slate-500 font-mono shrink-0">
             <button
               type="button"
-              onClick={() => setViewModeWithSync(viewMode === 'semantic' ? 'edit' : 'semantic')}
+              onClick={() => semanticBrowserBus.open(docName || currentDocMetaRef.current.name)}
               className={clsx(
                 'mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full border transition',
-                viewMode === 'semantic'
-                  ? 'border-blue-500/40 bg-blue-500/15 text-blue-200'
-                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
               )}
-              title={viewMode === 'semantic'
-                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
-                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
-              aria-label={viewMode === 'semantic'
-                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
-                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
+              title={`Abrir mesa semántica (${semanticItemCount} elementos)`}
+              aria-label={`Abrir mesa semántica (${semanticItemCount} elementos)`}
             >
               <BookMarked className="h-3.5 w-3.5" />
             </button>
@@ -1974,7 +1968,7 @@ export default function MosaicEditor({
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setViewModeWithSync('semantic')}
+                      onClick={() => semanticBrowserBus.open(docName || currentDocMetaRef.current.name)}
                       className="rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-[11px] font-medium text-blue-200 transition hover:bg-blue-500/20"
                     >
                       Abrir mesa semántica
@@ -2047,19 +2041,7 @@ export default function MosaicEditor({
 
         {/* ── Editor area ── */}
         <div className="flex-1 relative overflow-hidden flex flex-col">
-          {viewMode === 'semantic' ? (
-            <SemanticBrowser
-              docName={docName || currentDocMetaRef.current.name || 'Documento'}
-              state={semanticState}
-              linkedTasks={linkedTasks}
-              onBack={() => setViewModeWithSync('edit')}
-              onInsertAtlas={handleInsertSemanticAtlas}
-              onInsertEvidenceMatrix={handleInsertEvidenceMatrix}
-              onInsertResearchBrief={handleInsertResearchBrief}
-              onGenerateSTFile={handleGenerateSTFile}
-              companionSTExists={!!companionStDocId}
-            />
-          ) : viewMode === 'preview' ? (
+          {viewMode === 'preview' ? (
             <>
               <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-900 border-b border-slate-800">
                 <button
@@ -2193,19 +2175,13 @@ export default function MosaicEditor({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setViewModeWithSync(viewMode === 'semantic' ? 'edit' : 'semantic')}
+              onClick={() => semanticBrowserBus.open(docName || currentDocMetaRef.current.name)}
               className={clsx(
                 'inline-flex h-5 w-5 items-center justify-center rounded-full border transition',
-                viewMode === 'semantic'
-                  ? 'border-blue-500/40 bg-blue-500/15 text-blue-200'
-                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
               )}
-              title={viewMode === 'semantic'
-                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
-                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
-              aria-label={viewMode === 'semantic'
-                ? `Ocultar mesa semántica (${semanticItemCount} elementos)`
-                : `Abrir mesa semántica (${semanticItemCount} elementos)`}
+              title={`Abrir mesa semántica (${semanticItemCount} elementos)`}
+              aria-label={`Abrir mesa semántica (${semanticItemCount} elementos)`}
             >
               <BookMarked className="h-3 w-3" />
             </button>

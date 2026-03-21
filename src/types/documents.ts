@@ -5,7 +5,8 @@ export enum DocumentType {
   Terminal = 'terminal',
   Files = 'files',
   Board = 'board',
-  STRunner = 'st-runner'
+  STRunner = 'st-runner',
+  SemanticBrowser = 'semantic-browser'
 }
 
 export type DocumentTypeId = `${DocumentType}`;
