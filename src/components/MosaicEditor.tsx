@@ -1243,7 +1243,7 @@ export default function MosaicEditor({
         setSemanticNotice('📐 Concepto registrado, pero falló la generación del archivo ST.');
       }
     });
-  }, [clearSemanticSelection, companionStDocId, currentWorkspaceId, defineConceptDraft, docName, getSemanticPayload, runSemanticAction, semanticStoreContext, updateSemanticState, user?.uid]);
+  }, [clearSemanticSelection, companionStDocId, currentWorkspaceId, defineConceptDraft, docName, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, updateSemanticState, user?.uid]);
 
   const handleSaveAsSnippet = useCallback(() => {
     if (!semanticSelection) return;

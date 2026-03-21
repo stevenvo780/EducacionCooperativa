@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -7,7 +8,7 @@ import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from '
 import { Mail, Lock, AlertCircle, Chrome, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginPage() {
   const { signInWithGoogle, loginWithEmail, registerWithEmail, resetPassword } = useAuth();
   const reduceMotion = useReducedMotion();
   const [isLogin, setIsLogin] = useState(true);
@@ -293,3 +294,7 @@ export default function LoginPage() {
     </LazyMotion>
   );
 }
+
+export default dynamic(() => Promise.resolve(LoginPage), {
+  ssr: false
+});
