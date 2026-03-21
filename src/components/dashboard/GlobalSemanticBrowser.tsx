@@ -1,8 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { SemanticBrowser, type SemanticTab } from '@/components/editor/SemanticBrowser';
-import { loadSemanticWorkspaceState, type SemanticWorkspaceState } from '@/services/editorSemanticStore';
+import {
+  loadSemanticWorkspaceState,
+  deleteConcept,
+  deleteFragment,
+  deleteRelation,
+  updateConcept,
+  updateFragment,
+  type SemanticWorkspaceState
+} from '@/services/editorSemanticStore';
 import { EMPTY_SEMANTIC_WORKSPACE_STATE } from '@/lib/semantic/workspace-state';
 import type { BoardCard } from '@/components/dashboard/types';
 
@@ -20,21 +28,51 @@ export default function GlobalSemanticBrowser({
 }: GlobalSemanticBrowserProps) {
   const [state, setState] = useState<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!workspaceId) return;
-    const loaded = loadSemanticWorkspaceState({ workspaceId, userId });
-    setState(loaded);
+    setState(loadSemanticWorkspaceState({ workspaceId, userId }));
   }, [workspaceId, userId]);
+
+  useEffect(() => { reload(); }, [reload]);
 
   /* Reload periodically to pick up changes from editors */
   useEffect(() => {
     if (!workspaceId) return;
-    const interval = setInterval(() => {
-      const loaded = loadSemanticWorkspaceState({ workspaceId, userId });
-      setState(loaded);
-    }, 3000);
+    const interval = setInterval(reload, 3000);
     return () => clearInterval(interval);
-  }, [workspaceId, userId]);
+  }, [workspaceId, reload]);
+
+  const ctx = useMemo(() => workspaceId ? { workspaceId, userId: userId ?? undefined } : null, [workspaceId, userId]);
+
+  const handleDeleteConcept = useCallback((conceptId: string) => {
+    if (!ctx) return;
+    deleteConcept(ctx, conceptId);
+    reload();
+  }, [ctx, reload]);
+
+  const handleDeleteFragment = useCallback((fragmentId: string) => {
+    if (!ctx) return;
+    deleteFragment(ctx, fragmentId);
+    reload();
+  }, [ctx, reload]);
+
+  const handleDeleteRelation = useCallback((relationId: string) => {
+    if (!ctx) return;
+    deleteRelation(ctx, relationId);
+    reload();
+  }, [ctx, reload]);
+
+  const handleEditConcept = useCallback((conceptId: string, updates: { title?: string; definition?: string; formula?: string }) => {
+    if (!ctx) return;
+    updateConcept(ctx, conceptId, updates);
+    reload();
+  }, [ctx, reload]);
+
+  const handleEditFragment = useCallback((fragmentId: string, updates: { text?: string }) => {
+    if (!ctx) return;
+    updateFragment(ctx, fragmentId, updates);
+    reload();
+  }, [ctx, reload]);
 
   const initialTab = useMemo<SemanticTab | undefined>(
     () => filterDocName ? 'archivos' : undefined,
@@ -57,6 +95,11 @@ export default function GlobalSemanticBrowser({
       standalone
       initialTab={initialTab}
       filterSTFile={filterDocName}
+      onDeleteConcept={handleDeleteConcept}
+      onDeleteFragment={handleDeleteFragment}
+      onDeleteRelation={handleDeleteRelation}
+      onEditConcept={handleEditConcept}
+      onEditFragment={handleEditFragment}
     />
   );
 }
