@@ -209,10 +209,10 @@ class STDefinitionsRegistryClass {
 
       // interpret / interpretar
       const interpretMatch = trimmed.match(
-        /^(?:interpret|interpretar)\s+"([^"]+)"\s+(?:as|como)\s+(.+)/i
+        /^(?:interpret|interpretar)\s+"((?:\\.|[^"\\])*)"\s+(?:as|como)\s+(.+)/i
       );
       if (interpretMatch) {
-        const fullText = interpretMatch[1];
+        const fullText = unescapeSTString(interpretMatch[1]);
         const stId = interpretMatch[2].trim();
         defs.push({
           name: stId,
@@ -235,6 +235,13 @@ class STDefinitionsRegistryClass {
       listener(all);
     }
   }
+}
+
+function unescapeSTString(value: string): string {
+  return value
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, ' ')
+    .replace(/\\\\/g, '\\');
 }
 
 /** Singleton global del registry de definiciones ST */

@@ -53,6 +53,7 @@ import {
   buildWorkspaceAwarePathCandidates, extractWorkspaceSegments
 } from '@/components/mosaic-editor/utils';
 import { MarkdownPreview } from '@/components/mosaic-editor/MarkdownPreview';
+import { mermaidCodeBlockDescriptor } from '@/components/mosaic-editor/MermaidCodeBlockEditor';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
@@ -1879,7 +1880,7 @@ export default function MosaicEditor({
     linkPlugin(),
     linkDialogPlugin(),
     imagePlugin({ imageUploadHandler: async () => '/placeholder.png' }),
-    codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
+    codeBlockPlugin({ defaultCodeBlockLanguage: '', codeBlockEditorDescriptors: [mermaidCodeBlockDescriptor] }),
     codeMirrorPlugin({
       codeBlockLanguages: {
         js: 'JavaScript',

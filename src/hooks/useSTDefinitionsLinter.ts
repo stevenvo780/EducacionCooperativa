@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { STDefinitionsRegistry, type STDefinition } from '@/lib/st-definitions-registry';
 import type { LinterRule, LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 
+const LONG_INTERPRETATION_CHAR_THRESHOLD = 280;
+const LONG_INTERPRETATION_WORD_THRESHOLD = 42;
+const EXCERPT_MAX_WORDS = 12;
+const EXCERPT_MAX_CHARS = 96;
+
 /**
  * Icono según tipo de definición ST.
  */
@@ -66,13 +71,22 @@ export function useSTDefinitionsLinter() {
 
   /** Frases en lenguaje natural extraídas de interpret (para buscar en markdown) */
   const naturalPhrases = useMemo(() => {
-    const phrases: { phrase: string; phraseLower: string; def: STDefinition }[] = [];
+    const phrases: Array<{
+      phrase: string;
+      def: STDefinition;
+      searchText: string;
+      searchTextLower: string;
+      isExcerpt: boolean;
+    }> = [];
     for (const def of definitions) {
       if (def.naturalName && def.naturalName.length >= 8) {
+        const searchText = buildInterpretationSearchText(def.naturalName);
         phrases.push({
           phrase: def.naturalName,
-          phraseLower: def.naturalName.toLowerCase(),
-          def
+          def,
+          searchText,
+          searchTextLower: searchText.toLowerCase(),
+          isExcerpt: searchText !== def.naturalName
         });
       }
     }
@@ -128,23 +142,25 @@ export function useSTDefinitionsLinter() {
 
         // Buscar frases naturales de interpret en el texto markdown
         const lineLower = line.toLowerCase();
-        for (const { phrase, phraseLower, def } of naturalPhrases) {
+        for (const { phrase, searchText, searchTextLower, def, isExcerpt } of naturalPhrases) {
           let startPos = 0;
           let idx: number;
-          while ((idx = lineLower.indexOf(phraseLower, startPos)) !== -1) {
+          while ((idx = lineLower.indexOf(searchTextLower, startPos)) !== -1) {
             const key = `${lineIdx}:${idx}:natural:${phrase.slice(0, 20)}`;
             if (!seen.has(key)) {
               seen.add(key);
               const icon = kindIcon(def.kind);
               results.push({
-                message: `${icon} Interpretación ST: "${phrase.slice(0, 60)}${phrase.length > 60 ? '…' : ''}" → ${def.name}`,
+                message: `${icon} ${isExcerpt ? 'Interpretación ST (fragmento)' : 'Interpretación ST'}: "${phrase.slice(0, 60)}${phrase.length > 60 ? '…' : ''}" → ${def.name}`,
                 severity: 'info',
                 line: lineIdx + 1,
                 column: idx + 1,
                 endLine: lineIdx + 1,
-                endColumn: idx + 1 + phrase.length,
+                endColumn: idx + 1 + searchText.length,
                 source: 'ST-Definitions',
-                suggestion: def.description || undefined
+                suggestion: def.description || (isExcerpt
+                  ? 'Definición larga: se usa un fragmento inicial como ancla visual.'
+                  : undefined)
               });
             }
             startPos = idx + 1;
@@ -178,4 +194,30 @@ export function useSTDefinitionsLinter() {
 /** Escapa caracteres especiales de regex */
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildInterpretationSearchText(phrase: string): string {
+  const normalized = phrase.trim().replace(/\s+/g, ' ');
+  if (isQuotedInterpretation(normalized)) {
+    return normalized;
+  }
+
+  const words = normalized.split(' ').filter(Boolean);
+  const isLongInterpretation = normalized.length > LONG_INTERPRETATION_CHAR_THRESHOLD
+    || words.length > LONG_INTERPRETATION_WORD_THRESHOLD;
+
+  if (!isLongInterpretation) {
+    return normalized;
+  }
+
+  const excerptWords = words.slice(0, EXCERPT_MAX_WORDS).join(' ');
+  return excerptWords.length <= EXCERPT_MAX_CHARS
+    ? excerptWords
+    : `${excerptWords.slice(0, EXCERPT_MAX_CHARS).trimEnd()}…`;
+}
+
+function isQuotedInterpretation(text: string) {
+  if (text.length < 2) return false;
+  const quoteChars = new Set(['"', "'", '“', '”', '«', '»', '„', '‟']);
+  return quoteChars.has(text[0]) && quoteChars.has(text[text.length - 1]);
 }
