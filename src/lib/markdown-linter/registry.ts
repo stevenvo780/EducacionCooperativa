@@ -156,8 +156,8 @@ class MarkdownLinterRegistryClass {
           name: rule.name,
           description: rule.description,
           category: rule.category,
-          defaultEnabled: rule.defaultEnabled,
-        },
+          defaultEnabled: rule.defaultEnabled
+        }
       });
     }
     this._allStatesCache = states;

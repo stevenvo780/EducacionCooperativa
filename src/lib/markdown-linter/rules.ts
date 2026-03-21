@@ -12,7 +12,7 @@
 import {
   type LinterRule,
   type LinterDiagnostic,
-  getCodeBlockLines,
+  getCodeBlockLines
 } from './types';
 import { isSpellEngineReady, isCorrect, suggest } from './spell-engine';
 
@@ -313,7 +313,7 @@ const COMMON_TYPOS: Record<string, string> = {
   'esperiencia': 'experiencia',
   'esplicar': 'explicar',
   'esponer': 'exponer',
-  'espresion': 'expresión',
+  'espresion': 'expresión'
 };
 
 export const spellingRule: LinterRule = {
@@ -351,7 +351,7 @@ export const spellingRule: LinterRule = {
             endLine: lineIdx + 1,
             endColumn: end + 1,
             source: 'Spelling',
-            replacements,
+            replacements
           });
           continue;
         }
@@ -373,12 +373,12 @@ export const spellingRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: end + 1,
           source: 'Spelling',
-          replacements,
+          replacements
         });
       }
     }
     return results;
-  },
+  }
 };
 
 export const doubledWordsRule: LinterRule = {
@@ -407,12 +407,12 @@ export const doubledWordsRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: match.index + 1 + match[0].length,
           source: 'Spelling',
-          replacements: [match[1]],
+          replacements: [match[1]]
         });
       }
     }
     return results;
-  },
+  }
 };
 
 // ───────────────────────────────────────────────────────────
@@ -434,20 +434,20 @@ const ACCENT_SUFFIX_RULES: Array<{
   // -cion → -ción  (educacion → educación)
   {
     pattern: /\b([a-záéíóúñü]{2,})cion\b/gi,
-    fix: (m) => m.slice(0, -4) + 'ción',
-    msg: 'Falta tilde: las palabras terminadas en "-ción" llevan acento.',
+    fix: (m) => `${m.slice(0, -4)}ción`,
+    msg: 'Falta tilde: las palabras terminadas en "-ción" llevan acento.'
   },
   // -sion → -sión  (expresion → expresión)
   {
     pattern: /\b([a-záéíóúñü]{2,})sion\b/gi,
-    fix: (m) => m.slice(0, -4) + 'sión',
-    msg: 'Falta tilde: las palabras terminadas en "-sión" llevan acento.',
+    fix: (m) => `${m.slice(0, -4)}sión`,
+    msg: 'Falta tilde: las palabras terminadas en "-sión" llevan acento.'
   },
   // -gion → -gión  (region → región)
   {
     pattern: /\b([a-záéíóúñü]{2,})gion\b/gi,
-    fix: (m) => m.slice(0, -4) + 'gión',
-    msg: 'Falta tilde: las palabras terminadas en "-gión" llevan acento.',
+    fix: (m) => `${m.slice(0, -4)}gión`,
+    msg: 'Falta tilde: las palabras terminadas en "-gión" llevan acento.'
   },
   // -tico/a/os/as → -tico  (automatico → automático) — esdrújulas
   {
@@ -465,32 +465,32 @@ const ACCENT_SUFFIX_RULES: Array<{
       }
       return m;
     },
-    msg: 'Posible esdrújula sin tilde (terminación "-tico").',
+    msg: 'Posible esdrújula sin tilde (terminación "-tico").'
   },
   // -logico/a → -lógico/a
   {
     pattern: /\b([a-záéíóúñü]+)logico(s|a|as)?\b/gi,
     fix: (m) => m.replace(/logico/i, 'lógico'),
-    msg: 'Falta tilde: "-lógico" es esdrújula.',
+    msg: 'Falta tilde: "-lógico" es esdrújula.'
   },
   // -grafico/a → -gráfico/a
   {
     pattern: /\b([a-záéíóúñü]+)grafico(s|a|as)?\b/gi,
     fix: (m) => m.replace(/grafico/i, 'gráfico'),
-    msg: 'Falta tilde: "-gráfico" es esdrújula.',
+    msg: 'Falta tilde: "-gráfico" es esdrújula.'
   },
   // -nomico/a → -nómico/a
   {
     pattern: /\b([a-záéíóúñü]+)nomico(s|a|as)?\b/gi,
     fix: (m) => m.replace(/nomico/i, 'nómico'),
-    msg: 'Falta tilde: "-nómico" es esdrújula.',
+    msg: 'Falta tilde: "-nómico" es esdrújula.'
   },
   // -metrico/a → -métrico/a
   {
     pattern: /\b([a-záéíóúñü]+)metrico(s|a|as)?\b/gi,
     fix: (m) => m.replace(/metrico/i, 'métrico'),
-    msg: 'Falta tilde: "-métrico" es esdrújula.',
-  },
+    msg: 'Falta tilde: "-métrico" es esdrújula.'
+  }
 ];
 
 /** Words already handled by COMMON_TYPOS — skip in accent rule to avoid duplicates */
@@ -537,13 +537,13 @@ export const accentPatternRule: LinterRule = {
             endLine: lineIdx + 1,
             endColumn: match.index + 1 + word.length,
             source: 'Spelling',
-            replacements: [fixed],
+            replacements: [fixed]
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 // ───────────────────────────────────────────────────────────
@@ -575,7 +575,7 @@ export const suspiciousPatternsRule: LinterRule = {
     const whitelist = new Set([
       'innato', 'innata', 'innovar', 'innovación', 'innovador', 'innecesario',
       'innoble', 'innombrable', 'perenne', 'biennal', 'connotar', 'connotación',
-      'ennegrecer', 'cannabis', 'connectar',
+      'ennegrecer', 'cannabis', 'connectar'
     ]);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -603,7 +603,7 @@ export const suspiciousPatternsRule: LinterRule = {
             column: wordMatch.index + 1,
             endLine: lineIdx + 1,
             endColumn: wordMatch.index + 1 + word.length,
-            source: 'Spelling',
+            source: 'Spelling'
           });
           continue; // One diagnostic per word max
         }
@@ -620,7 +620,7 @@ export const suspiciousPatternsRule: LinterRule = {
             column: wordMatch.index + 1,
             endLine: lineIdx + 1,
             endColumn: wordMatch.index + 1 + word.length,
-            source: 'Spelling',
+            source: 'Spelling'
           });
           continue;
         }
@@ -636,13 +636,13 @@ export const suspiciousPatternsRule: LinterRule = {
             column: wordMatch.index + 1,
             endLine: lineIdx + 1,
             endColumn: wordMatch.index + 1 + word.length,
-            source: 'Spelling',
+            source: 'Spelling'
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -674,12 +674,12 @@ export const headingSpaceRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: hashes.length + 1,
           source: 'Structure',
-          replacements: [`${hashes} `],
+          replacements: [`${hashes} `]
         });
       }
     }
     return results;
-  },
+  }
 };
 
 export const headingHierarchyRule: LinterRule = {
@@ -708,14 +708,14 @@ export const headingHierarchyRule: LinterRule = {
             column: 1,
             endLine: lineIdx + 1,
             endColumn: level + 1,
-            source: 'Structure',
+            source: 'Structure'
           });
         }
         lastLevel = level;
       }
     }
     return results;
-  },
+  }
 };
 
 export const multipleH1Rule: LinterRule = {
@@ -742,13 +742,13 @@ export const multipleH1Rule: LinterRule = {
             column: 1,
             endLine: lineIdx + 1,
             endColumn: lines[lineIdx].length + 1,
-            source: 'Structure',
+            source: 'Structure'
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 export const emptyHeadingRule: LinterRule = {
@@ -772,12 +772,12 @@ export const emptyHeadingRule: LinterRule = {
           column: 1,
           endLine: lineIdx + 1,
           endColumn: lines[lineIdx].length + 1,
-          source: 'Structure',
+          source: 'Structure'
         });
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -811,13 +811,13 @@ export const linkSpacesRule: LinterRule = {
             endLine: lineIdx + 1,
             endColumn: match.index + match[0].indexOf(match[2]) + 1 + match[2].length,
             source: 'Links',
-            replacements: [match[2].replace(/ /g, '%20')],
+            replacements: [match[2].replace(/ /g, '%20')]
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 export const emptyLinkRule: LinterRule = {
@@ -848,7 +848,7 @@ export const emptyLinkRule: LinterRule = {
             column: match.index + 1,
             endLine: lineIdx + 1,
             endColumn: match.index + 1 + match[0].length,
-            source: 'Links',
+            source: 'Links'
           });
         }
         if (!url) {
@@ -860,13 +860,13 @@ export const emptyLinkRule: LinterRule = {
             column: match.index + 1,
             endLine: lineIdx + 1,
             endColumn: match.index + 1 + match[0].length,
-            source: 'Links',
+            source: 'Links'
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 export const bareUrlRule: LinterRule = {
@@ -898,12 +898,12 @@ export const bareUrlRule: LinterRule = {
           column: match.index + 1,
           endLine: lineIdx + 1,
           endColumn: match.index + 1 + match[0].length,
-          source: 'Links',
+          source: 'Links'
         });
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -934,7 +934,7 @@ export const longParagraphRule: LinterRule = {
           column: 1,
           endLine: endLineIdx + 1,
           endColumn: 1,
-          source: 'Readability',
+          source: 'Readability'
         });
       }
       paragraphStart = -1;
@@ -957,12 +957,12 @@ export const longParagraphRule: LinterRule = {
       }
 
       if (paragraphStart < 0) paragraphStart = lineIdx;
-      paragraphText += ' ' + trimmed;
+      paragraphText += ` ${trimmed}`;
       paragraphWords = paragraphText.trim().split(/\s+/).length;
     }
     flushParagraph(lines.length - 1);
     return results;
-  },
+  }
 };
 
 export const longSentenceRule: LinterRule = {
@@ -996,14 +996,14 @@ export const longSentenceRule: LinterRule = {
             column: col + 1,
             endLine: lineIdx + 1,
             endColumn: col + 1 + sentence.length,
-            source: 'Readability',
+            source: 'Readability'
           });
         }
         col += sentence.length + 1;
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1036,13 +1036,13 @@ export const imageAltTextRule: LinterRule = {
             column: match.index + 1,
             endLine: lineIdx + 1,
             endColumn: match.index + 1 + match[0].length,
-            source: 'Accessibility',
+            source: 'Accessibility'
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1086,13 +1086,13 @@ export const mixedListMarkersRule: LinterRule = {
             column: 1,
             endLine: lineIdx + 1,
             endColumn: 2,
-            source: 'Consistency',
+            source: 'Consistency'
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1128,12 +1128,12 @@ export const trailingWhitespaceRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: line.length + 1,
           source: 'Whitespace',
-          replacements: [''],
+          replacements: ['']
         });
       }
     }
     return results;
-  },
+  }
 };
 
 export const consecutiveBlankLinesRule: LinterRule = {
@@ -1159,7 +1159,7 @@ export const consecutiveBlankLinesRule: LinterRule = {
             column: 1,
             endLine: lineIdx + 1,
             endColumn: 1,
-            source: 'Whitespace',
+            source: 'Whitespace'
           });
         }
       } else {
@@ -1167,7 +1167,7 @@ export const consecutiveBlankLinesRule: LinterRule = {
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1204,7 +1204,7 @@ export const unclosedBracketsRule: LinterRule = {
             column: 1,
             endLine: lineIdx + 1,
             endColumn: line.length + 1,
-            source: 'Academic',
+            source: 'Academic'
           });
         } else if (count < 0) {
           results.push({
@@ -1214,13 +1214,13 @@ export const unclosedBracketsRule: LinterRule = {
             column: 1,
             endLine: lineIdx + 1,
             endColumn: line.length + 1,
-            source: 'Academic',
+            source: 'Academic'
           });
         }
       }
     }
     return results;
-  },
+  }
 };
 
 export const todoMarkersRule: LinterRule = {
@@ -1247,12 +1247,12 @@ export const todoMarkersRule: LinterRule = {
           column: match.index + 1,
           endLine: lineIdx + 1,
           endColumn: match.index + 1 + match[0].length,
-          source: 'Academic',
+          source: 'Academic'
         });
       }
     }
     return results;
-  },
+  }
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1286,5 +1286,5 @@ export const ALL_BUILTIN_RULES: LinterRule[] = [
   consecutiveBlankLinesRule,
   // Academic
   unclosedBracketsRule,
-  todoMarkersRule,
+  todoMarkersRule
 ];
