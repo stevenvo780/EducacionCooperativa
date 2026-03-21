@@ -7,18 +7,69 @@
  */
 import type { SemanticWorkspaceState } from '@/services/editorSemanticStore';
 
-/** Sanitiza texto para usarlo como identificador ST válido. */
-const toSTIdentifier = (text: string): string => {
+/** Stopwords en español para filtrar al generar identificadores. */
+const STOPWORDS = new Set([
+  'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas',
+  'de', 'del', 'al', 'en', 'con', 'por', 'para', 'sin',
+  'que', 'se', 'su', 'sus', 'es', 'son', 'ser', 'fue',
+  'y', 'o', 'a', 'e', 'no', 'ni', 'si', 'como', 'pero',
+  'mas', 'este', 'esta', 'esto', 'ese', 'esa', 'eso',
+  'lo', 'le', 'les', 'me', 'te', 'nos', 'ya', 'muy',
+  'por eso', 'sino', 'tambien', 'puede', 'pueden',
+  'ha', 'han', 'hay', 'he', 'ser', 'era', 'eso',
+  'todo', 'toda', 'todos', 'todas', 'otro', 'otra'
+]);
+
+/**
+ * Extrae 3-4 palabras clave de un texto, filtrando stopwords.
+ * Produce identificadores legibles como TECNICA_NECESIDAD.
+ */
+const extractKeywords = (text: string, maxWords = 4): string[] => {
   const normalized = text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9_\s]/g, '')
-    .trim()
-    .replace(/\s+/g, '_')
-    .toUpperCase();
+    .toLowerCase();
+  const words = normalized
+    .replace(/[^a-z0-9\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length >= 2 && !STOPWORDS.has(w));
+  return words.slice(0, maxWords);
+};
+
+/** Genera un identificador ST corto y legible a partir de texto. */
+const toSTIdentifier = (text: string, fallback = 'CONCEPTO'): string => {
+  const keywords = extractKeywords(text);
+  if (keywords.length === 0) return fallback;
+  const id = keywords.join('_').toUpperCase();
   // Asegurar que empiece con letra
-  const safe = /^[A-Z]/.test(normalized) ? normalized : `C_${normalized}`;
-  return safe.slice(0, 60) || 'CONCEPTO';
+  const safe = /^[A-Z]/.test(id) ? id : `C_${id}`;
+  return safe.slice(0, 60);
+};
+
+/**
+ * Subdivide un texto largo en cláusulas usando signos de puntuación.
+ * Solo genera sub-cláusulas si tienen ≥ 3 palabras significativas.
+ */
+const splitIntoClauses = (text: string): string[] => {
+  // Dividir por punto, punto y coma
+  const sentences = text.split(/[.;]+/).map(s => s.trim()).filter(Boolean);
+  const clauses: string[] = [];
+
+  for (const sentence of sentences) {
+    // Subdividir oraciones por coma solo si las partes son sustanciales
+    const parts = sentence.split(/,/).map(p => p.trim()).filter(Boolean);
+    if (parts.length <= 1 || parts.every(p => p.split(/\s+/).length < 3)) {
+      // La oración no se subdivide bien por comas → dejarla entera
+      if (sentence.split(/\s+/).length >= 3) clauses.push(sentence);
+    } else {
+      for (const part of parts) {
+        const wordCount = part.split(/\s+/).length;
+        if (wordCount >= 3) clauses.push(part);
+      }
+    }
+  }
+
+  return clauses;
 };
 
 /** Escapa comillas dobles para strings ST. */
@@ -48,20 +99,65 @@ const buildConceptDefines = (
     ''
   ];
 
-  concepts.forEach((concept) => {
-    const id = toSTIdentifier(concept.title);
-    const desc = escapeSTString(concept.excerpt || concept.title);
-    // interpret es un statement de nivel top; define solo acepta fórmulas.
-    // Usamos interpret para mapear texto→proposición y opcionalmente
-    // define como alias si hay definición adicional.
-    if (concept.definition) {
-      const def = escapeSTString(concept.definition);
-      lines.push(`// Definición: ${def}`);
-      lines.push(`interpret "${desc}" as ${id}`);
-      lines.push(`define ${id}_DEF = ${id} description "${def}"`);
-    } else {
-      lines.push(`interpret "${desc}" as ${id}`);
+  // Track used identifiers to avoid collisions
+  const usedIds = new Set<string>();
+  const uniqueId = (base: string): string => {
+    let id = base;
+    let counter = 2;
+    while (usedIds.has(id)) { id = `${base}_${counter}`; counter++; }
+    usedIds.add(id);
+    return id;
+  };
+
+  concepts.forEach((concept, conceptIdx) => {
+    const fullText = concept.excerpt || concept.title;
+    const clauses = splitIntoClauses(fullText);
+    const conceptLabel = concept.definition
+      ? escapeSTString(concept.definition)
+      : escapeSTString(concept.title.slice(0, 80));
+
+    // Si el usuario eligió perfil lógico, emitirlo
+    if (concept.logicProfile) {
+      lines.push(`logic ${concept.logicProfile}`);
+      lines.push('');
     }
+
+    lines.push(`// Concepto ${conceptIdx + 1}: ${conceptLabel}`);
+
+    if (clauses.length > 1) {
+      // ── Subdivisión en cláusulas ──
+      const clauseIds: string[] = [];
+      clauses.forEach((clause) => {
+        const id = uniqueId(toSTIdentifier(clause));
+        clauseIds.push(id);
+        lines.push(`interpret "${escapeSTString(clause)}" as ${id}`);
+      });
+
+      // Generar define que agrupa las sub-proposiciones
+      if (concept.definition) {
+        const groupId = uniqueId(toSTIdentifier(concept.definition, `CONCEPTO_${conceptIdx + 1}`));
+        const conjunction = clauseIds.join(' & ');
+        lines.push(`define ${groupId} = ${conjunction} description "${conceptLabel}"`);
+      }
+    } else {
+      // Texto corto → un solo interpret
+      const id = uniqueId(
+        concept.definition
+          ? toSTIdentifier(concept.definition, `CONCEPTO_${conceptIdx + 1}`)
+          : toSTIdentifier(fullText, `CONCEPTO_${conceptIdx + 1}`)
+      );
+      lines.push(`interpret "${escapeSTString(fullText)}" as ${id}`);
+      if (concept.definition) {
+        lines.push(`define ${id}_DEF = ${id} description "${conceptLabel}"`);
+      }
+    }
+
+    // Si el usuario escribió una fórmula, agregarla como axioma
+    if (concept.formula) {
+      const axiomId = uniqueId(`AX_${toSTIdentifier(concept.definition || concept.title, `CONCEPTO_${conceptIdx + 1}`)}`);
+      lines.push(`axiom ${axiomId} = ${concept.formula}`);
+    }
+
     lines.push('');
   });
 
@@ -128,7 +224,9 @@ const buildVerificationSkeleton = (
     ''
   ];
 
-  const ids = concepts.slice(0, 5).map((c) => toSTIdentifier(c.title));
+  const ids = concepts.slice(0, 5).map((c) =>
+    toSTIdentifier(c.definition || c.title)
+  );
 
   if (ids.length >= 2) {
     lines.push(`// axiom conexion_1 = ${ids[0]} -> ${ids[1]}`);

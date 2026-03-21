@@ -177,6 +177,8 @@ export default function MosaicEditor({
     selectionText: string;
     title: string;
     definition: string;
+    logicProfile: string;
+    formula: string;
   } | null>(null);
   const [snippetDraft, setSnippetDraft] = useState<{ markdown: string } | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
@@ -1166,7 +1168,7 @@ export default function MosaicEditor({
     const text = semanticSelection.text;
     const compact = text.replace(/\s+/g, ' ').trim();
     const title = compact.length > 60 ? `${compact.slice(0, 59)}…` : compact;
-    setDefineConceptDraft({ selectionText: text, title, definition: '' });
+    setDefineConceptDraft({ selectionText: text, title, definition: '', logicProfile: '', formula: '' });
   }, [semanticSelection]);
 
   const handleConfirmDefineConcept = useCallback(() => {
@@ -1178,7 +1180,9 @@ export default function MosaicEditor({
         payload,
         {
           title: defineConceptDraft.title.trim() || undefined,
-          definition: defineConceptDraft.definition.trim() || undefined
+          definition: defineConceptDraft.definition.trim() || undefined,
+          logicProfile: defineConceptDraft.logicProfile || undefined,
+          formula: defineConceptDraft.formula.trim() || undefined
         }
       );
       updateSemanticState(nextState);
@@ -2280,14 +2284,56 @@ export default function MosaicEditor({
               className="mb-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none focus:border-blue-500/60"
               autoFocus
             />
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Definición (opcional)</label>
-            <textarea
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+              Definición corta
+              <span className="text-slate-600 ml-1">(se usa como identificador ST)</span>
+            </label>
+            <input
+              type="text"
               value={defineConceptDraft.definition}
               onChange={(e) => setDefineConceptDraft({ ...defineConceptDraft, definition: e.target.value })}
-              placeholder="Escribe una definición propia del concepto…"
-              rows={3}
-              className="mb-4 w-full resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-blue-500/60"
+              placeholder="Ej: técnica como necesidad"
+              className="mb-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-blue-500/60"
             />
+            <details className="mb-3 rounded-lg border border-slate-800 bg-slate-950/60">
+              <summary className="cursor-pointer px-3 py-2 text-[11px] font-medium text-slate-400 select-none flex items-center gap-1.5">
+                <span>📐 Formalización ST</span>
+                <span className="text-slate-600">(opcional)</span>
+              </summary>
+              <div className="px-3 pb-3 pt-1 space-y-2">
+                <label className="block text-[11px] font-medium text-slate-500">Perfil lógico</label>
+                <select
+                  value={defineConceptDraft.logicProfile}
+                  onChange={(e) => setDefineConceptDraft({ ...defineConceptDraft, logicProfile: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-blue-500/60"
+                >
+                  <option value="">Sin perfil (usa el del archivo)</option>
+                  <option value="classical.propositional">Proposicional clásica</option>
+                  <option value="classical.first_order">Primer orden clásica</option>
+                  <option value="intuitionistic.propositional">Intuicionista</option>
+                  <option value="modal.k">Modal K</option>
+                  <option value="epistemic.s5">Epistémica S5</option>
+                  <option value="deontic.standard">Deóntica</option>
+                  <option value="temporal.ltl">Temporal LTL</option>
+                  <option value="paraconsistent.belnap">Paraconsistente (Belnap)</option>
+                  <option value="aristotelian.syllogistic">Silogística aristotélica</option>
+                  <option value="arithmetic">Aritmética</option>
+                  <option value="probabilistic.basic">Probabilística</option>
+                </select>
+                <label className="block text-[11px] font-medium text-slate-500">Fórmula ST</label>
+                <textarea
+                  value={defineConceptDraft.formula}
+                  onChange={(e) => setDefineConceptDraft({ ...defineConceptDraft, formula: e.target.value })}
+                  placeholder={'Ej: TECNICA_NO_LUJO -> NECESIDAD\nEj: forall x. (Humano(x) -> UsaTecnica(x))'}
+                  rows={2}
+                  className="w-full resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-mono text-cyan-300 outline-none placeholder:text-slate-600 focus:border-blue-500/60"
+                />
+                <p className="text-[10px] leading-4 text-slate-600">
+                  Si escribes una fórmula, se añadirá como axioma verificable en el archivo ST.
+                  Los identificadores se generan automáticamente desde las cláusulas del texto.
+                </p>
+              </div>
+            </details>
             <div className="text-[11px] text-slate-500 mb-4 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2">
               <span className="font-medium text-slate-400">Selección:</span>{' '}
               {defineConceptDraft.selectionText.length > 200
