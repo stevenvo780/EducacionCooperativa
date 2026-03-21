@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, BookOpen, ChevronRight, Download, ExternalLink,
+  ArrowLeft, BookOpen, Bot, Check, ChevronRight, Copy, Download, ExternalLink,
   FlaskConical, Info, Layers3, Scale, ShieldAlert, Sigma, Terminal
 } from 'lucide-react';
 import CopyBlock from '@/components/docs/STDocCodeBlock';
@@ -83,6 +83,358 @@ interface PackageHelper {
 }
 
 const ST_RUNTIME_VERSION = '2.5.0';
+
+const ST_AI_PROMPT = `# Prompt de contexto: Lenguaje ST
+
+> Copia y pega este archivo como contexto en cualquier workspace o chat con IA para que el asistente sepa cómo usar el lenguaje ST.
+
+---
+
+## Qué es ST
+
+**ST** (Symbolic Theory Language) es un lenguaje ejecutable para lógica formal, argumentación y formalización de documentos. Combina tres capas:
+
+1. **Lógica formal**: axiomas, teoremas, derivaciones, validez, satisfacibilidad, contramodelos.
+2. **Scripting declarativo**: variables, condicionales, loops, funciones, módulos, POO.
+3. **Text Layer**: vincula pasajes de documentos con formalizaciones verificables.
+
+Los archivos tienen extensión \`.st\` y se ejecutan con el CLI \`st\`.
+
+**Documentación completa:**
+- Manual local: \`ST/DOCS.md\` (secciones 1–20)
+- Quickstart: \`ST/QUICKSTART.md\`
+- README con sintaxis resumida: \`ST/README.md\`
+
+---
+
+## Instalación
+
+\`\`\`bash
+# npm global
+npm install -g @stevenvo780/st-lang
+
+# o binario Linux
+chmod +x st && sudo mv st /usr/local/bin/
+\`\`\`
+
+---
+
+## CLI principal
+
+\`\`\`bash
+st run archivo.st          # ejecutar archivo
+st archivo.st              # modo legacy
+st check archivo.st        # validar sintaxis
+st run archivo.st --diagnostics  # guardar diagnósticos JSON
+st eval "check valid (P -> P)"   # expresión rápida
+st repl                    # modo interactivo
+st profiles                # listar perfiles disponibles
+st protocol                # protocolo para editores (LSP)
+\`\`\`
+
+---
+
+## Estructura mínima de un script
+
+Todo script necesita declarar un perfil lógico al inicio:
+
+\`\`\`st
+logic classical.propositional
+
+axiom a1 : P -> Q
+axiom a2 : P
+derive Q from {a1, a2}
+check valid (P | !P)
+\`\`\`
+
+---
+
+## Perfiles lógicos disponibles
+
+| Perfil | Uso principal |
+|---|---|
+| \`classical.propositional\` | Lógica proposicional clásica (el más completo) |
+| \`classical.first_order\` | Lógica de primer orden con cuantificadores |
+| \`modal.k\` | Lógica modal (\`[]\` necesidad, \`<>\` posibilidad) |
+| \`deontic.standard\` | Razonamiento normativo/deóntico |
+| \`epistemic.s5\` | Razonamiento sobre conocimiento |
+| \`aristotelian.syllogistic\` | Silogística aristotélica |
+| \`intuitionistic.propositional\` | Sin tercero excluido |
+| \`temporal.ltl\` | Lógica temporal (\`next\`, \`until\`) |
+| \`probabilistic.basic\` | Razonamiento probabilístico básico |
+| \`paraconsistent.belnap\` | Tolerante a inconsistencia |
+| \`arithmetic\` | Aritmética explicable (\`+\`, \`-\`, \`*\`, \`/\`, \`%\`, \`<\`, \`>\`) |
+
+Selección:
+\`\`\`st
+logic modal.k
+logic arithmetic
+\`\`\`
+
+---
+
+## Statements principales
+
+### Núcleo lógico
+
+\`\`\`st
+logic classical.propositional
+
+axiom a1 : P -> Q          -- declara axioma
+theorem t1 : (P -> P)      -- registra teorema
+derive Q from {a1, a2}     -- deriva desde premisas nombradas
+prove (P -> P)             -- prueba desde teoría acumulada
+check valid (P | !P)       -- verifica validez
+check satisfiable (P & Q)  -- verifica satisfacibilidad
+check equivalent (!(P&Q)), (!P|!Q)  -- equivalencia
+truth_table (P -> Q)       -- tabla de verdad
+countermodel (P -> Q)      -- busca contraejemplo
+analyze {P, P->Q} -> Q     -- evalúa inferencia + detecta falacias
+explain (P & !P)           -- explica fórmula en el perfil activo
+render theory              -- inspecciona teoría cargada
+render claims              -- inspecciona claims
+\`\`\`
+
+Falacias detectadas por \`analyze\`: afirmación del consecuente, negación del antecedente, medio no distribuido.
+
+### Variables y scripting
+
+\`\`\`st
+let regla = P -> Q                         -- alias de fórmula (también como axioma implícito)
+let causa = "Si llueve, se moja" : (L->M)  -- descripción + fórmula
+let P = "Llueve"                           -- descripción semántica de átomo
+set regla = Q -> R                         -- reasignación mutable
+print "texto"                              -- imprime texto
+print regla                                -- imprime variable resuelta
+\`\`\`
+
+### Control de flujo
+
+\`\`\`st
+if valid (P | !P) {
+  print "tautología"
+} else if satisfiable P {
+  print "satisfacible"
+} else {
+  print "insatisfacible"
+}
+
+for F in { P, Q, (R -> R) } {
+  check valid F
+}
+
+set cond = P
+while satisfiable cond {
+  print "iteración"
+  set cond = P & !P
+}
+\`\`\`
+
+Condiciones para \`if\`/\`while\`: \`valid\`, \`invalid\`, \`satisfiable\`, \`unsatisfiable\`.
+Límite de seguridad en \`while\`: 1000 iteraciones.
+
+### Funciones
+
+\`\`\`st
+fn verificar(X) {
+  check valid X
+  return X
+}
+
+fn combinar(A, B) {
+  return A & B
+}
+
+verificar((P | !P))
+let resultado = combinar(P, Q) | !R    -- funciones como expresiones
+\`\`\`
+
+### Proof blocks
+
+\`\`\`st
+assume h1 : P -> Q
+assume h2 : P
+show Q
+derive Q from {h1, h2}
+qed
+\`\`\`
+
+### Teorías (POO lógico)
+
+\`\`\`st
+-- Singleton (sin parámetros)
+theory Base {
+  axiom ley = P -> P
+  private let interno = Q
+  let publico = R
+}
+
+-- Con parámetros (instanciable como clase)
+theory Agente(id, creencia) {
+  let nombre = id
+  axiom p = creencia
+
+  fn saludar() {
+    print nombre
+  }
+}
+
+let a1 = Agente("Socrates", P)
+a1.saludar()
+check valid a1.p
+print Base.publico   -- acceso con punto
+\`\`\`
+
+Herencia:
+\`\`\`st
+theory Extendida extends Base {
+  axiom otra = Q -> Q
+}
+\`\`\`
+
+### Módulos
+
+\`\`\`st
+-- lib.st
+export let Identidad = P -> P
+export fn doble_neg(phi) { return !!phi }
+let Interno = Q & !Q   -- no se exporta
+
+-- main.st
+import "lib.st"
+check valid Identidad
+\`\`\`
+
+### Text Layer
+
+\`\`\`st
+let p = passage([[documento.md#seccion-2]])
+let f = formalize p as (P -> Q)
+claim c1 = f
+support c1 <- p
+confidence c1 = 0.84
+context c1 = "Lectura conservadora"
+render claims
+\`\`\`
+
+---
+
+## Operadores
+
+### Proposicional (precedencia de menor a mayor)
+
+| Op | Significado |
+|---|---|
+| \`<->\` | Bicondicional |
+| \`->\` | Implicación |
+| \`|\` | Disyunción |
+| \`^\` / \`xor\` | XOR |
+| \`!|\` / \`nor\` | NOR |
+| \`&\` | Conjunción |
+| \`!&\` / \`nand\` | NAND |
+| \`!\` | Negación |
+
+### Primer orden
+\`forall x\`, \`exists x\`, \`P(x)\`, \`x = y\`
+
+### Modal / Deóntica / Epistémica
+\`[]\` (necesario/obligatorio/conocido), \`<>\` (posible/permitido)
+
+### Temporal
+\`next P\`, \`P until Q\`
+
+### Aritmética
+\`+\`, \`-\`, \`*\`, \`/\`, \`%\`, \`<\`, \`>\`, \`<=\`, \`>=\`
+
+---
+
+## Alias en español
+
+| Inglés | Español |
+|---|---|
+| \`logic\` | \`logica\` |
+| \`axiom\` | \`axioma\` |
+| \`theorem\` | \`teorema\` |
+| \`derive\` | \`derivar\` |
+| \`from\` | \`desde\` |
+| \`check valid\` | \`verificar valido\` |
+| \`check satisfiable\` | \`verificar satisfacible\` |
+| \`countermodel\` | \`contramodelo\` |
+| \`truth_table\` | \`tabla_verdad\` |
+| \`analyze\` | \`analizar\` |
+| \`explain\` | \`explicar\` |
+| \`import\` | \`importar\` |
+| \`export\` | \`exportar\` |
+| \`theory\` | \`teoria\` |
+| \`private\` | \`privado\` |
+| \`if\` | \`si\` |
+| \`else\` | \`sino\` |
+| \`for\` | \`para\` |
+| \`while\` | \`mientras\` |
+| \`fn\` | \`funcion\` |
+| \`return\` | \`retornar\` |
+
+---
+
+## API programática (TypeScript/JavaScript)
+
+\`\`\`typescript
+import { evaluate, createInterpreter } from '@stevenvo780/st-lang/api';
+
+// Stateless: corre un script completo de una vez
+const result = evaluate(\\\`
+  logic classical.propositional
+  let regla = P -> Q
+  let hecho = P
+  derive Q from {regla, hecho}
+\\\`);
+console.log(result.results[0].status);
+
+// Stateful: útil para REPLs y sesiones interactivas
+const st = createInterpreter();
+st.exec('logic arithmetic');
+st.exec('explain 2 + 3 * 4');
+\`\`\`
+
+---
+
+## Secciones de DOCS.md (referencia rápida)
+
+| Sección | Tema |
+|---|---|
+| §1 | Modelo mental de ST |
+| §2 | Estructura mínima de un script |
+| §3 | Statements principales |
+| §4 | Variables, alias y scripting (\`let\`, \`set\`, \`print\`) |
+| §5 | Control de flujo (\`if\`, \`for\`, \`while\`) |
+| §6 | Funciones (\`fn\`, \`return\`) |
+| §7 | Proof blocks (\`assume\`, \`show\`, \`qed\`) |
+| §8 | Teorías, encapsulación y herencia (POO) |
+| §9 | Módulos (\`import\`, \`export\`) |
+| §10 | Text Layer |
+| §11 | Perfiles lógicos soportados (11 perfiles) |
+| §12 | Operadores y precedencia |
+| §13 | Alias en español |
+| §14 | CLI |
+| §15 | API programática |
+| §16 | Integración con editores (protocolo LSP) |
+| §17 | Ejemplos recomendados |
+| §18 | Buenas prácticas |
+| §19 | Limitaciones y notas de precisión |
+| §20 | Receta pedagógica sugerida |
+
+---
+
+## Notas de precisión
+
+- \`classical.propositional\` es el perfil más completo y probado.
+- \`truth_table\` y \`check equivalent\` dependen de que el perfil los implemente.
+- \`while\` tiene límite de 1000 iteraciones para evitar loops infinitos.
+- \`return\` dentro de \`fn\` corta la ejecución; las funciones también pueden usarse como expresiones en fórmulas.
+- Las teorías sin parámetros actúan como singletons (se instancian al declararse).
+- Solo \`let\`, \`axiom\`, \`theorem\`, \`fn\` y \`theory\` pueden ser \`export\`ados.
+`;
+
 const DOC_PLAYGROUND = `logic classical.propositional
 set verbose = on
 
@@ -113,7 +465,8 @@ const NAV: NavItem[] = [
   { id: 'profiles', label: 'Perfiles Lógicos' },
   { id: 'text-layer', label: 'Text Layer' },
   { id: 'limits', label: 'Limitaciones' },
-  { id: 'validation', label: 'Validación' }
+  { id: 'validation', label: 'Validación' },
+  { id: 'ai-prompt', label: 'Prompt para IA' }
 ];
 
 /* ──────────── Data: syntax blocks ──────────── */
@@ -967,6 +1320,65 @@ const PROFILE_DOWNLOADS: Record<string, string> = {
   arithmetic: '/downloads/st/12-aritmetica.st'
 };
 
+function AiPromptSection() {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(ST_AI_PROMPT);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([ST_AI_PROMPT], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'st-prompt.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <section>
+      <SectionTitle id="ai-prompt" icon={Bot} title="Prompt para IA" />
+      <div className="space-y-4">
+        <p className="text-surface-300 text-sm leading-relaxed">
+          Contexto listo para copiar y pegar en cualquier chat o workspace con IA.
+          Incluye sintaxis completa, todos los perfiles, operadores, alias en español, API y referencias a secciones de la documentación.
+        </p>
+        <div className="bg-surface-950 border border-surface-700/50 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-surface-800/60 border-b border-surface-700/30">
+            <span className="text-[11px] font-mono text-surface-400">st-prompt.md</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopy}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-surface-300 hover:text-emerald-400 hover:bg-surface-700/60 border border-surface-700/40 transition"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copiado' : 'Copiar todo'}
+              </button>
+              <button
+                onClick={handleDownload}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-surface-300 hover:text-mandy-400 hover:bg-surface-700/60 border border-surface-700/40 transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Descargar .md
+              </button>
+            </div>
+          </div>
+          <pre className="p-4 text-xs text-surface-300 overflow-auto max-h-96 leading-relaxed font-mono whitespace-pre-wrap">
+            {ST_AI_PROMPT}
+          </pre>
+        </div>
+        <p className="text-xs text-surface-500 italic">
+          Pega este contenido al inicio de tu sesión con cualquier IA (Claude, ChatGPT, Gemini, Copilot…) para que comprenda el lenguaje ST sin necesidad de documentación adicional.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function SectionTitle({ id, icon: Icon, title }: { id: string; icon: React.ElementType; title: string }) {
   return (
     <div id={id} className="flex items-center gap-3 mb-6 pt-10 -mt-10 scroll-mt-24">
@@ -1672,6 +2084,9 @@ export default function STDocsPage() {
               </div>
             </div>
           </section>
+
+          {/* ── AI Prompt ── */}
+          <AiPromptSection />
 
           {/* Footer */}
           <footer className="border-t border-surface-700/30 pt-8 pb-16 text-center">

@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
@@ -9,7 +10,7 @@ import {
   MonitorSmartphone, Lock, Check
 } from 'lucide-react';
 
-export default function LandingPage() {
+function LandingPage() {
   const { user, loading } = useAuth();
   const reduceMotion = useReducedMotion();
   const heroTransition: Transition = { duration: reduceMotion ? 0.01 : 0.3, ease: 'easeOut' };
@@ -334,3 +335,7 @@ export default function LandingPage() {
     </LazyMotion>
   );
 }
+
+export default dynamic(() => Promise.resolve(LandingPage), {
+    ssr: false
+});
