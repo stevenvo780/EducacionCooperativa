@@ -9,6 +9,7 @@ type MathBlock = {
   el: HTMLElement;
   latex: string;
   top: number;
+  left: number;
   width: number;
   height: number;
 };
@@ -105,6 +106,7 @@ const moveCursorToMath = (el: HTMLElement, delimiter: '$$' | '$') => {
 const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<Element>) => {
   const blocks: MathBlock[] = [];
   const blockParagraphs = new Set<HTMLElement>();
+  const editableRect = editable.getBoundingClientRect();
 
   paragraphs.forEach((paragraph) => {
     const el = paragraph as HTMLElement;
@@ -116,17 +118,42 @@ const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<Element>
     const text = el.textContent || '';
 
     // Match both escaped (\$\$…\$\$) and unescaped ($$…$$) block math
-    const match = text.match(/(?:\\\$\\\$|\$\$)([\s\S]*?)(?:\\\$\\\$|\$\$)/);
+    const blockRegex = /(?:\\\$\\\$|\$\$)([\s\S]*?)(?:\\\$\\\$|\$\$)/;
+    const match = blockRegex.exec(text);
     if (!match || !match[1]?.trim()) return;
 
+    const start = findTextNodeAtOffset(el, match.index);
+    const end = findTextNodeAtOffset(el, match.index + match[0].length);
+    if (!start || !end) return;
+
+    let top = el.offsetTop;
+    let left = 0;
+    let width = el.getBoundingClientRect().width;
+    let height = el.getBoundingClientRect().height;
+
+    try {
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      const rect = range.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        top = rect.top - editableRect.top + editable.scrollTop;
+        left = rect.left - editableRect.left + editable.scrollLeft;
+        width = rect.width;
+        height = rect.height;
+      }
+    } catch {
+      // fallback to paragraph metrics
+    }
+
     blockParagraphs.add(el);
-    const rect = el.getBoundingClientRect();
     blocks.push({
       el,
       latex: normalizeLatex(match[1]),
-      top: el.offsetTop,
-      width: rect.width,
-      height: rect.height
+      top,
+      left,
+      width,
+      height
     });
   });
 
@@ -197,7 +224,7 @@ const createBlockOverlay = (container: HTMLElement, block: MathBlock) => {
   overlay.innerHTML = html;
   overlay.style.position = 'absolute';
   overlay.style.top = `${block.top}px`;
-  overlay.style.left = '0';
+  overlay.style.left = `${block.left}px`;
   overlay.style.width = `${block.width}px`;
   overlay.style.minHeight = `${block.height}px`;
   overlay.style.zIndex = '5';
