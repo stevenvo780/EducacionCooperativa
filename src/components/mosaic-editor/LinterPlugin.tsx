@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom';
-import { useMarkdownLinter, type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
-import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 
 const LINTER_OVERLAY_CONTAINER_CLASS = 'mdx-linter-overlay-container';
 
@@ -38,11 +36,18 @@ function findDOMPosition(root: HTMLElement, line: number, col: number) {
 
 export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPluginProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const diagnosticsRef = useRef(diagnostics);
+  diagnosticsRef.current = diagnostics;
+  const rafIdRef = useRef(0);
 
+  // ── Función de decoración que lee diagnósticos desde ref ──
+  const decorateRef = useRef<(() => void) | null>(null);
+
+  // ── Efecto de SETUP: contenedor, observer, scroll (no depende de diagnostics) ──
   useEffect(() => {
     if (viewMode !== 'edit') {
-        if (containerRef.current) containerRef.current.innerHTML = '';
-        return;
+      if (containerRef.current) containerRef.current.innerHTML = '';
+      return;
     }
 
     const shell = editorShellRef.current;
@@ -51,150 +56,171 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode }: LinterPl
     const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
     if (!editable) return;
 
-    // Ensure container exists
     const scrollParent = editable.parentElement;
     if (!scrollParent) return;
 
+    // Ensure overlay container exists
     if (!containerRef.current) {
-        let existing = scrollParent.querySelector(`.${LINTER_OVERLAY_CONTAINER_CLASS}`) as HTMLDivElement | null;
-        if (!existing) {
-            existing = document.createElement('div');
-            existing.className = LINTER_OVERLAY_CONTAINER_CLASS;
-            existing.style.position = 'absolute';
-            existing.style.top = '0';
-            existing.style.left = '0';
-            existing.style.width = '100%';
-            existing.style.height = '0';
-            existing.style.pointerEvents = 'none';
-            existing.style.zIndex = '20';
-            scrollParent.appendChild(existing);
-        }
-        containerRef.current = existing;
+      let existing = scrollParent.querySelector(`.${LINTER_OVERLAY_CONTAINER_CLASS}`) as HTMLDivElement | null;
+      if (!existing) {
+        existing = document.createElement('div');
+        existing.className = LINTER_OVERLAY_CONTAINER_CLASS;
+        existing.style.position = 'absolute';
+        existing.style.top = '0';
+        existing.style.left = '0';
+        existing.style.width = '100%';
+        existing.style.height = '0';
+        existing.style.pointerEvents = 'none';
+        existing.style.zIndex = '20';
+        scrollParent.appendChild(existing);
+      }
+      containerRef.current = existing;
     }
 
+    // ── Función de decoración (lee diagnosticsRef.current) ──
     const decorate = () => {
-        if (!containerRef.current || viewMode !== 'edit') return;
-        const container = containerRef.current;
-        container.innerHTML = '';
+      const container = containerRef.current;
+      if (!container || viewMode !== 'edit') return;
+      container.innerHTML = '';
 
-        const editableRect = editable.getBoundingClientRect();
+      const currentDiags = diagnosticsRef.current;
+      if (currentDiags.length === 0) return;
 
-        diagnostics.forEach((d, idx) => {
-            const pos = findDOMPosition(editable, d.line, d.column);
-            if (!pos) return;
+      const editableRect = editable.getBoundingClientRect();
 
-            try {
-                const range = document.createRange();
-                const startOffset = Math.min(pos.offset, pos.node.textContent?.length || 0);
-                const endOffset = d.endColumn
-                    ? Math.min(pos.offset + (d.endColumn - d.column), pos.node.textContent?.length || 0)
-                    : Math.min(startOffset + 1, pos.node.textContent?.length || 0);
+      currentDiags.forEach((d) => {
+        const pos = findDOMPosition(editable, d.line, d.column);
+        if (!pos) return;
 
-                range.setStart(pos.node, startOffset);
-                range.setEnd(pos.node, endOffset);
+        try {
+          const range = document.createRange();
+          const startOffset = Math.min(pos.offset, pos.node.textContent?.length || 0);
+          const endOffset = d.endColumn
+            ? Math.min(pos.offset + (d.endColumn - d.column), pos.node.textContent?.length || 0)
+            : Math.min(startOffset + 1, pos.node.textContent?.length || 0);
 
-                const rects = range.getClientRects();
-                if (rects.length === 0) return;
+          range.setStart(pos.node, startOffset);
+          range.setEnd(pos.node, endOffset);
 
-                // Create underlines for each rect (handles line breaks)
-                Array.from(rects).forEach(rect => {
-                    const underline = document.createElement('div');
-                    underline.className = 'mdx-linter-marker group pointer-events-auto';
+          const rects = range.getClientRects();
+          if (rects.length === 0) return;
 
-                    const isSTRef = d.source === 'ST-Definitions';
-                    const borderColor = d.severity === 'error' ? '#ef4444' :
-                                       d.severity === 'warning' ? '#f59e0b' :
-                                       isSTRef ? '#06b6d4' : '#3b82f6';
+          Array.from(rects).forEach(rect => {
+            const underline = document.createElement('div');
+            underline.className = 'mdx-linter-marker group pointer-events-auto';
 
-                    underline.style.position = 'absolute';
-                    underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
-                    underline.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
-                    underline.style.width = `${rect.width}px`;
-                    underline.style.cursor = 'help';
-                    underline.style.transition = 'opacity 0.2s';
+            const isSTRef = d.source === 'ST-Definitions';
+            const borderColor = d.severity === 'error' ? '#ef4444' :
+                               d.severity === 'warning' ? '#f59e0b' :
+                               isSTRef ? '#06b6d4' : '#3b82f6';
 
-                    if (isSTRef) {
-                      // Dotted cyan underline + subtle background for ST references
-                      underline.style.height = '0px';
-                      underline.style.borderBottom = '2px dotted #06b6d4';
-                      underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 3}px`;
-                      // Also add a soft highlight background
-                      const bg = document.createElement('div');
-                      bg.style.position = 'absolute';
-                      bg.style.top = `${rect.top - editableRect.top + editable.scrollTop}px`;
-                      bg.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
-                      bg.style.width = `${rect.width}px`;
-                      bg.style.height = `${rect.height}px`;
-                      bg.style.backgroundColor = 'rgba(6, 182, 212, 0.08)';
-                      bg.style.borderRadius = '2px';
-                      bg.style.pointerEvents = 'none';
-                      container.appendChild(bg);
-                    } else {
-                      underline.style.height = '2px';
-                      underline.style.backgroundColor = borderColor;
-                    }
+            underline.style.position = 'absolute';
+            underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
+            underline.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
+            underline.style.width = `${rect.width}px`;
+            underline.style.cursor = 'help';
+            underline.style.transition = 'opacity 0.2s';
 
-                    // Tooltip Root
-                    const tooltip = document.createElement('div');
-                    tooltip.className = 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded shadow-xl p-2 z-[100] min-w-[200px] max-w-[300px] pointer-events-none';
-
-                    const isSTDef = d.source === 'ST-Definitions';
-                    const header = document.createElement('div');
-                    header.className = 'flex items-center gap-2 mb-1';
-                    header.innerHTML = isSTDef ? `
-                        <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">📐 ST Reference</span>
-                        <span class="text-[10px] text-slate-500 ml-auto">${d.source}</span>
-                    ` : `
-                        <span class="text-[10px] font-bold uppercase tracking-wider ${
-                            d.severity === 'error' ? 'text-red-400' :
-                            d.severity === 'warning' ? 'text-amber-400' :
-                            'text-blue-400'
-                        }">${d.severity}</span>
-                        <span class="text-[10px] text-slate-500 ml-auto">${d.source}</span>
-                    `;
-
-                    const msg = document.createElement('div');
-                    msg.className = 'text-xs text-slate-200 leading-relaxed';
-                    msg.innerText = d.message;
-
-                    tooltip.appendChild(header);
-                    tooltip.appendChild(msg);
-
-                    if (d.suggestion) {
-                        const sug = document.createElement('div');
-                        sug.className = 'mt-1 text-[11px] text-cyan-400 font-medium';
-                        sug.innerText = `💡 ${d.suggestion}`;
-                        tooltip.appendChild(sug);
-                    }
-
-                    underline.appendChild(tooltip);
-                    container.appendChild(underline);
-                });
-            } catch (e) {
-                // ignore range errors
+            if (isSTRef) {
+              underline.style.height = '0px';
+              underline.style.borderBottom = '2px dotted #06b6d4';
+              underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 3}px`;
+              const bg = document.createElement('div');
+              bg.style.position = 'absolute';
+              bg.style.top = `${rect.top - editableRect.top + editable.scrollTop}px`;
+              bg.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
+              bg.style.width = `${rect.width}px`;
+              bg.style.height = `${rect.height}px`;
+              bg.style.backgroundColor = 'rgba(6, 182, 212, 0.08)';
+              bg.style.borderRadius = '2px';
+              bg.style.pointerEvents = 'none';
+              container.appendChild(bg);
+            } else {
+              underline.style.height = '2px';
+              underline.style.backgroundColor = borderColor;
             }
-        });
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded shadow-xl p-2 z-[100] min-w-[200px] max-w-[300px] pointer-events-none';
+
+            const isSTDef = d.source === 'ST-Definitions';
+            const header = document.createElement('div');
+            header.className = 'flex items-center gap-2 mb-1';
+            header.innerHTML = isSTDef ? `
+              <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">📐 ST Reference</span>
+              <span class="text-[10px] text-slate-500 ml-auto">${d.source}</span>
+            ` : `
+              <span class="text-[10px] font-bold uppercase tracking-wider ${
+                d.severity === 'error' ? 'text-red-400' :
+                d.severity === 'warning' ? 'text-amber-400' :
+                'text-blue-400'
+              }">${d.severity}</span>
+              <span class="text-[10px] text-slate-500 ml-auto">${d.source}</span>
+            `;
+
+            const msg = document.createElement('div');
+            msg.className = 'text-xs text-slate-200 leading-relaxed';
+            msg.innerText = d.message;
+
+            tooltip.appendChild(header);
+            tooltip.appendChild(msg);
+
+            if (d.suggestion) {
+              const sug = document.createElement('div');
+              sug.className = 'mt-1 text-[11px] text-cyan-400 font-medium';
+              sug.innerText = `💡 ${d.suggestion}`;
+              tooltip.appendChild(sug);
+            }
+
+            underline.appendChild(tooltip);
+            container.appendChild(underline);
+          });
+        } catch {
+          // ignore range errors
+        }
+      });
     };
 
-    // Initial decoration
-    const timer = setTimeout(decorate, 500);
+    decorateRef.current = decorate;
 
-    // Re-decorate on changes or scroll
+    // Decoración batched vía rAF para evitar layout thrashing
+    const scheduleDecorate = () => {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(decorate);
+    };
+
+    // Decoración inicial
+    const timer = setTimeout(scheduleDecorate, 300);
+
+    // Re-decorar en mutaciones del contenido (no de nuestro overlay)
+    let mutationTimer = 0;
     const observer = new MutationObserver(() => {
-        setTimeout(decorate, 100);
+      clearTimeout(mutationTimer);
+      mutationTimer = window.setTimeout(scheduleDecorate, 150);
     });
     observer.observe(editable, { childList: true, subtree: true, characterData: true });
 
-    const handleScroll = () => decorate();
+    const handleScroll = () => scheduleDecorate();
     scrollParent.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
-        clearTimeout(timer);
-        observer.disconnect();
-        scrollParent.removeEventListener('scroll', handleScroll);
-        if (containerRef.current) containerRef.current.innerHTML = '';
+      clearTimeout(timer);
+      clearTimeout(mutationTimer);
+      cancelAnimationFrame(rafIdRef.current);
+      observer.disconnect();
+      scrollParent.removeEventListener('scroll', handleScroll);
+      if (containerRef.current) containerRef.current.innerHTML = '';
+      decorateRef.current = null;
     };
-  }, [diagnostics, editorShellRef, viewMode]);
+  }, [editorShellRef, viewMode]); // NO depende de diagnostics
+
+  // ── Efecto de DECORACIÓN: se ejecuta cuando diagnostics cambian ──
+  useEffect(() => {
+    if (decorateRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(() => decorateRef.current?.());
+    }
+  }, [diagnostics]);
 
   return null;
 }

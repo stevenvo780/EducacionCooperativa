@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 export type LinterSeverity = 'error' | 'warning' | 'info';
 
@@ -120,24 +120,35 @@ const linksRule: LinterRule = {
 
 const defaultRules = [spellcheckRule, markdownStructureRule, linksRule];
 
+/** Compara dos arrays de diagnósticos superficialmente para evitar re-renders innecesarios */
+function diagnosticsEqual(a: LinterDiagnostic[], b: LinterDiagnostic[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].line !== b[i].line || a[i].column !== b[i].column || a[i].message !== b[i].message) return false;
+  }
+  return true;
+}
+
 export function useMarkdownLinter(content: string, customRules: LinterRule[] = []) {
   const [diagnostics, setDiagnostics] = useState<LinterDiagnostic[]>([]);
+  const rulesRef = useRef(customRules);
+  rulesRef.current = customRules;
 
+  // runLint es estable — lee reglas desde ref
   const runLint = useCallback((text: string) => {
-    const allRules = [...defaultRules, ...customRules];
+    const allRules = [...defaultRules, ...rulesRef.current];
     const results = allRules.flatMap(rule => rule.check(text));
-
-    // Sort and deduplicate (optional, but good for performance)
     const sortedResults = results.sort((a, b) => a.line - b.line || a.column - b.column);
-    setDiagnostics(sortedResults);
-  }, [customRules]);
+    setDiagnostics(prev => diagnosticsEqual(prev, sortedResults) ? prev : sortedResults);
+  }, []);
 
+  // Re-lint cuando cambia el contenido o las reglas
   useEffect(() => {
     const timer = setTimeout(() => {
         runLint(content);
     }, 800);
     return () => clearTimeout(timer);
-  }, [content, runLint]);
+  }, [content, runLint, customRules]);
 
   return { diagnostics, runLint };
 }
