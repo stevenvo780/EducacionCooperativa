@@ -7,23 +7,25 @@ import { mockGetDoc } from '@/lib/insecure-mock-store';
 
 type StoredDocumentRecord = Record<string, unknown>;
 const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: RouteContext) {
     try {
         const auth = await requireAuth(req);
         if (!auth) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
+        const { id } = await context.params;
+
         if (isInsecure) {
-            const doc = mockGetDoc(params.id);
+            const doc = mockGetDoc(id);
             const content = doc?.content ?? '';
             return new Response(content, {
                 headers: { 'Content-Type': 'text/plain; charset=utf-8' }
             });
         }
 
-        const { id } = params;
         const docSnap = await adminDb.collection('documents').doc(id).get();
         if (!docSnap.exists) {
             return NextResponse.json({ error: 'Document not found' }, { status: 404 });

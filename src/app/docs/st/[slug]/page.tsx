@@ -6,8 +6,9 @@ export function generateStaticParams() {
   return logicCourses.map(course => ({ slug: course.slug }));
 }
 
-export default function STLogicCourseRoute({ params }: { params: { slug: string } }) {
-  const course = logicCourseBySlug[params.slug];
+export default async function STLogicCourseRoute({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const course = logicCourseBySlug[slug];
 
   if (!course) {
     notFound();

@@ -2,12 +2,13 @@
 
 import { useAuth } from '@/context/AuthContext';
 import { useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Editor from '@/components/Editor';
 
-export default function EditorPage({ params }: { params: { id: string } }) {
+export default function EditorPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const roomId = params.id;
   const frameMode = searchParams?.get('embedded') === '1';

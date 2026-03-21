@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { authFetch } from '@/services/apiClient';
 import { normalizePath } from '@/lib/folder-utils';
@@ -92,12 +92,17 @@ const findMatchingDoc = (docs: DocumentRecord[], targetPath: string) => {
   });
 };
 
-export default function WorkspacePathResolverPage({ params }: { params: { slug: string[] } }) {
+export default function WorkspacePathResolverPage() {
   const router = useRouter();
+  const params = useParams<{ slug?: string[] | string }>();
   const { user, userEmail, loading } = useAuth();
   const [message, setMessage] = useState('Resolviendo referencia...');
 
-  const slug = useMemo(() => Array.isArray(params.slug) ? params.slug : [], [params.slug]);
+  const slug = useMemo(() => {
+    if (Array.isArray(params.slug)) return params.slug;
+    if (typeof params.slug === 'string') return [params.slug];
+    return [];
+  }, [params.slug]);
 
   useEffect(() => {
     if (loading) return;

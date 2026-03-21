@@ -11,6 +11,7 @@ import { getActivePlanId } from '@/app/api/payments/helpers';
 export const runtime = 'nodejs';
 
 type StoredDocumentRecord = Record<string, unknown>;
+type RouteContext = { params: Promise<{ id: string }> };
 
 const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: string) => {
   const workspaceId = typeof data?.workspaceId === 'string' ? data.workspaceId : PERSONAL_WORKSPACE_ID;
@@ -20,12 +21,14 @@ const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: stri
   return isWorkspaceMember(workspaceId, uid);
 };
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const auth = await requireAuth(req);
     if (!auth) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
+
+    const { id } = await context.params;
 
     const body = await req.json();
     const mimeType = typeof body.mimeType === 'string' && body.mimeType.trim()
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'fileSize must be a non-negative number' }, { status: 400 });
     }
 
-    const docRef = adminDb.collection('documents').doc(params.id);
+    const docRef = adminDb.collection('documents').doc(id);
     const snap = await docRef.get();
     if (!snap.exists) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
