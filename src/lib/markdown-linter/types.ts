@@ -45,7 +45,7 @@ export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   consistency: 'Consistencia',
   whitespace: 'Espacios en blanco',
   academic: 'Escritura académica',
-  semantic: 'Semántica ST',
+  semantic: 'Semántica ST'
 };
 
 export const RULE_CATEGORY_ICONS: Record<RuleCategory, string> = {
@@ -57,7 +57,7 @@ export const RULE_CATEGORY_ICONS: Record<RuleCategory, string> = {
   consistency: '🔄',
   whitespace: '⬜',
   academic: '🎓',
-  semantic: '📐',
+  semantic: '📐'
 };
 
 // ── Definición de regla (plugin) ────────────────────────────
