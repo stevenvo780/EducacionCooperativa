@@ -28,6 +28,7 @@ const _suggestCache = new Map<string, string[]>();
 /** Palabras añadidas por el usuario (persistidas en localStorage) */
 const PERSONAL_DICT_KEY = 'linter_personal_dictionary';
 let _personalWords: Set<string> = new Set();
+let _personalWordsLoaded = false;
 
 /** Palabras que sabemos que son válidas pero nspell no reconoce (tecnicismos, etc.) */
 const EXTRA_VALID = new Set([
@@ -53,7 +54,7 @@ function resetSpellCaches(): void {
 // ── Carga del diccionario ────────────────────────────────
 
 function loadPersonalDict(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
+  if (typeof localStorage === 'undefined') return new Set();
   try {
     const raw = localStorage.getItem(PERSONAL_DICT_KEY);
     if (raw) {
@@ -65,10 +66,16 @@ function loadPersonalDict(): Set<string> {
 }
 
 function savePersonalDict(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(PERSONAL_DICT_KEY, JSON.stringify([..._personalWords]));
   } catch { /* storage full, ignorar */ }
+}
+
+function ensurePersonalWordsLoaded(): void {
+  if (_personalWordsLoaded) return;
+  _personalWords = loadPersonalDict();
+  _personalWordsLoaded = true;
 }
 
 /**
@@ -79,8 +86,7 @@ export function initSpellEngine(): Promise<void> {
   if (_ready) return Promise.resolve();
   if (_loading) return _loading.then(() => {});
 
-  if (typeof window === 'undefined') {
-    // SSR — no cargar
+  if (typeof fetch !== 'function') {
     return Promise.resolve();
   }
 
@@ -109,7 +115,7 @@ export function initSpellEngine(): Promise<void> {
       _nspell = NSpell(affText, dicText);
 
       // Cargar palabras personales del usuario
-      _personalWords = loadPersonalDict();
+      ensurePersonalWordsLoaded();
       for (const word of _personalWords) {
         _nspell.add(word);
       }
@@ -144,6 +150,7 @@ export function isSpellEngineReady(): boolean {
  */
 export function isCorrect(word: string): boolean {
   if (!_ready || !_nspell) return true; // Fail-open: sin motor, todo es "correcto"
+  ensurePersonalWordsLoaded();
   const normalized = normalizeWord(word);
   // Palabras de 1-2 letras: no verificar (artículos, preposiciones, etc.)
   if (normalized.length <= 2) return true;
@@ -168,6 +175,7 @@ export function isCorrect(word: string): boolean {
  */
 export function suggest(word: string): string[] {
   if (!_ready || !_nspell) return [];
+  ensurePersonalWordsLoaded();
   const normalized = normalizeWord(word);
   const cached = _suggestCache.get(normalized);
   if (cached) return cached;
@@ -185,6 +193,7 @@ export function suggest(word: string): string[] {
  * Se persiste en localStorage y se aplica inmediatamente.
  */
 export function addToPersonalDictionary(word: string): void {
+  ensurePersonalWordsLoaded();
   const lower = normalizeWord(word);
   _personalWords.add(lower);
   if (_nspell) {
@@ -198,6 +207,7 @@ export function addToPersonalDictionary(word: string): void {
  * Elimina una palabra del diccionario personal.
  */
 export function removeFromPersonalDictionary(word: string): void {
+  ensurePersonalWordsLoaded();
   const lower = normalizeWord(word);
   _personalWords.delete(lower);
   if (_nspell) {
@@ -211,5 +221,30 @@ export function removeFromPersonalDictionary(word: string): void {
  * Devuelve las palabras del diccionario personal.
  */
 export function getPersonalDictionary(): string[] {
+  ensurePersonalWordsLoaded();
   return [..._personalWords];
+}
+
+export function syncPersonalDictionary(words: string[]): void {
+  const normalizedWords = new Set(words.map(normalizeWord).filter(Boolean));
+  const previousWords = _personalWords;
+
+  _personalWords = normalizedWords;
+  _personalWordsLoaded = true;
+
+  if (_nspell) {
+    for (const word of previousWords) {
+      if (!normalizedWords.has(word)) {
+        _nspell.remove(word);
+      }
+    }
+
+    for (const word of normalizedWords) {
+      if (!previousWords.has(word)) {
+        _nspell.add(word);
+      }
+    }
+  }
+
+  resetSpellCaches();
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 
 const LINTER_OVERLAY_CONTAINER_CLASS = 'mdx-linter-overlay-container';
@@ -115,6 +115,45 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   const rafIdRef = useRef(0);
   const decorateRef = useRef<(() => void) | null>(null);
   const hoverHideTimerRef = useRef(0);
+  const [hasActiveTextSelection, setHasActiveTextSelection] = useState(false);
+
+  useEffect(() => {
+    const updateSelectionState = () => {
+      const shell = editorShellRef.current;
+      if (!shell) {
+        setHasActiveTextSelection(false);
+        return;
+      }
+
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLTextAreaElement && shell.contains(activeElement)) {
+        setHasActiveTextSelection((activeElement.selectionStart ?? 0) !== (activeElement.selectionEnd ?? 0));
+        return;
+      }
+
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+        setHasActiveTextSelection(false);
+        return;
+      }
+
+      const range = domSelection.getRangeAt(0);
+      setHasActiveTextSelection(shell.contains(range.commonAncestorContainer));
+    };
+
+    updateSelectionState();
+    document.addEventListener('selectionchange', updateSelectionState);
+    window.addEventListener('mouseup', updateSelectionState, true);
+    window.addEventListener('keyup', updateSelectionState, true);
+
+    return () => {
+      document.removeEventListener('selectionchange', updateSelectionState);
+      window.removeEventListener('mouseup', updateSelectionState, true);
+      window.removeEventListener('keyup', updateSelectionState, true);
+    };
+  }, [editorShellRef]);
+
+  const linterInteractive = interactive && !hasActiveTextSelection;
 
   // ── Dismiss tooltip on click outside ──
   useEffect(() => {
@@ -342,7 +381,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
             }
             container.appendChild(underline);
 
-            if (!interactive) {
+            if (!linterInteractive) {
               return;
             }
 
@@ -417,7 +456,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       if (containerRef.current) containerRef.current.innerHTML = '';
       decorateRef.current = null;
     };
-  }, [editorShellRef, interactive, viewMode]); // NO depende de diagnostics
+  }, [editorShellRef, linterInteractive, viewMode]); // NO depende de diagnostics
 
   // ── Efecto de DECORACIÓN: se ejecuta cuando diagnostics cambian ──
   useEffect(() => {

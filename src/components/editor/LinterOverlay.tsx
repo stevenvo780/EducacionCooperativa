@@ -101,6 +101,33 @@ export function LinterOverlay({
   const [hoverTooltipKey, setHoverTooltipKey] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const hoverCloseTimerRef = useRef<number | null>(null);
+  const [hasActiveTextSelection, setHasActiveTextSelection] = useState(false);
+
+  useEffect(() => {
+    const updateSelectionState = () => {
+      const overlay = overlayRef.current;
+      const parent = overlay?.parentElement;
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLTextAreaElement && parent?.contains(activeElement)) {
+        setHasActiveTextSelection((activeElement.selectionStart ?? 0) !== (activeElement.selectionEnd ?? 0));
+        return;
+      }
+      setHasActiveTextSelection(false);
+    };
+
+    updateSelectionState();
+    document.addEventListener('selectionchange', updateSelectionState);
+    window.addEventListener('mouseup', updateSelectionState, true);
+    window.addEventListener('keyup', updateSelectionState, true);
+
+    return () => {
+      document.removeEventListener('selectionchange', updateSelectionState);
+      window.removeEventListener('mouseup', updateSelectionState, true);
+      window.removeEventListener('keyup', updateSelectionState, true);
+    };
+  }, []);
+
+  const linterInteractive = interactive && !hasActiveTextSelection;
 
   const handleFixClick = useCallback(
     (line: number, replacement: string) => {
@@ -112,11 +139,11 @@ export function LinterOverlay({
   );
 
   useEffect(() => {
-    if (!interactive) {
+    if (!linterInteractive) {
       setOpenTooltipKey(null);
       setHoverTooltipKey(null);
     }
-  }, [interactive]);
+  }, [linterInteractive]);
 
   useEffect(() => {
     return () => {
@@ -147,7 +174,7 @@ export function LinterOverlay({
         const tooltipKey = `${d.line ?? 1}:${d.column ?? 1}:${d.message}:${i}`;
         const quickFixes = generateQuickFixes(d, content);
         const supportsPinnedTooltip = quickFixes.length > 0 && Boolean(onApplyFix);
-        const isTooltipOpen = interactive && (openTooltipKey === tooltipKey || (hoverTooltipKey === tooltipKey && openTooltipKey === null));
+        const isTooltipOpen = linterInteractive && (openTooltipKey === tooltipKey || (hoverTooltipKey === tooltipKey && openTooltipKey === null));
         const line = d.line ?? 1;
         const col = d.column ?? 1;
 
@@ -201,16 +228,16 @@ export function LinterOverlay({
             />
             {/* Transparent hit area covering full text line */}
             <div
-              className={interactive ? 'absolute group pointer-events-auto' : 'absolute pointer-events-none'}
+              className={linterInteractive ? 'absolute group pointer-events-auto' : 'absolute pointer-events-none'}
               style={{
                 top: (line - 1) * lineHeight + paddingTop - scrollTop,
                 left,
                 width: Math.max(width, 4),
                 height: lineHeight,
-                cursor: interactive ? (supportsPinnedTooltip ? 'pointer' : 'help') : 'default'
+                cursor: linterInteractive ? (supportsPinnedTooltip ? 'pointer' : 'help') : 'default'
               }}
               onMouseEnter={() => {
-                if (!interactive || openTooltipKey) return;
+                if (!linterInteractive || openTooltipKey) return;
                 if (hoverCloseTimerRef.current !== null) {
                   window.clearTimeout(hoverCloseTimerRef.current);
                   hoverCloseTimerRef.current = null;
@@ -218,7 +245,7 @@ export function LinterOverlay({
                 setHoverTooltipKey(tooltipKey);
               }}
               onMouseLeave={() => {
-                if (!interactive || openTooltipKey) return;
+                if (!linterInteractive || openTooltipKey) return;
                 if (hoverCloseTimerRef.current !== null) {
                   window.clearTimeout(hoverCloseTimerRef.current);
                 }
@@ -227,7 +254,7 @@ export function LinterOverlay({
                 }, 90);
               }}
               onMouseDown={(event) => {
-                if (!interactive || !supportsPinnedTooltip) return;
+                if (!linterInteractive || !supportsPinnedTooltip) return;
                 event.preventDefault();
                 event.stopPropagation();
                 if (hoverCloseTimerRef.current !== null) {
@@ -240,7 +267,7 @@ export function LinterOverlay({
             >
             {/* Tooltip */}
             <div
-              className={interactive ? 'absolute bottom-full left-0 mb-2 flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100100] min-w-[220px] max-w-[320px]' : 'hidden'}
+              className={linterInteractive ? 'absolute bottom-full left-0 mb-2 flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100100] min-w-[220px] max-w-[320px]' : 'hidden'}
               style={{ display: isTooltipOpen ? 'flex' : 'none' }}
               onMouseEnter={() => {
                 if (hoverCloseTimerRef.current !== null) {

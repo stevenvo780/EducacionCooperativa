@@ -670,3 +670,6 @@ export const ALL_BUILTIN_RULES: LinterRule[] = [
   unclosedBracketsRule,
   todoMarkersRule
 ];
+
+export const BUILTIN_RULES_BY_ID = new Map(ALL_BUILTIN_RULES.map((rule) => [rule.id, rule]));
+export const BUILTIN_RULE_IDS = new Set(ALL_BUILTIN_RULES.map((rule) => rule.id));
