@@ -14,6 +14,7 @@ import {
   type LinterDiagnostic,
   getCodeBlockLines,
 } from './types';
+import { isSpellEngineReady, isCorrect, suggest } from './spell-engine';
 
 /**
  * Parses a correction string like "a ver / haber" or "hecho (¿participio?)"
@@ -25,6 +26,16 @@ function parseReplacements(correction: string): string[] {
   // Split by " / " separator
   return cleaned.split(/\s*\/\s*/).map(s => s.trim()).filter(Boolean);
 }
+
+function restoreSuggestionCase(original: string, suggestion: string): string {
+  if (original === original.toUpperCase()) return suggestion.toUpperCase();
+  if (original[0] === original[0]?.toUpperCase()) {
+    return suggestion.charAt(0).toUpperCase() + suggestion.slice(1);
+  }
+  return suggestion;
+}
+
+const WORD_REGEX = /\b[\p{L}\p{M}][\p{L}\p{M}'’-]*\b/gu;
 
 // ═══════════════════════════════════════════════════════════
 // 1. SPELLING — Ortografía
@@ -85,74 +96,30 @@ const COMMON_TYPOS: Record<string, string> = {
   'exepto': 'excepto',
   'exeso': 'exceso',
   'escases': 'escasez',
-  'correccion': 'corrección',
+  // Confusiones s/c en terminaciones -ción (el algoritmo NO cubre la s→c, solo la tilde)
   'correcion': 'corrección',
-  'ortografico': 'ortográfico',
-  'ortograficos': 'ortográficos',
-  'ortografia': 'ortografía',
-  'ortografica': 'ortográfica',
   'corresion': 'corrección',
   'diresion': 'dirección',
-  'direccion': 'dirección',
   'situasion': 'situación',
-  'situacion': 'situación',
   'evaluasion': 'evaluación',
-  'evaluacion': 'evaluación',
   'informasion': 'información',
-  'informacion': 'información',
   'comunicasion': 'comunicación',
-  'comunicacion': 'comunicación',
   'organisacion': 'organización',
-  'organizacion': 'organización',
-  'educacion': 'educación',
-  'funcion': 'función',
-  'operacion': 'operación',
-  'relacion': 'relación',
-  'investigacion': 'investigación',
-  'participacion': 'participación',
-  'presentacion': 'presentación',
-  'solucion': 'solución',
-  'construccion': 'construcción',
   'condision': 'condición',
-  'condicion': 'condición',
   'nasion': 'nación',
-  'nacion': 'nación',
   'posision': 'posición',
-  'posicion': 'posición',
   'desision': 'decisión',
-  'decision': 'decisión',
   'tradision': 'tradición',
-  'tradicion': 'tradición',
   'conclucion': 'conclusión',
-  'conclusion': 'conclusión',
-  'expresion': 'expresión',
   'comprecion': 'comprensión',
-  'comprension': 'comprensión',
   'dimencion': 'dimensión',
-  'dimension': 'dimensión',
   'extencion': 'extensión',
-  'extension': 'extensión',
-  'sesion': 'sesión',
   'ocacion': 'ocasión',
-  'ocasion': 'ocasión',
-  'atencion': 'atención',
   'calificasion': 'calificación',
-  'calificacion': 'calificación',
-  'redaccion': 'redacción',
   'introducion': 'introducción',
-  'introduccion': 'introducción',
   'aplicasion': 'aplicación',
-  'aplicacion': 'aplicación',
   'produsion': 'producción',
-  'produccion': 'producción',
-  'institucion': 'institución',
-  'resolucion': 'resolución',
   'explicasion': 'explicación',
-  'explicacion': 'explicación',
-  'suposicion': 'suposición',
-  'proposicion': 'proposición',
-  'asignasion': 'asignación',
-  'asignacion': 'asignación',
 
   /* ─── h omission / addition ─── */
   'aver': 'a ver / haber',
@@ -162,13 +129,12 @@ const COMMON_TYPOS: Record<string, string> = {
   'echo': 'hecho (¿participio?)',
   'allar': 'hallar',
   'eredar': 'heredar',
-  'error': 'error',
   'herrores': 'errores',
   'herrror': 'error',
   'heror': 'error',
   'errror': 'error',
 
-  /* ─── tildes / accents ─── */
+  /* ─── tildes / accents (solo palabras que el algoritmo NO cubre) ─── */
   'tambien': 'también',
   'todavia': 'todavía',
   'mas': 'más (si es comparativo)',
@@ -186,24 +152,7 @@ const COMMON_TYPOS: Record<string, string> = {
   'titulo': 'título',
   'analisis': 'análisis',
   'proposito': 'propósito',
-  'especifico': 'específico',
-  'tecnico': 'técnico',
-  'teorico': 'teórico',
   'practica': 'práctica (si es sustantivo)',
-  'logico': 'lógico',
-  'basico': 'básico',
-  'publico': 'público',
-  'politica': 'política',
-  'economico': 'económico',
-  'historico': 'histórico',
-  'filosofico': 'filosófico',
-  'automatico': 'automático',
-  'semantico': 'semántico',
-  'pedagogico': 'pedagógico',
-  'sistematico': 'sistemático',
-  'matematico': 'matemático',
-  'gramatico': 'gramático',
-  'linguistico': 'lingüístico',
   'ademas': 'además',
   'detras': 'detrás',
   'traves': 'través',
@@ -369,36 +318,63 @@ const COMMON_TYPOS: Record<string, string> = {
 
 export const spellingRule: LinterRule = {
   id: 'spelling_typos',
-  name: 'Errores ortográficos comunes',
-  description: 'Detecta errores frecuentes en español: confusión b/v, s/c/z, h muda, y faltas comunes.',
+  name: 'Errores ortográficos',
+  description: 'Detecta errores ortográficos usando typos frecuentes y diccionario Hunspell en memoria.',
   category: 'spelling',
   defaultEnabled: true,
   check: (text: string): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
     const codeLines = getCodeBlockLines(lines);
+    const spellReady = isSpellEngineReady();
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
       const line = lines[lineIdx];
+      WORD_REGEX.lastIndex = 0;
+      let wordMatch;
+      while ((wordMatch = WORD_REGEX.exec(line)) !== null) {
+        const word = wordMatch[0];
+        const start = wordMatch.index;
+        const end = start + word.length;
+        const lower = word.toLowerCase();
 
-      for (const [typo, correction] of Object.entries(COMMON_TYPOS)) {
-        const regex = new RegExp(`\\b${typo}\\b`, 'gi');
-        let match;
-        while ((match = regex.exec(line)) !== null) {
-          const replacements = parseReplacements(correction);
+        const typoCorrection = COMMON_TYPOS[lower];
+        if (typoCorrection) {
+          const replacements = parseReplacements(typoCorrection).map(option => restoreSuggestionCase(word, option));
           results.push({
-            message: `Posible error ortográfico: "${match[0]}"`,
-            suggestion: `¿Quisiste decir "${correction}"?`,
+            message: `Posible error ortográfico: "${word}"`,
+            suggestion: `¿Quisiste decir "${replacements[0] ?? typoCorrection}"?`,
             severity: 'warning',
             line: lineIdx + 1,
-            column: match.index + 1,
+            column: start + 1,
             endLine: lineIdx + 1,
-            endColumn: match.index + 1 + match[0].length,
+            endColumn: end + 1,
             source: 'Spelling',
             replacements,
           });
+          continue;
         }
+
+        if (!spellReady) continue;
+        if (word.length <= 2) continue;
+        if (/^\d+$/.test(word)) continue;
+        if (isCorrect(word)) continue;
+
+        const replacements = suggest(word).map(option => restoreSuggestionCase(word, option));
+        results.push({
+          message: `Posible error ortográfico: "${word}"`,
+          suggestion: replacements.length > 0
+            ? `¿Quisiste decir "${replacements[0]}"?`
+            : 'Revisa la ortografía de esta palabra.',
+          severity: 'warning',
+          line: lineIdx + 1,
+          column: start + 1,
+          endLine: lineIdx + 1,
+          endColumn: end + 1,
+          source: 'Spelling',
+          replacements,
+        });
       }
     }
     return results;
