@@ -121,6 +121,14 @@ describe('api client auth wrappers', () => {
     expect(headers.get('X-Test')).toBe('1');
   });
 
+  it('falls back to local dev token when firebase auth is unavailable', async () => {
+    shouldThrowAuth = true;
+    localStorage.setItem('agora_local_dev_token', 'local-dev-token');
+
+    const apiClient = await loadApiClient();
+    await expect(apiClient.getAuthToken()).resolves.toBe('local-dev-token');
+  });
+
   it('adds the bearer token when available and exposes the deprecated helper', async () => {
     authState.currentUser = {
       getIdToken: vi.fn().mockResolvedValue('auth-token')

@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { hashPassword } from '@/lib/crypto';
 import { ensureFirebaseAuthUser, normalizeEmailAddress } from '@/lib/custom-auth';
 import { getErrorMessage } from '@/lib/error-utils';
+import { createLocalDevAuthToken, shouldUseLocalDevAuthFallback } from '@/lib/local-dev-auth';
 
 // In-memory rate limiter (simple implementation)
 const rateLimit = new Map<string, { count: number; expires: number }>();
@@ -119,6 +120,7 @@ export async function POST(req: NextRequest) {
 
         // Personal workspace se gestiona en el cliente; evitamos duplicados en Firestore.
 
+        let localDevFallback = false;
         try {
             await ensureFirebaseAuthUser({
                 uid: userId,
@@ -126,33 +128,50 @@ export async function POST(req: NextRequest) {
                 password
             });
         } catch (error) {
-            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true') {
+            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true' && !shouldUseLocalDevAuthFallback(error)) {
                 await Promise.allSettled([
                     userDocRef.delete(),
                     emailIndexRef.delete()
                 ]);
                 throw error;
             }
-            console.warn('Firebase Admin ensureAuthUser failed (insecure mode, continuing):', getErrorMessage(error));
+            localDevFallback = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true';
+            console.warn(
+                localDevFallback
+                    ? 'Firebase Admin ensureAuthUser failed (local dev signed session):'
+                    : 'Firebase Admin ensureAuthUser failed (insecure mode, continuing):',
+                getErrorMessage(error)
+            );
         }
 
         let customToken: string | undefined;
+        let localDevToken: string | undefined;
         try {
             customToken = await adminAuth.createCustomToken(userId, {
                 userEmail: normalizedEmail
             });
         } catch (tokenError) {
-            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true') {
+            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true' && !shouldUseLocalDevAuthFallback(tokenError)) {
                 throw tokenError;
             }
-            console.warn('Firebase Admin createCustomToken failed (insecure mode, continuing):', getErrorMessage(tokenError));
+            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+                console.warn('Firebase Admin createCustomToken failed (insecure mode, continuing):', getErrorMessage(tokenError));
+            } else {
+                console.warn('Firebase Admin createCustomToken failed (local dev signed session):', getErrorMessage(tokenError));
+                localDevFallback = true;
+            }
+        }
+
+        if (localDevFallback) {
+            localDevToken = createLocalDevAuthToken({ uid: userId, email: normalizedEmail }) ?? undefined;
         }
 
         return NextResponse.json({
             uid: userId,
             email: normalizedEmail,
             displayName: normalizedEmail.split('@')[0],
-            ...(customToken ? { customToken } : {})
+            ...(customToken ? { customToken } : {}),
+            ...(localDevToken ? { localDevToken } : {})
         }, { status: 201 });
 
     } catch (error: unknown) {

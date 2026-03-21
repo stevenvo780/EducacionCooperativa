@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { verifyPassword } from '@/lib/crypto';
 import { ensureFirebaseAuthUser, findUserByEmail, normalizeEmailAddress } from '@/lib/custom-auth';
 import { getErrorMessage } from '@/lib/error-utils';
+import { createLocalDevAuthToken, shouldUseLocalDevAuthFallback } from '@/lib/local-dev-auth';
 
 // In-memory rate limiter
 const rateLimit = new Map<string, { count: number; expires: number }>();
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
         }
 
         let customToken: string | undefined;
+        let localDevToken: string | undefined;
         try {
             await ensureFirebaseAuthUser({
                 uid: userLookup.id,
@@ -90,10 +92,14 @@ export async function POST(req: NextRequest) {
                 userEmail: userData.email || userLookup.normalizedEmail
             });
         } catch (tokenError: unknown) {
-            // When ALLOW_INSECURE_AUTH is enabled (local dev), tolerate Firebase Admin
-            // failures (e.g. missing IAM roles) and fall back to insecure session.
             if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
                 console.warn('Firebase Admin token creation failed (insecure mode, continuing):', getErrorMessage(tokenError));
+            } else if (shouldUseLocalDevAuthFallback(tokenError)) {
+                console.warn('Firebase Admin token creation failed (local dev signed session):', getErrorMessage(tokenError));
+                localDevToken = createLocalDevAuthToken({
+                    uid: userLookup.id,
+                    email: userData.email || userLookup.normalizedEmail
+                }) ?? undefined;
             } else {
                 throw tokenError;
             }
@@ -104,7 +110,8 @@ export async function POST(req: NextRequest) {
             email: userData.email || normalizedEmail,
             displayName: userData.displayName || 'User',
             photoURL: userData.photoURL || null,
-            ...(customToken ? { customToken } : {})
+            ...(customToken ? { customToken } : {}),
+            ...(localDevToken ? { localDevToken } : {})
         }, { status: 200 });
 
     } catch (error: unknown) {

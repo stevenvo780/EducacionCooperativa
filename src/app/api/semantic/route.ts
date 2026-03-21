@@ -2,6 +2,19 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
+
+/** Recursively remove undefined values so Firestore doesn't reject the document. */
+function stripUndefined<T>(obj: T): T {
+  if (Array.isArray(obj)) return obj.map(stripUndefined) as unknown as T;
+  if (obj !== null && typeof obj === 'object') {
+    const clean: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined) clean[k] = stripUndefined(v);
+    }
+    return clean as T;
+  }
+  return obj;
+}
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
   normalizeSemanticWorkspaceState,
@@ -93,7 +106,7 @@ export async function POST(req: NextRequest) {
       updatedAt: nextUpdatedAt
     };
 
-    await ref.set({
+    await ref.set(stripUndefined({
       workspaceId,
       storageId,
       concepts: mergedState.concepts,
@@ -102,7 +115,7 @@ export async function POST(req: NextRequest) {
       updatedAt: mergedState.updatedAt,
       updatedBy: auth.uid,
       serverUpdatedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
+    }));
 
     return NextResponse.json({ state: mergedState });
   } catch (error: unknown) {
