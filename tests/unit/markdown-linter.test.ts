@@ -194,6 +194,14 @@ describe('spellingRule', () => {
     expectClean(spellingRule, '```\nentonses\n```');
   });
 
+  it('ignora expresiones LaTeX inline', () => {
+    expectClean(spellingRule, 'La $entonses + conoser$ verdad.');
+  });
+
+  it('ignora expresiones LaTeX en bloque', () => {
+    expectClean(spellingRule, '$$\nentonses + conoser\n$$');
+  });
+
   it('no reporta en texto correcto', () => {
     expectClean(spellingRule, 'Entonces vamos a conocer la verdad.');
   });
@@ -292,6 +300,10 @@ describe('accentPatternRule', () => {
     expectClean(accentPatternRule, '```\ninvestigacion\n```');
   });
 
+  it('ignora palabras dentro de LaTeX', () => {
+    expectClean(accentPatternRule, 'Fórmula: $investigacion + emision$');
+  });
+
   it('detecta -logico sin tilde', () => {
     const diags = accentPatternRule.check('Es un problema biologico');
     expect(diags.length).toBeGreaterThanOrEqual(1);
@@ -339,6 +351,10 @@ describe('suspiciousPatternsRule', () => {
 
   it('ignora bloques de código', () => {
     expectClean(suspiciousPatternsRule, '```\nnmal ahhorrar\n```');
+  });
+
+  it('ignora secuencias sospechosas dentro de LaTeX', () => {
+    expectClean(suspiciousPatternsRule, 'Sea $ahhorrar + nmal$ una cadena de prueba');
   });
 
   it('permite palabras válidas con nn (innato, innovar)', () => {

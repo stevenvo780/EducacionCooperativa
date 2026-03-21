@@ -15,6 +15,69 @@ function restoreSuggestionCase(original: string, suggestion: string): string {
 
 const WORD_REGEX = /\b[\p{L}\p{M}][\p{L}\p{M}'’-]*\b/gu;
 
+type Range = { start: number; end: number };
+
+function isEscapedDollar(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let pos = index - 1; pos >= 0 && text[pos] === '\\'; pos--) {
+    backslashes++;
+  }
+  return backslashes % 2 === 1;
+}
+
+function pushMathRange(rangesByLine: Range[][], startLine: number, startCol: number, endLine: number, endCol: number): void {
+  for (let line = startLine; line <= endLine; line++) {
+    const lineStart = line === startLine ? startCol : 0;
+    const lineEnd = line === endLine ? endCol : Number.POSITIVE_INFINITY;
+    rangesByLine[line].push({ start: lineStart, end: lineEnd });
+  }
+}
+
+function getMathRangesByLine(lines: string[]): Range[][] {
+  const rangesByLine = lines.map((): Range[] => []);
+  let current:
+    | { delimiter: '$' | '$$'; startLine: number; startCol: number }
+    | null = null;
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+
+    for (let column = 0; column < line.length; column++) {
+      if (line[column] !== '$') continue;
+      if (isEscapedDollar(line, column)) continue;
+
+      const delimiter: '$' | '$$' = line[column + 1] === '$' && !isEscapedDollar(line, column + 1)
+        ? '$$'
+        : '$';
+      const delimiterLength = delimiter.length;
+
+      if (!current) {
+        current = { delimiter, startLine: lineIndex, startCol: column };
+        column += delimiterLength - 1;
+        continue;
+      }
+
+      if (current.delimiter !== delimiter) continue;
+
+      pushMathRange(
+        rangesByLine,
+        current.startLine,
+        current.startCol,
+        lineIndex,
+        column + delimiterLength
+      );
+      current = null;
+      column += delimiterLength - 1;
+    }
+  }
+
+  return rangesByLine;
+}
+
+function overlapsMathRange(ranges: Range[], start: number, end: number): boolean {
+  return ranges.some(range => start < range.end && end > range.start);
+}
+
 function matchesAccentPattern(word: string): boolean {
   return ACCENT_SUFFIX_RULES.some(rule => {
     rule.pattern.lastIndex = 0;
@@ -32,6 +95,7 @@ export const spellingRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
     const codeLines = getCodeBlockLines(lines);
+    const mathRangesByLine = getMathRangesByLine(lines);
     const spellReady = isSpellEngineReady();
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -45,6 +109,7 @@ export const spellingRule: LinterRule = {
         const end = start + word.length;
 
         if (!spellReady) continue;
+        if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
         if (word.length <= 2) continue;
         if (/^\d+$/.test(word)) continue;
         if (matchesAccentPattern(word)) continue;
@@ -80,6 +145,7 @@ export const doubledWordsRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
     const codeLines = getCodeBlockLines(lines);
+    const mathRangesByLine = getMathRangesByLine(lines);
     const regex = /\b(\w{2,})\s+\1\b/gi;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -87,6 +153,9 @@ export const doubledWordsRule: LinterRule = {
       const line = lines[lineIdx];
       let match;
       while ((match = regex.exec(line)) !== null) {
+        const start = match.index;
+        const end = start + match[0].length;
+        if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
         results.push({
           message: `Palabra duplicada: "${match[1]} ${match[1]}"`,
           suggestion: 'Elimina una de las repeticiones.',
@@ -172,6 +241,7 @@ export const accentPatternRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
     const codeLines = getCodeBlockLines(lines);
+    const mathRangesByLine = getMathRangesByLine(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -182,6 +252,9 @@ export const accentPatternRule: LinterRule = {
         rule.pattern.lastIndex = 0;
         while ((match = rule.pattern.exec(line)) !== null) {
           const word = match[0];
+          const start = match.index;
+          const end = start + word.length;
+          if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
           if (/[áéíóú]/i.test(word)) continue;
 
           const fixed = rule.fix(word);
@@ -192,9 +265,9 @@ export const accentPatternRule: LinterRule = {
             suggestion: `Cambiar a "${fixed}"`,
             severity: 'warning',
             line: lineIdx + 1,
-            column: match.index + 1,
+            column: start + 1,
             endLine: lineIdx + 1,
-            endColumn: match.index + 1 + word.length,
+            endColumn: end + 1,
             source: 'Spelling',
             replacements: [fixed]
           });
@@ -224,6 +297,7 @@ export const suspiciousPatternsRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
     const codeLines = getCodeBlockLines(lines);
+    const mathRangesByLine = getMathRangesByLine(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -233,6 +307,9 @@ export const suspiciousPatternsRule: LinterRule = {
 
       while ((wordMatch = wordRegex.exec(line)) !== null) {
         const word = wordMatch[0];
+        const start = wordMatch.index;
+        const end = start + word.length;
+        if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
         const lower = word.toLowerCase();
         if (SUSPICIOUS_WHITELIST.has(lower)) continue;
 
@@ -245,9 +322,9 @@ export const suspiciousPatternsRule: LinterRule = {
             suggestion: `Revisa la ortografía de "${word}".`,
             severity: 'info',
             line: lineIdx + 1,
-            column: wordMatch.index + 1,
+            column: start + 1,
             endLine: lineIdx + 1,
-            endColumn: wordMatch.index + 1 + word.length,
+            endColumn: end + 1,
             source: 'Spelling'
           });
           continue;
@@ -261,9 +338,9 @@ export const suspiciousPatternsRule: LinterRule = {
             suggestion: `Revisa la ortografía de "${word}".`,
             severity: 'warning',
             line: lineIdx + 1,
-            column: wordMatch.index + 1,
+            column: start + 1,
             endLine: lineIdx + 1,
-            endColumn: wordMatch.index + 1 + word.length,
+            endColumn: end + 1,
             source: 'Spelling'
           });
           continue;
@@ -276,9 +353,9 @@ export const suspiciousPatternsRule: LinterRule = {
             suggestion: `Revisa la ortografía de "${word}".`,
             severity: 'info',
             line: lineIdx + 1,
-            column: wordMatch.index + 1,
+            column: start + 1,
             endLine: lineIdx + 1,
-            endColumn: wordMatch.index + 1 + word.length,
+            endColumn: end + 1,
             source: 'Spelling'
           });
         }
