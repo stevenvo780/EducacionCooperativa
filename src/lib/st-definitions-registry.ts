@@ -58,6 +58,16 @@ class STDefinitionsRegistryClass {
     return all;
   }
 
+  /** Devuelve la lista de archivos registrados */
+  getRegisteredFiles(): string[] {
+    return Array.from(this._fileDefinitions.keys());
+  }
+
+  /** Devuelve las definiciones de un archivo específico */
+  getFileDefinitions(fileId: string): STDefinition[] {
+    return this._fileDefinitions.get(fileId) ?? [];
+  }
+
   /** Devuelve solo los nombres únicos definidos (para búsqueda rápida) */
   getDefinedNames(): Set<string> {
     const names = new Set<string>();
