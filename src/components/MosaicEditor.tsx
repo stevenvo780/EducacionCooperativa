@@ -63,8 +63,8 @@ import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery'
 import { createSnippet } from '@/services/snippetApi';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
-import { createDocumentApi, updateDocumentApi } from '@/services/dashboardApi';
-import type { BoardCard } from '@/components/dashboard/types';
+import { createDocumentApi, fetchDocsApi, updateDocumentApi } from '@/services/dashboardApi';
+import type { BoardCard, DocItem } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { useMarkdownLinter } from '@/hooks/useMarkdownLinter';
@@ -1207,7 +1207,7 @@ export default function MosaicEditor({
       clearSemanticSelection();
       setDefineConceptDraft(null);
 
-      // --- Auto-crear / actualizar archivo .st companion ---
+      // --- Auto-crear / actualizar archivo(s) .st companion ---
       const currentName = docName || currentDocMetaRef.current.name || 'Documento';
       const stFileName = companionSTName(currentName);
       const scopedSemanticState = filterSemanticWorkspaceStateByDocument(nextState, {
@@ -1219,16 +1219,27 @@ export default function MosaicEditor({
       const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
 
       try {
-        if (companionStDocId) {
-          await updateDocumentApi(companionStDocId, { content: stContent });
+        /* Fetch all docs to find every companion with the expected name */
+        const allDocs = await fetchDocsApi({ workspaceId });
+        const companionDocs = allDocs.filter((d: DocItem) => d.name === stFileName);
+
+        const syncRegistry = () => {
           const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
           if (definitions.length > 0) {
             STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
           } else {
             STDefinitionsRegistry.removeFile(stFileName);
           }
+        };
+
+        if (companionDocs.length > 0) {
+          /* Update ALL existing companions */
+          await Promise.all(companionDocs.map((doc: DocItem) => updateDocumentApi(doc.id, { content: stContent })));
+          if (!companionStDocId) setCompanionStDocId(companionDocs[0].id);
+          syncRegistry();
           setSemanticNotice(`📐 Concepto registrado → ${stFileName} actualizado.`);
         } else {
+          /* Create a new companion */
           const result = await createDocumentApi({
             name: stFileName,
             content: stContent,
@@ -1239,15 +1250,18 @@ export default function MosaicEditor({
           });
           if (result?.id) {
             setCompanionStDocId(result.id);
+            companionDocs.push({ id: result.id, name: stFileName } as DocItem);
           }
-          const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
-          if (definitions.length > 0) {
-            STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
-          } else {
-            STDefinitionsRegistry.removeFile(stFileName);
-          }
+          syncRegistry();
           setSemanticNotice(`📐 Concepto registrado → ${stFileName} creado en ${folder}/.`);
           window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+        }
+
+        /* Notify every open STFileEditor so they refresh their content */
+        for (const doc of companionDocs) {
+          window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
+            detail: { docId: doc.id, docName: stFileName }
+          }));
         }
       } catch (error) {
         console.error('Error auto-generating ST companion:', error);
@@ -1462,18 +1476,24 @@ export default function MosaicEditor({
     const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
 
     try {
-      if (companionStDocId) {
-        // Actualizar el archivo .st existente
-        await updateDocumentApi(companionStDocId, { content: stContent });
+      const allDocs = await fetchDocsApi({ workspaceId });
+      const companionDocs = allDocs.filter((d: DocItem) => d.name === stFileName);
+
+      const syncRegistry = () => {
         const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
         if (definitions.length > 0) {
           STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
         } else {
           STDefinitionsRegistry.removeFile(stFileName);
         }
+      };
+
+      if (companionDocs.length > 0) {
+        await Promise.all(companionDocs.map((doc: DocItem) => updateDocumentApi(doc.id, { content: stContent })));
+        if (!companionStDocId) setCompanionStDocId(companionDocs[0].id);
+        syncRegistry();
         setSemanticNotice(`Archivo ${stFileName} actualizado con ${scopedSemanticState.concepts.length} definiciones.`);
       } else {
-        // Crear nuevo archivo .st
         const result = await createDocumentApi({
           name: stFileName,
           content: stContent,
@@ -1484,15 +1504,17 @@ export default function MosaicEditor({
         });
         if (result?.id) {
           setCompanionStDocId(result.id);
+          companionDocs.push({ id: result.id, name: stFileName } as DocItem);
         }
-        const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
-        if (definitions.length > 0) {
-          STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
-        } else {
-          STDefinitionsRegistry.removeFile(stFileName);
-        }
+        syncRegistry();
         setSemanticNotice(`Archivo ${stFileName} creado en ${folder}/ con ${scopedSemanticState.concepts.length} definiciones.`);
         window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+      }
+
+      for (const doc of companionDocs) {
+        window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
+          detail: { docId: doc.id, docName: stFileName }
+        }));
       }
     } catch (error) {
       console.error('Error generating ST file:', error);

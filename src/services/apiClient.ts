@@ -1,6 +1,8 @@
 import { auth as getAuth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 
+const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
+
 // Shared promise so concurrent calls while auth is loading share the same wait
 let authWaiter: Promise<User | null> | null = null;
 
@@ -49,6 +51,14 @@ export const getAuthToken = async () => {
     /* v8 ignore next -- user objects without getIdToken are treated as unauthenticated */
     if (user?.getIdToken) {
       return await user.getIdToken();
+    }
+  } catch {
+  }
+
+  try {
+    const localDevToken = localStorage.getItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
+    if (localDevToken) {
+      return localDevToken;
     }
   } catch {
   }

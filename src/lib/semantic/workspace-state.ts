@@ -118,11 +118,11 @@ const normalizeFragment = (value: unknown): SemanticFragmentRecord | null => {
     createdAt: toNumber(raw.createdAt),
     updatedAt: toNumber(raw.updatedAt),
     selectionHash: raw.selectionHash,
-    docBlockId: typeof raw.docBlockId === 'string' ? raw.docBlockId : undefined,
-    conceptId: typeof raw.conceptId === 'string' ? raw.conceptId : undefined,
-    conceptTitle: typeof raw.conceptTitle === 'string' ? raw.conceptTitle : undefined,
-    linkedDocId: typeof raw.linkedDocId === 'string' ? raw.linkedDocId : undefined,
-    linkedDocName: typeof raw.linkedDocName === 'string' ? raw.linkedDocName : undefined
+    ...(typeof raw.docBlockId === 'string' ? { docBlockId: raw.docBlockId } : {}),
+    ...(typeof raw.conceptId === 'string' ? { conceptId: raw.conceptId } : {}),
+    ...(typeof raw.conceptTitle === 'string' ? { conceptTitle: raw.conceptTitle } : {}),
+    ...(typeof raw.linkedDocId === 'string' ? { linkedDocId: raw.linkedDocId } : {}),
+    ...(typeof raw.linkedDocName === 'string' ? { linkedDocName: raw.linkedDocName } : {})
   };
 };
 

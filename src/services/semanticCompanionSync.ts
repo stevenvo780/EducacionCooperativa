@@ -30,10 +30,9 @@ const resolveSourceDocument = (docs: DocItem[], ref: SemanticDocumentRef) => {
   return undefined;
 };
 
-const resolveCompanionDocument = (docs: DocItem[], sourceDoc: DocItem) => {
+const resolveCompanionDocuments = (docs: DocItem[], sourceDoc: DocItem) => {
   const expectedName = companionSTName(sourceDoc.name);
-  const expectedFolder = sourceDoc.folder || 'Material';
-  return docs.find((doc) => doc.name === expectedName && (doc.folder || 'Material') === expectedFolder);
+  return docs.filter((doc) => doc.name === expectedName);
 };
 
 const syncRegistryFromContent = (fileName: string, content: string) => {
@@ -54,7 +53,16 @@ export const syncSemanticCompanionFiles = async ({
   const uniqueRefs = Array.from(new Map(documentRefs.map((ref) => [getDocKey(ref), ref])).values())
     .filter((ref) => ref.docId || ref.docName);
 
-  if (uniqueRefs.length === 0) return;
+  if (uniqueRefs.length === 0) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[companionSync] No document refs to sync');
+    }
+    return;
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[companionSync] Syncing', uniqueRefs.length, 'refs, concepts in state:', normalizedState.concepts.length);
+  }
 
   const docs = await fetchDocsApi({ workspaceId });
 
@@ -68,13 +76,26 @@ export const syncSemanticCompanionFiles = async ({
     });
     const fileName = companionSTName(sourceDoc.name);
     const content = buildSTFromSemantic(scopedState, sourceDoc.name);
-    const companionDoc = resolveCompanionDocument(docs, sourceDoc);
+    const companionDocs = resolveCompanionDocuments(docs, sourceDoc);
 
-    if (companionDoc?.id) {
-      await updateDocumentApi(companionDoc.id, { content });
+    if (companionDocs.length > 0) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[companionSync] Updating', companionDocs.length, 'companion(s)', fileName, 'concepts:', scopedState.concepts.length);
+      }
+      /* Update ALL companions with the same name (handles duplicates) */
+      await Promise.all(companionDocs.map((doc) => updateDocumentApi(doc.id, { content })));
       syncRegistryFromContent(fileName, content);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+        /* Dispatch an event per companion so every open tab refreshes */
+        for (const doc of companionDocs) {
+          window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
+            detail: { docId: doc.id, docName: fileName }
+          }));
+        }
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[companionSync] Dispatched agora:doc-content-updated for', companionDocs.map((d) => d.id).join(', '));
+        }
       }
       return;
     }
@@ -96,6 +117,9 @@ export const syncSemanticCompanionFiles = async ({
       syncRegistryFromContent(fileName, content);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+        window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
+          detail: { docId: created.id, docName: fileName }
+        }));
       }
     }
   }));

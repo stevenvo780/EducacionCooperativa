@@ -20,6 +20,8 @@ const {
   };
 });
 
+process.env.APP_PASSWORD = 'test-local-secret';
+
 vi.mock('@/lib/firebase-admin', () => ({
   adminAuth: {
     verifyIdToken: verifyIdTokenMock
@@ -35,6 +37,7 @@ import {
   isWorkspaceMember,
   requireAuth
 } from '@/lib/server-auth';
+import { createLocalDevAuthToken } from '@/lib/local-dev-auth';
 
 describe('server auth helpers', () => {
   beforeEach(() => {
@@ -83,6 +86,21 @@ describe('server auth helpers', () => {
       headers: new Headers(),
       url: '::::'
     } as never)).resolves.toBeNull();
+  });
+
+  it('accepts local dev signed tokens when Firebase verify fails', async () => {
+    const token = createLocalDevAuthToken({
+      uid: 'local-user-1',
+      email: 'local@example.com'
+    });
+
+    verifyIdTokenMock.mockRejectedValueOnce(new Error('identitytoolkit permission denied'));
+    await expect(requireAuth(new Request('https://app.test', {
+      headers: { authorization: `Bearer ${token}` }
+    }) as never)).resolves.toEqual({
+      uid: 'local-user-1',
+      email: 'local@example.com'
+    });
   });
 
   it('checks workspace membership', async () => {

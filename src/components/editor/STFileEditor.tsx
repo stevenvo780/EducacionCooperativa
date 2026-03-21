@@ -103,6 +103,33 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
     });
   }, [onDocChangeCallback, docId, fetchContent]);
 
+  // ── Refresh when companion sync updates this file ──
+  useEffect(() => {
+    if (!docId) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ docId?: string; docName?: string }>).detail;
+      /* Match by docId OR by docName (covers duplicate companion files) */
+      const matchesId = detail?.docId === docId;
+      const matchesName = !!docName && !!detail?.docName && detail.docName === docName;
+      if (!matchesId && !matchesName) return;
+      // Skip if we have unsaved local edits or a save is in-flight
+      if (dirtyRef.current || savingRef.current) return;
+      fetchContent().then((text) => {
+        if (text === null) return;
+        if (text !== latestContent.current) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[STFileEditor] Applying companion-sync update for', docId, '(matched:', matchesId ? 'id' : 'name', ')');
+          }
+          setContent(text);
+          lastSyncedRef.current = text;
+          setDirty(false);
+        }
+      });
+    };
+    window.addEventListener('agora:doc-content-updated', handler);
+    return () => window.removeEventListener('agora:doc-content-updated', handler);
+  }, [docId, docName, fetchContent]);
+
   // ── Re-fetch content when tab becomes visible again ──
   useEffect(() => {
     if (!isPageVisible || !docId || loading) return;

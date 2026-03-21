@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/prepare-next-build.mjs",
     "dev": "next dev",
-    "build": "node scripts/prepare-next-build.mjs && next build",
+    "build": "node scripts/prepare-next-build.mjs --build && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "validate:st-docs": "bash scripts/validate-st-docs.sh",

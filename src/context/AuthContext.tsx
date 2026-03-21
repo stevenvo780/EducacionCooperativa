@@ -38,6 +38,21 @@ const AuthContext = createContext<AuthContextType>({
 export const useAuth = () => useContext(AuthContext);
 
 const allowInsecureAuth = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
+const LOCAL_DEV_USER_STORAGE_KEY = 'agora_local_dev_user';
+
+const createLocalDevUser = (userData: {
+    uid: string;
+    email?: string | null;
+    displayName?: string | null;
+    photoURL?: string | null;
+}, token: string) => ({
+    uid: userData.uid,
+    email: userData.email ?? null,
+    displayName: userData.displayName ?? null,
+    photoURL: userData.photoURL ?? null,
+    getIdToken: async () => token
+} as unknown as User);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -50,6 +65,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const storedEmail = localStorage.getItem('agora_user_email');
         if (storedEmail) {
             setUserEmail(storedEmail);
+        }
+
+        const storedLocalDevToken = localStorage.getItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
+        const storedLocalDevUser = localStorage.getItem(LOCAL_DEV_USER_STORAGE_KEY);
+        if (storedLocalDevToken && storedLocalDevUser) {
+            try {
+                const parsedUser = JSON.parse(storedLocalDevUser) as {
+                    uid: string;
+                    email?: string | null;
+                    displayName?: string | null;
+                    photoURL?: string | null;
+                };
+                setUser(createLocalDevUser(parsedUser, storedLocalDevToken));
+                setUserEmail(parsedUser.email || storedEmail);
+                setLoading(false);
+                return;
+            } catch {
+                localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
+                localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
+            }
         }
 
         if (allowInsecureAuth) {
@@ -81,6 +116,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                         setUserEmail(authUser.email);
                         localStorage.setItem('agora_user_email', authUser.email);
                     }
+                    localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
+                    localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
                     localStorage.removeItem('agora_user');
                 } else {
                     setUser(null);
@@ -149,6 +186,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
 
+        if (typeof userData.localDevToken === 'string' && userData.localDevToken) {
+            const userObj = createLocalDevUser({
+                uid: userData.uid,
+                email: userData.email,
+                displayName: userData.displayName || email.split('@')[0],
+                photoURL: userData.photoURL || null
+            }, userData.localDevToken);
+
+            setUser(userObj);
+            setUserEmail(userData.email || normalizedEmail);
+            setLoading(false);
+            localStorage.setItem(LOCAL_DEV_TOKEN_STORAGE_KEY, userData.localDevToken);
+            localStorage.setItem(LOCAL_DEV_USER_STORAGE_KEY, JSON.stringify({
+                uid: userData.uid,
+                email: userData.email,
+                displayName: userObj.displayName,
+                photoURL: userObj.photoURL
+            }));
+            localStorage.setItem('agora_user_email', userData.email || normalizedEmail);
+            localStorage.removeItem('agora_user');
+            router.push('/dashboard');
+            return;
+        }
+
         if (!allowInsecureAuth) {
             throw new Error('No se pudo iniciar sesión con Firebase. Verifica la configuración.');
         }
@@ -201,6 +262,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } catch (tokenError) {
                 console.warn('Custom token sign-in failed, using fallback:', tokenError);
             }
+        }
+
+        if (typeof userData.localDevToken === 'string' && userData.localDevToken) {
+            const userObj = createLocalDevUser({
+                uid: userData.uid,
+                email: userData.email,
+                displayName: email.split('@')[0],
+                photoURL: null
+            }, userData.localDevToken);
+
+            setUser(userObj);
+            setUserEmail(userData.email || normalizedEmail);
+            setLoading(false);
+            localStorage.setItem(LOCAL_DEV_TOKEN_STORAGE_KEY, userData.localDevToken);
+            localStorage.setItem(LOCAL_DEV_USER_STORAGE_KEY, JSON.stringify({
+                uid: userData.uid,
+                email: userData.email,
+                displayName: userObj.displayName,
+                photoURL: null
+            }));
+            localStorage.setItem('agora_user_email', userData.email || normalizedEmail);
+            localStorage.removeItem('agora_user');
+            router.push('/dashboard');
+            return;
         }
 
         if (!allowInsecureAuth) {
@@ -291,6 +376,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
         setUserEmail(null);
         localStorage.removeItem('agora_user');
+        localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
+        localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
         localStorage.removeItem('agora_user_email');
         router.push('/');
     };

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { verifyLocalDevAuthToken } from '@/lib/local-dev-auth';
 import { isPersonalWorkspaceId } from '@/types/workspace';
 
 export type AuthContext = {
@@ -32,6 +33,10 @@ export const requireAuth = async (req: NextRequest): Promise<AuthContext | null>
     const email = decoded.email ?? (decoded as { userEmail?: string }).userEmail ?? null;
     return { uid: decoded.uid, email };
   } catch {
+    const localDevAuth = verifyLocalDevAuthToken(token);
+    if (localDevAuth) {
+      return localDevAuth;
+    }
     if (allowInsecureAuth && INSECURE_UID_PATTERN.test(token)) {
       return { uid: token, email: null };
     }
