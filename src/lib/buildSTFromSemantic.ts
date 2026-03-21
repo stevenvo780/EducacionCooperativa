@@ -51,10 +51,14 @@ const buildConceptDefines = (
   concepts.forEach((concept) => {
     const id = toSTIdentifier(concept.title);
     const desc = escapeSTString(concept.excerpt || concept.title);
+    // interpret es un statement de nivel top; define solo acepta fórmulas.
+    // Usamos interpret para mapear texto→proposición y opcionalmente
+    // define como alias si hay definición adicional.
     if (concept.definition) {
       const def = escapeSTString(concept.definition);
       lines.push(`// Definición: ${def}`);
-      lines.push(`define ${id} = interpret "${desc}" as ${id}`);
+      lines.push(`interpret "${desc}" as ${id}`);
+      lines.push(`define ${id}_DEF = ${id} description "${def}"`);
     } else {
       lines.push(`interpret "${desc}" as ${id}`);
     }
