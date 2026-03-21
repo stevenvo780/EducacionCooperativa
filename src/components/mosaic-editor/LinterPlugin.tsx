@@ -21,7 +21,7 @@ interface LinterPluginProps {
  * This is robust against code blocks, LaTeX, Mermaid, etc. that break line-based mapping.
  */
 function findDiagnosticRange(
-  root: HTMLElement,
+  textIndex: DocumentTextIndex,
   content: string,
   diag: LinterDiagnostic,
   usedPositions: Set<string>,
@@ -35,42 +35,126 @@ function findDiagnosticRange(
   const targetText = lines[lineIdx].substring(colStart, colEnd);
   if (!targetText || !targetText.trim()) return null;
 
-  // Walk all text nodes and search for targetText
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  let node = walker.nextNode() as Text | null;
+  const hasWordEdges = /[\p{L}\p{N}\p{M}]/u.test(targetText[0] ?? '')
+    || /[\p{L}\p{N}\p{M}]/u.test(targetText[targetText.length - 1] ?? '');
 
-  while (node) {
-    const text = node.textContent || '';
-    let searchFrom = 0;
+  if (textIndex.segments.length === 0) return null;
 
-    while (true) {
-      // Case-insensitive search to handle capitalization differences
-      const idx = text.toLowerCase().indexOf(targetText.toLowerCase(), searchFrom);
-      if (idx === -1) break;
+  const { segments, fullText, fullTextLower } = textIndex;
+  const targetTextLower = targetText.toLowerCase();
+  let searchFrom = 0;
 
-      // Build a unique key for this occurrence to avoid duplicates
-      // Use the DOM node + character index as identifier
-      const nodeId = (node as unknown as { __linterId?: number }).__linterId ??
-        ((node as unknown as { __linterId: number }).__linterId = Math.random());
-      const posKey = `${nodeId}:${idx}`;
+  while (true) {
+    const idx = fullTextLower.indexOf(targetTextLower, searchFrom);
+    if (idx === -1) break;
 
-      if (!usedPositions.has(posKey)) {
+    const endIdx = idx + targetText.length;
+    if (hasWordEdges && !isWordBoundaryMatch(fullText, idx, endIdx, targetText)) {
+      searchFrom = idx + 1;
+      continue;
+    }
+
+    const posKey = `${idx}:${endIdx}`;
+    if (!usedPositions.has(posKey)) {
+      const startPosition = resolveTextPosition(segments, idx);
+      const endPosition = resolveTextPosition(segments, endIdx);
+
+      if (startPosition && endPosition) {
         usedPositions.add(posKey);
         try {
           const range = document.createRange();
-          const endIdx = Math.min(idx + targetText.length, text.length);
-          range.setStart(node, idx);
-          range.setEnd(node, endIdx);
+          range.setStart(startPosition.node, startPosition.offset);
+          range.setEnd(endPosition.node, endPosition.offset);
           return range;
         } catch {
           // Invalid range
         }
       }
-      searchFrom = idx + 1;
+    }
+
+    searchFrom = idx + 1;
+  }
+
+  return null;
+}
+
+interface TextNodeSegment {
+  node: Text;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+}
+
+interface DocumentTextIndex {
+  segments: TextNodeSegment[];
+  fullText: string;
+  fullTextLower: string;
+}
+
+function buildDocumentTextIndex(root: HTMLElement): DocumentTextIndex {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const segments: TextNodeSegment[] = [];
+  let currentOffset = 0;
+  let node = walker.nextNode() as Text | null;
+
+  while (node) {
+    const text = node.textContent || '';
+    if (text.length > 0) {
+      segments.push({
+        node,
+        text,
+        startOffset: currentOffset,
+        endOffset: currentOffset + text.length
+      });
+      currentOffset += text.length;
     }
     node = walker.nextNode() as Text | null;
   }
-  return null;
+
+  const fullText = segments.map(({ text }) => text).join('');
+  return {
+    segments,
+    fullText,
+    fullTextLower: fullText.toLowerCase()
+  };
+}
+
+function resolveTextPosition(segments: TextNodeSegment[], absoluteOffset: number) {
+  if (segments.length === 0) return null;
+
+  const clampedOffset = Math.max(0, absoluteOffset);
+  for (const segment of segments) {
+    if (clampedOffset < segment.endOffset) {
+      return {
+        node: segment.node,
+        offset: clampedOffset - segment.startOffset
+      };
+    }
+  }
+
+  const lastSegment = segments[segments.length - 1];
+  return {
+    node: lastSegment.node,
+    offset: lastSegment.text.length
+  };
+}
+
+function isWordBoundaryMatch(text: string, startIdx: number, endIdx: number, targetText: string) {
+  const wordCharRegex = /[\p{L}\p{N}\p{M}]/u;
+  const startsOnWord = wordCharRegex.test(targetText[0] ?? '');
+  const endsOnWord = wordCharRegex.test(targetText[targetText.length - 1] ?? '');
+  const previousChar = startIdx > 0 ? text[startIdx - 1] : '';
+  const nextChar = endIdx < text.length ? text[endIdx] : '';
+
+  if (startsOnWord && previousChar && wordCharRegex.test(previousChar)) {
+    return false;
+  }
+
+  if (endsOnWord && nextChar && wordCharRegex.test(nextChar)) {
+    return false;
+  }
+
+  return true;
 }
 
 // ── SVG icons ───────────────────────────────────────────────
@@ -338,9 +422,10 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
         a.line !== b.line ? a.line - b.line : a.column - b.column
       );
       const usedPositions = new Set<string>();
+      const textIndex = buildDocumentTextIndex(editable);
 
       sortedDiags.forEach((d) => {
-        const range = findDiagnosticRange(editable, contentRef.current, d, usedPositions);
+        const range = findDiagnosticRange(textIndex, contentRef.current, d, usedPositions);
         if (!range) return;
 
         try {

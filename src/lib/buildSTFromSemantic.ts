@@ -50,9 +50,23 @@ const toSTIdentifier = (text: string, fallback = 'CONCEPTO'): string => {
  * Subdivide un texto largo en cláusulas usando signos de puntuación.
  * Solo genera sub-cláusulas si tienen ≥ 3 palabras significativas.
  */
+const QUOTE_CHARS = new Set(['"', "'", '“', '”', '«', '»', '„', '‟']);
+
+const isQuotedSelection = (text: string) => {
+  const trimmed = text.trim();
+  if (trimmed.length < 2) return false;
+  return QUOTE_CHARS.has(trimmed[0]) && QUOTE_CHARS.has(trimmed[trimmed.length - 1]);
+};
+
+const normalizeSemanticText = (text: string) => text.replace(/\s+/g, ' ').trim();
+
 const splitIntoClauses = (text: string): string[] => {
+  const normalizedText = normalizeSemanticText(text);
+  if (!normalizedText) return [];
+  if (isQuotedSelection(normalizedText)) return [normalizedText];
+
   // Dividir por punto, punto y coma
-  const sentences = text.split(/[.;]+/).map(s => s.trim()).filter(Boolean);
+  const sentences = normalizedText.split(/[.;]+/).map(s => s.trim()).filter(Boolean);
   const clauses: string[] = [];
 
   for (const sentence of sentences) {
@@ -69,7 +83,7 @@ const splitIntoClauses = (text: string): string[] => {
     }
   }
 
-  return clauses;
+  return clauses.length > 0 ? clauses : [normalizedText];
 };
 
 /** Escapa comillas dobles para strings ST. */
@@ -90,7 +104,8 @@ const buildHeader = (docName: string): string => [
 
 /** Genera declaraciones `interpret` y `define` para cada concepto semántico. */
 const buildConceptDefines = (
-  concepts: SemanticWorkspaceState['concepts']
+  concepts: SemanticWorkspaceState['concepts'],
+  fragments: SemanticWorkspaceState['fragments']
 ): string => {
   if (concepts.length === 0) return '';
 
@@ -110,7 +125,10 @@ const buildConceptDefines = (
   };
 
   concepts.forEach((concept, conceptIdx) => {
-    const fullText = concept.excerpt || concept.title;
+    const sourceFragment = concept.sourceFragmentId
+      ? fragments.find((fragment) => fragment.id === concept.sourceFragmentId)
+      : undefined;
+    const fullText = normalizeSemanticText(sourceFragment?.text || concept.excerpt || concept.title);
     const clauses = splitIntoClauses(fullText);
     const conceptLabel = concept.definition
       ? escapeSTString(concept.definition)
@@ -125,6 +143,9 @@ const buildConceptDefines = (
     lines.push(`// Concepto ${conceptIdx + 1}: ${conceptLabel}`);
 
     if (clauses.length > 1) {
+      const fullTextId = uniqueId(toSTIdentifier(`${concept.definition || concept.title} texto`, `CONCEPTO_${conceptIdx + 1}_TEXTO`));
+      lines.push(`interpret "${escapeSTString(fullText)}" as ${fullTextId}`);
+
       // ── Subdivisión en cláusulas ──
       const clauseIds: string[] = [];
       clauses.forEach((clause) => {
@@ -253,7 +274,7 @@ export function buildSTFromSemantic(
 ): string {
   const parts = [
     buildHeader(docName),
-    buildConceptDefines(state.concepts),
+    buildConceptDefines(state.concepts, state.fragments),
     buildEvidenceSection(state.fragments),
     buildRelationsSection(state.relations, state.fragments),
     buildVerificationSkeleton(state.concepts)
