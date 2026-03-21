@@ -8,6 +8,7 @@ const EDITING_ATTR = 'data-katex-editing';
 type MathBlock = {
   el: HTMLElement;
   latex: string;
+  startOffset: number;
   top: number;
   left: number;
   width: number;
@@ -103,6 +104,21 @@ const moveCursorToMath = (el: HTMLElement, delimiter: '$$' | '$') => {
   }
 };
 
+const moveCursorToOffset = (el: HTMLElement, charOffset: number) => {
+  try {
+    const target = findTextNodeAtOffset(el, charOffset);
+    if (!target) return;
+    const range = document.createRange();
+    range.setStart(target.node, target.offset);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  } catch {
+    // best effort
+  }
+};
+
 const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<Element>) => {
   const blocks: MathBlock[] = [];
   const blockParagraphs = new Set<HTMLElement>();
@@ -118,43 +134,46 @@ const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<Element>
     const text = el.textContent || '';
 
     // Match both escaped (\$\$…\$\$) and unescaped ($$…$$) block math
-    const blockRegex = /(?:\\\$\\\$|\$\$)([\s\S]*?)(?:\\\$\\\$|\$\$)/;
-    const match = blockRegex.exec(text);
-    if (!match || !match[1]?.trim()) return;
+    const blockRegex = /(?:\\\$\\\$|\$\$)([\s\S]*?)(?:\\\$\\\$|\$\$)/g;
+    let match: RegExpExecArray | null;
+    while ((match = blockRegex.exec(text)) !== null) {
+      if (!match[1]?.trim()) continue;
 
-    const start = findTextNodeAtOffset(el, match.index);
-    const end = findTextNodeAtOffset(el, match.index + match[0].length);
-    if (!start || !end) return;
+      const start = findTextNodeAtOffset(el, match.index);
+      const end = findTextNodeAtOffset(el, match.index + match[0].length);
+      if (!start || !end) continue;
 
-    let top = el.offsetTop;
-    let left = 0;
-    let width = el.getBoundingClientRect().width;
-    let height = el.getBoundingClientRect().height;
+      let top = el.offsetTop;
+      let left = 0;
+      let width = el.getBoundingClientRect().width;
+      let height = el.getBoundingClientRect().height;
 
-    try {
-      const range = document.createRange();
-      range.setStart(start.node, start.offset);
-      range.setEnd(end.node, end.offset);
-      const rect = range.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        top = rect.top - editableRect.top + editable.scrollTop;
-        left = rect.left - editableRect.left + editable.scrollLeft;
-        width = rect.width;
-        height = rect.height;
+      try {
+        const range = document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        const rect = range.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          top = rect.top - editableRect.top + editable.scrollTop;
+          left = rect.left - editableRect.left + editable.scrollLeft;
+          width = rect.width;
+          height = rect.height;
+        }
+      } catch {
+        // fallback to paragraph metrics
       }
-    } catch {
-      // fallback to paragraph metrics
-    }
 
-    blockParagraphs.add(el);
-    blocks.push({
-      el,
-      latex: normalizeLatex(match[1]),
-      top,
-      left,
-      width,
-      height
-    });
+      blockParagraphs.add(el);
+      blocks.push({
+        el,
+        latex: normalizeLatex(match[1]),
+        startOffset: match.index,
+        top,
+        left,
+        width,
+        height
+      });
+    }
   });
 
   return { blocks, blockParagraphs };
@@ -235,7 +254,7 @@ const createBlockOverlay = (container: HTMLElement, block: MathBlock) => {
     overlay.style.display = 'none';
     block.el.setAttribute(EDITING_ATTR, '1');
     block.el.focus();
-    moveCursorToMath(block.el, '$$');
+    moveCursorToOffset(block.el, block.startOffset + 2);
   });
 
   container.appendChild(overlay);
