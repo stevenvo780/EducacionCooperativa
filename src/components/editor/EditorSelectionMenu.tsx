@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { BookMarked, BookmarkPlus, Briefcase, FilePlus2, Link2, Network, Quote, Scissors, Sparkles } from 'lucide-react';
+import { BookMarked, BookmarkPlus, Briefcase, FilePlus2, Link2, Network, PlusCircle, Quote, Scissors, Sparkles } from 'lucide-react';
 import type { EditorSelectionSnapshot } from '@/hooks/useEditorSelectionActions';
 import type { SemanticConceptRecord } from '@/services/editorSemanticStore';
 
@@ -32,6 +32,8 @@ interface EditorSelectionMenuProps {
   onRelateConcept: (conceptId: string) => void;
   onLinkDocument: (document: LinkableDocument) => void;
   onSaveAsSnippet: () => void;
+  canAddToDictionary: boolean;
+  onAddToDictionary: () => void;
 }
 
 const excerpt = (value: string, maxLength = 110) => {
@@ -57,16 +59,63 @@ export function EditorSelectionMenu({
   onOpenDocuments,
   onRelateConcept,
   onLinkDocument,
-  onSaveAsSnippet
+  onSaveAsSnippet,
+  canAddToDictionary,
+  onAddToDictionary
 }: EditorSelectionMenuProps) {
   const [mode, setMode] = useState<MenuMode>('actions');
   const [query, setQuery] = useState('');
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState({ left: 12, top: 12, maxHeight: 340 });
 
   useEffect(() => {
     setMode('actions');
     setQuery('');
   }, [selection.id]);
+
+  useLayoutEffect(() => {
+    if (!menuRef.current) return;
+
+    const computePosition = () => {
+      if (!menuRef.current) return;
+      const gutter = 12;
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const menuWidth = menuRef.current.offsetWidth || 320;
+      const menuHeight = menuRef.current.offsetHeight || 340;
+      const desiredLeft = selection.rect.left + selection.rect.width / 2 - menuWidth / 2;
+      const left = Math.min(Math.max(gutter, desiredLeft), viewportWidth - menuWidth - gutter);
+
+      const belowTop = selection.rect.bottom + gutter;
+      const aboveTop = selection.rect.top - menuHeight - gutter;
+      const top = belowTop + menuHeight <= viewportHeight - gutter
+        ? belowTop
+        : aboveTop >= gutter
+          ? aboveTop
+          : Math.max(gutter, viewportHeight - menuHeight - gutter);
+
+      setPosition({
+        left,
+        top,
+        maxHeight: Math.max(180, viewportHeight - gutter * 2)
+      });
+    };
+
+    const rafId = requestAnimationFrame(computePosition);
+
+    if (typeof ResizeObserver === 'undefined') return () => cancelAnimationFrame(rafId);
+    const observer = new ResizeObserver(() => computePosition());
+    observer.observe(menuRef.current);
+    window.addEventListener('resize', computePosition);
+    window.visualViewport?.addEventListener('resize', computePosition);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+      window.removeEventListener('resize', computePosition);
+      window.visualViewport?.removeEventListener('resize', computePosition);
+    };
+  }, [mode, selection.id, selection.rect.bottom, selection.rect.left, selection.rect.top, selection.rect.width, canAddToDictionary]);
 
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
@@ -87,21 +136,6 @@ export function EditorSelectionMenu({
       document.removeEventListener('keydown', handleEscape);
     };
   }, [onClose]);
-
-  const position = useMemo(() => {
-    const menuWidth = 320;
-    const menuHeight = mode === 'actions' ? 336 : 340;
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 720;
-
-    const desiredLeft = selection.rect.left + selection.rect.width / 2 - menuWidth / 2;
-    const desiredTop = selection.rect.bottom + 12;
-
-    return {
-      left: Math.min(Math.max(12, desiredLeft), viewportWidth - menuWidth - 12),
-      top: Math.min(Math.max(12, desiredTop), viewportHeight - menuHeight - 12)
-    };
-  }, [mode, selection.rect.bottom, selection.rect.left, selection.rect.width]);
 
   const filteredConcepts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -131,6 +165,7 @@ export function EditorSelectionMenu({
         <ActionButton icon={<Quote className="h-3.5 w-3.5" />} label="Marcar evidencia" busy={busyAction === 'mark-evidence'} onClick={onMarkEvidence} />
         <ActionButton icon={<BookmarkPlus className="h-3.5 w-3.5" />} label="Fijar fragmento" busy={busyAction === 'pin-fragment'} onClick={onPinFragment} />
         <ActionButton icon={<Scissors className="h-3.5 w-3.5" />} label="Guardar snippet" busy={busyAction === 'save-snippet'} onClick={onSaveAsSnippet} />
+        {canAddToDictionary && <ActionButton icon={<PlusCircle className="h-3.5 w-3.5" />} label="Añadir al diccionario" busy={false} onClick={onAddToDictionary} />}
       </div>
       <button
         type="button"
@@ -196,7 +231,7 @@ export function EditorSelectionMenu({
     <div
       ref={menuRef}
       className="fixed z-[100000] w-[320px] rounded-xl border border-slate-700 bg-slate-950/98 p-3 shadow-2xl shadow-black/60 backdrop-blur"
-      style={{ left: position.left, top: position.top }}
+      style={{ left: position.left, top: position.top, maxHeight: position.maxHeight, overflowY: 'auto' }}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
