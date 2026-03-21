@@ -77,6 +77,7 @@ import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
+import { EditorUtilityMenu } from '@/components/editor/EditorUtilityMenu';
 import {
   buildEvidenceMatrixMarkdown,
   buildResearchBriefMarkdown,
@@ -192,6 +193,7 @@ export default function MosaicEditor({
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [rawScrollPos, setRawScrollPos] = useState({ top: 0, left: 0 });
+  const [editorUtilityMenu, setEditorUtilityMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const { stDefinitionsRule } = useSTDefinitionsLinter();
   const linterRules = useMemo(() => [stDefinitionsRule], [stDefinitionsRule]);
@@ -267,7 +269,18 @@ export default function MosaicEditor({
   } = useEditorSelectionActions({
     editorShellRef,
     docId: roomId ?? null,
-    enabled: docType !== 'file' && viewMode !== 'preview'
+    enabled: docType !== 'file' && viewMode !== 'preview',
+    onContextMenuWithoutSelection: ({ x, y }) => {
+      clearSemanticSelection();
+      setShowCompactMenu(false);
+      setEditorUtilityMenu({
+        id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        x,
+        y
+      });
+    }
   });
 
   const dictionaryCandidate = useMemo(() => {
@@ -282,6 +295,18 @@ export default function MosaicEditor({
     if (!dictionaryCandidate) return false;
     return !new Set(getPersonalDictionary()).has(dictionaryCandidate.toLowerCase());
   }, [dictionaryCandidate]);
+
+  useEffect(() => {
+    if (semanticSelection) {
+      setEditorUtilityMenu(null);
+    }
+  }, [semanticSelection]);
+
+  useEffect(() => {
+    if (docType === 'file' || viewMode === 'preview') {
+      setEditorUtilityMenu(null);
+    }
+  }, [docType, viewMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1211,6 +1236,76 @@ export default function MosaicEditor({
     clearSemanticSelection();
   }, [clearSemanticSelection, dictionaryCandidate, runLint]);
 
+  const toggleFullscreen = useCallback(async () => {
+    if (typeof document === 'undefined') return;
+
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch (err) {
+        console.error('Error exiting fullscreen:', err);
+      }
+    } else {
+      const target = editorShellRef.current;
+      if (target) {
+        try {
+          await target.requestFullscreen();
+        } catch (error) {
+          console.error('Error toggling fullscreen editor:', error);
+          try {
+            await document.documentElement.requestFullscreen();
+          } catch (e2) {
+            console.error('Critical fullscreen error:', e2);
+          }
+        }
+      }
+    }
+  }, []);
+
+  const closeEditorUtilityMenu = useCallback(() => {
+    setEditorUtilityMenu(null);
+  }, []);
+
+  const handleToggleToolsPanelFromContextMenu = useCallback(() => {
+    setShowToolsPanel((current) => !current);
+    closeEditorUtilityMenu();
+  }, [closeEditorUtilityMenu]);
+
+  const handleOpenSemanticDeskFromContextMenu = useCallback(() => {
+    semanticBrowserBus.open(docName || currentDocMetaRef.current.name);
+    closeEditorUtilityMenu();
+  }, [closeEditorUtilityMenu, docName]);
+
+  const handleResetToolbarFromContextMenu = useCallback(() => {
+    applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY);
+    closeEditorUtilityMenu();
+  }, [applyToolbarVisibility, closeEditorUtilityMenu]);
+
+  const handleToggleSnippetGalleryFromContextMenu = useCallback(() => {
+    setShowSnippetGallery((current) => !current);
+    closeEditorUtilityMenu();
+  }, [closeEditorUtilityMenu]);
+
+  const handleToggleRawModeFromContextMenu = useCallback(() => {
+    setViewModeWithSync(viewMode === 'raw' ? 'edit' : 'raw');
+    closeEditorUtilityMenu();
+  }, [closeEditorUtilityMenu, setViewModeWithSync, viewMode]);
+
+  const handleTogglePreviewFromContextMenu = useCallback(() => {
+    setViewModeWithSync(viewMode === 'preview' ? 'edit' : 'preview');
+    closeEditorUtilityMenu();
+  }, [closeEditorUtilityMenu, setViewModeWithSync, viewMode]);
+
+  const handleScanPendingsFromContextMenu = useCallback(() => {
+    void scanPendings();
+    closeEditorUtilityMenu();
+  }, [closeEditorUtilityMenu, scanPendings]);
+
+  const handleInsertQuickSnippetFromContextMenu = useCallback((markdown: string) => {
+    appendMarkdownBlock(markdown);
+    closeEditorUtilityMenu();
+  }, [appendMarkdownBlock, closeEditorUtilityMenu]);
+
   const handleConfirmDefineConcept = useCallback(() => {
     if (!defineConceptDraft) return;
     void runSemanticAction('define-concept', async () => {
@@ -1560,32 +1655,10 @@ export default function MosaicEditor({
     }
   }, [editorKey, viewMode]);
 
-  const toggleFullscreen = useCallback(async () => {
-    if (typeof document === 'undefined') return;
-
-    if (document.fullscreenElement) {
-      try {
-        await document.exitFullscreen();
-      } catch (err) {
-        console.error('Error exiting fullscreen:', err);
-      }
-    } else {
-      const target = editorShellRef.current;
-      if (target) {
-        try {
-          await target.requestFullscreen();
-        } catch (error) {
-          console.error('Error toggling fullscreen editor:', error);
-          // Fallback to document if editor shell fails
-          try {
-            await document.documentElement.requestFullscreen();
-          } catch (e2) {
-            console.error('Critical fullscreen error:', e2);
-          }
-        }
-      }
-    }
-  }, []);
+  const handleToggleFullscreenFromContextMenu = useCallback(() => {
+    void toggleFullscreen();
+    closeEditorUtilityMenu();
+  }, [closeEditorUtilityMenu, toggleFullscreen]);
 
   const renderToolbarContents = useCallback(() => {
     const sections: React.ReactNode[] = [];
@@ -2237,7 +2310,7 @@ export default function MosaicEditor({
                   paddingLeft={20}
                   scrollTop={rawScrollPos.top}
                   scrollLeft={rawScrollPos.left}
-                  interactive={!semanticSelection}
+                  interactive={!semanticSelection && !editorUtilityMenu}
                 />
               </div>
             </>
@@ -2259,7 +2332,7 @@ export default function MosaicEditor({
                 viewMode="edit"
                 content={statsContent}
                 onApplyFix={handleLinterFix}
-                interactive={!semanticSelection}
+                interactive={!semanticSelection && !editorUtilityMenu}
               />
             </div>
           )}
@@ -2349,6 +2422,27 @@ export default function MosaicEditor({
           onSaveAsSnippet={handleSaveAsSnippet}
           canAddToDictionary={canAddSelectionToDictionary}
           onAddToDictionary={handleAddSelectionToDictionary}
+        />
+      )}
+
+      {editorUtilityMenu && !semanticSelection && viewMode !== 'preview' && (
+        <EditorUtilityMenu
+          anchor={editorUtilityMenu}
+          quickInserts={QUICK_INSERTS}
+          isFullscreen={isFullscreen}
+          showToolsPanel={showToolsPanel}
+          showSnippetGallery={showSnippetGallery}
+          viewMode={viewMode}
+          onClose={closeEditorUtilityMenu}
+          onToggleToolsPanel={handleToggleToolsPanelFromContextMenu}
+          onOpenSemanticDesk={handleOpenSemanticDeskFromContextMenu}
+          onResetToolbar={handleResetToolbarFromContextMenu}
+          onToggleFullscreen={handleToggleFullscreenFromContextMenu}
+          onToggleSnippetGallery={handleToggleSnippetGalleryFromContextMenu}
+          onToggleRawMode={handleToggleRawModeFromContextMenu}
+          onTogglePreviewMode={handleTogglePreviewFromContextMenu}
+          onScanPendings={handleScanPendingsFromContextMenu}
+          onInsertQuickSnippet={handleInsertQuickSnippetFromContextMenu}
         />
       )}
 

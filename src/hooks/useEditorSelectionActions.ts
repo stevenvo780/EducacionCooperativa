@@ -37,6 +37,7 @@ interface UseEditorSelectionActionsOptions {
   editorShellRef: React.RefObject<HTMLDivElement | null>;
   docId: string | null;
   enabled: boolean;
+  onContextMenuWithoutSelection?: (eventPoint: { x: number; y: number }) => void;
 }
 
 const MIN_TEXT_LENGTH = 2;
@@ -85,7 +86,7 @@ const resolveNodePath = (root: Node, path: number[]) => {
 
 const isValidText = (text: string) => text.replace(/\s+/g, ' ').trim().length >= MIN_TEXT_LENGTH;
 
-export function useEditorSelectionActions({ editorShellRef, docId, enabled }: UseEditorSelectionActionsOptions) {
+export function useEditorSelectionActions({ editorShellRef, docId, enabled, onContextMenuWithoutSelection }: UseEditorSelectionActionsOptions) {
   const [selection, setSelection] = useState<EditorSelectionSnapshot | null>(null);
   const suppressClearUntilRef = useRef(0);
 
@@ -236,6 +237,12 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled }: Us
       const snapshot = captureSelection({ x: event.clientX, y: event.clientY });
       if (snapshot) {
         event.preventDefault();
+        return;
+      }
+
+      if (enabled) {
+        onContextMenuWithoutSelection?.({ x: event.clientX, y: event.clientY });
+        event.preventDefault();
       }
     };
 
@@ -301,7 +308,7 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled }: Us
       document.removeEventListener('selectionchange', handleSelectionChange);
       if (longPressTimer) clearTimeout(longPressTimer);
     };
-  }, [captureSelection, editorShellRef, enabled]);
+  }, [captureSelection, editorShellRef, enabled, onContextMenuWithoutSelection]);
 
   return {
     selection,

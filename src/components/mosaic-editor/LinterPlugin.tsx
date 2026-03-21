@@ -225,10 +225,9 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
 
             /* ── Tooltip ── */
             const tooltip = document.createElement('div');
-            // Interactive tooltips: click-to-pin. Info-only: hover.
             tooltip.className = hasReplacements
               ? 'absolute bottom-full left-0 mb-2 hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100] min-w-[240px] max-w-[380px]'
-              : 'absolute bottom-full left-0 mb-2 hidden group-hover:flex flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100] min-w-[220px] max-w-[320px] pointer-events-none';
+              : 'absolute bottom-full left-0 mb-2 hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100] min-w-[220px] max-w-[320px] pointer-events-none';
 
             const isSTDef = d.source === 'ST-Definitions';
 
@@ -306,17 +305,25 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
 
             hitArea.appendChild(tooltip);
 
-            // ── Click-to-pin for interactive tooltips ──
-            if (hasReplacements) {
-              hitArea.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                dismissAllTooltips(container);
-                tooltip.classList.remove('hidden');
-                tooltip.classList.add('flex', ACTIVE_TOOLTIP_CLASS);
-                tooltip.style.pointerEvents = 'auto';
-              });
-            }
+            // ── Click-to-open for all tooltips ──
+            hitArea.addEventListener('click', (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+
+              const isAlreadyOpen = tooltip.classList.contains(ACTIVE_TOOLTIP_CLASS);
+              dismissAllTooltips(container);
+
+              if (isAlreadyOpen) {
+                tooltip.classList.add('hidden');
+                tooltip.classList.remove(ACTIVE_TOOLTIP_CLASS, 'flex');
+                tooltip.style.pointerEvents = hasReplacements ? 'auto' : 'none';
+                return;
+              }
+
+              tooltip.classList.remove('hidden');
+              tooltip.classList.add('flex', ACTIVE_TOOLTIP_CLASS);
+              tooltip.style.pointerEvents = hasReplacements ? 'auto' : 'none';
+            });
 
             container.appendChild(hitArea);
           });
