@@ -1,0 +1,102 @@
+import type { DocItem } from '@/components/dashboard/types';
+import { buildSTFromSemantic, companionSTName } from '@/lib/buildSTFromSemantic';
+import {
+  filterSemanticWorkspaceStateByDocument,
+  normalizeSemanticWorkspaceState,
+  type SemanticDocumentRef,
+  type SemanticWorkspaceState
+} from '@/lib/semantic/workspace-state';
+import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
+import { createDocumentApi, fetchDocsApi, updateDocumentApi } from '@/services/dashboardApi';
+
+interface SyncSemanticCompanionFilesOptions {
+  workspaceId: string;
+  state: SemanticWorkspaceState;
+  documentRefs: SemanticDocumentRef[];
+}
+
+const getDocKey = (ref: SemanticDocumentRef) => `${ref.docId || ''}::${ref.docName || ''}`;
+
+const resolveSourceDocument = (docs: DocItem[], ref: SemanticDocumentRef) => {
+  if (ref.docId) {
+    const byId = docs.find((doc) => doc.id === ref.docId);
+    if (byId) return byId;
+  }
+
+  if (ref.docName) {
+    return docs.find((doc) => doc.name === ref.docName);
+  }
+
+  return undefined;
+};
+
+const resolveCompanionDocument = (docs: DocItem[], sourceDoc: DocItem) => {
+  const expectedName = companionSTName(sourceDoc.name);
+  const expectedFolder = sourceDoc.folder || 'Material';
+  return docs.find((doc) => doc.name === expectedName && (doc.folder || 'Material') === expectedFolder);
+};
+
+const syncRegistryFromContent = (fileName: string, content: string) => {
+  const definitions = STDefinitionsRegistry.extractFromSource(content, fileName);
+  if (definitions.length > 0) {
+    STDefinitionsRegistry.setFileDefinitions(fileName, definitions);
+  } else {
+    STDefinitionsRegistry.removeFile(fileName);
+  }
+};
+
+export const syncSemanticCompanionFiles = async ({
+  workspaceId,
+  state,
+  documentRefs
+}: SyncSemanticCompanionFilesOptions) => {
+  const normalizedState = normalizeSemanticWorkspaceState(state);
+  const uniqueRefs = Array.from(new Map(documentRefs.map((ref) => [getDocKey(ref), ref])).values())
+    .filter((ref) => ref.docId || ref.docName);
+
+  if (uniqueRefs.length === 0) return;
+
+  const docs = await fetchDocsApi({ workspaceId });
+
+  await Promise.all(uniqueRefs.map(async (ref) => {
+    const sourceDoc = resolveSourceDocument(docs, ref);
+    if (!sourceDoc?.name) return;
+
+    const scopedState = filterSemanticWorkspaceStateByDocument(normalizedState, {
+      docId: sourceDoc.id,
+      docName: sourceDoc.name
+    });
+    const fileName = companionSTName(sourceDoc.name);
+    const content = buildSTFromSemantic(scopedState, sourceDoc.name);
+    const companionDoc = resolveCompanionDocument(docs, sourceDoc);
+
+    if (companionDoc?.id) {
+      await updateDocumentApi(companionDoc.id, { content });
+      syncRegistryFromContent(fileName, content);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+      }
+      return;
+    }
+
+    if (scopedState.concepts.length === 0) {
+      STDefinitionsRegistry.removeFile(fileName);
+      return;
+    }
+
+    const created = await createDocumentApi({
+      name: fileName,
+      content,
+      type: 'text',
+      workspaceId,
+      folder: sourceDoc.folder || 'Material'
+    });
+
+    if (created?.id) {
+      syncRegistryFromContent(fileName, content);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+      }
+    }
+  }));
+};

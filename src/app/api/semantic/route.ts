@@ -4,7 +4,6 @@ import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
-  mergeSemanticWorkspaceStates,
   normalizeSemanticWorkspaceState,
   type SemanticWorkspaceState
 } from '@/lib/semantic/workspace-state';
@@ -80,9 +79,8 @@ export async function POST(req: NextRequest) {
     const nextUpdatedAt = Date.now();
 
     if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
-      const currentState = getMockState(storageId);
       const mergedState = {
-        ...mergeSemanticWorkspaceStates(currentState, incomingState),
+        ...incomingState,
         updatedAt: nextUpdatedAt
       };
       mockSemanticStates.set(storageId, mergedState);
@@ -90,13 +88,8 @@ export async function POST(req: NextRequest) {
     }
 
     const ref = adminDb.collection('workspaceSemanticStates').doc(storageId);
-    const currentSnap = await ref.get();
-    const currentState = currentSnap.exists
-      ? normalizeSemanticWorkspaceState(currentSnap.data())
-      : EMPTY_SEMANTIC_WORKSPACE_STATE;
-
     const mergedState = {
-      ...mergeSemanticWorkspaceStates(currentState, incomingState),
+      ...incomingState,
       updatedAt: nextUpdatedAt
     };
 

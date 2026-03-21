@@ -85,6 +85,7 @@ import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
+  filterSemanticWorkspaceStateByDocument,
   hasSemanticWorkspaceStateChanged,
   mergeSemanticWorkspaceStates,
   normalizeSemanticWorkspaceState
@@ -216,27 +217,34 @@ export default function MosaicEditor({
   // Debounced to avoid rebuilds on every small semantic change
   const prevConceptsHashRef = useRef('');
   useEffect(() => {
-    const definedConcepts = semanticState.concepts.filter(c => c.definition);
-    // Hash rápido para detectar cambios reales en las definiciones
-    const hash = definedConcepts.map(c => `${c.id}:${c.definition}`).join('|');
+    const currentName = docName || currentDocMetaRef.current.name || 'Documento';
+    const scopedSemanticState = filterSemanticWorkspaceStateByDocument(semanticState, {
+      docId: roomId ?? null,
+      docName: currentName
+    });
+    const definedConcepts = scopedSemanticState.concepts.filter(c => c.definition || c.formula);
+    const hash = definedConcepts
+      .map(c => `${c.id}:${c.definition || ''}:${c.formula || ''}:${c.logicProfile || ''}`)
+      .join('|');
     if (hash === prevConceptsHashRef.current) return;
 
-    const currentName = docName || currentDocMetaRef.current.name || 'Documento';
     const timer = setTimeout(() => {
       prevConceptsHashRef.current = hash;
       const stFileName = companionSTName(currentName);
       if (definedConcepts.length > 0) {
-        const stContent = buildSTFromSemantic(semanticState, currentName);
-        STDefinitionsRegistry.setFileDefinitions(
-          stFileName,
-          STDefinitionsRegistry.extractFromSource(stContent, stFileName)
-        );
+        const stContent = buildSTFromSemantic(scopedSemanticState, currentName);
+        const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
+        if (definitions.length > 0) {
+          STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
+        } else {
+          STDefinitionsRegistry.removeFile(stFileName);
+        }
       } else {
         STDefinitionsRegistry.removeFile(stFileName);
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [semanticState, docName]);
+  }, [docName, roomId, semanticState]);
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -1191,17 +1199,23 @@ export default function MosaicEditor({
       // --- Auto-crear / actualizar archivo .st companion ---
       const currentName = docName || currentDocMetaRef.current.name || 'Documento';
       const stFileName = companionSTName(currentName);
-      const stContent = buildSTFromSemantic(nextState, currentName);
+      const scopedSemanticState = filterSemanticWorkspaceStateByDocument(nextState, {
+        docId: roomId ?? null,
+        docName: currentName
+      });
+      const stContent = buildSTFromSemantic(scopedSemanticState, currentName);
       const folder = currentDocMetaRef.current.folder || 'Material';
       const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
 
       try {
         if (companionStDocId) {
           await updateDocumentApi(companionStDocId, { content: stContent });
-          STDefinitionsRegistry.setFileDefinitions(
-            stFileName,
-            STDefinitionsRegistry.extractFromSource(stContent, stFileName)
-          );
+          const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
+          if (definitions.length > 0) {
+            STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
+          } else {
+            STDefinitionsRegistry.removeFile(stFileName);
+          }
           setSemanticNotice(`📐 Concepto registrado → ${stFileName} actualizado.`);
         } else {
           const result = await createDocumentApi({
@@ -1215,10 +1229,12 @@ export default function MosaicEditor({
           if (result?.id) {
             setCompanionStDocId(result.id);
           }
-          STDefinitionsRegistry.setFileDefinitions(
-            stFileName,
-            STDefinitionsRegistry.extractFromSource(stContent, stFileName)
-          );
+          const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
+          if (definitions.length > 0) {
+            STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
+          } else {
+            STDefinitionsRegistry.removeFile(stFileName);
+          }
           setSemanticNotice(`📐 Concepto registrado → ${stFileName} creado en ${folder}/.`);
           window.dispatchEvent(new CustomEvent('agora:docs-changed'));
         }
@@ -1408,7 +1424,11 @@ export default function MosaicEditor({
     }
     const currentName = docName || currentDocMetaRef.current.name || 'Documento';
     const stFileName = companionSTName(currentName);
-    const stContent = buildSTFromSemantic(semanticState, currentName);
+    const scopedSemanticState = filterSemanticWorkspaceStateByDocument(semanticState, {
+      docId: roomId ?? null,
+      docName: currentName
+    });
+    const stContent = buildSTFromSemantic(scopedSemanticState, currentName);
     const folder = currentDocMetaRef.current.folder || 'Material';
     const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
 
@@ -1416,11 +1436,13 @@ export default function MosaicEditor({
       if (companionStDocId) {
         // Actualizar el archivo .st existente
         await updateDocumentApi(companionStDocId, { content: stContent });
-        STDefinitionsRegistry.setFileDefinitions(
-          stFileName,
-          STDefinitionsRegistry.extractFromSource(stContent, stFileName)
-        );
-        setSemanticNotice(`Archivo ${stFileName} actualizado con ${semanticState.concepts.length} definiciones.`);
+        const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
+        if (definitions.length > 0) {
+          STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
+        } else {
+          STDefinitionsRegistry.removeFile(stFileName);
+        }
+        setSemanticNotice(`Archivo ${stFileName} actualizado con ${scopedSemanticState.concepts.length} definiciones.`);
       } else {
         // Crear nuevo archivo .st
         const result = await createDocumentApi({
@@ -1434,18 +1456,20 @@ export default function MosaicEditor({
         if (result?.id) {
           setCompanionStDocId(result.id);
         }
-        STDefinitionsRegistry.setFileDefinitions(
-          stFileName,
-          STDefinitionsRegistry.extractFromSource(stContent, stFileName)
-        );
-        setSemanticNotice(`Archivo ${stFileName} creado en ${folder}/ con ${semanticState.concepts.length} definiciones.`);
+        const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
+        if (definitions.length > 0) {
+          STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
+        } else {
+          STDefinitionsRegistry.removeFile(stFileName);
+        }
+        setSemanticNotice(`Archivo ${stFileName} creado en ${folder}/ con ${scopedSemanticState.concepts.length} definiciones.`);
         window.dispatchEvent(new CustomEvent('agora:docs-changed'));
       }
     } catch (error) {
       console.error('Error generating ST file:', error);
       setSemanticNotice('Error al generar el archivo ST.');
     }
-  }, [companionStDocId, currentWorkspaceId, docName, semanticState, user?.uid]);
+  }, [companionStDocId, currentWorkspaceId, docName, roomId, semanticState, user?.uid]);
 
   // Obsidian-style inline LaTeX rendering (extracted to hook)
   useKatexOverlayDecorations({ editorShellRef, viewMode });
