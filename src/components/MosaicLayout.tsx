@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { Mosaic, MosaicWindow, MosaicNode, MosaicZeroState, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
+import { Mosaic, MosaicNode, MosaicZeroState, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
 import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown, Check, XCircle, Maximize2, Minimize2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -10,6 +10,7 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import type { WorkspaceTypeId } from '@/types/workspace';
 import { isMarkdownDocument } from '@/lib/document-format';
+import { CompatMosaicWindow } from '@/components/mosaic/CompatMosaicWindow';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -605,7 +606,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const dropInfo = dragOverInfo?.tileId === doc.id ? dragOverInfo : null;
 
     return (
-        <MosaicWindow<string>
+        <CompatMosaicWindow<string>
             path={path}
             title={doc.name}
             className="bg-surface-900 mosaic-window-compact"
@@ -704,7 +705,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       />
                   )}
             </div>
-        </MosaicWindow>
+        </CompatMosaicWindow>
     );
   }, [
     tabById, docById, docModes, nexusUrl, renderToolbarControls, renderWindowToolbar, docSearchTerms, dragOverInfo, isDraggingDoc,

@@ -98,12 +98,15 @@ export function LinterOverlay({
 }: LinterOverlayProps) {
   const lines = useMemo(() => content.split('\n'), [content]);
   const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);
+  const [hoverTooltipKey, setHoverTooltipKey] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const hoverCloseTimerRef = useRef<number | null>(null);
 
   const handleFixClick = useCallback(
     (line: number, replacement: string) => {
       onApplyFix?.(line, replacement);
       setOpenTooltipKey(null);
+      setHoverTooltipKey(null);
     },
     [onApplyFix]
   );
@@ -111,8 +114,17 @@ export function LinterOverlay({
   useEffect(() => {
     if (!interactive) {
       setOpenTooltipKey(null);
+      setHoverTooltipKey(null);
     }
   }, [interactive]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverCloseTimerRef.current !== null) {
+        window.clearTimeout(hoverCloseTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
@@ -120,6 +132,7 @@ export function LinterOverlay({
       if (!overlay) return;
       if (event.target instanceof Node && overlay.contains(event.target)) return;
       setOpenTooltipKey(null);
+      setHoverTooltipKey(null);
     };
 
     document.addEventListener('mousedown', handleMouseDown, true);
@@ -129,10 +142,12 @@ export function LinterOverlay({
   if (diagnostics.length === 0) return null;
 
   return (
-    <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-[50]">
+    <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-[100050]">
       {diagnostics.map((d, i) => {
         const tooltipKey = `${d.line ?? 1}:${d.column ?? 1}:${d.message}:${i}`;
-        const isTooltipOpen = interactive && openTooltipKey === tooltipKey;
+        const quickFixes = generateQuickFixes(d, content);
+        const supportsPinnedTooltip = quickFixes.length > 0 && Boolean(onApplyFix);
+        const isTooltipOpen = interactive && (openTooltipKey === tooltipKey || (hoverTooltipKey === tooltipKey && openTooltipKey === null));
         const line = d.line ?? 1;
         const col = d.column ?? 1;
 
@@ -154,8 +169,6 @@ export function LinterOverlay({
         const severityColor = d.severity === 'error' ? 'rgba(239, 68, 68, 0.4)'
                              : d.severity === 'warning' ? 'rgba(245, 158, 11, 0.4)'
                              : isSTRef ? 'rgba(6, 182, 212, 0.15)' : 'rgba(59, 130, 246, 0.4)';
-
-        const quickFixes = generateQuickFixes(d, content);
 
         return (
           <React.Fragment key={i}>
@@ -194,19 +207,53 @@ export function LinterOverlay({
                 left,
                 width: Math.max(width, 4),
                 height: lineHeight,
-                cursor: interactive ? 'pointer' : 'default'
+                cursor: interactive ? (supportsPinnedTooltip ? 'pointer' : 'help') : 'default'
+              }}
+              onMouseEnter={() => {
+                if (!interactive || openTooltipKey) return;
+                if (hoverCloseTimerRef.current !== null) {
+                  window.clearTimeout(hoverCloseTimerRef.current);
+                  hoverCloseTimerRef.current = null;
+                }
+                setHoverTooltipKey(tooltipKey);
+              }}
+              onMouseLeave={() => {
+                if (!interactive || openTooltipKey) return;
+                if (hoverCloseTimerRef.current !== null) {
+                  window.clearTimeout(hoverCloseTimerRef.current);
+                }
+                hoverCloseTimerRef.current = window.setTimeout(() => {
+                  setHoverTooltipKey((current) => current === tooltipKey ? null : current);
+                }, 90);
               }}
               onMouseDown={(event) => {
-                if (!interactive) return;
+                if (!interactive || !supportsPinnedTooltip) return;
                 event.preventDefault();
                 event.stopPropagation();
+                if (hoverCloseTimerRef.current !== null) {
+                  window.clearTimeout(hoverCloseTimerRef.current);
+                  hoverCloseTimerRef.current = null;
+                }
                 setOpenTooltipKey((current) => current === tooltipKey ? null : tooltipKey);
+                setHoverTooltipKey(null);
               }}
             >
             {/* Tooltip */}
             <div
-              className={interactive ? 'absolute bottom-full left-0 mb-2 flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100] min-w-[220px] max-w-[320px]' : 'hidden'}
+              className={interactive ? 'absolute bottom-full left-0 mb-2 flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100100] min-w-[220px] max-w-[320px]' : 'hidden'}
               style={{ display: isTooltipOpen ? 'flex' : 'none' }}
+              onMouseEnter={() => {
+                if (hoverCloseTimerRef.current !== null) {
+                  window.clearTimeout(hoverCloseTimerRef.current);
+                  hoverCloseTimerRef.current = null;
+                }
+              }}
+              onMouseLeave={() => {
+                if (openTooltipKey === tooltipKey) return;
+                hoverCloseTimerRef.current = window.setTimeout(() => {
+                  setHoverTooltipKey((current) => current === tooltipKey ? null : current);
+                }, 90);
+              }}
               onMouseDown={(event) => event.stopPropagation()}
             >
               <div className="flex items-center gap-2 mb-1">
