@@ -233,3 +233,64 @@ export const attachLinkedDocumentToSelection = (
   });
   return state;
 });
+
+/* ── Delete / Edit operations ── */
+
+export const deleteConcept = (context: SemanticStoreContext, conceptId: string) => updateState(context, (state) => {
+  state.concepts = state.concepts.filter(c => c.id !== conceptId);
+  const relatedRelationFragmentIds = state.relations
+    .filter(r => r.conceptId === conceptId)
+    .map(r => r.fragmentId);
+  state.relations = state.relations.filter(r => r.conceptId !== conceptId);
+  state.fragments = state.fragments.filter(f => {
+    if (f.conceptId === conceptId) return false;
+    if (relatedRelationFragmentIds.includes(f.id) && f.kind === 'relation') return false;
+    return true;
+  });
+  return state;
+});
+
+export const deleteFragment = (context: SemanticStoreContext, fragmentId: string) => updateState(context, (state) => {
+  state.fragments = state.fragments.filter(f => f.id !== fragmentId);
+  state.relations = state.relations.filter(r => r.fragmentId !== fragmentId);
+  return state;
+});
+
+export const deleteRelation = (context: SemanticStoreContext, relationId: string) => updateState(context, (state) => {
+  const relation = state.relations.find(r => r.id === relationId);
+  if (relation) {
+    state.fragments = state.fragments.filter(f => !(f.id === relation.fragmentId && f.kind === 'relation'));
+  }
+  state.relations = state.relations.filter(r => r.id !== relationId);
+  return state;
+});
+
+export const updateConcept = (
+  context: SemanticStoreContext,
+  conceptId: string,
+  updates: { title?: string; definition?: string; formula?: string; logicProfile?: string }
+) => updateState(context, (state) => {
+  const concept = state.concepts.find(c => c.id === conceptId);
+  if (!concept) return state;
+  if (updates.title !== undefined) concept.title = updates.title;
+  if (updates.definition !== undefined) concept.definition = updates.definition;
+  if (updates.formula !== undefined) concept.formula = updates.formula;
+  if (updates.logicProfile !== undefined) concept.logicProfile = updates.logicProfile;
+  concept.updatedAt = Date.now();
+  return state;
+});
+
+export const updateFragment = (
+  context: SemanticStoreContext,
+  fragmentId: string,
+  updates: { text?: string }
+) => updateState(context, (state) => {
+  const fragment = state.fragments.find(f => f.id === fragmentId);
+  if (!fragment) return state;
+  if (updates.text !== undefined) {
+    fragment.text = updates.text;
+    fragment.excerpt = updates.text.replace(/\s+/g, ' ').trim().slice(0, 139);
+  }
+  fragment.updatedAt = Date.now();
+  return state;
+});

@@ -3,14 +3,17 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
   BookMarked,
+  Check,
   ClipboardList,
   FileCode2,
   Link2,
   Network,
+  Pencil,
   Pin,
   Quote,
   Search,
   Sparkles,
+  Trash2,
   X
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -50,6 +53,12 @@ interface SemanticBrowserProps {
   standalone?: boolean;
   /** When set, the "Archivos ST" tab filters to definitions from this file only. */
   filterSTFile?: string;
+  /** Mutation callbacks — when provided, edit/delete buttons appear on cards. */
+  onDeleteConcept?: (conceptId: string) => void;
+  onDeleteFragment?: (fragmentId: string) => void;
+  onDeleteRelation?: (relationId: string) => void;
+  onEditConcept?: (conceptId: string, updates: { title?: string; definition?: string; formula?: string }) => void;
+  onEditFragment?: (fragmentId: string, updates: { text?: string }) => void;
 }
 
 const compactText = (value: string, maxLength = 140) => {
@@ -104,80 +113,188 @@ function ActionCard({ icon, title, description, onClick, variant }: {
 }
 
 /* ── Concept Detail Card ── */
-function ConceptCard({ concept, relationsCount, fragments }: {
+function ConceptCard({ concept, relationsCount, fragments, onDelete, onEdit }: {
   concept: SemanticConceptRecord;
   relationsCount: number;
   fragments: SemanticFragmentRecord[];
+  onDelete?: (id: string) => void;
+  onEdit?: (id: string, updates: { title?: string; definition?: string; formula?: string }) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editTitle, setEditTitle] = useState(concept.title);
+  const [editDef, setEditDef] = useState(concept.definition || '');
+  const [editFormula, setEditFormula] = useState(concept.formula || '');
   const relatedFragments = fragments.filter(f => f.conceptId === concept.id);
+
+  const handleSave = () => {
+    onEdit?.(concept.id, { title: editTitle, definition: editDef || undefined, formula: editFormula || undefined });
+    setEditing(false);
+  };
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setExpanded(e => !e)}
-        className="w-full p-4 text-left"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h4 className="text-sm font-semibold text-slate-100 truncate">{concept.title}</h4>
-            {concept.definition && (
-              <p className="mt-1 text-xs text-blue-300/80">Def: {concept.definition}</p>
+      <div className="flex items-start">
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          className="flex-1 p-4 text-left min-w-0"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-semibold text-slate-100 truncate">{concept.title}</h4>
+              {concept.definition && (
+                <p className="mt-1 text-xs text-blue-300/80">Def: {concept.definition}</p>
+              )}
+              <p className="mt-1.5 text-[11px] leading-5 text-slate-400">{compactText(concept.excerpt, 200)}</p>
+            </div>
+            <div className="shrink-0 flex flex-col items-end gap-1 text-[10px] text-slate-500">
+              <span>{concept.docName}</span>
+              <span>{formatDate(concept.updatedAt)}</span>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {concept.logicProfile && (
+              <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">
+                {concept.logicProfile}
+              </span>
             )}
-            <p className="mt-1.5 text-[11px] leading-5 text-slate-400">{compactText(concept.excerpt, 200)}</p>
+            {concept.formula && (
+              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-mono text-cyan-300">
+                axiom
+              </span>
+            )}
+            {relationsCount > 0 && (
+              <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-400">
+                {relationsCount} relacion{relationsCount !== 1 ? 'es' : ''}
+              </span>
+            )}
           </div>
-          <div className="shrink-0 flex flex-col items-end gap-1 text-[10px] text-slate-500">
-            <span>{concept.docName}</span>
-            <span>{formatDate(concept.updatedAt)}</span>
+        </button>
+        {(onEdit || onDelete) && (
+          <div className="flex items-center gap-0.5 p-2 shrink-0">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setEditing(true); setExpanded(true); setConfirmDelete(false); }}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-blue-300 hover:bg-slate-800 transition"
+                title="Editar concepto"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onDelete && !confirmDelete && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800 transition"
+                title="Eliminar concepto"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onDelete && confirmDelete && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onDelete(concept.id); }}
+                  className="px-2 py-1 rounded text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500/30 transition"
+                >
+                  Eliminar
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                  className="px-2 py-1 rounded text-[10px] text-slate-500 hover:text-slate-300 transition"
+                >
+                  No
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {concept.logicProfile && (
-            <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">
-              {concept.logicProfile}
-            </span>
-          )}
-          {concept.formula && (
-            <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-mono text-cyan-300">
-              axiom
-            </span>
-          )}
-          {relationsCount > 0 && (
-            <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-400">
-              {relationsCount} relacion{relationsCount !== 1 ? 'es' : ''}
-            </span>
-          )}
-        </div>
-      </button>
-      {expanded && (
+        )}
+      </div>
+      {(expanded || editing) && (
         <div className="border-t border-slate-800 bg-slate-950/50 px-4 py-3 space-y-3">
-          {concept.formula && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Fórmula ST</div>
-              <pre className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-mono text-cyan-300 overflow-x-auto">
-                {concept.formula}
-              </pre>
-            </div>
-          )}
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Texto fuente</div>
-            <p className="text-[11px] leading-5 text-slate-400">{concept.excerpt}</p>
-          </div>
-          {relatedFragments.length > 0 && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                Fragmentos relacionados ({relatedFragments.length})
+          {editing ? (
+            <div className="space-y-2">
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Título</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
               </div>
-              <div className="space-y-1">
-                {relatedFragments.map(f => (
-                  <div key={f.id} className="rounded-lg border border-slate-800 bg-slate-950/80 px-2.5 py-1.5 text-[11px] text-slate-400">
-                    {compactText(f.excerpt, 120)}
-                    <span className="ml-2 text-[10px] text-slate-600">{f.docName}</span>
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Definición</label>
+                <input
+                  type="text"
+                  value={editDef}
+                  onChange={e => setEditDef(e.target.value)}
+                  placeholder="Definición (opcional)"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Fórmula ST</label>
+                <input
+                  type="text"
+                  value={editFormula}
+                  onChange={e => setEditFormula(e.target.value)}
+                  placeholder="Fórmula ST (opcional)"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-mono text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 text-xs font-semibold hover:bg-blue-500/30 transition"
+                >
+                  <Check className="h-3 w-3" /> Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditing(false); setEditTitle(concept.title); setEditDef(concept.definition || ''); setEditFormula(concept.formula || ''); }}
+                  className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-300 transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {concept.formula && (
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Fórmula ST</div>
+                  <pre className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-mono text-cyan-300 overflow-x-auto">
+                    {concept.formula}
+                  </pre>
+                </div>
+              )}
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Texto fuente</div>
+                <p className="text-[11px] leading-5 text-slate-400">{concept.excerpt}</p>
+              </div>
+              {relatedFragments.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                    Fragmentos relacionados ({relatedFragments.length})
                   </div>
-                ))}
-              </div>
-            </div>
+                  <div className="space-y-1">
+                    {relatedFragments.map(f => (
+                      <div key={f.id} className="rounded-lg border border-slate-800 bg-slate-950/80 px-2.5 py-1.5 text-[11px] text-slate-400">
+                        {compactText(f.excerpt, 120)}
+                        <span className="ml-2 text-[10px] text-slate-600">{f.docName}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -186,39 +303,164 @@ function ConceptCard({ concept, relationsCount, fragments }: {
 }
 
 /* ── Fragment Card ── */
-function FragmentCard({ fragment }: { fragment: SemanticFragmentRecord }) {
+function FragmentCard({ fragment, onDelete, onEdit }: {
+  fragment: SemanticFragmentRecord;
+  onDelete?: (id: string) => void;
+  onEdit?: (id: string, updates: { text?: string }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editText, setEditText] = useState(fragment.text);
+
+  const handleSave = () => {
+    onEdit?.(fragment.id, { text: editText });
+    setEditing(false);
+  };
+
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs text-slate-200 leading-5 flex-1 min-w-0">{compactText(fragment.text, 300)}</p>
-        <div className="shrink-0 text-[10px] text-slate-500 text-right">
-          <div>{fragment.docName}</div>
-          <div>{formatDate(fragment.updatedAt)}</div>
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            value={editText}
+            onChange={e => setEditText(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-y"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 text-xs font-semibold hover:bg-blue-500/30 transition"
+            >
+              <Check className="h-3 w-3" /> Guardar
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEditing(false); setEditText(fragment.text); }}
+              className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-300 transition"
+            >
+              Cancelar
+            </button>
+          </div>
         </div>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {fragment.conceptTitle && (
-          <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-300">
-            ↔ {fragment.conceptTitle}
-          </span>
-        )}
-        {fragment.linkedDocName && (
-          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
-            📄 {fragment.linkedDocName}
-          </span>
-        )}
-      </div>
+      ) : (
+        <>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-xs text-slate-200 leading-5 flex-1 min-w-0">{compactText(fragment.text, 300)}</p>
+            <div className="flex items-start gap-2 shrink-0">
+              <div className="text-[10px] text-slate-500 text-right">
+                <div>{fragment.docName}</div>
+                <div>{formatDate(fragment.updatedAt)}</div>
+              </div>
+              {(onEdit || onDelete) && (
+                <div className="flex items-center gap-0.5">
+                  {onEdit && (
+                    <button
+                      type="button"
+                      onClick={() => { setEditing(true); setConfirmDelete(false); }}
+                      className="p-1 rounded text-slate-500 hover:text-blue-300 hover:bg-slate-800 transition"
+                      title="Editar"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
+                  {onDelete && !confirmDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(true)}
+                      className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                  {onDelete && confirmDelete && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onDelete(fragment.id)}
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500/30 transition"
+                      >
+                        Sí
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(false)}
+                        className="px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-slate-300 transition"
+                      >
+                        No
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {fragment.conceptTitle && (
+              <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-300">
+                ↔ {fragment.conceptTitle}
+              </span>
+            )}
+            {fragment.linkedDocName && (
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+                📄 {fragment.linkedDocName}
+              </span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 /* ── Relation Card ── */
-function RelationCard({ relation, fragment }: { relation: SemanticRelationRecord; fragment?: SemanticFragmentRecord }) {
+function RelationCard({ relation, fragment, onDelete }: {
+  relation: SemanticRelationRecord;
+  fragment?: SemanticFragmentRecord;
+  onDelete?: (id: string) => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-      <div className="flex items-center gap-2 text-xs font-semibold text-slate-100">
-        <Link2 className="h-3.5 w-3.5 text-blue-300" />
-        {relation.conceptTitle}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-100">
+          <Link2 className="h-3.5 w-3.5 text-blue-300" />
+          {relation.conceptTitle}
+        </div>
+        {onDelete && (
+          <div className="flex items-center gap-1 shrink-0">
+            {!confirmDelete ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition"
+                title="Eliminar relación"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onDelete(relation.id)}
+                  className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500/30 transition"
+                >
+                  Eliminar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-slate-300 transition"
+                >
+                  No
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
       {fragment && (
         <p className="mt-2 text-[11px] leading-5 text-slate-400">
@@ -321,7 +563,12 @@ export function SemanticBrowser({
   companionSTExists,
   initialTab,
   standalone,
-  filterSTFile
+  filterSTFile,
+  onDeleteConcept,
+  onDeleteFragment,
+  onDeleteRelation,
+  onEditConcept,
+  onEditFragment
 }: SemanticBrowserProps) {
   const [activeTab, setActiveTab] = useState<SemanticTab>(initialTab ?? 'resumen');
   const [searchQuery, setSearchQuery] = useState('');
@@ -583,6 +830,8 @@ export function SemanticBrowser({
                   concept={concept}
                   relationsCount={relationCounts.get(concept.id) ?? 0}
                   fragments={state.fragments}
+                  onDelete={onDeleteConcept}
+                  onEdit={onEditConcept}
                 />
               ))
             )}
@@ -601,7 +850,7 @@ export function SemanticBrowser({
               />
             ) : (
               filteredEvidence.map(fragment => (
-                <FragmentCard key={fragment.id} fragment={fragment} />
+                <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
               ))
             )}
           </div>
@@ -619,7 +868,7 @@ export function SemanticBrowser({
               />
             ) : (
               filteredPinned.map(fragment => (
-                <FragmentCard key={fragment.id} fragment={fragment} />
+                <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
               ))
             )}
           </div>
@@ -641,6 +890,7 @@ export function SemanticBrowser({
                   key={relation.id}
                   relation={relation}
                   fragment={state.fragments.find(f => f.id === relation.fragmentId)}
+                  onDelete={onDeleteRelation}
                 />
               ))
             )}
