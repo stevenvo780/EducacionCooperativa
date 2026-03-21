@@ -93,6 +93,8 @@ import {
 import {
   attachLinkedDocumentToSelection,
   captureAnalyticalFragment,
+  attachLinkedDocumentToSelectionWithReference,
+  captureAnalyticalFragmentWithReference,
   getRecentSemanticItems,
   loadSemanticWorkspaceState,
   saveSemanticWorkspaceState,
@@ -100,6 +102,7 @@ import {
   pinSelectionFragment,
   registerConceptFromSelection,
   registerSemanticBlock,
+  registerSemanticBlockWithReference,
   relateSelectionToConcept,
   type SemanticWorkspaceState
 } from '@/services/editorSemanticStore';
@@ -107,6 +110,7 @@ import {
   fetchSemanticWorkspaceStateApi,
   saveSemanticWorkspaceStateApi
 } from '@/services/semanticStateApi';
+import { wrapSemanticDocumentBlock } from '@/lib/semanticDocumentBlocks';
 import PdfViewer from '@/components/PdfViewer';
 
 export default function MosaicEditor({
@@ -994,6 +998,13 @@ export default function MosaicEditor({
     workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID
   }), [currentWorkspaceId, docName, roomId]);
 
+  const createSemanticDocBlockId = useCallback((kind: string) => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `${kind}-${crypto.randomUUID()}`;
+    }
+    return `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }, []);
+
   const applySelectionMarkdown = useCallback((markdown: string) => {
     const activeSelection = semanticSelection;
     if (!activeSelection) return false;
@@ -1265,11 +1276,12 @@ export default function MosaicEditor({
   const handleCreateAnalyticalCard = useCallback(() => {
     if (!semanticSelection) return;
     void runSemanticAction('analytic-card', () => {
+      const docBlockId = createSemanticDocBlockId('analysis');
       const quoted = semanticSelection.text
         .split(/\r?\n/)
         .map((line) => `> ${line || ' '}`)
         .join('\n');
-      const analyticalCard = [
+      const analyticalCard = wrapSemanticDocumentBlock(docBlockId, [
         '> [!analysis] Ficha analitica',
         `> origen: ${docName || 'Documento actual'}`,
         quoted,
@@ -1277,17 +1289,21 @@ export default function MosaicEditor({
         '> - ',
         '> accion sugerida:',
         '> - [ ]'
-      ].join('\n');
+      ].join('\n'));
       const inserted = applySelectionMarkdown(analyticalCard);
       if (!inserted) {
         throw new Error('Analytical card insertion failed');
       }
-      const nextState = captureAnalyticalFragment(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      const nextState = captureAnalyticalFragmentWithReference(
+        semanticStoreContext,
+        getSemanticPayload(semanticSelection.text),
+        { docBlockId }
+      );
       updateSemanticState(nextState);
       setSemanticNotice('Ficha analitica insertada y fragmento guardado como evidencia y fijado.');
       clearSemanticSelection();
     });
-  }, [applySelectionMarkdown, clearSemanticSelection, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+  }, [applySelectionMarkdown, clearSemanticSelection, createSemanticDocBlockId, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
 
   const handleRelateConcept = useCallback((conceptId: string) => {
     if (!semanticSelection) return;
@@ -1302,21 +1318,29 @@ export default function MosaicEditor({
   const handleCreateSemanticBlock = useCallback(() => {
     if (!semanticSelection) return;
     void runSemanticAction('semantic-block', () => {
+      const docBlockId = createSemanticDocBlockId('semantic-block');
       const quoted = semanticSelection.text
         .split(/\r?\n/)
         .map((line) => `> ${line || ' '}`)
         .join('\n');
-      const blockMarkdown = `${semanticSelection.text}\n\n> [!semantic] Fragmento académico\n${quoted}\n> origen: ${docName || 'Documento actual'}\n`;
+      const blockMarkdown = wrapSemanticDocumentBlock(
+        docBlockId,
+        `${semanticSelection.text}\n\n> [!semantic] Fragmento académico\n${quoted}\n> origen: ${docName || 'Documento actual'}\n`
+      );
       const inserted = applySelectionMarkdown(blockMarkdown);
       if (!inserted) {
         throw new Error('Selection block insertion failed');
       }
-      const nextState = registerSemanticBlock(semanticStoreContext, getSemanticPayload(semanticSelection.text));
+      const nextState = registerSemanticBlockWithReference(
+        semanticStoreContext,
+        getSemanticPayload(semanticSelection.text),
+        { docBlockId }
+      );
       updateSemanticState(nextState);
       setSemanticNotice('Bloque semántico insertado en el documento.');
       clearSemanticSelection();
     });
-  }, [applySelectionMarkdown, clearSemanticSelection, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+  }, [applySelectionMarkdown, clearSemanticSelection, createSemanticDocBlockId, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
 
   const handleCreateTask = useCallback(() => {
     if (!semanticSelection) return;
@@ -1366,22 +1390,27 @@ export default function MosaicEditor({
   const handleLinkDocument = useCallback((documentItem: { id: string; name: string; folder?: string }) => {
     if (!semanticSelection) return;
     void runSemanticAction('link-document', () => {
-      const markdownLink = `[${semanticSelection.text}](/editor/${encodeURIComponent(documentItem.id)})`;
+      const docBlockId = createSemanticDocBlockId('doc-link');
+      const markdownLink = wrapSemanticDocumentBlock(
+        docBlockId,
+        `[${semanticSelection.text}](/editor/${encodeURIComponent(documentItem.id)})`
+      );
       const inserted = applySelectionMarkdown(markdownLink);
       if (!inserted) {
         throw new Error('Document link insertion failed');
       }
-      const nextState = attachLinkedDocumentToSelection(
+      const nextState = attachLinkedDocumentToSelectionWithReference(
         semanticStoreContext,
         getSemanticPayload(semanticSelection.text),
         documentItem.id,
-        documentItem.name
+        documentItem.name,
+        { docBlockId }
       );
       updateSemanticState(nextState);
       setSemanticNotice(`Enlace interno creado hacia “${documentItem.name}”.`);
       clearSemanticSelection();
     });
-  }, [applySelectionMarkdown, clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
+  }, [applySelectionMarkdown, clearSemanticSelection, createSemanticDocBlockId, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
 
   const handleInsertSemanticAtlas = useCallback(() => {
     if (semanticItemCount === 0) {
