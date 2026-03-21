@@ -4,7 +4,8 @@ import React, { useEffect, useRef } from 'react';
 import { type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 
 const LINTER_OVERLAY_CONTAINER_CLASS = 'mdx-linter-overlay-container';
-const ACTIVE_TOOLTIP_CLASS = 'mdx-linter-tooltip-active';
+const TOOLTIP_CLASS = 'mdx-linter-tooltip';
+const TOOLTIP_GUTTER = 8;
 
 interface LinterPluginProps {
   diagnostics: LinterDiagnostic[];
@@ -80,10 +81,23 @@ const svgWrench = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11
 const svgX = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
 function dismissAllTooltips(container: HTMLElement) {
-  container.querySelectorAll(`.${ACTIVE_TOOLTIP_CLASS}`).forEach(el => {
+  container.querySelectorAll(`.${TOOLTIP_CLASS}`).forEach(el => {
     el.classList.add('hidden');
-    el.classList.remove(ACTIVE_TOOLTIP_CLASS, 'flex');
+    el.classList.remove('flex');
+    (el as HTMLDivElement).style.pointerEvents = 'none';
   });
+}
+
+function showTooltip(tooltip: HTMLDivElement, allowInteraction: boolean) {
+  tooltip.classList.remove('hidden');
+  tooltip.classList.add('flex');
+  tooltip.style.pointerEvents = allowInteraction ? 'auto' : 'none';
+}
+
+function hideTooltip(tooltip: HTMLDivElement) {
+  tooltip.classList.add('hidden');
+  tooltip.classList.remove('flex');
+  tooltip.style.pointerEvents = 'none';
 }
 
 function escapeHtml(s: string) {
@@ -100,6 +114,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   onApplyFixRef.current = onApplyFix;
   const rafIdRef = useRef(0);
   const decorateRef = useRef<(() => void) | null>(null);
+  const hoverHideTimerRef = useRef(0);
 
   // ── Dismiss tooltip on click outside ──
   useEffect(() => {
@@ -107,11 +122,19 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       const container = containerRef.current;
       if (!container) return;
       const target = e.target as HTMLElement;
-      if (target.closest(`.${ACTIVE_TOOLTIP_CLASS}`) || target.closest('.mdx-linter-marker')) return;
+      if (target.closest(`.${TOOLTIP_CLASS}`) || target.closest('.mdx-linter-marker')) return;
       dismissAllTooltips(container);
     };
     document.addEventListener('mousedown', handler, true);
     return () => document.removeEventListener('mousedown', handler, true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverHideTimerRef.current) {
+        window.clearTimeout(hoverHideTimerRef.current);
+      }
+    };
   }, []);
 
   // ── Efecto de SETUP: contenedor, observer, scroll ──
@@ -157,6 +180,119 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       if (currentDiags.length === 0) return;
 
       const editableRect = editable.getBoundingClientRect();
+      const sharedTooltip = document.createElement('div');
+      sharedTooltip.className = `${TOOLTIP_CLASS} absolute hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100100] min-w-[220px] max-w-[380px]`;
+      sharedTooltip.style.pointerEvents = 'none';
+
+      const scheduleHideTooltip = () => {
+        if (hoverHideTimerRef.current) {
+          window.clearTimeout(hoverHideTimerRef.current);
+        }
+        hoverHideTimerRef.current = window.setTimeout(() => hideTooltip(sharedTooltip), 90);
+      };
+
+      const positionTooltip = (targetRect: DOMRect) => {
+        showTooltip(sharedTooltip, sharedTooltip.style.pointerEvents === 'auto');
+        sharedTooltip.style.visibility = 'hidden';
+
+        const baseLeft = targetRect.left - editableRect.left + editable.scrollLeft;
+        const baseTop = targetRect.top - editableRect.top + editable.scrollTop;
+        const tooltipWidth = sharedTooltip.offsetWidth || 320;
+        const tooltipHeight = sharedTooltip.offsetHeight || 180;
+        const minLeft = editable.scrollLeft + 8;
+        const maxLeft = editable.scrollLeft + Math.max(8, scrollParent.clientWidth - tooltipWidth - 8);
+        const left = Math.min(Math.max(minLeft, baseLeft), maxLeft);
+
+        const preferredTop = baseTop - tooltipHeight - TOOLTIP_GUTTER;
+        const fallbackTop = baseTop + targetRect.height + TOOLTIP_GUTTER;
+        const top = preferredTop >= editable.scrollTop + 8 ? preferredTop : fallbackTop;
+
+        sharedTooltip.style.left = `${left}px`;
+        sharedTooltip.style.top = `${top}px`;
+        sharedTooltip.style.visibility = 'visible';
+      };
+
+      const showSharedTooltip = (diag: LinterDiagnostic, targetRect: DOMRect, hasReplacements: boolean) => {
+        if (hoverHideTimerRef.current) {
+          window.clearTimeout(hoverHideTimerRef.current);
+          hoverHideTimerRef.current = 0;
+        }
+
+        sharedTooltip.innerHTML = '';
+
+        const isSTDef = diag.source === 'ST-Definitions';
+        const header = document.createElement('div');
+        header.className = 'flex items-center gap-2 mb-1 pr-5';
+        header.innerHTML = isSTDef ? `
+          ${svgRuler}
+          <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">ST Reference</span>
+          <span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(diag.source)}</span>
+        ` : `
+          <span class="text-[10px] font-bold uppercase tracking-wider ${
+            diag.severity === 'error' ? 'text-red-400' :
+            diag.severity === 'warning' ? 'text-amber-400' :
+            'text-blue-400'
+          }">${escapeHtml(diag.severity)}</span>
+          <span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(diag.source)}</span>
+        `;
+
+        const msg = document.createElement('div');
+        msg.className = 'text-xs text-slate-200 leading-relaxed';
+        msg.textContent = diag.message;
+
+        sharedTooltip.appendChild(header);
+        sharedTooltip.appendChild(msg);
+
+        if (diag.suggestion) {
+          const sug = document.createElement('div');
+          sug.className = 'mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium';
+          sug.innerHTML = `${svgBulb}<span>${escapeHtml(diag.suggestion)}</span>`;
+          sharedTooltip.appendChild(sug);
+        }
+
+        if (hasReplacements && diag.replacements) {
+          const fixSection = document.createElement('div');
+          fixSection.className = 'mt-2 pt-2 border-t border-slate-700/60 flex flex-col gap-1';
+
+          const fixLabel = document.createElement('div');
+          fixLabel.className = 'text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-0.5 flex items-center gap-1';
+          fixLabel.innerHTML = `${svgWrench} <span>Correcciones rápidas</span>`;
+          fixSection.appendChild(fixLabel);
+
+          for (const replacement of diag.replacements) {
+            const btn = document.createElement('button');
+            btn.className = 'flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs bg-slate-700/50 hover:bg-blue-600/30 text-slate-200 hover:text-blue-300 transition-colors cursor-pointer border border-transparent hover:border-blue-500/30';
+            const displayText = replacement === '' ? '(eliminar)' : replacement;
+            btn.innerHTML = `<span class="text-blue-400 font-mono text-[11px] font-bold shrink-0">→</span> <span class="font-medium truncate">${escapeHtml(displayText)}</span>`;
+            btn.addEventListener('click', (event) => {
+              event.stopPropagation();
+              event.preventDefault();
+              onApplyFixRef.current?.(diag, replacement);
+              hideTooltip(sharedTooltip);
+            });
+            fixSection.appendChild(btn);
+          }
+
+          sharedTooltip.appendChild(fixSection);
+        }
+
+        sharedTooltip.style.pointerEvents = hasReplacements ? 'auto' : 'none';
+        showTooltip(sharedTooltip, hasReplacements);
+        positionTooltip(targetRect);
+      };
+
+      sharedTooltip.addEventListener('mouseenter', () => {
+        if (hoverHideTimerRef.current) {
+          window.clearTimeout(hoverHideTimerRef.current);
+          hoverHideTimerRef.current = 0;
+        }
+      });
+
+      sharedTooltip.addEventListener('mouseleave', () => {
+        scheduleHideTooltip();
+      });
+
+      container.appendChild(sharedTooltip);
 
       // Sort diagnostics by position for consistent text-search matching
       const sortedDiags = [...currentDiags].sort((a, b) =>
@@ -223,106 +359,26 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
             const hasReplacements = d.replacements && d.replacements.length > 0 && onApplyFixRef.current;
             hitArea.style.cursor = hasReplacements ? 'pointer' : 'help';
 
-            /* ── Tooltip ── */
-            const tooltip = document.createElement('div');
-            tooltip.className = hasReplacements
-              ? 'absolute bottom-full left-0 mb-2 hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100] min-w-[240px] max-w-[380px]'
-              : 'absolute bottom-full left-0 mb-2 hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100] min-w-[220px] max-w-[320px] pointer-events-none';
-
-            const isSTDef = d.source === 'ST-Definitions';
-
-            // Header
-            const header = document.createElement('div');
-            header.className = 'flex items-center gap-2 mb-1 pr-5';
-            header.innerHTML = isSTDef ? `
-              ${svgRuler}
-              <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">ST Reference</span>
-              <span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(d.source)}</span>
-            ` : `
-              <span class="text-[10px] font-bold uppercase tracking-wider ${
-                d.severity === 'error' ? 'text-red-400' :
-                d.severity === 'warning' ? 'text-amber-400' :
-                'text-blue-400'
-              }">${escapeHtml(d.severity)}</span>
-              <span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(d.source)}</span>
-            `;
-
-            // Message
-            const msg = document.createElement('div');
-            msg.className = 'text-xs text-slate-200 leading-relaxed';
-            msg.textContent = d.message;
-
-            tooltip.appendChild(header);
-            tooltip.appendChild(msg);
-
-            // Suggestion text
-            if (d.suggestion) {
-              const sug = document.createElement('div');
-              sug.className = 'mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium';
-              sug.innerHTML = `${svgBulb}<span>${escapeHtml(d.suggestion)}</span>`;
-              tooltip.appendChild(sug);
-            }
-
-            // ── Quick-fix buttons ──
-            if (hasReplacements && d.replacements) {
-              const fixSection = document.createElement('div');
-              fixSection.className = 'mt-2 pt-2 border-t border-slate-700/60 flex flex-col gap-1';
-
-              const fixLabel = document.createElement('div');
-              fixLabel.className = 'text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-0.5 flex items-center gap-1';
-              fixLabel.innerHTML = `${svgWrench} <span>Correcciones rápidas</span>`;
-              fixSection.appendChild(fixLabel);
-
-              for (const replacement of d.replacements) {
-                const btn = document.createElement('button');
-                btn.className = 'flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs bg-slate-700/50 hover:bg-blue-600/30 text-slate-200 hover:text-blue-300 transition-colors cursor-pointer border border-transparent hover:border-blue-500/30';
-                const displayText = replacement === '' ? '(eliminar)' : replacement;
-                btn.innerHTML = `<span class="text-blue-400 font-mono text-[11px] font-bold shrink-0">→</span> <span class="font-medium truncate">${escapeHtml(displayText)}</span>`;
-
-                btn.addEventListener('click', (e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onApplyFixRef.current?.(d, replacement);
-                  tooltip.classList.add('hidden');
-                  tooltip.classList.remove(ACTIVE_TOOLTIP_CLASS, 'flex');
-                });
-                fixSection.appendChild(btn);
+            hitArea.addEventListener('mouseenter', () => {
+              if (hoverHideTimerRef.current) {
+                window.clearTimeout(hoverHideTimerRef.current);
+                hoverHideTimerRef.current = 0;
               }
-
-              tooltip.appendChild(fixSection);
-
-              // Close button
-              const closeBtn = document.createElement('button');
-              closeBtn.className = 'absolute top-1.5 right-1.5 p-0.5 rounded hover:bg-slate-700/80 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer';
-              closeBtn.innerHTML = svgX;
-              closeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                tooltip.classList.add('hidden');
-                tooltip.classList.remove(ACTIVE_TOOLTIP_CLASS, 'flex');
-              });
-              tooltip.appendChild(closeBtn);
-            }
-
-            hitArea.appendChild(tooltip);
-
-            // ── Click-to-open for all tooltips ──
-            hitArea.addEventListener('click', (e) => {
-              e.stopPropagation();
-              e.preventDefault();
-
-              const isAlreadyOpen = tooltip.classList.contains(ACTIVE_TOOLTIP_CLASS);
               dismissAllTooltips(container);
+              showSharedTooltip(d, rect, Boolean(hasReplacements));
+            });
 
-              if (isAlreadyOpen) {
-                tooltip.classList.add('hidden');
-                tooltip.classList.remove(ACTIVE_TOOLTIP_CLASS, 'flex');
-                tooltip.style.pointerEvents = hasReplacements ? 'auto' : 'none';
+            hitArea.addEventListener('mouseleave', () => {
+              scheduleHideTooltip();
+            });
+
+            hitArea.addEventListener('click', (e) => {
+              if (!hasReplacements) {
                 return;
               }
-
-              tooltip.classList.remove('hidden');
-              tooltip.classList.add('flex', ACTIVE_TOOLTIP_CLASS);
-              tooltip.style.pointerEvents = hasReplacements ? 'auto' : 'none';
+              e.stopPropagation();
+              e.preventDefault();
+              showSharedTooltip(d, rect, true);
             });
 
             container.appendChild(hitArea);
