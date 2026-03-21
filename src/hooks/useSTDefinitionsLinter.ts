@@ -56,11 +56,26 @@ export function useSTDefinitionsLinter() {
     return map;
   }, [definitions]);
 
+  /** Frases en lenguaje natural extraídas de interpret (para buscar en markdown) */
+  const naturalPhrases = useMemo(() => {
+    const phrases: { phrase: string; phraseLower: string; def: STDefinition }[] = [];
+    for (const def of definitions) {
+      if (def.naturalName && def.naturalName.length >= 8) {
+        phrases.push({
+          phrase: def.naturalName,
+          phraseLower: def.naturalName.toLowerCase(),
+          def
+        });
+      }
+    }
+    return phrases;
+  }, [definitions]);
+
   /** Regla de linter que detecta términos ST en markdown */
   const stDefinitionsRule: LinterRule = useMemo(() => ({
     name: 'STDefinitions',
     check: (text: string): LinterDiagnostic[] => {
-      if (definedNamesMap.size === 0) return [];
+      if (definedNamesMap.size === 0 && naturalPhrases.length === 0) return [];
 
       const results: LinterDiagnostic[] = [];
       const lines = text.split('\n');
@@ -98,11 +113,36 @@ export function useSTDefinitionsLinter() {
             });
           }
         }
+
+        // Buscar frases naturales de interpret en el texto markdown
+        const lineLower = line.toLowerCase();
+        for (const { phrase, phraseLower, def } of naturalPhrases) {
+          let startPos = 0;
+          let idx: number;
+          while ((idx = lineLower.indexOf(phraseLower, startPos)) !== -1) {
+            const key = `${lineIdx}:${idx}:natural:${phrase.slice(0, 20)}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              const icon = kindIcon(def.kind);
+              results.push({
+                message: `${icon} Interpretación ST: "${phrase.slice(0, 60)}${phrase.length > 60 ? '…' : ''}" → ${def.name}`,
+                severity: 'info',
+                line: lineIdx + 1,
+                column: idx + 1,
+                endLine: lineIdx + 1,
+                endColumn: idx + 1 + phrase.length,
+                source: 'ST-Definitions',
+                suggestion: def.description || undefined
+              });
+            }
+            startPos = idx + 1;
+          }
+        }
       }
 
       return results;
     }
-  }), [definedNamesMap]);
+  }), [definedNamesMap, naturalPhrases]);
 
   /** Función para registrar/actualizar definiciones de un archivo .st */
   const registerSTFile = useCallback((fileId: string, code: string) => {

@@ -210,6 +210,24 @@ export default function MosaicEditor({
     semanticStateRef.current = semanticState;
   }, [semanticState]);
 
+  // Auto-register ST definitions from semantic state so the linter works on page load
+  useEffect(() => {
+    const definedConcepts = semanticState.concepts.filter(c => c.definition);
+    const currentName = docName || currentDocMetaRef.current.name || 'Documento';
+    if (definedConcepts.length > 0) {
+      const stFileName = companionSTName(currentName);
+      const stContent = buildSTFromSemantic(semanticState, currentName);
+      STDefinitionsRegistry.setFileDefinitions(
+        stFileName,
+        STDefinitionsRegistry.extractFromSource(stContent, stFileName)
+      );
+    }
+    return () => {
+      const stFileName = companionSTName(currentName);
+      STDefinitionsRegistry.removeFile(stFileName);
+    };
+  }, [semanticState, docName]);
+
   const {
     selection: semanticSelection,
     restoreSelection,

@@ -21,6 +21,8 @@ export interface STDefinition {
   detail?: string;
   /** Descripción en lenguaje natural (si tiene @) */
   description?: string;
+  /** Término en lenguaje natural para buscar en markdown (ej: texto del interpret) */
+  naturalName?: string;
   /** Archivo .st de origen */
   file: string;
   /** Línea donde está declarado */
@@ -91,9 +93,9 @@ class STDefinitionsRegistryClass {
       const trimmed = lines[i].trim();
       const lineNum = i + 1;
 
-      // define / definir (con descripción opcional vía @)
+      // define / definir (con descripción opcional vía @ o description)
       const defineMatch = trimmed.match(
-        /^(?:(?:export|exportar)\s+)?(?:define|definir)\s+(\w+)(?:\([^)]*\))?\s*:=\s*(.+?)(?:\s*@\s*"([^"]*)")?$/
+        /^(?:(?:export|exportar)\s+)?(?:define|definir)\s+(\w+)(?:\([^)]*\))?\s*:?=\s*(.+?)(?:\s*(?:@|description)\s*"([^"]*)")?$/
       );
       if (defineMatch) {
         defs.push({
@@ -200,10 +202,13 @@ class STDefinitionsRegistryClass {
         /^(?:interpret|interpretar)\s+"([^"]+)"\s+(?:as|como)\s+(.+)/i
       );
       if (interpretMatch) {
+        const fullText = interpretMatch[1];
+        const stId = interpretMatch[2].trim();
         defs.push({
-          name: interpretMatch[1].slice(0, 40),
+          name: stId,
           kind: 'interpretation',
-          detail: interpretMatch[2].trim(),
+          detail: fullText,
+          naturalName: fullText,
           file: fileId,
           line: lineNum
         });
