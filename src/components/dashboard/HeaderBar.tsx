@@ -28,7 +28,8 @@ import {
   Trash2,
   User,
   Users,
-  X
+  X,
+  Zap
 } from 'lucide-react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
@@ -60,6 +61,9 @@ interface HeaderBarProps {
   onOpenStRunner: () => void;
   isSemanticBrowserOpen: boolean;
   onOpenSemanticBrowser: () => void;
+  isFormalizerOpen: boolean;
+  onOpenFormalizer: () => void;
+  formalizerTileId: string | null;
   onOpenQuickSearch: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
@@ -115,6 +119,9 @@ const HeaderBar = ({
   onOpenStRunner,
   isSemanticBrowserOpen,
   onOpenSemanticBrowser,
+  isFormalizerOpen,
+  onOpenFormalizer,
+  formalizerTileId,
   onOpenQuickSearch,
   onAcceptInvite,
   onSelectWorkspace,
@@ -524,40 +531,80 @@ const HeaderBar = ({
           <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
         </div>
         <button
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            const id = currentWorkspace ? `board-${currentWorkspace.id}` : '';
+            e.dataTransfer.setData('application/x-doc-id', id);
+            e.dataTransfer.setData('text/plain', id);
+          }}
           onClick={onOpenBoard}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
             isBoardOpen
               ? 'bg-mandy-500/15 text-mandy-300'
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
-          title="Tablero"
+          title="Tablero (arrastrar al grid)"
         >
           <KanbanSquare className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">Tablero</span>
         </button>
         <button
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            const id = currentWorkspace ? `st-runner-${currentWorkspace.id}` : '';
+            e.dataTransfer.setData('application/x-doc-id', id);
+            e.dataTransfer.setData('text/plain', id);
+          }}
           onClick={onOpenStRunner}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
             isStRunnerOpen
               ? 'bg-indigo-500/15 text-indigo-300'
               : 'text-surface-500 hover:text-indigo-400 hover:bg-indigo-500/10'
           }`}
-          title="ST Logic Runner"
+          title="ST Logic Runner (arrastrar al grid)"
         >
           <FlaskConical className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">ST</span>
         </button>
         <button
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            const id = currentWorkspace ? `semantic-browser-${currentWorkspace.id}` : '';
+            e.dataTransfer.setData('application/x-doc-id', id);
+            e.dataTransfer.setData('text/plain', id);
+          }}
           onClick={onOpenSemanticBrowser}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
             isSemanticBrowserOpen
               ? 'bg-blue-500/15 text-blue-300'
               : 'text-surface-500 hover:text-blue-400 hover:bg-blue-500/10'
           }`}
-          title="Mesa Semántica"
+          title="Mesa Semántica (arrastrar al grid)"
         >
           <BookMarked className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">Semántica</span>
+        </button>
+        <button
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            const id = formalizerTileId || '';
+            e.dataTransfer.setData('application/x-doc-id', id);
+            e.dataTransfer.setData('text/plain', id);
+          }}
+          onClick={onOpenFormalizer}
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
+            isFormalizerOpen
+              ? 'bg-cyan-500/15 text-cyan-300'
+              : 'text-surface-500 hover:text-cyan-400 hover:bg-cyan-500/10'
+          }`}
+          title="Formalizador ST (arrastrar al grid)"
+        >
+          <Zap className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Formalizar</span>
         </button>
         <button
           onClick={openFilesTab}

@@ -27,6 +27,7 @@ interface UseMosaicTabsResult {
     openBoard: () => Promise<void>;
     openStRunner: () => Promise<void>;
     openSemanticBrowser: () => Promise<void>;
+    openFormalizer: () => Promise<void>;
     openFilesTab: () => Promise<void>;
     closeTabById: (docId: string) => Promise<void>;
     openDocument: (doc: DocItem) => Promise<void>;
@@ -130,6 +131,33 @@ export function useMosaicTabs({
         });
         setShowMobileSidebar(false);
         setSelectedDocId(semId);
+    }, [currentWorkspace, user, openTabs, setShowMobileSidebar]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const openFormalizer = useCallback(async () => {
+        if (!currentWorkspace || !user) return;
+        const formalId = `formalizer-${currentWorkspace.id}`;
+        if (openTabs.find(tab => tab.id === formalId)) {
+            setSelectedDocId(formalId);
+            setShowMobileSidebar(false);
+            return;
+        }
+        const newItem: DocItem = {
+            id: formalId,
+            name: 'Formalizador',
+            type: 'formalizer',
+            workspaceId: currentWorkspace.id,
+            ownerId: user.uid,
+            updatedAt: new Date()
+        };
+        setOpenTabs(prev => [...prev, newItem]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(formalId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, formalId]);
+        });
+        setShowMobileSidebar(false);
+        setSelectedDocId(formalId);
     }, [currentWorkspace, user, openTabs, setShowMobileSidebar]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const closeTabById = useCallback(async (docId: string) => {
@@ -400,6 +428,7 @@ export function useMosaicTabs({
         openBoard,
         openStRunner,
         openSemanticBrowser,
+        openFormalizer,
         openFilesTab,
         closeTabById,
         openDocument,

@@ -136,6 +136,14 @@ export function restoreOpenTabs(
       });
     }
 
+    if (persistedTab.type === 'formalizer') {
+      restoredTabs.push({
+        id: persistedTab.id,
+        name: persistedTab.name || 'Formalizador',
+        type: 'formalizer'
+      });
+    }
+
     if (persistedTab.type === 'terminal') {
       restoredTabs.push({
         id: persistedTab.id,
@@ -221,7 +229,7 @@ export function validateMosaicNode(
   if (!node) return null;
 
   if (typeof node === 'string') {
-    if (node === 'files' || node.startsWith('terminal-') || openTabIds.has(node)) {
+    if (node === 'files' || node.startsWith('terminal-') || node.startsWith('formalizer-') || openTabIds.has(node)) {
       return node;
     }
     return null;

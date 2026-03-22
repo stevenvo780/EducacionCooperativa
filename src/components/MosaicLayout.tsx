@@ -19,6 +19,7 @@ const KanbanBoard = dynamic(() => import('@/components/dashboard/KanbanBoard'), 
 const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false });
 const STFileEditor = dynamic(() => import('@/components/editor/STFileEditor'), { ssr: false });
 const GlobalSemanticBrowser = dynamic(() => import('@/components/dashboard/GlobalSemanticBrowser'), { ssr: false });
+const FormalizerPlayground = dynamic(() => import('@/components/FormalizerPlayground'), { ssr: false });
 
 function isStFileDoc(doc: { name: string }): boolean {
   const lower = doc.name.toLowerCase();
@@ -32,6 +33,7 @@ function isTextSearchableDoc(doc: { type?: string; name: string; mimeType?: stri
     || doc.type === DocumentType.Board
     || doc.type === DocumentType.STRunner
     || doc.type === DocumentType.SemanticBrowser
+    || doc.type === DocumentType.Formalizer
     || isStFileDoc(doc)
   ) {
     return false;
@@ -600,7 +602,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isBoard = doc.type === 'board';
     const isStRunner = doc.type === 'st-runner';
     const isSemanticBrowser = doc.type === 'semantic-browser';
-    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && isStFileDoc(doc);
+    const isFormalizer = doc.type === 'formalizer';
+    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && !isFormalizer && isStFileDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
     const dropInfo = dragOverInfo?.tileId === doc.id ? dragOverInfo : null;
@@ -688,6 +691,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         workspaceId={currentWorkspaceId}
                         userId={currentUserId}
                       />
+                  ) : isFormalizer ? (
+                      <FormalizerPlayground embedded />
                   ) : isStFile ? (
                       <STFileEditor
                         docId={doc.id}
