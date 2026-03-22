@@ -1,8 +1,32 @@
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { NextRequest } from 'next/server';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { getErrorMessage } from '@/lib/error-utils';
+
+// In-memory throttle so we don't re-sign on every onSnapshot tick.
+const streamUrlThrottle = new Map<string, { url: string; ts: number }>();
+const STREAM_URL_TTL_MS = 45 * 60 * 1000; // 45 min – well within the 1 h signed-URL lifetime
+
+async function maybeFreshUrl(docId: string, data: Record<string, unknown>): Promise<string | null> {
+    if (data.type !== DocumentType.File || typeof data.storagePath !== 'string') return null;
+    const cached = streamUrlThrottle.get(docId);
+    if (cached && Date.now() - cached.ts < STREAM_URL_TTL_MS) return cached.url;
+    try {
+        const bucket = adminStorage.bucket();
+        if (!bucket?.name) return null;
+        const [freshUrl] = await bucket.file(data.storagePath as string).getSignedUrl({
+            action: 'read' as const,
+            expires: Date.now() + 60 * 60 * 1000, // 1 hour
+        });
+        streamUrlThrottle.set(docId, { url: freshUrl, ts: Date.now() });
+        return freshUrl;
+    } catch (error) {
+        console.warn('stream: failed to refresh signed URL', getErrorMessage(error));
+        return null;
+    }
+}
 
 export const runtime = 'nodejs';
 type RouteContext = { params: Promise<{ id: string }> };
@@ -93,12 +117,15 @@ export async function GET(req: NextRequest, context: RouteContext) {
             send({ type: 'connected' });
 
             const docRef = adminDb.collection('documents').doc(id);
-            const unsubscribe = docRef.onSnapshot((snap) => {
+            const unsubscribe = docRef.onSnapshot(async (snap) => {
                 if (!snap.exists) {
                     send({ type: 'deleted' });
                     return;
                 }
-                send({ type: 'snapshot', data: { id: snap.id, ...snap.data() } });
+                const snapData = { id: snap.id, ...snap.data() } as Record<string, unknown>;
+                const freshUrl = await maybeFreshUrl(id, snapData);
+                if (freshUrl) snapData.url = freshUrl;
+                send({ type: 'snapshot', data: snapData });
             }, (error) => {
                 send({ type: 'error', error: error.message });
             });
