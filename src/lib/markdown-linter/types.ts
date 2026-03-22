@@ -48,7 +48,6 @@ export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   semantic: 'Semántica ST'
 };
 
-
 // ── Definición de regla (plugin) ────────────────────────────
 
 export interface LinterRuleMeta {
