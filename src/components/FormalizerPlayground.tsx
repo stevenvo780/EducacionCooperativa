@@ -38,58 +38,105 @@ const PROFILES: { value: LogicProfile; label: string; short: string }[] = [
 /* ── Ejemplos de prueba ─────────────────────────────────────── */
 
 const EXAMPLES: { label: string; text: string; profile: LogicProfile }[] = [
+  // ── Proposicional clásica ──
   {
-    label: 'Modus Ponens',
+    label: 'PROP · Modus Ponens',
     text: 'Si llueve entonces la calle se moja. Llueve. Por lo tanto, la calle se moja.',
     profile: 'classical.propositional'
   },
   {
-    label: 'Modus Tollens',
+    label: 'PROP · Modus Tollens',
     text: 'Si el coche avanza, entonces hay gasolina. El coche no avanza. Por lo tanto, no hay gasolina.',
     profile: 'classical.propositional'
   },
   {
-    label: 'Silogismo Hipotético',
+    label: 'PROP · Silogismo Hipotético',
     text: 'Si estudio, apruebo el examen. Si apruebo el examen, obtengo el título. Si obtengo el título, consigo trabajo.',
     profile: 'classical.propositional'
   },
   {
-    label: 'Conjunción',
+    label: 'PROP · Conjunción',
     text: 'El gato es negro y el perro es grande.',
     profile: 'classical.propositional'
   },
   {
-    label: 'Disyunción',
+    label: 'PROP · Disyunción',
     text: 'O viajamos en tren o viajamos en avión.',
     profile: 'classical.propositional'
   },
   {
-    label: 'Bicondicional',
+    label: 'PROP · Bicondicional',
     text: 'Un número es par si y solo si es divisible entre dos.',
     profile: 'classical.propositional'
   },
   {
-    label: 'Negación',
-    text: 'No es cierto que todos los cisnes son blancos.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'Causal (puesto que)',
-    text: 'Puesto que la técnica no es un lujo, entonces es una necesidad.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'Causal (dado que)',
-    text: 'Dado que todos los humanos son mortales y Sócrates es humano, por lo tanto Sócrates es mortal.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'Argumento complejo',
+    label: 'PROP · Cadena + MP',
     text: 'Si un animal es mamífero, entonces tiene sangre caliente. Si tiene sangre caliente, entonces puede regular su temperatura. Los perros son mamíferos. Por lo tanto, los perros pueden regular su temperatura.',
     profile: 'classical.propositional'
   },
+  // ── Primer orden ──
   {
-    label: 'Aristóteles — Poética',
+    label: 'FOL · Silogismo universal',
+    text: 'Todos los filósofos buscan la verdad. Sócrates es filósofo. Por lo tanto, Sócrates busca la verdad.',
+    profile: 'classical.first_order'
+  },
+  // ── Silogística aristotélica ──
+  {
+    label: 'SYL · Barbara clásico',
+    text: 'Todos los humanos son mortales. Sócrates es humano. Por lo tanto, Sócrates es mortal.',
+    profile: 'aristotelian.syllogistic'
+  },
+  // ── Modal K ──
+  {
+    label: 'MOD · Necesidad + posibilidad',
+    text: 'Es necesario que si llueve, la calle se moje. Posiblemente llueve.',
+    profile: 'modal.k'
+  },
+  // ── Epistémica S5 ──
+  {
+    label: 'EPI · Conocimiento + MP',
+    text: 'Se sabe que la tierra es redonda. Si la tierra es redonda, entonces tiene gravedad.',
+    profile: 'epistemic.s5'
+  },
+  // ── Deóntica ──
+  {
+    label: 'DEO · Obligación + permiso',
+    text: 'Es obligatorio que todos respeten las leyes. Es permitido que se proteste pacíficamente.',
+    profile: 'deontic.standard'
+  },
+  // ── Temporal LTL ──
+  {
+    label: 'TMP · Siempre + eventualmente',
+    text: 'Siempre que llueve, eventualmente sale el sol. Actualmente llueve.',
+    profile: 'temporal.ltl'
+  },
+  // ── Intuicionista ──
+  {
+    label: 'INT · Doble negación',
+    text: 'No es cierto que no llueve. Si llueve entonces la calle se moja.',
+    profile: 'intuitionistic.propositional'
+  },
+  // ── Paraconsistente ──
+  {
+    label: 'PAR · Contradicción tolerada',
+    text: 'El gato está vivo y el gato no está vivo. El gato está en la caja.',
+    profile: 'paraconsistent.belnap'
+  },
+  // ── Aritmética ──
+  {
+    label: 'ARI · Divisibilidad',
+    text: 'Si un número es par, entonces es divisible entre dos. Cuatro es par. Por lo tanto, cuatro es divisible entre dos.',
+    profile: 'arithmetic'
+  },
+  // ── Probabilística ──
+  {
+    label: 'PRO · Inferencia probable',
+    text: 'Probablemente llueve. Si llueve, entonces posiblemente la calle se moje.',
+    profile: 'probabilistic.basic'
+  },
+  // ── Texto complejo (Aristóteles) ──
+  {
+    label: 'PROP · Aristóteles — Poética',
     text: 'Puesto que realizan la representación actuando, primero sería necesariamente una parte de la tragedia la decoración del espectáculo, la melopeya y la elocución.',
     profile: 'classical.propositional'
   }
