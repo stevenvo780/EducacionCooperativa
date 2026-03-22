@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getErrorMessage } from '@/lib/error-utils';
-import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive } from 'lucide-react';
+import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive, AlertTriangle } from 'lucide-react';
 import { PLAN_ORDER, PLANS, Plan, type PlanId, type PlanConfig, formatStorageSize } from '@/types/subscription';
 import { authFetch } from '@/services/apiClient';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
@@ -118,8 +118,9 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail, 
               />
             </div>
             {storageUsage.percentage >= 90 && (
-              <p className="text-xs text-red-400 mt-1">
-                ⚠️ Tu almacenamiento está casi lleno. Mejora tu plan para obtener más espacio.
+              <p className="flex items-center gap-1 text-xs text-red-400 mt-1">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                Tu almacenamiento está casi lleno. Mejora tu plan para obtener más espacio.
               </p>
             )}
           </div>

@@ -343,7 +343,7 @@ export class TerminalController {
       const instance = this.getTerminalInstance(data.id);
       if (instance) {
         instance.term.clear();
-        instance.term.writeln('\x1b[32m✔ Sesion iniciada\x1b[0m');
+        instance.term.writeln('\x1b[32mSesion iniciada\x1b[0m');
       }
       onSessionCreated?.(data);
     });
@@ -387,7 +387,7 @@ export class TerminalController {
       this.sessionOwnership.set(payload.id, payload.isOwner);
       const instance = this.getTerminalInstance(payload.id);
       if (instance && !payload.isOwner) {
-        instance.term.writeln('\x1b[36m📺 Conectado a sesión compartida\x1b[0m');
+        instance.term.writeln('\x1b[36mConectado a sesión compartida\x1b[0m');
       }
       this.onSessionJoined?.(payload);
     });

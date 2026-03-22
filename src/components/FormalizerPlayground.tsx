@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Zap, Play, List, Check, X, Copy, BarChart2 } from 'lucide-react';
 import { formalize, type LogicProfile } from '@stevenvo780/autologic';
 import { evaluate, type STEvalResult } from '@stevenvo780/st-lang/api';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
@@ -310,7 +311,7 @@ export default function FormalizerPlayground() {
       {/* ── Header compacto ─────────────────────────────────── */}
       <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <span className="text-cyan-400 text-xs">⚡</span>
+          <Zap className="w-3 h-3 text-cyan-400" />
           <span className="text-[10px] font-medium text-slate-400">Formalizador ST</span>
           <span className="rounded bg-cyan-950/50 px-1.5 py-0.5 text-[9px] font-mono text-cyan-400/70 border border-cyan-900/30">
             v2
@@ -377,7 +378,7 @@ export default function FormalizerPlayground() {
                 onClick={handleBatchRun}
                 className="rounded-lg border border-amber-800/60 bg-amber-950/40 px-4 py-2 text-xs font-medium text-amber-400 transition hover:bg-amber-900/40"
               >
-                ▶ Batch ({EXAMPLES.length} ejemplos)
+                <Play className="w-3 h-3" /> Batch ({EXAMPLES.length} ejemplos)
               </button>
 
               {results.length > 0 && (
@@ -394,7 +395,7 @@ export default function FormalizerPlayground() {
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
               <details open>
                 <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-slate-400 select-none border-b border-slate-800 hover:text-slate-300">
-                  📋 Ejemplos de prueba ({EXAMPLES.length})
+                  <List className="w-3.5 h-3.5 inline mr-1" />Ejemplos de prueba ({EXAMPLES.length})
                 </summary>
                 <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[300px] overflow-auto">
                   {EXAMPLES.map((ex, i) => (
@@ -419,9 +420,9 @@ export default function FormalizerPlayground() {
                     Historial ({results.length})
                   </span>
                   <div className="flex gap-2 text-[10px] text-slate-600">
-                    <span className="text-green-500">{successRuns} ✓</span>
+                    <span className="flex items-center gap-0.5 text-green-500">{successRuns} <Check className="w-3 h-3" /></span>
                     {totalRuns - successRuns > 0 && (
-                      <span className="text-red-500">{totalRuns - successRuns} ✗</span>
+                      <span className="flex items-center gap-0.5 text-red-500">{totalRuns - successRuns} <X className="w-3 h-3" /></span>
                     )}
                   </div>
                 </div>
@@ -438,7 +439,7 @@ export default function FormalizerPlayground() {
                     >
                       <div className="flex items-center gap-2">
                         <span className={r.ok ? 'text-green-500' : 'text-red-500'}>
-                          {r.ok ? '✓' : '✗'}
+                          {r.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
                         </span>
                         <span className="text-slate-400 truncate flex-1">
                           {r.input.slice(0, 80)}{r.input.length > 80 ? '…' : ''}
@@ -474,7 +475,9 @@ export default function FormalizerPlayground() {
                       ? 'bg-green-950/50 text-green-400 border border-green-800/40'
                       : 'bg-red-950/50 text-red-400 border border-red-800/40'
                   }`}>
-                    {activeResult.ok ? '✓ Formalizado' : '✗ Error'}
+                    {activeResult.ok
+                      ? <><Check className="w-3 h-3 inline mr-1" />Formalizado</>
+                      : <><X className="w-3 h-3 inline mr-1" />Error</>}
                   </span>
                   <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] text-slate-400 border border-slate-800">
                     {PROFILES.find(p => p.value === activeResult.profile)?.label}
@@ -501,7 +504,7 @@ export default function FormalizerPlayground() {
                       onClick={() => copyToClipboard(activeResult.stCode)}
                       className="text-[10px] text-slate-600 hover:text-cyan-400 transition"
                     >
-                      📋 Copiar
+                      <Copy className="w-3 h-3 inline mr-1" />Copiar
                     </button>
                   </div>
                   <pre className="p-4 text-xs font-mono leading-relaxed overflow-auto max-h-[500px] whitespace-pre-wrap">
@@ -520,7 +523,9 @@ export default function FormalizerPlayground() {
                             ? 'bg-green-950/50 text-green-400 border border-green-900/40'
                             : 'bg-red-950/50 text-red-400 border border-red-900/40'
                         }`}>
-                          {activeResult.evalResult.ok ? '✓ OK' : '✗ Error'}
+                          {activeResult.evalResult.ok
+                            ? <><Check className="w-3 h-3 inline mr-1" />OK</>
+                            : <><X className="w-3 h-3 inline mr-1" />Error</>}
                         </span>
                       )}
                     </div>
@@ -533,7 +538,7 @@ export default function FormalizerPlayground() {
                         disabled={!activeResult.stCode.trim()}
                         className="rounded bg-emerald-700 px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
                       >
-                        ▶ Ejecutar
+                        <Play className="w-3 h-3 inline mr-1" />Ejecutar
                       </button>
                     </div>
                   </div>
@@ -544,7 +549,7 @@ export default function FormalizerPlayground() {
                   ) : (
                     <div className="px-4 py-6 text-center text-xs text-slate-600">
                       {activeResult.ok
-                        ? 'Presiona ▶ Ejecutar para correr el código ST'
+                        ? 'Presiona Ejecutar para correr el código ST'
                         : 'La formalización contiene errores — no se puede ejecutar'}
                     </div>
                   )}
@@ -559,7 +564,7 @@ export default function FormalizerPlayground() {
             ) : (
               <div className="rounded-xl border border-slate-800/60 bg-slate-950/30 flex items-center justify-center h-[400px]">
                 <div className="text-center space-y-3">
-                  <div className="text-4xl opacity-20">⚡</div>
+                  <Zap className="w-12 h-12 opacity-20 text-cyan-400" />
                   <p className="text-sm text-slate-600">
                     Escribe texto y presiona <kbd className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono">Ctrl+Enter</kbd> para formalizar
                   </p>
@@ -575,7 +580,7 @@ export default function FormalizerPlayground() {
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
                 <details>
                   <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-slate-400 select-none border-b border-slate-800 hover:text-slate-300">
-                    📊 Resumen de resultados ({results.length} ejecuciones)
+                    <BarChart2 className="w-3.5 h-3.5 inline mr-1" />Resumen de resultados ({results.length} ejecuciones)
                   </summary>
                   <div className="overflow-auto max-h-[300px]">
                     <table className="w-full text-[11px]">
@@ -601,7 +606,7 @@ export default function FormalizerPlayground() {
                           >
                             <td className="px-3 py-1.5">
                               <span className={r.ok ? 'text-green-500' : 'text-red-500'}>
-                                {r.ok ? '✓' : '✗'}
+                                {r.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
                               </span>
                             </td>
                             <td className="px-3 py-1.5 text-slate-400 max-w-[200px] truncate">
