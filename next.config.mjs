@@ -47,7 +47,7 @@ const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: useStandaloneOutput ? 'standalone' : undefined,
-  transpilePackages: ['react-mosaic-component', 'firebase', 'undici', '@stevenvo780/st-lang'],
+  transpilePackages: ['react-mosaic-component', 'firebase', 'undici', '@stevenvo780/st-lang', '@stevenvo780/autologic'],
   serverExternalPackages: ['firebase-admin'],
   experimental: {
     serverActions: {
@@ -71,6 +71,10 @@ const nextConfig = {
         ...config.resolve.fallback,
         fs: false,
         worker_threads: false,
+        readline: false,
+        child_process: false,
+        net: false,
+        tls: false,
       };
     }
     
