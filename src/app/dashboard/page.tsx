@@ -285,6 +285,8 @@ function DashboardContent() {
     const isStRunnerOpen = stRunnerTabId ? openTabs.some(tab => tab.id === stRunnerTabId) : false;
     const semanticBrowserTabId = currentWorkspaceId ? `semantic-browser-${currentWorkspaceId}` : null;
     const isSemanticBrowserOpen = semanticBrowserTabId ? openTabs.some(tab => tab.id === semanticBrowserTabId) : false;
+    const formalizerTabId = currentWorkspaceId ? `formalizer-${currentWorkspaceId}` : null;
+    const isFormalizerOpen = formalizerTabId ? openTabs.some(tab => tab.id === formalizerTabId) : false;
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [showNewFileModal, setShowNewFileModal] = useState(false);
@@ -746,6 +748,7 @@ function DashboardContent() {
         openBoard,
         openStRunner,
         openSemanticBrowser,
+        openFormalizer,
         openFilesTab,
         closeTabById,
         openDocument,
@@ -1526,6 +1529,9 @@ function DashboardContent() {
                         onOpenStRunner={openStRunner}
                         isSemanticBrowserOpen={isSemanticBrowserOpen}
                         onOpenSemanticBrowser={openSemanticBrowser}
+                        isFormalizerOpen={isFormalizerOpen}
+                        onOpenFormalizer={openFormalizer}
+                        formalizerTileId={formalizerTabId}
                         onOpenQuickSearch={openQuickSearch}
                         onAcceptInvite={acceptInvite}
                         onSelectWorkspace={selectWorkspace}
