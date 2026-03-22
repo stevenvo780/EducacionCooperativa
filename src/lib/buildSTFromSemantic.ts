@@ -1,13 +1,18 @@
 /**
  * Genera código ST (.st) a partir del estado semántico del editor.
  *
- * Convierte conceptos, evidencias y relaciones registradas en la
- * Mesa Semántica en declaraciones `interpret` y esqueletos de
- * verificación ejecutables por ST.
+ * Delega la formalización de conceptos a @stevenvo780/autologic,
+ * que aplica NLP basado en reglas para extraer estructura argumental,
+ * detectar patrones lógicos y generar ST ejecutable.
+ *
+ * Mantiene compatibilidad con el flujo existente: evidencias, relaciones
+ * y skeleton de verificación se generan igual que antes.
  */
+import { formalize, type LogicProfile } from '@stevenvo780/autologic';
 import type { SemanticWorkspaceState } from '@/services/editorSemanticStore';
 
-/** Stopwords en español para filtrar al generar identificadores. */
+/* ── Utilidades de escape / identificadores ────────────────── */
+
 const STOPWORDS = new Set([
   'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas',
   'de', 'del', 'al', 'en', 'con', 'por', 'para', 'sin',
@@ -20,10 +25,6 @@ const STOPWORDS = new Set([
   'todo', 'toda', 'todos', 'todas', 'otro', 'otra'
 ]);
 
-/**
- * Extrae 3-4 palabras clave de un texto, filtrando stopwords.
- * Produce identificadores legibles como TECNICA_NECESIDAD.
- */
 const extractKeywords = (text: string, maxWords = 4): string[] => {
   const normalized = text
     .normalize('NFD')
@@ -36,85 +37,122 @@ const extractKeywords = (text: string, maxWords = 4): string[] => {
   return words.slice(0, maxWords);
 };
 
-/** Genera un identificador ST corto y legible a partir de texto. */
 const toSTIdentifier = (text: string, fallback = 'CONCEPTO'): string => {
   const keywords = extractKeywords(text);
   if (keywords.length === 0) return fallback;
   const id = keywords.join('_').toUpperCase();
-  // Asegurar que empiece con letra
   const safe = /^[A-Z]/.test(id) ? id : `C_${id}`;
   return safe.slice(0, 60);
 };
 
-/**
- * Subdivide un texto largo en cláusulas usando signos de puntuación.
- * Solo genera sub-cláusulas si tienen ≥ 3 palabras significativas.
- */
-const QUOTE_CHARS = new Set(['"', "'", '“', '”', '«', '»', '„', '‟']);
-
-const isQuotedSelection = (text: string) => {
-  const trimmed = text.trim();
-  if (trimmed.length < 2) return false;
-  return QUOTE_CHARS.has(trimmed[0]) && QUOTE_CHARS.has(trimmed[trimmed.length - 1]);
-};
-
-const normalizeSemanticText = (text: string) => text.replace(/\s+/g, ' ').trim();
-
-const splitIntoClauses = (text: string): string[] => {
-  const normalizedText = normalizeSemanticText(text);
-  if (!normalizedText) return [];
-  if (isQuotedSelection(normalizedText)) return [normalizedText];
-
-  // Dividir por punto, punto y coma
-  const sentences = normalizedText.split(/[.;]+/).map(s => s.trim()).filter(Boolean);
-  const clauses: string[] = [];
-
-  for (const sentence of sentences) {
-    // Subdividir oraciones por coma solo si las partes son sustanciales
-    const parts = sentence.split(/,/).map(p => p.trim()).filter(Boolean);
-    if (parts.length <= 1 || parts.every(p => p.split(/\s+/).length < 3)) {
-      // La oración no se subdivide bien por comas → dejarla entera
-      if (sentence.split(/\s+/).length >= 3) clauses.push(sentence);
-    } else {
-      for (const part of parts) {
-        const wordCount = part.split(/\s+/).length;
-        if (wordCount >= 3) clauses.push(part);
-      }
-    }
-  }
-
-  return clauses.length > 0 ? clauses : [normalizedText];
-};
-
-/** Escapa comillas dobles para strings ST. */
 const escapeSTString = (text: string): string =>
   text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ');
 
-/** Genera el bloque de encabezado. */
+const normalizeSemanticText = (text: string) => text.replace(/\s+/g, ' ').trim();
+
+/* ── Perfiles lógicos válidos para autologic ────────────────── */
+
+const VALID_PROFILES: Set<string> = new Set([
+  'classical.propositional', 'classical.first_order', 'modal.k',
+  'deontic.standard', 'epistemic.s5', 'intuitionistic.propositional',
+  'temporal.ltl', 'paraconsistent.belnap', 'aristotelian.syllogistic',
+  'probabilistic.basic', 'arithmetic'
+]);
+
+const isValidProfile = (profile?: string): profile is LogicProfile =>
+  !!profile && VALID_PROFILES.has(profile);
+
+/* ── Generación de secciones ─────────────────────────────────── */
+
+/** Encabezado del archivo .st */
 const buildHeader = (docName: string): string => [
   `// ═══════════════════════════════════════════════════════`,
-  `// Interpretaciones ST`,
+  `// Interpretaciones ST — autologic`,
   `// Generado desde: ${docName}`,
   `// Fecha: ${new Date().toISOString().split('T')[0]}`,
   `// ═══════════════════════════════════════════════════════`,
-  '',
-  'logic classical.propositional',
   ''
 ].join('\n');
 
-/** Genera declaraciones `interpret` y `define` para cada concepto semántico. */
+/**
+ * Extrae el cuerpo útil del código ST generado por autologic,
+ * omitiendo el header autogenerado y añadiendo un comentario de contexto.
+ */
+function extractSTBody(
+  stCode: string,
+  concept: SemanticWorkspaceState['concepts'][number],
+  conceptIdx: number
+): string {
+  const lines = stCode.split('\n');
+  const bodyLines: string[] = [];
+  let pastHeader = false;
+
+  const conceptLabel = escapeSTString(concept.definition || concept.title.slice(0, 80));
+  bodyLines.push(`// Concepto ${conceptIdx + 1}: ${conceptLabel}`);
+
+  for (const line of lines) {
+    if (!pastHeader) {
+      if (line.startsWith('// ═')) continue;
+      if (line.startsWith('// Formalización automática')) continue;
+      if (line.startsWith('// Perfil:')) continue;
+      if (line.startsWith('// Idioma:')) continue;
+      if (line.startsWith('// Patrones:')) continue;
+      if (line.trim() === '' && bodyLines.length <= 1) continue;
+      pastHeader = true;
+    }
+    bodyLines.push(line);
+  }
+
+  bodyLines.push('');
+  return bodyLines.join('\n');
+}
+
+/** Fallback: genera interpret básico cuando autologic no puede formalizar */
+function buildFallbackInterpret(
+  concept: SemanticWorkspaceState['concepts'][number],
+  fullText: string,
+  conceptIdx: number,
+  uniqueId: (base: string) => string
+): string {
+  const lines: string[] = [];
+  const conceptLabel = escapeSTString(concept.definition || concept.title.slice(0, 80));
+
+  if (concept.logicProfile) {
+    lines.push(`logic ${concept.logicProfile}`);
+    lines.push('');
+  }
+
+  lines.push(`// Concepto ${conceptIdx + 1}: ${conceptLabel} (fallback)`);
+  const id = uniqueId(toSTIdentifier(concept.definition || concept.title, `CONCEPTO_${conceptIdx + 1}`));
+  lines.push(`interpret "${escapeSTString(fullText)}" as ${id}`);
+
+  if (concept.definition) {
+    lines.push(`define ${id}_DEF = ${id} description "${conceptLabel}"`);
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * Genera código ST para cada concepto usando autologic.
+ *
+ * Para cada concepto:
+ *  - Si el usuario escribió una fórmula manual, se respeta y se agrega como axiom.
+ *  - Si no hay fórmula manual, autologic formaliza el texto automáticamente.
+ *  - Si autologic falla, se genera un interpret básico como fallback.
+ */
 const buildConceptDefines = (
   concepts: SemanticWorkspaceState['concepts'],
   fragments: SemanticWorkspaceState['fragments']
 ): string => {
   if (concepts.length === 0) return '';
 
-  const lines = [
-    '// ── Conceptos ─────────────────────────────────────────',
+  const sections: string[] = [
+    '// ── Conceptos (formalización autologic) ────────────────',
     ''
   ];
 
-  // Track used identifiers to avoid collisions
   const usedIds = new Set<string>();
   const uniqueId = (base: string): string => {
     let id = base;
@@ -129,60 +167,57 @@ const buildConceptDefines = (
       ? fragments.find((fragment) => fragment.id === concept.sourceFragmentId)
       : undefined;
     const fullText = normalizeSemanticText(sourceFragment?.text || concept.excerpt || concept.title);
-    const clauses = splitIntoClauses(fullText);
-    const conceptLabel = concept.definition
-      ? escapeSTString(concept.definition)
-      : escapeSTString(concept.title.slice(0, 80));
+    const profile: LogicProfile = isValidProfile(concept.logicProfile)
+      ? concept.logicProfile
+      : 'classical.propositional';
 
-    // Si el usuario eligió perfil lógico, emitirlo
-    if (concept.logicProfile) {
-      lines.push(`logic ${concept.logicProfile}`);
-      lines.push('');
+    // ── Opción A: El usuario ya escribió una fórmula manual ──
+    if (concept.formula && concept.formula.trim()) {
+      const conceptLabel = escapeSTString(concept.definition || concept.title.slice(0, 80));
+      if (concept.logicProfile) {
+        sections.push(`logic ${concept.logicProfile}`);
+        sections.push('');
+      }
+      sections.push(`// Concepto ${conceptIdx + 1}: ${conceptLabel}`);
+
+      const id = uniqueId(toSTIdentifier(concept.definition || concept.title, `CONCEPTO_${conceptIdx + 1}`));
+      sections.push(`interpret "${escapeSTString(fullText)}" as ${id}`);
+
+      if (concept.definition) {
+        sections.push(`define ${id}_DEF = ${id} description "${conceptLabel}"`);
+      }
+
+      const axiomId = uniqueId(`AX_${toSTIdentifier(concept.definition || concept.title, `CONCEPTO_${conceptIdx + 1}`)}`);
+      sections.push(`axiom ${axiomId} = ${concept.formula.trim()}`);
+      sections.push('');
+      return;
     }
 
-    lines.push(`// Concepto ${conceptIdx + 1}: ${conceptLabel}`);
-
-    if (clauses.length > 1) {
-      const fullTextId = uniqueId(toSTIdentifier(`${concept.definition || concept.title} texto`, `CONCEPTO_${conceptIdx + 1}_TEXTO`));
-      lines.push(`interpret "${escapeSTString(fullText)}" as ${fullTextId}`);
-
-      // ── Subdivisión en cláusulas ──
-      const clauseIds: string[] = [];
-      clauses.forEach((clause) => {
-        const id = uniqueId(toSTIdentifier(clause));
-        clauseIds.push(id);
-        lines.push(`interpret "${escapeSTString(clause)}" as ${id}`);
+    // ── Opción B: Autologic formaliza automáticamente ──
+    try {
+      const result = formalize(fullText, {
+        profile,
+        language: 'es',
+        atomStyle: 'keywords',
+        includeComments: true
       });
 
-      // Generar define que agrupa las sub-proposiciones
-      if (concept.definition) {
-        const groupId = uniqueId(toSTIdentifier(concept.definition, `CONCEPTO_${conceptIdx + 1}`));
-        const conjunction = clauseIds.join(' & ');
-        lines.push(`define ${groupId} = ${conjunction} description "${conceptLabel}"`);
-      }
-    } else {
-      // Texto corto → un solo interpret
-      const id = uniqueId(
-        concept.definition
-          ? toSTIdentifier(concept.definition, `CONCEPTO_${conceptIdx + 1}`)
-          : toSTIdentifier(fullText, `CONCEPTO_${conceptIdx + 1}`)
-      );
-      lines.push(`interpret "${escapeSTString(fullText)}" as ${id}`);
-      if (concept.definition) {
-        lines.push(`define ${id}_DEF = ${id} description "${conceptLabel}"`);
-      }
-    }
+      if (result.ok && result.stCode.trim()) {
+        const stBody = extractSTBody(result.stCode, concept, conceptIdx);
+        sections.push(stBody);
 
-    // Si el usuario escribió una fórmula, agregarla como axioma
-    if (concept.formula) {
-      const axiomId = uniqueId(`AX_${toSTIdentifier(concept.definition || concept.title, `CONCEPTO_${conceptIdx + 1}`)}`);
-      lines.push(`axiom ${axiomId} = ${concept.formula}`);
+        for (const [atomId] of result.atoms) {
+          usedIds.add(atomId);
+        }
+      } else {
+        sections.push(buildFallbackInterpret(concept, fullText, conceptIdx, uniqueId));
+      }
+    } catch {
+      sections.push(buildFallbackInterpret(concept, fullText, conceptIdx, uniqueId));
     }
-
-    lines.push('');
   });
 
-  return lines.join('\n');
+  return sections.join('\n');
 };
 
 /** Genera sección de evidencias como comentarios + interpret. */
@@ -264,6 +299,9 @@ const buildVerificationSkeleton = (
 /**
  * Construye un script ST completo a partir del estado semántico.
  *
+ * Usa autologic para formalizar automáticamente el texto de cada concepto.
+ * Respeta fórmulas manuales escritas por el usuario.
+ *
  * @param state  Estado actual de la Mesa Semántica
  * @param docName  Nombre del documento markdown origen
  * @returns Código ST listo para guardarse como archivo .st
@@ -287,9 +325,42 @@ export function buildSTFromSemantic(
  * Nombre canónico del archivo .st companion para un documento markdown.
  */
 export function companionSTName(docName: string): string {
-  // Quitar extensiones .md / .markdown del nombre base
   const base = docName
     .replace(/\.(md|markdown)$/i, '')
     .replace(/\s+/g, '_');
   return `${base}.md.st`;
+}
+
+/* ── Utilidad pública: formalizar texto individual ──────────── */
+
+/**
+ * Formaliza un texto individual usando autologic.
+ * Útil para previews en el modal de definición de conceptos.
+ */
+export function formalizeText(
+  text: string,
+  profile?: string
+): { ok: boolean; stCode: string; patterns: string[]; atomCount: number; formulaCount: number } {
+  try {
+    const logicProfile: LogicProfile = isValidProfile(profile)
+      ? profile
+      : 'classical.propositional';
+
+    const result = formalize(text, {
+      profile: logicProfile,
+      language: 'es',
+      atomStyle: 'keywords',
+      includeComments: true
+    });
+
+    return {
+      ok: result.ok,
+      stCode: result.stCode,
+      patterns: result.analysis.detectedPatterns,
+      atomCount: result.atoms.size,
+      formulaCount: result.formulas.length
+    };
+  } catch {
+    return { ok: false, stCode: '', patterns: [], atomCount: 0, formulaCount: 0 };
+  }
 }

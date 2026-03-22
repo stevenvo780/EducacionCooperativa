@@ -72,7 +72,7 @@ import { useMarkdownLinter, type LinterDiagnostic } from '@/hooks/useMarkdownLin
 import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
 import { addToPersonalDictionary, getPersonalDictionary } from '@/lib/markdown-linter/spell-engine';
 import { normalizePath } from '@/lib/folder-utils';
-import { buildSTFromSemantic, companionSTName } from '@/lib/buildSTFromSemantic';
+import { buildSTFromSemantic, companionSTName, formalizeText } from '@/lib/buildSTFromSemantic';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
@@ -187,6 +187,13 @@ export default function MosaicEditor({
     definition: string;
     logicProfile: string;
     formula: string;
+  } | null>(null);
+  const [autologicPreview, setAutologicPreview] = useState<{
+    ok: boolean;
+    stCode: string;
+    patterns: string[];
+    atomCount: number;
+    formulaCount: number;
   } | null>(null);
   const [snippetDraft, setSnippetDraft] = useState<{ markdown: string } | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
@@ -1225,9 +1232,17 @@ export default function MosaicEditor({
   const handleDefineConcept = useCallback(() => {
     if (!semanticSelection) return;
     const text = semanticSelection.text;
+    console.warn('[DefineConcept] semanticSelection.text:', text.length, 'chars | preview:', text.slice(0, 120));
     const compact = text.replace(/\s+/g, ' ').trim();
     const title = compact.length > 60 ? `${compact.slice(0, 59)}…` : compact;
     setDefineConceptDraft({ selectionText: text, title, definition: '', logicProfile: '', formula: '' });
+    // Auto-preview con autologic
+    try {
+      const preview = formalizeText(text);
+      setAutologicPreview(preview);
+    } catch {
+      setAutologicPreview(null);
+    }
   }, [semanticSelection]);
 
   const handleAddSelectionToDictionary = useCallback(() => {
@@ -1310,6 +1325,16 @@ export default function MosaicEditor({
   const handleConfirmDefineConcept = useCallback(() => {
     if (!defineConceptDraft) return;
     void runSemanticAction('define-concept', async () => {
+      // Auto-generar fórmula con autologic si el usuario no escribió una
+      let formulaToUse = defineConceptDraft.formula.trim();
+      if (!formulaToUse && autologicPreview?.ok && autologicPreview.formulaCount > 0) {
+        // Extraer la primera fórmula del código ST generado como sugerencia
+        const axiomMatch = autologicPreview.stCode.match(/axiom\s+\w+\s*=\s*(.+)/);
+        if (axiomMatch) {
+          formulaToUse = axiomMatch[1].trim();
+        }
+      }
+
       const payload = getSemanticPayload(defineConceptDraft.selectionText);
       const nextState = registerConceptFromSelection(
         semanticStoreContext,
@@ -1318,12 +1343,13 @@ export default function MosaicEditor({
           title: defineConceptDraft.title.trim() || undefined,
           definition: defineConceptDraft.definition.trim() || undefined,
           logicProfile: defineConceptDraft.logicProfile || undefined,
-          formula: defineConceptDraft.formula.trim() || undefined
+          formula: formulaToUse || undefined
         }
       );
       updateSemanticState(nextState);
       clearSemanticSelection();
       setDefineConceptDraft(null);
+      setAutologicPreview(null);
 
       // --- Auto-crear / actualizar archivo(s) .st companion ---
       const currentName = docName || currentDocMetaRef.current.name || 'Documento';
@@ -1386,7 +1412,7 @@ export default function MosaicEditor({
         setSemanticNotice('📐 Concepto registrado, pero falló la generación del archivo ST.');
       }
     });
-  }, [clearSemanticSelection, companionStDocId, currentWorkspaceId, defineConceptDraft, docName, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, updateSemanticState, user?.uid]);
+  }, [autologicPreview, clearSemanticSelection, companionStDocId, currentWorkspaceId, defineConceptDraft, docName, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, updateSemanticState, user?.uid]);
 
   const handleSaveAsSnippet = useCallback(() => {
     if (!semanticSelection) return;
@@ -2450,7 +2476,7 @@ export default function MosaicEditor({
       {defineConceptDraft && ReactDOM.createPortal(
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={(e) => { if (e.target === e.currentTarget) setDefineConceptDraft(null); }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setDefineConceptDraft(null); setAutologicPreview(null); } }}
         >
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
             <h3 className="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
@@ -2485,7 +2511,17 @@ export default function MosaicEditor({
                 <label className="block text-[11px] font-medium text-slate-500">Perfil lógico</label>
                 <select
                   value={defineConceptDraft.logicProfile}
-                  onChange={(e) => setDefineConceptDraft({ ...defineConceptDraft, logicProfile: e.target.value })}
+                  onChange={(e) => {
+                    const newProfile = e.target.value;
+                    setDefineConceptDraft({ ...defineConceptDraft, logicProfile: newProfile });
+                    // Recalcular preview con el nuevo perfil
+                    try {
+                      const preview = formalizeText(defineConceptDraft.selectionText, newProfile || undefined);
+                      setAutologicPreview(preview);
+                    } catch {
+                      setAutologicPreview(null);
+                    }
+                  }}
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-blue-500/60"
                 >
                   <option value="">Sin perfil (usa el del archivo)</option>
@@ -2511,8 +2547,25 @@ export default function MosaicEditor({
                 />
                 <p className="text-[10px] leading-4 text-slate-600">
                   Si escribes una fórmula, se añadirá como axioma verificable en el archivo ST.
-                  Los identificadores se generan automáticamente desde las cláusulas del texto.
+                  Si la dejas vacía, autologic generará una formalización automática.
                 </p>
+                {autologicPreview && !defineConceptDraft.formula.trim() && (
+                  <details open className="rounded-lg border border-cyan-900/40 bg-cyan-950/20">
+                    <summary className="cursor-pointer px-3 py-1.5 text-[10px] font-medium text-cyan-400 select-none flex items-center gap-1.5">
+                      <Sparkles className="h-3 w-3" />
+                      Preview autologic
+                      {autologicPreview.ok && (
+                        <span className="ml-auto text-[9px] text-cyan-600">
+                          {autologicPreview.atomCount} átomos · {autologicPreview.formulaCount} fórmulas
+                          {autologicPreview.patterns.length > 0 && ` · ${autologicPreview.patterns.join(', ')}`}
+                        </span>
+                      )}
+                    </summary>
+                    <pre className="px-3 pb-2 pt-1 text-[10px] leading-4 font-mono text-cyan-300/80 whitespace-pre-wrap max-h-32 overflow-auto">
+                      {autologicPreview.ok ? autologicPreview.stCode.slice(0, 600) : '(no se pudo formalizar automáticamente)'}
+                    </pre>
+                  </details>
+                )}
               </div>
             </details>
             <div className="text-[11px] text-slate-500 mb-4 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2">
@@ -2524,7 +2577,7 @@ export default function MosaicEditor({
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setDefineConceptDraft(null)}
+                onClick={() => { setDefineConceptDraft(null); setAutologicPreview(null); }}
                 className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
               >
                 Cancelar
