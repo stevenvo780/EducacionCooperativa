@@ -168,7 +168,7 @@ export default function GlobalSemanticBrowser({
       .catch((err) => console.error('[GlobalSemanticBrowser] handleEditConcept failed', err));
   }, [ctx, persistAndSync, state.concepts]);
 
-  const handleEditFragment = useCallback((fragmentId: string, updates: { text?: string }) => {
+  const handleEditFragment = useCallback((fragmentId: string, updates: { text?: string; note?: string }) => {
     if (!ctx) return;
     const fragment = state.fragments.find((item) => item.id === fragmentId);
     const nextState = updateFragment(ctx, fragmentId, updates);

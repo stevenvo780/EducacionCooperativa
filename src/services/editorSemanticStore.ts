@@ -68,6 +68,8 @@ const excerptFromText = (value: string, maxLength = 140) => {
   return `${compact.slice(0, maxLength - 1)}…`;
 };
 
+const sanitizeNote = (value: string) => value.replace(/\r\n?/g, '\n').trim();
+
 export const loadSemanticWorkspaceState = (context: SemanticStoreContext): SemanticWorkspaceState => {
   if (!isBrowser()) return EMPTY_SEMANTIC_WORKSPACE_STATE;
   try {
@@ -181,6 +183,17 @@ export const pinSelectionFragment = (context: SemanticStoreContext, payload: Sem
 
 export const markSelectionAsEvidence = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
   ensureFragment(state, 'evidence', payload);
+  return state;
+});
+
+export const saveSelectionNote = (
+  context: SemanticStoreContext,
+  payload: SemanticSelectionPayload,
+  note: string
+) => updateState(context, (state) => {
+  const normalizedNote = sanitizeNote(note);
+  if (!normalizedNote) return state;
+  ensureFragment(state, 'note', payload, { note: normalizedNote });
   return state;
 });
 
@@ -333,13 +346,21 @@ export const updateConcept = (
 export const updateFragment = (
   context: SemanticStoreContext,
   fragmentId: string,
-  updates: { text?: string }
+  updates: { text?: string; note?: string }
 ) => updateState(context, (state) => {
   const fragment = state.fragments.find(f => f.id === fragmentId);
   if (!fragment) return state;
   if (updates.text !== undefined) {
     fragment.text = updates.text;
     fragment.excerpt = updates.text.replace(/\s+/g, ' ').trim().slice(0, 139);
+  }
+  if (updates.note !== undefined) {
+    const normalizedNote = sanitizeNote(updates.note);
+    if (normalizedNote) {
+      fragment.note = normalizedNote;
+    } else {
+      delete fragment.note;
+    }
   }
   fragment.updatedAt = Date.now();
   return state;

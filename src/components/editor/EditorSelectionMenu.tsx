@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { BookMarked, BookmarkPlus, Briefcase, FilePlus2, Link2, Network, PlusCircle, Quote, Scissors, Sparkles } from 'lucide-react';
+import { BookMarked, BookmarkPlus, Briefcase, FilePlus2, Link2, Network, PenLine, PlusCircle, Quote, Scissors, Sparkles } from 'lucide-react';
 import type { EditorSelectionSnapshot } from '@/hooks/useEditorSelectionActions';
 import type { SemanticConceptRecord } from '@/services/editorSemanticStore';
 
@@ -25,6 +25,7 @@ interface EditorSelectionMenuProps {
   onCreateAnalyticalCard: () => void;
   onCreateSemanticBlock: () => void;
   onCreateTask: () => void;
+  onAddNote: () => void;
   onMarkEvidence: () => void;
   onPinFragment: () => void;
   onOpenConcepts: () => void;
@@ -53,6 +54,7 @@ export function EditorSelectionMenu({
   onCreateAnalyticalCard,
   onCreateSemanticBlock,
   onCreateTask,
+  onAddNote,
   onMarkEvidence,
   onPinFragment,
   onOpenConcepts,
@@ -167,6 +169,7 @@ export function EditorSelectionMenu({
         <ActionButton icon={<Network className="h-3.5 w-3.5" />} label="Relacionar" busy={busyAction === 'relate-concept'} onClick={() => { onOpenConcepts(); setMode('concepts'); }} />
         <ActionButton icon={<FilePlus2 className="h-3.5 w-3.5" />} label="Bloque semántico" busy={busyAction === 'semantic-block'} onClick={onCreateSemanticBlock} />
         <ActionButton icon={<Briefcase className="h-3.5 w-3.5" />} label="Enviar a tarea" busy={busyAction === 'create-task'} onClick={onCreateTask} />
+        <ActionButton icon={<PenLine className="h-3.5 w-3.5" />} label="Guardar nota" busy={busyAction === 'save-note'} onClick={onAddNote} />
         <ActionButton icon={<Quote className="h-3.5 w-3.5" />} label="Marcar evidencia" busy={busyAction === 'mark-evidence'} onClick={onMarkEvidence} />
         <ActionButton icon={<BookmarkPlus className="h-3.5 w-3.5" />} label="Fijar fragmento" busy={busyAction === 'pin-fragment'} onClick={onPinFragment} />
         <ActionButton icon={<Scissors className="h-3.5 w-3.5" />} label="Guardar snippet" busy={busyAction === 'save-snippet'} onClick={onSaveAsSnippet} />

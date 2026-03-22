@@ -1,3 +1,5 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   attachLinkedDocumentToSelection,
   attachLinkedDocumentToSelectionWithReference,
@@ -12,8 +14,9 @@ import {
   registerSemanticBlock,
   registerSemanticBlockWithReference,
   relateSelectionToConcept,
+  saveSelectionNote,
   saveSemanticWorkspaceState
-} from '@/services/editorSemanticStore';
+} from '../../src/services/editorSemanticStore';
 
 const context = {
   workspaceId: 'ws-1',
@@ -37,6 +40,8 @@ describe('editor semantic store', () => {
         .mockReturnValueOnce('uuid-fragment-2')
         .mockReturnValueOnce('uuid-relation-1')
         .mockReturnValueOnce('uuid-fragment-3')
+        .mockReturnValueOnce('uuid-fragment-4')
+        .mockReturnValueOnce('uuid-fragment-5')
     });
   });
 
@@ -110,7 +115,17 @@ describe('editor semantic store', () => {
     expect(secondState.concepts[0].excerpt.endsWith('…')).toBe(true);
   });
 
-  it('stores pinned, evidence and semantic block fragments', () => {
+  it('stores notes, pinned, evidence and semantic block fragments', () => {
+    const noted = saveSelectionNote(context, payload, 'Primera hipótesis de lectura');
+    expect(noted.fragments[0]).toMatchObject({
+      kind: 'note',
+      note: 'Primera hipótesis de lectura'
+    });
+
+    const updatedNote = saveSelectionNote(context, payload, 'Hipótesis refinada');
+    expect(updatedNote.fragments.filter((fragment) => fragment.kind === 'note')).toHaveLength(1);
+    expect(updatedNote.fragments.find((fragment) => fragment.kind === 'note')?.note).toBe('Hipótesis refinada');
+
     const pinned = pinSelectionFragment(context, payload);
     expect(pinned.fragments[0].kind).toBe('pinned');
 
@@ -193,6 +208,7 @@ describe('editor semantic store', () => {
     const recent = getRecentSemanticItems({
       concepts: Array.from({ length: 6 }, (_, index) => ({ id: `c${index}`, title: `Concepto ${index}` })) as never[],
       fragments: [
+        ...Array.from({ length: 6 }, (_, index) => ({ id: `n${index}`, kind: 'note', note: `Nota ${index}`, selectionHash: `nh${index}` })),
         ...Array.from({ length: 6 }, (_, index) => ({ id: `p${index}`, kind: 'pinned', selectionHash: `ph${index}` })),
         ...Array.from({ length: 6 }, (_, index) => ({ id: `e${index}`, kind: 'evidence', selectionHash: `eh${index}` }))
       ] as never[],
@@ -200,6 +216,7 @@ describe('editor semantic store', () => {
       updatedAt: 0
     });
     expect(recent.concepts).toHaveLength(5);
+    expect(recent.notes).toHaveLength(5);
     expect(recent.pinned).toHaveLength(5);
     expect(recent.evidence).toHaveLength(5);
     expect(recent.relations).toHaveLength(5);

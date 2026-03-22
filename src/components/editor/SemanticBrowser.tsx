@@ -8,6 +8,7 @@ import {
   FileCode2,
   FileText,
   Link2,
+  MessageSquareText,
   Network,
   Pencil,
   Pin,
@@ -27,11 +28,12 @@ import type {
 } from '@/services/editorSemanticStore';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 
-export type SemanticTab = 'resumen' | 'conceptos' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
+export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
 
 const TABS: { key: SemanticTab; label: string; icon: React.ReactNode }[] = [
   { key: 'resumen', label: 'Resumen', icon: <BookMarked className="h-3.5 w-3.5" /> },
   { key: 'conceptos', label: 'Conceptos', icon: <Network className="h-3.5 w-3.5" /> },
+  { key: 'notas', label: 'Notas', icon: <MessageSquareText className="h-3.5 w-3.5" /> },
   { key: 'evidencias', label: 'Evidencias', icon: <Quote className="h-3.5 w-3.5" /> },
   { key: 'fijados', label: 'Fijados', icon: <Pin className="h-3.5 w-3.5" /> },
   { key: 'relaciones', label: 'Relaciones', icon: <Link2 className="h-3.5 w-3.5" /> },
@@ -59,7 +61,7 @@ interface SemanticBrowserProps {
   onDeleteFragment?: (fragmentId: string) => void;
   onDeleteRelation?: (relationId: string) => void;
   onEditConcept?: (conceptId: string, updates: { title?: string; definition?: string; formula?: string }) => void;
-  onEditFragment?: (fragmentId: string, updates: { text?: string }) => void;
+  onEditFragment?: (fragmentId: string, updates: { text?: string; note?: string }) => void;
 }
 
 const compactText = (value: string, maxLength = 140) => {
@@ -307,14 +309,19 @@ function ConceptCard({ concept, relationsCount, fragments, onDelete, onEdit }: {
 function FragmentCard({ fragment, onDelete, onEdit }: {
   fragment: SemanticFragmentRecord;
   onDelete?: (id: string) => void;
-  onEdit?: (id: string, updates: { text?: string }) => void;
+  onEdit?: (id: string, updates: { text?: string; note?: string }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editText, setEditText] = useState(fragment.text);
+  const [editNote, setEditNote] = useState(fragment.note || '');
+  const isNote = fragment.kind === 'note';
 
   const handleSave = () => {
-    onEdit?.(fragment.id, { text: editText });
+    onEdit?.(fragment.id, {
+      text: editText,
+      ...(isNote ? { note: editNote } : {})
+    });
     setEditing(false);
   };
 
@@ -322,23 +329,51 @@ function FragmentCard({ fragment, onDelete, onEdit }: {
     <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
       {editing ? (
         <div className="space-y-2">
-          <textarea
-            value={editText}
-            onChange={e => setEditText(e.target.value)}
-            rows={3}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-y"
-          />
+          {isNote ? (
+            <>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">Comentario</label>
+                <textarea
+                  value={editNote}
+                  onChange={e => setEditNote(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-y"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">Texto señalado</label>
+                <textarea
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-y"
+                />
+              </div>
+            </>
+          ) : (
+            <textarea
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              rows={3}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-y"
+            />
+          )}
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleSave}
+              disabled={isNote && !editNote.trim()}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 text-xs font-semibold hover:bg-blue-500/30 transition"
             >
               <Check className="h-3 w-3" /> Guardar
             </button>
             <button
               type="button"
-              onClick={() => { setEditing(false); setEditText(fragment.text); }}
+              onClick={() => {
+                setEditing(false);
+                setEditText(fragment.text);
+                setEditNote(fragment.note || '');
+              }}
               className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-300 transition"
             >
               Cancelar
@@ -348,7 +383,22 @@ function FragmentCard({ fragment, onDelete, onEdit }: {
       ) : (
         <>
           <div className="flex items-start justify-between gap-3">
-            <p className="text-xs text-slate-200 leading-5 flex-1 min-w-0">{compactText(fragment.text, 300)}</p>
+            <div className="min-w-0 flex-1">
+              {isNote && fragment.note ? (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Nota</div>
+                  <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-amber-100">{fragment.note}</p>
+                </div>
+              ) : null}
+              <div className={clsx('text-xs leading-5', isNote ? 'mt-3 text-slate-300' : 'text-slate-200')}>
+                {isNote ? (
+                  <>
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Texto señalado</div>
+                    <p>{compactText(fragment.text, 300)}</p>
+                  </>
+                ) : compactText(fragment.text, 300)}
+              </div>
+            </div>
             <div className="flex items-start gap-2 shrink-0">
               <div className="text-[10px] text-slate-500 text-right">
                 <div>{fragment.docName}</div>
@@ -399,6 +449,11 @@ function FragmentCard({ fragment, onDelete, onEdit }: {
             </div>
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
+            {isNote && (
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300 inline-flex items-center gap-1">
+                <MessageSquareText className="h-2.5 w-2.5" /> Nota
+              </span>
+            )}
             {fragment.conceptTitle && (
               <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-300">
                 ↔ {fragment.conceptTitle}
@@ -574,6 +629,7 @@ export function SemanticBrowser({
   const [activeTab, setActiveTab] = useState<SemanticTab>(initialTab ?? 'resumen');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const notes = useMemo(() => state.fragments.filter(f => f.kind === 'note'), [state.fragments]);
   const evidence = useMemo(() => state.fragments.filter(f => f.kind === 'evidence'), [state.fragments]);
   const pinned = useMemo(() => state.fragments.filter(f => f.kind === 'pinned'), [state.fragments]);
 
@@ -608,6 +664,15 @@ export function SemanticBrowser({
     return evidence.filter(f => f.text.toLowerCase().includes(lowerQuery) || f.excerpt.toLowerCase().includes(lowerQuery));
   }, [evidence, lowerQuery]);
 
+  const filteredNotes = useMemo(() => {
+    if (!lowerQuery) return notes;
+    return notes.filter(f => (
+      f.text.toLowerCase().includes(lowerQuery)
+      || f.excerpt.toLowerCase().includes(lowerQuery)
+      || (f.note?.toLowerCase().includes(lowerQuery) ?? false)
+    ));
+  }, [lowerQuery, notes]);
+
   const filteredPinned = useMemo(() => {
     if (!lowerQuery) return pinned;
     return pinned.filter(f => f.text.toLowerCase().includes(lowerQuery) || f.excerpt.toLowerCase().includes(lowerQuery));
@@ -623,6 +688,7 @@ export function SemanticBrowser({
   const tabCounts: Record<SemanticTab, number> = {
     resumen: 0,
     conceptos: state.concepts.length,
+    notas: notes.length,
     evidencias: evidence.length,
     fijados: pinned.length,
     relaciones: state.relations.length,
@@ -714,8 +780,9 @@ export function SemanticBrowser({
         {activeTab === 'resumen' && (
           <div className="space-y-6 max-w-5xl mx-auto">
             {/* Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
               <MetricCard label="Conceptos" value={state.concepts.length} hint="Ideas registradas desde selecciones" accent="text-blue-300" />
+              <MetricCard label="Notas" value={notes.length} hint="Comentarios persistentes sobre fragmentos" accent="text-amber-200" />
               <MetricCard label="Evidencias" value={evidence.length} hint="Fragmentos para argumentar" accent="text-amber-300" />
               <MetricCard label="Fijados" value={pinned.length} hint="Atajos de acceso rápido" accent="text-emerald-300" />
               <MetricCard label="Relaciones" value={state.relations.length} hint="Conexiones entre conceptos" accent="text-violet-300" />
@@ -834,6 +901,24 @@ export function SemanticBrowser({
                   onDelete={onDeleteConcept}
                   onEdit={onEditConcept}
                 />
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'notas' && (
+          <div className="max-w-4xl mx-auto space-y-3">
+            {filteredNotes.length === 0 ? (
+              <EmptyState
+                icon={<MessageSquareText className="h-8 w-8" />}
+                title={lowerQuery ? 'Sin resultados' : 'No hay notas guardadas'}
+                description={lowerQuery
+                  ? 'Intenta con otro término de búsqueda.'
+                  : 'Selecciona texto en el editor y usa “Guardar nota” para dejar comentarios persistentes.'}
+              />
+            ) : (
+              filteredNotes.map(fragment => (
+                <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
               ))
             )}
           </div>

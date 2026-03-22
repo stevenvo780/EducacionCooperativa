@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  normalizeSemanticWorkspaceState,
   filterSemanticWorkspaceStateByDocument,
   type SemanticWorkspaceState
 } from '../../src/lib/semantic/workspace-state';
@@ -86,5 +87,34 @@ describe('semantic workspace state helpers', () => {
     expect(filtered.fragments).toHaveLength(1);
     expect(filtered.fragments[0]?.id).toBe('fragment-a');
     expect(filtered.relations).toHaveLength(0);
+  });
+
+  it('normalizes persisted notes without losing the comment text', () => {
+    const state = normalizeSemanticWorkspaceState({
+      concepts: [],
+      fragments: [
+        {
+          id: 'note-1',
+          kind: 'note',
+          text: 'Pasaje del documento',
+          excerpt: 'Pasaje del documento',
+          note: 'Recordar conectar esto con el argumento central.',
+          docId: 'doc-a',
+          docName: 'A.md',
+          workspaceId: 'ws-1',
+          createdAt: 10,
+          updatedAt: 20,
+          selectionHash: 'note-a'
+        }
+      ],
+      relations: [],
+      updatedAt: 20
+    });
+
+    expect(state.fragments).toHaveLength(1);
+    expect(state.fragments[0]).toMatchObject({
+      kind: 'note',
+      note: 'Recordar conectar esto con el argumento central.'
+    });
   });
 });
