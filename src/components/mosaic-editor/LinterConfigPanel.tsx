@@ -14,7 +14,7 @@ const RULE_CATEGORY_ICONS: Record<RuleCategory, React.ReactNode> = {
   consistency: <RefreshCw className="w-3 h-3" />,
   whitespace: <AlignJustify className="w-3 h-3" />,
   academic: <GraduationCap className="w-3 h-3" />,
-  semantic: <Ruler className="w-3 h-3" />,
+  semantic: <Ruler className="w-3 h-3" />
 };
 
 // ── Sync with registry ──────────────────────────────────────
