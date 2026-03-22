@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { formalize, type LogicProfile } from '@stevenvo780/autologic';
+import { evaluate, type STEvalResult } from '@stevenvo780/st-lang/api';
+import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 
 /* ── Tipos ──────────────────────────────────────────────────── */
 
@@ -16,6 +18,7 @@ interface FormalizeResult {
   formulaCount: number;
   elapsed: number;
   timestamp: number;
+  evalResult?: STEvalResult;
 }
 
 /* ── Perfiles disponibles ───────────────────────────────────── */
@@ -150,6 +153,7 @@ export default function FormalizerPlayground() {
   const [selectedResult, setSelectedResult] = useState<string | null>(null);
   const [batchMode, setBatchMode] = useState(false);
   const [autoRun, setAutoRun] = useState(false);
+  const [viewMode, setViewMode] = useState<OutputViewMode>('graphic');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -166,6 +170,12 @@ export default function FormalizerPlayground() {
         atomStyle: 'keywords',
         includeComments: true
       });
+      let evalResult: STEvalResult | undefined;
+      if (r.ok && r.stCode.trim()) {
+        try {
+          evalResult = evaluate(r.stCode);
+        } catch { /* ignore eval errors */ }
+      }
       result = {
         id: crypto.randomUUID(),
         input: trimmed,
@@ -176,7 +186,8 @@ export default function FormalizerPlayground() {
         atomCount: r.atoms.size,
         formulaCount: r.formulas.length,
         elapsed: Math.round(performance.now() - t0),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        evalResult
       };
     } catch (err) {
       result = {
@@ -212,6 +223,12 @@ export default function FormalizerPlayground() {
           atomStyle: 'keywords',
           includeComments: true
         });
+        let evalResult: STEvalResult | undefined;
+        if (r.ok && r.stCode.trim()) {
+          try {
+            evalResult = evaluate(r.stCode);
+          } catch { /* ignore eval errors */ }
+        }
         newResults.push({
           id: crypto.randomUUID(),
           input: ex.text,
@@ -222,7 +239,8 @@ export default function FormalizerPlayground() {
           atomCount: r.atoms.size,
           formulaCount: r.formulas.length,
           elapsed: Math.round(performance.now() - t0),
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          evalResult
         });
       } catch (err) {
         newResults.push({
@@ -267,6 +285,16 @@ export default function FormalizerPlayground() {
   }, []);
 
   const activeResult = results.find(r => r.id === selectedResult);
+
+  const reRunST = useCallback(() => {
+    if (!activeResult || !activeResult.stCode.trim()) return;
+    try {
+      const evalResult = evaluate(activeResult.stCode);
+      setResults(prev => prev.map(r =>
+        r.id === activeResult.id ? { ...r, evalResult } : r
+      ));
+    } catch { /* ignore */ }
+  }, [activeResult]);
 
   const copyToClipboard = useCallback((text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -479,6 +507,47 @@ export default function FormalizerPlayground() {
                   <pre className="p-4 text-xs font-mono leading-relaxed overflow-auto max-h-[500px] whitespace-pre-wrap">
                     <STHighlight code={activeResult.stCode} />
                   </pre>
+                </div>
+
+                {/* ── Ejecución ST ─────────────────────── */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/80 overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-400">Ejecución ST</span>
+                      {activeResult.evalResult && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                          activeResult.evalResult.ok
+                            ? 'bg-green-950/50 text-green-400 border border-green-900/40'
+                            : 'bg-red-950/50 text-red-400 border border-red-900/40'
+                        }`}>
+                          {activeResult.evalResult.ok ? '✓ OK' : '✗ Error'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {activeResult.evalResult && (
+                        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                      )}
+                      <button
+                        onClick={reRunST}
+                        disabled={!activeResult.stCode.trim()}
+                        className="rounded bg-emerald-700 px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        ▶ Ejecutar
+                      </button>
+                    </div>
+                  </div>
+                  {activeResult.evalResult ? (
+                    <div className="max-h-[400px] overflow-auto">
+                      <OutputViewer result={activeResult.evalResult} mode={viewMode} />
+                    </div>
+                  ) : (
+                    <div className="px-4 py-6 text-center text-xs text-slate-600">
+                      {activeResult.ok
+                        ? 'Presiona ▶ Ejecutar para correr el código ST'
+                        : 'La formalización contiene errores — no se puede ejecutar'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Input original */}
