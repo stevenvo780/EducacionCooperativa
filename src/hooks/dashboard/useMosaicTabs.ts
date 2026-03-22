@@ -257,7 +257,7 @@ export function useMosaicTabs({
                 { prefix: 'semantic-browser-', name: 'Mesa Semántica', type: 'semantic-browser' },
                 { prefix: 'formalizer-', name: 'Formalizador', type: 'formalizer' },
                 { prefix: 'snippets-gallery-', name: 'Galería de Snippets', type: 'snippets-gallery' },
-                { prefix: 'files-', name: 'Archivos', type: 'files' },
+                { prefix: 'files-', name: 'Archivos', type: 'files' }
             ];
             for (const panel of specialPanels) {
                 if (docId === `${panel.prefix}${wsId}`) {

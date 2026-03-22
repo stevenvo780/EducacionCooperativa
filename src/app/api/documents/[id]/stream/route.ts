@@ -18,7 +18,7 @@ async function maybeFreshUrl(docId: string, data: Record<string, unknown>): Prom
         if (!bucket?.name) return null;
         const [freshUrl] = await bucket.file(data.storagePath as string).getSignedUrl({
             action: 'read' as const,
-            expires: Date.now() + 60 * 60 * 1000, // 1 hour
+            expires: Date.now() + 60 * 60 * 1000 // 1 hour
         });
         streamUrlThrottle.set(docId, { url: freshUrl, ts: Date.now() });
         return freshUrl;
