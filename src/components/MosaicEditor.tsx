@@ -2036,6 +2036,7 @@ export default function MosaicEditor({
             <PdfViewer
               fileUrl={fileUrl}
               fileName={safeName}
+              docId={roomId ?? undefined}
               storageKey={roomId ? `${roomId}:${fileUrl}` : fileUrl}
             />
           )}

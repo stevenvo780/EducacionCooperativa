@@ -26,6 +26,7 @@ export default function PdfDocumentViewer({
           fileUrl={fileUrl}
           fileName={docName}
           workspaceId={workspaceId}
+          docId={docId}
           storageKey={`${docId}:${fileUrl}`}
         />
       ) : (

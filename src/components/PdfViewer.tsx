@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Minus, Plus, Search, Sparkles } from 'lucide-react';
 import { createSnippet } from '@/services/snippetApi';
+import { authFetch } from '@/services/apiClient';
 
 interface PDFViewportProxy {
   width: number;
@@ -164,9 +165,11 @@ interface PdfViewerProps {
   fileName: string;
   storageKey: string;
   workspaceId?: string;
+  /** Document id – used to request a fresh signed URL when the current one has expired. */
+  docId?: string;
 }
 
-export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId }: PdfViewerProps) {
+export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, docId }: PdfViewerProps) {
   const initialViewerState = useMemo(() => readViewerState(storageKey), [storageKey]);
   const [zoomLevel, setZoomLevel] = useState(() => initialViewerState.zoomLevel);
   const [searchQuery, setSearchQuery] = useState(() => initialViewerState.searchQuery);
@@ -231,11 +234,10 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId }
     pageRefs.current = {};
 
     const loadDocument = async () => {
-      try {
+      const tryLoad = async (url: string) => {
         const pdfjs = await loadPdfJs();
         if (cancelled) return;
-
-        const nextDocument = await pdfjs.getDocument({ url: fileUrl }).promise;
+        const nextDocument = await pdfjs.getDocument({ url }).promise;
         if (cancelled) {
           await nextDocument.destroy?.();
           return;
@@ -250,8 +252,25 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId }
 
         setPageCount(nextDocument.numPages);
         setIsLoading(false);
-      } catch (error) {
-        console.warn('Falling back to browser PDF viewer', error);
+      };
+
+      try {
+        await tryLoad(fileUrl);
+      } catch (firstError) {
+        // The signed URL may have expired — try fetching a fresh one from the API.
+        if (docId && !cancelled) {
+          try {
+            const res = await authFetch(`/api/documents/${docId}`, { cache: 'no-store' });
+            if (res.ok) {
+              const data = await res.json();
+              if (typeof data?.url === 'string' && data.url !== fileUrl) {
+                await tryLoad(data.url);
+                return; // success on retry
+              }
+            }
+          } catch { /* retry also failed – fall through */ }
+        }
+        console.warn('Falling back to browser PDF viewer', firstError);
         setUseIframeFallback(true);
         setIsLoading(false);
       }
@@ -266,7 +285,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId }
       pdfDocumentRef.current = null;
       void activeDocument?.destroy?.();
     };
-  }, [fileUrl, storageKey]);
+  }, [fileUrl, storageKey, docId]);
 
   useEffect(() => {
     if (useIframeFallback || !pageCount || !pdfDocumentRef.current) return;

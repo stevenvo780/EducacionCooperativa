@@ -247,8 +247,33 @@ export function useMosaicTabs({
                 ownerId: user?.uid || 'system'
             };
         }
+        // Resolve special panel IDs dragged from the navbar
+        const wsId = currentWorkspace?.id;
+        const uid = user?.uid || 'system';
+        if (wsId) {
+            const specialPanels: Array<{ prefix: string; name: string; type: string }> = [
+                { prefix: 'board-', name: 'Tablero', type: 'board' },
+                { prefix: 'st-runner-', name: 'ST Logic', type: 'st-runner' },
+                { prefix: 'semantic-browser-', name: 'Mesa Semántica', type: 'semantic-browser' },
+                { prefix: 'formalizer-', name: 'Formalizador', type: 'formalizer' },
+                { prefix: 'snippets-gallery-', name: 'Galería de Snippets', type: 'snippets-gallery' },
+                { prefix: 'files-', name: 'Archivos', type: 'files' },
+            ];
+            for (const panel of specialPanels) {
+                if (docId === `${panel.prefix}${wsId}`) {
+                    return {
+                        id: docId,
+                        name: panel.name,
+                        type: panel.type as any,
+                        workspaceId: wsId,
+                        ownerId: uid,
+                        updatedAt: new Date()
+                    };
+                }
+            }
+        }
         return null;
-    }, [docs, openTabs, terminalSessions, user?.uid]);
+    }, [docs, openTabs, terminalSessions, user?.uid, currentWorkspace?.id]);
 
     const openDocumentInTile = useCallback(async (doc: DocItem, requestedTargetTileId?: string | null) => {
         if (doc.type === 'folder') return;
