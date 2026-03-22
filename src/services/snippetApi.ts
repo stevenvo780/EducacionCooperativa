@@ -19,7 +19,8 @@ export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => 
     cache: 'no-store'
   });
   if (!res.ok) return [];
-  return res.json();
+  const data = await res.json() as unknown;
+  return Array.isArray(data) ? data as Snippet[] : [];
 };
 
 /* ── Create a snippet ── */
@@ -348,7 +349,9 @@ const buildSnippetKey = (snippet: Pick<Snippet, 'title' | 'category'> | Omit<Sni
 
 /* ── Ensure default snippets exist for a workspace ── */
 export const seedDefaultSnippets = async (workspaceId: string, existingSnippets?: Snippet[]): Promise<Snippet[]> => {
-  const current = existingSnippets ?? await fetchSnippets(workspaceId);
+  const current = Array.isArray(existingSnippets)
+    ? existingSnippets
+    : await fetchSnippets(workspaceId);
   const existingKeys = new Set(current.map((snippet) => buildSnippetKey(snippet)));
   const missing = DEFAULT_SNIPPETS.filter((snippet) => !existingKeys.has(buildSnippetKey(snippet)));
 

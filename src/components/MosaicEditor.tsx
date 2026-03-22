@@ -60,7 +60,8 @@ import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
 import {
   BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles,
   MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote,
-  ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces, Ruler, RefreshCw
+  ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces, Ruler, RefreshCw,
+  ZoomIn, ZoomOut
 } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
@@ -112,6 +113,7 @@ import {
   registerSemanticBlock,
   registerSemanticBlockWithReference,
   relateSelectionToConcept,
+  saveSelectionNote,
   type SemanticWorkspaceState
 } from '@/services/editorSemanticStore';
 import {
@@ -181,6 +183,7 @@ export default function MosaicEditor({
   const [showCompactMenu, setShowCompactMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
@@ -200,6 +203,7 @@ export default function MosaicEditor({
     formulaCount: number;
   } | null>(null);
   const [snippetDraft, setSnippetDraft] = useState<{ markdown: string } | null>(null);
+  const [noteDraft, setNoteDraft] = useState<{ selectionText: string; note: string } | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
   const semanticSyncRequestIdRef = useRef(0);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -1434,6 +1438,26 @@ export default function MosaicEditor({
     clearSemanticSelection();
   }, [clearSemanticSelection, semanticSelection]);
 
+  const handleAddNote = useCallback(() => {
+    if (!semanticSelection) return;
+    setNoteDraft({ selectionText: semanticSelection.text, note: '' });
+    clearSemanticSelection();
+  }, [clearSemanticSelection, semanticSelection]);
+
+  const handleConfirmSaveNote = useCallback(() => {
+    if (!noteDraft?.note.trim()) return;
+    void runSemanticAction('save-note', () => {
+      const nextState = saveSelectionNote(
+        semanticStoreContext,
+        getSemanticPayload(noteDraft.selectionText),
+        noteDraft.note
+      );
+      updateSemanticState(nextState);
+      setNoteDraft(null);
+      setSemanticNotice('Nota guardada en la mesa semántica y sincronizada con Firebase.');
+    });
+  }, [getSemanticPayload, noteDraft, runSemanticAction, semanticStoreContext, updateSemanticState]);
+
   const handleConfirmSnippetSave = useCallback(async (data: { title: string; description: string; markdown: string; category: string }) => {
     const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
     const created = await createSnippet({ ...data, workspaceId, order: 0 });
@@ -2208,7 +2232,7 @@ export default function MosaicEditor({
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Panel semántico</h3>
-                  <p className="mt-1 text-[11px] leading-5 text-slate-500">Lo que guardas desde el menú contextual vive aquí: conceptos, evidencias, fijados y relaciones rápidas.</p>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">Lo que guardas desde el menú contextual vive aquí: conceptos, notas, evidencias, fijados y relaciones rápidas.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -2246,11 +2270,16 @@ export default function MosaicEditor({
                 <div className="text-[11px] text-slate-500">{semanticState.concepts.length} conceptos · {semanticState.fragments.length} fragmentos</div>
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 <SemanticPanelColumn
                   title="Conceptos"
                   emptyLabel="Aún no defines conceptos desde una selección."
                   items={semanticOverview.concepts.map((concept) => ({ title: concept.title, subtitle: concept.definition || concept.excerpt, meta: concept.definition ? `${concept.docName} · con def.` : concept.docName }))}
+                />
+                <SemanticPanelColumn
+                  title="Notas"
+                  emptyLabel="Todavía no hay notas rápidas guardadas."
+                  items={semanticOverview.notes.map((item) => ({ title: item.note || 'Nota', subtitle: item.excerpt, meta: item.docName }))}
                 />
                 <SemanticPanelColumn
                   title="Fijados"
@@ -2308,8 +2337,43 @@ export default function MosaicEditor({
                 >
                   <FileCode2 className="h-3 w-3" />
                 </button>
+
+                <div className="h-4 w-px bg-slate-700 mx-1" />
+
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                  title="Alejar (Zoom Out)"
+                >
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </button>
+
+                <span className="text-[10px] font-mono text-slate-400 min-w-[32px] text-center">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(prev => Math.min(3, prev + 0.1))}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                  title="Acercar (Zoom In)"
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(1)}
+                  className="px-2 h-8 flex items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-[10px] text-slate-400 transition hover:bg-slate-700 hover:text-white"
+                  title="Restablecer zoom"
+                >
+                  100%
+                </button>
               </div>
-              <MarkdownPreview content={statsContent || contentRef.current} onOpenInternalLink={openInternalMarkdownLink} />
+              <div className="flex-1 overflow-hidden" style={{ fontSize: `${zoomLevel * 15}px` }}>
+                <MarkdownPreview content={statsContent || contentRef.current} onOpenInternalLink={openInternalMarkdownLink} />
+              </div>
             </>
           ) : viewMode === 'raw' ? (
             <>
@@ -2457,6 +2521,7 @@ export default function MosaicEditor({
           onCreateAnalyticalCard={handleCreateAnalyticalCard}
           onCreateSemanticBlock={handleCreateSemanticBlock}
           onCreateTask={handleCreateTask}
+          onAddNote={handleAddNote}
           onMarkEvidence={handleMarkEvidence}
           onPinFragment={handlePinFragment}
           onOpenConcepts={() => undefined}
@@ -2606,6 +2671,56 @@ export default function MosaicEditor({
                 className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Definir concepto
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {noteDraft && ReactDOM.createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) { setNoteDraft(null); } }}
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-100">
+              <PenLine className="h-4 w-4 text-amber-300" />
+              Guardar nota semántica
+            </h3>
+            <div className="mb-3 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-400">
+              <span className="font-medium text-slate-300">Texto señalado:</span>{' '}
+              {noteDraft.selectionText.length > 240
+                ? `${noteDraft.selectionText.slice(0, 237)}…`
+                : noteDraft.selectionText}
+            </div>
+            <label className="mb-1 block text-[11px] font-medium text-slate-400">Comentario</label>
+            <textarea
+              value={noteDraft.note}
+              onChange={(e) => setNoteDraft({ ...noteDraft, note: e.target.value })}
+              placeholder="Escribe una observación breve, una hipótesis o un recordatorio para este fragmento..."
+              rows={5}
+              autoFocus
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-amber-400/60"
+            />
+            <p className="mt-2 text-[11px] leading-5 text-slate-500">
+              La nota se guarda en la mesa semántica del workspace y queda persistida en Firebase para volver a verla desde cualquier sesión.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNoteDraft(null)}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSaveNote}
+                disabled={!noteDraft.note.trim()}
+                className="rounded-lg bg-amber-500 px-4 py-2 text-xs font-medium text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Guardar nota
               </button>
             </div>
           </div>

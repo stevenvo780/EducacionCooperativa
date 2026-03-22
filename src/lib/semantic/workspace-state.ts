@@ -1,10 +1,11 @@
-export type SemanticFragmentKind = 'concept' | 'evidence' | 'pinned' | 'relation' | 'semantic-block';
+export type SemanticFragmentKind = 'concept' | 'evidence' | 'pinned' | 'relation' | 'semantic-block' | 'note';
 
 export interface SemanticFragmentRecord {
   id: string;
   kind: SemanticFragmentKind;
   text: string;
   excerpt: string;
+  note?: string;
   docId: string | null;
   docName: string;
   workspaceId: string;
@@ -107,11 +108,13 @@ const normalizeFragment = (value: unknown): SemanticFragmentRecord | null => {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Partial<SemanticFragmentRecord>;
   if (typeof raw.id !== 'string' || typeof raw.kind !== 'string' || typeof raw.selectionHash !== 'string') return null;
+  const normalizedNote = typeof raw.note === 'string' ? raw.note.trim() : '';
   return {
     id: raw.id,
     kind: raw.kind as SemanticFragmentKind,
     text: typeof raw.text === 'string' ? raw.text : '',
     excerpt: typeof raw.excerpt === 'string' ? raw.excerpt : '',
+    ...(normalizedNote ? { note: normalizedNote } : {}),
     docId: typeof raw.docId === 'string' ? raw.docId : null,
     docName: typeof raw.docName === 'string' ? raw.docName : 'Documento',
     workspaceId: typeof raw.workspaceId === 'string' ? raw.workspaceId : '',
@@ -297,6 +300,7 @@ export const getRecentSemanticItems = (state: SemanticWorkspaceState) => {
   const normalized = normalizeSemanticWorkspaceState(state);
   return {
     concepts: normalized.concepts.slice(0, 5),
+    notes: normalized.fragments.filter((item) => item.kind === 'note').slice(0, 5),
     pinned: normalized.fragments.filter((item) => item.kind === 'pinned').slice(0, 5),
     evidence: normalized.fragments.filter((item) => item.kind === 'evidence').slice(0, 5),
     relations: normalized.relations.slice(0, 5)
