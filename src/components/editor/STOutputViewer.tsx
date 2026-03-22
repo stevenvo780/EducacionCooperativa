@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Code2, Eye, Terminal, ChevronRight, ChevronDown } from 'lucide-react';
+import { Code2, Eye, Terminal, ChevronRight, ChevronDown, Check, X, AlertTriangle, Info } from 'lucide-react';
 import type { STEvalResult } from '@stevenvo780/st-lang/api';
 import type {
   Formula,
@@ -280,20 +280,20 @@ function JsonView({ result }: { result: STEvalResult }) {
 
 /** Indicador de estado lógico */
 function StatusChip({ status }: { status: string }) {
-  const map: Record<string, { bg: string; text: string; label: string }> = {
-    valid: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: '✓ Válido' },
-    invalid: { bg: 'bg-red-500/20', text: 'text-red-400', label: '✗ Inválido' },
-    satisfiable: { bg: 'bg-sky-500/20', text: 'text-sky-400', label: '◎ Satisfacible' },
-    unsatisfiable: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: '⊘ Insatisfacible' },
-    provable: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: '✓ Demostrable' },
-    refutable: { bg: 'bg-red-500/20', text: 'text-red-400', label: '✗ Refutable' },
-    unknown: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: '? Desconocido' },
-    error: { bg: 'bg-red-600/20', text: 'text-red-500', label: '⚠ Error' }
+  const map: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
+    valid: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', icon: <Check className="w-2.5 h-2.5" />, label: 'Válido' },
+    invalid: { bg: 'bg-red-500/20', text: 'text-red-400', icon: <X className="w-2.5 h-2.5" />, label: 'Inválido' },
+    satisfiable: { bg: 'bg-sky-500/20', text: 'text-sky-400', icon: null, label: '◎ Satisfacible' },
+    unsatisfiable: { bg: 'bg-amber-500/20', text: 'text-amber-400', icon: null, label: '⊘ Insatisfacible' },
+    provable: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', icon: <Check className="w-2.5 h-2.5" />, label: 'Demostrable' },
+    refutable: { bg: 'bg-red-500/20', text: 'text-red-400', icon: <X className="w-2.5 h-2.5" />, label: 'Refutable' },
+    unknown: { bg: 'bg-slate-500/20', text: 'text-slate-400', icon: null, label: '? Desconocido' },
+    error: { bg: 'bg-red-600/20', text: 'text-red-500', icon: <AlertTriangle className="w-2.5 h-2.5" />, label: 'Error' }
   };
   const s = map[status] ?? map['unknown'];
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${s.bg} ${s.text}`}>
-      {s.label}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${s.bg} ${s.text}`}>
+      {s.icon}{s.label}
     </span>
   );
 }
@@ -865,7 +865,11 @@ function RunResultCard({ result, index }: { result: RunResult; index: number }) 
                         : 'text-slate-500'
                   }`}
                 >
-                  {d.severity === 'error' ? '✗' : d.severity === 'warning' ? '⚠' : 'ℹ'}{' '}
+                  {d.severity === 'error'
+                    ? <X className="w-3 h-3 inline mr-1" />
+                    : d.severity === 'warning'
+                      ? <AlertTriangle className="w-3 h-3 inline mr-1" />
+                      : <Info className="w-3 h-3 inline mr-1" />}
                   {d.message}
                 </div>
               ))}

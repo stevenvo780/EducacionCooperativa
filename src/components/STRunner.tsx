@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown, Save, Loader2 } from 'lucide-react';
+import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown, Save, Loader2, Check, X, Lightbulb } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
@@ -52,7 +52,7 @@ function StatusBadge({ ok }: { ok: boolean }) {
           : 'bg-red-500/20 text-red-400'
       }`}
     >
-      {ok ? '✓ OK' : '✗ Error'}
+      {ok ? <><Check className="w-3 h-3 inline mr-1" />OK</> : <><X className="w-3 h-3 inline mr-1" />Error</>}
     </span>
   );
 }
@@ -105,9 +105,9 @@ function ProblemsPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
 
   const severityIcon = (severity: string) => {
     switch (severity) {
-      case 'error': return <span className="text-red-400">✗</span>;
-      case 'warning': return <span className="text-amber-400">⚠</span>;
-      case 'hint': return <span className="text-blue-400">ℹ</span>;
+      case 'error': return <X className="w-3 h-3 text-red-400" />;
+      case 'warning': return <AlertTriangle className="w-3 h-3 text-amber-400" />;
+      case 'hint': return <Info className="w-3 h-3 text-blue-400" />;
       default: return <span className="text-slate-400">·</span>;
     }
   };
@@ -137,7 +137,7 @@ function ProblemsPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
               <span className="text-slate-600 ml-2">[{d.code}]</span>
             )}
             {d.suggestion && (
-              <div className="text-cyan-400/80 mt-0.5">💡 {d.suggestion}</div>
+              <div className="flex items-start gap-1 text-cyan-400/80 mt-0.5"><Lightbulb className="w-3 h-3 mt-0.5 shrink-0" />{d.suggestion}</div>
             )}
           </div>
         </div>

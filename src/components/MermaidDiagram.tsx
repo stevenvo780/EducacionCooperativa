@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 const MERMAID_CDN = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
 const LOAD_TIMEOUT = 15000;
@@ -207,7 +208,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
       )}
       {state === 'error' && (
         <div className="mermaid-error">
-          <div className="mermaid-error-label">⚠ Error en diagrama Mermaid</div>
+          <div className="mermaid-error-label flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Error en diagrama Mermaid</div>
           <pre className="mermaid-error-detail">{errorMsg}</pre>
           <pre className="mermaid-error-source">{chart}</pre>
         </div>

@@ -278,7 +278,7 @@ export const FEATURE_LABELS: Record<EditorFeature, string> = {
   autocomplete: 'Autocompletado',
   lint: 'Diagnósticos',
   hover: 'Tooltips al hover',
-  lightTheme: 'Tema claro ☀️'
+  lightTheme: 'Tema claro'
 };
 
 export const ALL_FEATURES: EditorFeature[] = [

@@ -1,9 +1,21 @@
 'use client';
 
 import React, { useState, useCallback, useSyncExternalStore } from 'react';
-import { Settings2, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Settings2, RotateCcw, ChevronDown, ChevronRight, X, PenLine, Layers, Link, BookOpen, Accessibility, RefreshCw, AlignJustify, GraduationCap, Ruler } from 'lucide-react';
 import { MarkdownLinterRegistry, type RuleState } from '@/lib/markdown-linter/registry';
-import { RULE_CATEGORY_LABELS, RULE_CATEGORY_ICONS, type RuleCategory } from '@/lib/markdown-linter/types';
+import { RULE_CATEGORY_LABELS, type RuleCategory } from '@/lib/markdown-linter/types';
+
+const RULE_CATEGORY_ICONS: Record<RuleCategory, React.ReactNode> = {
+  spelling: <PenLine className="w-3 h-3" />,
+  structure: <Layers className="w-3 h-3" />,
+  links: <Link className="w-3 h-3" />,
+  readability: <BookOpen className="w-3 h-3" />,
+  accessibility: <Accessibility className="w-3 h-3" />,
+  consistency: <RefreshCw className="w-3 h-3" />,
+  whitespace: <AlignJustify className="w-3 h-3" />,
+  academic: <GraduationCap className="w-3 h-3" />,
+  semantic: <Ruler className="w-3 h-3" />,
+};
 
 // ── Sync with registry ──────────────────────────────────────
 
@@ -79,7 +91,7 @@ export function LinterConfigPanel() {
             onClick={() => setOpen(false)}
             className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-colors"
           >
-            ✕
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

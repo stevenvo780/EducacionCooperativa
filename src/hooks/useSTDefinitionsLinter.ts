@@ -14,15 +14,15 @@ const EXCERPT_MAX_CHARS = 96;
  */
 function kindIcon(kind: STDefinition['kind']): string {
   switch (kind) {
-    case 'define': return '📐';
-    case 'axiom': return '📜';
-    case 'theorem': return '🏛️';
-    case 'let': return '📎';
-    case 'source': return '📖';
-    case 'theory': return '🏗️';
-    case 'function': return '⚙️';
-    case 'interpretation': return '🔍';
-    default: return '🔹';
+    case 'define': return '[def]';
+    case 'axiom': return '[axiom]';
+    case 'theorem': return '[thm]';
+    case 'let': return '[let]';
+    case 'source': return '[src]';
+    case 'theory': return '[theory]';
+    case 'function': return '[fn]';
+    case 'interpretation': return '[interp]';
+    default: return '[·]';
   }
 }
 

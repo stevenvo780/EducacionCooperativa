@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, BookOpen, Bot, Check, ChevronRight, Copy, Download, ExternalLink,
-  FlaskConical, Info, Layers3, Scale, ShieldAlert, Sigma, Terminal
+  FlaskConical, Info, Layers3, Scale, ShieldAlert, Sigma, Terminal, X, AlertTriangle
 } from 'lucide-react';
 import CopyBlock from '@/components/docs/STDocCodeBlock';
 
@@ -1933,17 +1933,17 @@ export default function STDocsPage() {
                         )}
                         {/* Ejemplo válido */}
                         <div>
-                          <h5 className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2">✓ Ejemplo Válido</h5>
+                          <h5 className="flex items-center gap-1 text-xs font-bold text-emerald-500 uppercase tracking-widest mb-2"><Check className="w-3 h-3" />Ejemplo Válido</h5>
                           <CopyBlock code={p.validExample} />
                         </div>
                         {/* Ejemplo inválido */}
                         <div>
-                          <h5 className="text-xs font-bold text-red-400 uppercase tracking-widest mb-2">✗ Ejemplo Inválido / Contramodelo</h5>
+                          <h5 className="flex items-center gap-1 text-xs font-bold text-red-400 uppercase tracking-widest mb-2"><X className="w-3 h-3" />Ejemplo Inválido / Contramodelo</h5>
                           <CopyBlock code={p.invalidExample} />
                         </div>
                         {/* Límites */}
                         <div>
-                          <h5 className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-2">⚠ Limitaciones del Motor</h5>
+                          <h5 className="flex items-center gap-1 text-xs font-bold text-amber-400 uppercase tracking-widest mb-2"><AlertTriangle className="w-3 h-3" />Limitaciones del Motor</h5>
                           <BulletList items={p.limits} />
                         </div>
                         {/* Download */}

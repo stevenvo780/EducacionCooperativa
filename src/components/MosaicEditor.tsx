@@ -57,7 +57,7 @@ import { mermaidCodeBlockDescriptor } from '@/components/mosaic-editor/MermaidCo
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
-import { BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces } from 'lucide-react';
+import { BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces, Ruler, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
@@ -1381,7 +1381,7 @@ export default function MosaicEditor({
           await Promise.all(companionDocs.map((doc: DocItem) => updateDocumentApi(doc.id, { content: stContent })));
           if (!companionStDocId) setCompanionStDocId(companionDocs[0].id);
           syncRegistry();
-          setSemanticNotice(`📐 Concepto registrado → ${stFileName} actualizado.`);
+          setSemanticNotice(`Concepto registrado → ${stFileName} actualizado.`);
         } else {
           /* Create a new companion */
           const result = await createDocumentApi({
@@ -1397,7 +1397,7 @@ export default function MosaicEditor({
             companionDocs.push({ id: result.id, name: stFileName } as DocItem);
           }
           syncRegistry();
-          setSemanticNotice(`📐 Concepto registrado → ${stFileName} creado en ${folder}/.`);
+          setSemanticNotice(`Concepto registrado → ${stFileName} creado en ${folder}/.`);
           window.dispatchEvent(new CustomEvent('agora:docs-changed'));
         }
 
@@ -1409,7 +1409,7 @@ export default function MosaicEditor({
         }
       } catch (error) {
         console.error('Error auto-generating ST companion:', error);
-        setSemanticNotice('📐 Concepto registrado, pero falló la generación del archivo ST.');
+        setSemanticNotice('Concepto registrado, pero falló la generación del archivo ST.');
       }
     });
   }, [autologicPreview, clearSemanticSelection, companionStDocId, currentWorkspaceId, defineConceptDraft, docName, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, updateSemanticState, user?.uid]);
@@ -2222,7 +2222,9 @@ export default function MosaicEditor({
                       className="rounded-full border border-emerald-700/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-300 transition hover:bg-emerald-500/20"
                       title={companionStDocId ? 'Actualizar archivo .st companion' : 'Crear archivo .st con definiciones'}
                     >
-                      {companionStDocId ? '↻ Actualizar ST' : '📐 Generar ST'}
+                      {companionStDocId
+                        ? <><RefreshCw className="w-3 h-3 inline mr-1" />Actualizar ST</>
+                        : <><Ruler className="w-3 h-3 inline mr-1" />Generar ST</>}
                     </button>
                   </div>
                 </div>
@@ -2504,7 +2506,7 @@ export default function MosaicEditor({
             />
             <details className="mb-3 rounded-lg border border-slate-800 bg-slate-950/60">
               <summary className="cursor-pointer px-3 py-2 text-[11px] font-medium text-slate-400 select-none flex items-center gap-1.5">
-                <span>📐 Formalización ST</span>
+                <span className="flex items-center gap-1"><Ruler className="w-3 h-3" />Formalización ST</span>
                 <span className="text-slate-600">(opcional)</span>
               </summary>
               <div className="px-3 pb-3 pt-1 space-y-2">

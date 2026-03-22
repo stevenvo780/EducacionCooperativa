@@ -48,17 +48,6 @@ export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   semantic: 'Semántica ST'
 };
 
-export const RULE_CATEGORY_ICONS: Record<RuleCategory, string> = {
-  spelling: '📝',
-  structure: '🏗️',
-  links: '🔗',
-  readability: '📖',
-  accessibility: '♿',
-  consistency: '🔄',
-  whitespace: '⬜',
-  academic: '🎓',
-  semantic: '📐'
-};
 
 // ── Definición de regla (plugin) ────────────────────────────
 

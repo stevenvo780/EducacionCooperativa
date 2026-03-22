@@ -165,7 +165,7 @@ export function useWorkspaceActions({
             setShowMembersModal(false);
             await showDialog({
                 type: DialogKind.Info,
-                title: '✉️ Invitación enviada',
+                title: 'Invitación enviada',
                 message: `Se ha enviado una invitación a "${emailToInvite}". Cuando el usuario acepte, aparecerá como miembro del espacio.`
             });
         } catch (e) {
