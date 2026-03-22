@@ -692,7 +692,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         userId={currentUserId}
                       />
                   ) : isFormalizer ? (
-                      <FormalizerPlayground embedded />
+                      <FormalizerPlayground />
                   ) : isStFile ? (
                       <STFileEditor
                         docId={doc.id}
