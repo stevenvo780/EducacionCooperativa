@@ -64,6 +64,7 @@ interface HeaderBarProps {
   isFormalizerOpen: boolean;
   onOpenFormalizer: () => void;
   formalizerTileId: string | null;
+  onOpenSnippetsGallery: () => void;
   onOpenQuickSearch: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
@@ -122,6 +123,7 @@ const HeaderBar = ({
   isFormalizerOpen,
   onOpenFormalizer,
   formalizerTileId,
+  onOpenSnippetsGallery,
   onOpenQuickSearch,
   onAcceptInvite,
   onSelectWorkspace,
@@ -605,6 +607,25 @@ const HeaderBar = ({
         >
           <Zap className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">Formalizar</span>
+        </button>
+        <button
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            const id = currentWorkspace ? `snippets-gallery-${currentWorkspace.id}` : '';
+            e.dataTransfer.setData('application/x-doc-id', id);
+            e.dataTransfer.setData('text/plain', id);
+          }}
+          onClick={onOpenSnippetsGallery}
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
+            openTabs.some(t => t.type === ('snippets-gallery' as any))
+              ? 'bg-amber-500/15 text-amber-300'
+              : 'text-surface-500 hover:text-amber-400 hover:bg-amber-500/10'
+          }`}
+          title="Galería de Snippets (arrastrar al grid)"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Snippets</span>
         </button>
         <button
           onClick={openFilesTab}

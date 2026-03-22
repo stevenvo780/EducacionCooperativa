@@ -750,6 +750,7 @@ function DashboardContent() {
         openSemanticBrowser,
         openFormalizer,
         openFilesTab,
+        openSnippetsGallery,
         closeTabById,
         openDocument,
         openDocumentInTile,
@@ -1532,6 +1533,7 @@ function DashboardContent() {
                         isFormalizerOpen={isFormalizerOpen}
                         onOpenFormalizer={openFormalizer}
                         formalizerTileId={formalizerTabId}
+                        onOpenSnippetsGallery={openSnippetsGallery}
                         onOpenQuickSearch={openQuickSearch}
                         onAcceptInvite={acceptInvite}
                         onSelectWorkspace={selectWorkspace}

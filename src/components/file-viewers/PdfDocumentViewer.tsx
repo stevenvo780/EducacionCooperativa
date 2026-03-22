@@ -6,6 +6,7 @@ import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 
 interface PdfDocumentViewerProps {
   docId: string;
+  workspaceId?: string;
   docName: string;
   fileUrl: string | null;
   onClose?: () => void;
@@ -13,6 +14,7 @@ interface PdfDocumentViewerProps {
 
 export default function PdfDocumentViewer({
   docId,
+  workspaceId,
   docName,
   fileUrl,
   onClose
@@ -23,6 +25,7 @@ export default function PdfDocumentViewer({
         <PdfViewer
           fileUrl={fileUrl}
           fileName={docName}
+          workspaceId={workspaceId}
           storageKey={`${docId}:${fileUrl}`}
         />
       ) : (

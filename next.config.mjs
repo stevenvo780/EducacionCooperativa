@@ -3,7 +3,10 @@ import runtimeCaching from 'next-pwa/cache.js';
 
 const withPWA = withPWAInit({
   dest: 'public',
-  disable: process.env.NODE_ENV === 'development',
+  disable: process.env.NODE_ENV === 'development' || process.env.DISABLE_PWA === 'true',
+  register: true,
+  skipWaiting: true,
+  cacheOnFrontEndNav: true,
   runtimeCaching: [
     {
       urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/documents'),
@@ -22,18 +25,24 @@ const withPWA = withPWAInit({
       }
     },
     {
-      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/'),
-      handler: 'NetworkFirst',
-      method: 'GET',
+      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
+      handler: 'StaleWhileRevalidate',
       options: {
-        cacheName: 'api-general',
-        networkTimeoutSeconds: 10,
+        cacheName: 'static-images',
         expiration: {
           maxEntries: 100,
-          maxAgeSeconds: 24 * 60 * 60 // 1 day
-        },
-        cacheableResponse: {
-          statuses: [0, 200]
+          maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+        }
+      }
+    },
+    {
+      urlPattern: /\.(?:woff|woff2|eot|ttf|otf)$/,
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'static-fonts',
+        expiration: {
+          maxEntries: 20,
+          maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
         }
       }
     },

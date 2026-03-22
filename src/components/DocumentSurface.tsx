@@ -18,6 +18,7 @@ interface SearchState {
 
 interface DocumentSurfaceProps {
   roomId: string;
+  workspaceId?: string;
   onClose?: () => void;
   embedded?: boolean;
   initialContent?: string;
@@ -52,6 +53,7 @@ const canResolveWithoutFetch = (meta: ResolvedDocumentMeta | null) => {
 
 export default function DocumentSurface({
   roomId,
+  workspaceId,
   onClose,
   embedded,
   initialContent,
@@ -162,6 +164,7 @@ export default function DocumentSurface({
     return (
       <FileDocumentViewer
         docId={roomId}
+        workspaceId={workspaceId}
         docName={docName}
         mimeType={mimeType}
         fileUrl={docMeta?.url ?? null}

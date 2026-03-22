@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
 import StoreProvider from '@/components/StoreProvider';
+import PWAUpdater from '@/components/PWAUpdater';
 
 export const viewport: Viewport = {
   themeColor: '#000000',
@@ -29,15 +30,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="es">
-      <body className="">
+      <body className="" suppressHydrationWarning>
         <StoreProvider>
           <AuthProvider>
             {children}
+            <PWAUpdater />
           </AuthProvider>
         </StoreProvider>
       </body>
