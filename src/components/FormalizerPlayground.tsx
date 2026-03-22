@@ -1,14 +1,9 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import Link from 'next/link';
 import { formalize, type LogicProfile } from '@stevenvo780/autologic';
 
 /* ── Tipos ──────────────────────────────────────────────────── */
-
-interface FormalizerPlaygroundProps {
-  embedded?: boolean;
-}
 
 interface FormalizeResult {
   id: string;
@@ -148,7 +143,7 @@ const EXAMPLES: { label: string; text: string; profile: LogicProfile }[] = [
 
 /* ── Componente principal ───────────────────────────────────── */
 
-export default function FormalizerPlayground({ embedded = false }: FormalizerPlaygroundProps) {
+export default function FormalizerPlayground() {
   const [input, setInput] = useState('');
   const [profile, setProfile] = useState<LogicProfile>('classical.propositional');
   const [results, setResults] = useState<FormalizeResult[]>([]);
@@ -283,60 +278,26 @@ export default function FormalizerPlayground({ embedded = false }: FormalizerPla
   const avgTime = totalRuns > 0 ? Math.round(results.reduce((s, r) => s + r.elapsed, 0) / totalRuns) : 0;
 
   return (
-    <div className={embedded ? 'h-full overflow-auto bg-[#0a0a0f] text-slate-200' : 'min-h-screen bg-[#0a0a0f] text-slate-200'}>
-      {/* ── Header ──────────────────────────────────────────── */}
-      {!embedded && (
-        <header className="sticky top-0 z-30 border-b border-slate-800 bg-[#0a0a0f]/95 backdrop-blur">
-          <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Link href="/" className="text-slate-500 hover:text-slate-300 transition text-sm">← Agora</Link>
-              <h1 className="text-lg font-bold tracking-tight">
-                <span className="text-cyan-400">⚡</span> Formalizador ST
-              </h1>
-              <span className="rounded bg-cyan-950/50 px-2 py-0.5 text-[10px] font-mono text-cyan-400 border border-cyan-900/40">
-                autologic v2
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-slate-500">
-              {totalRuns > 0 && (
-                <span>
-                  {successRuns}/{totalRuns} OK · {avgTime}ms avg
-                </span>
-              )}
-              <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={autoRun}
-                  onChange={(e) => setAutoRun(e.target.checked)}
-                  className="accent-cyan-500 h-3.5 w-3.5"
-                />
-                Auto-run
-              </label>
-            </div>
-          </div>
-        </header>
-      )}
-
-      {embedded && (
-        <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-cyan-400 text-xs">⚡</span>
-            <span className="text-[10px] font-medium text-slate-400">Formalizador ST</span>
-            <span className="rounded bg-cyan-950/50 px-1.5 py-0.5 text-[9px] font-mono text-cyan-400/70 border border-cyan-900/30">
-              v2
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-[10px] text-slate-500">
-            {totalRuns > 0 && <span>{successRuns}/{totalRuns} OK · {avgTime}ms avg</span>}
-            <label className="flex items-center gap-1 cursor-pointer select-none">
-              <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} className="accent-cyan-500 h-3 w-3" />
-              Auto
-            </label>
-          </div>
+    <div className="h-full overflow-auto bg-[#0a0a0f] text-slate-200">
+      {/* ── Header compacto ─────────────────────────────────── */}
+      <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-cyan-400 text-xs">⚡</span>
+          <span className="text-[10px] font-medium text-slate-400">Formalizador ST</span>
+          <span className="rounded bg-cyan-950/50 px-1.5 py-0.5 text-[9px] font-mono text-cyan-400/70 border border-cyan-900/30">
+            v2
+          </span>
         </div>
-      )}
+        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+          {totalRuns > 0 && <span>{successRuns}/{totalRuns} OK · {avgTime}ms avg</span>}
+          <label className="flex items-center gap-1 cursor-pointer select-none">
+            <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} className="accent-cyan-500 h-3 w-3" />
+            Auto
+          </label>
+        </div>
+      </div>
 
-      <div className={embedded ? 'p-2' : 'mx-auto max-w-[1600px] p-4'}>
+      <div className="p-2">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-4">
 
           {/* ── Panel izquierdo: Input ──────────────────────── */}
