@@ -685,18 +685,19 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         ownerId={doc.ownerId ?? currentUserId}
                       />
                   ) : isStRunner ? (
-                      <STRunner height="100%" />
+                      <STRunner height="100%" workspaceId={currentWorkspaceId} />
                   ) : isSemanticBrowser ? (
                       <GlobalSemanticBrowser
                         workspaceId={currentWorkspaceId}
                         userId={currentUserId}
                       />
                   ) : isFormalizer ? (
-                      <FormalizerPlayground />
+                      <FormalizerPlayground workspaceId={currentWorkspaceId} />
                   ) : isStFile ? (
                       <STFileEditor
                         docId={doc.id}
                         docName={doc.name}
+                        workspaceId={doc.workspaceId ?? currentWorkspaceId}
                       />
                   ) : (
                       <Editor

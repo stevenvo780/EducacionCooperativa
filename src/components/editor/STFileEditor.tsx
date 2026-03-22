@@ -11,9 +11,10 @@ import { Loader2 } from 'lucide-react';
 interface STFileEditorProps {
   docId: string;
   docName: string;
+  workspaceId?: string;
 }
 
-export default function STFileEditor({ docId, docName }: STFileEditorProps) {
+export default function STFileEditor({ docId, docName, workspaceId }: STFileEditorProps) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -217,6 +218,7 @@ export default function STFileEditor({ docId, docName }: STFileEditorProps) {
   return (
     <STRunner
       initialCode={content}
+      workspaceId={workspaceId}
       className="h-full border-0 rounded-none"
       fileMode={{
         docName,

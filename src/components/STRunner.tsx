@@ -9,6 +9,8 @@ import EditorSettingsMenu from '@/components/editor/EditorSettingsMenu';
 import { type EditorConfig, loadConfig, isTouchDeviceProfile } from '@/components/editor/codemirror';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
+import SnippetGallery from '@/components/SnippetGallery';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 // ── Constantes ──────────────────────────────────────────────
 
@@ -207,6 +209,8 @@ interface STRunnerProps {
   onExecute?: (code: string, result: STEvalResult) => void;
   /** Clase CSS extra */
   className?: string;
+  /** Workspace para snippets dinámicos */
+  workspaceId?: string;
   /** Modo editor de archivo: permite guardar y manejar cambios externos */
   fileMode?: {
     docName: string;
@@ -223,6 +227,7 @@ export default function STRunner({
   height = '100%',
   onExecute,
   className = '',
+  workspaceId = PERSONAL_WORKSPACE_ID,
   fileMode
 }: STRunnerProps) {
   const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles, isRunning, getSymbols, validate, lastDiagnostics } =
@@ -253,6 +258,7 @@ export default function STRunner({
   const [isResizingOutput, setIsResizingOutput] = useState(false);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(loadConfig);
   const isTouchTablet = useMemo(() => isTouchDeviceProfile(), []);
+  const [showSnippetGallery, setShowSnippetGallery] = useState(false);
 
   const runAnalysis = useCallback(() => {
     const diagnostics = validate(code);
@@ -339,6 +345,15 @@ export default function STRunner({
   const handleAnalyze = useCallback(() => {
     runAnalysis();
   }, [runAnalysis]);
+
+  const handleInsertSnippet = useCallback((snippetContent: string) => {
+    const normalized = snippetContent.trim();
+    if (!normalized) return;
+    const nextCode = code.trim()
+      ? `${code.replace(/\s+$/, '')}\n\n${normalized}\n`
+      : `${normalized}\n`;
+    setCode(nextCode);
+  }, [code, setCode]);
 
   // ── Ejecutar línea REPL ──
   const handleReplSubmit = useCallback(() => {
@@ -548,113 +563,135 @@ export default function STRunner({
           <Trash2 className="w-3.5 h-3.5" />
         </button>
 
+        <button
+          onClick={() => setShowSnippetGallery((current) => !current)}
+          className={`p-1.5 rounded transition ${showSnippetGallery ? 'bg-blue-600/20 text-blue-300' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+          title={showSnippetGallery ? 'Ocultar snippets ST' : 'Mostrar snippets ST'}
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+        </button>
+
         <EditorSettingsMenu config={editorConfig} onChange={setEditorConfig} />
       </div>
 
       {/* ── Body ── */}
-      <div className="flex flex-col flex-1 overflow-hidden st-runner-body relative">
-        {/* Global overlay during output resizing to prevent iframe interference */}
-        {isResizingOutput && (
-          <div
-            className="fixed inset-0 z-[100] cursor-row-resize"
-            onMouseUp={stopResizingOutput}
-          />
+      <div className="flex flex-1 overflow-hidden">
+        {showSnippetGallery && (
+          <div className="w-80 shrink-0 border-r border-slate-800 overflow-y-auto bg-slate-900">
+            <SnippetGallery
+              workspaceId={workspaceId}
+              allowedCategories={['st']}
+              title="Snippets ST"
+              emptyLabel="Todavía no hay snippets ST en este workspace."
+              onInsert={handleInsertSnippet}
+              onClose={() => setShowSnippetGallery(false)}
+            />
+          </div>
         )}
-        {mode === 'script' ? (
-          /* Script mode: editor arriba, output con tabs abajo */
-          <>
-            <div className="flex-1 min-h-[100px] border-b border-slate-800 relative">
-              <STCodeEditor
-                value={code}
-                onChange={setCode}
-                onKeyDown={handleCodeKeyDown}
-                placeholder="// Escribe tu script ST aquí..."
-                className="bg-slate-950 h-full"
-                diagnostics={lastDiagnostics}
-                editorConfig={editorConfig}
-              />
-            </div>
 
-            {/* Resize Handle and Tabs */}
-            <div className="flex flex-col flex-shrink-0 bg-slate-900 border-t border-slate-800">
-              {/* Actual resize handle bar */}
-              <div
-                onMouseDown={startResizingOutput}
-                className={`h-1 cursor-row-resize hover:bg-indigo-500/50 transition-colors ${isResizingOutput ? 'bg-indigo-500' : 'bg-transparent'}`}
-                title="Redimensionar salida"
-              />
+        <div className="flex flex-col flex-1 overflow-hidden st-runner-body relative">
+          {/* Global overlay during output resizing to prevent iframe interference */}
+          {isResizingOutput && (
+            <div
+              className="fixed inset-0 z-[100] cursor-row-resize"
+              onMouseUp={stopResizingOutput}
+            />
+          )}
+          {mode === 'script' ? (
+            /* Script mode: editor arriba, output con tabs abajo */
+            <>
+              <div className="flex-1 min-h-[100px] border-b border-slate-800 relative">
+                <STCodeEditor
+                  value={code}
+                  onChange={setCode}
+                  onKeyDown={handleCodeKeyDown}
+                  placeholder="// Escribe tu script ST aquí..."
+                  className="bg-slate-950 h-full"
+                  diagnostics={lastDiagnostics}
+                  editorConfig={editorConfig}
+                />
+              </div>
 
-              <div className="flex items-center gap-0 border-b border-slate-800 px-1">
-                <button
-                  onClick={() => setActiveTab('output')}
-                  className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
-                    activeTab === 'output'
-                      ? 'border-indigo-500 text-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  <Terminal className="w-3 h-3 inline mr-1" />
-                  Salida
-                </button>
-                <button
-                  onClick={() => setActiveTab('problems')}
-                  className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
-                    activeTab === 'problems'
-                      ? 'border-amber-500 text-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  <AlertTriangle className="w-3 h-3 inline mr-1" />
-                  Problemas
-                  {lastDiagnostics.length > 0 && (
-                    <span className={`ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
-                      lastDiagnostics.some(d => d.severity === 'error')
-                        ? 'bg-red-500/30 text-red-400'
-                        : 'bg-amber-500/30 text-amber-400'
-                    }`}>
-                      {lastDiagnostics.length}
-                    </span>
+              {/* Resize Handle and Tabs */}
+              <div className="flex flex-col flex-shrink-0 bg-slate-900 border-t border-slate-800">
+                {/* Actual resize handle bar */}
+                <div
+                  onMouseDown={startResizingOutput}
+                  className={`h-1 cursor-row-resize hover:bg-indigo-500/50 transition-colors ${isResizingOutput ? 'bg-indigo-500' : 'bg-transparent'}`}
+                  title="Redimensionar salida"
+                />
+
+                <div className="flex items-center gap-0 border-b border-slate-800 px-1">
+                  <button
+                    onClick={() => setActiveTab('output')}
+                    className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                      activeTab === 'output'
+                        ? 'border-indigo-500 text-white'
+                        : 'border-transparent text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    <Terminal className="w-3 h-3 inline mr-1" />
+                    Salida
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('problems')}
+                    className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                      activeTab === 'problems'
+                        ? 'border-amber-500 text-white'
+                        : 'border-transparent text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3 h-3 inline mr-1" />
+                    Problemas
+                    {lastDiagnostics.length > 0 && (
+                      <span className={`ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
+                        lastDiagnostics.some(d => d.severity === 'error')
+                          ? 'bg-red-500/30 text-red-400'
+                          : 'bg-amber-500/30 text-amber-400'
+                      }`}>
+                        {lastDiagnostics.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('symbols')}
+                    className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                      activeTab === 'symbols'
+                        ? 'border-emerald-500 text-white'
+                        : 'border-transparent text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    <List className="w-3 h-3 inline mr-1" />
+                    Símbolos
+                    {currentSymbols.length > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-emerald-500/30 text-emerald-400">
+                        {currentSymbols.length}
+                      </span>
+                    )}
+                  </button>
+                  <div className="flex-1" />
+                  {activeTab === 'output' && (
+                    <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                   )}
-                </button>
-                <button
-                  onClick={() => setActiveTab('symbols')}
-                  className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
-                    activeTab === 'symbols'
-                      ? 'border-emerald-500 text-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  <List className="w-3 h-3 inline mr-1" />
-                  Símbolos
-                  {currentSymbols.length > 0 && (
-                    <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-emerald-500/30 text-emerald-400">
-                      {currentSymbols.length}
-                    </span>
-                  )}
-                </button>
-                <div className="flex-1" />
-                {activeTab === 'output' && (
-                  <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                  <button
+                    onClick={() => setShowOutput(prev => !prev)}
+                    className="px-3 py-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+                    title={showOutput ? 'Ocultar panel' : 'Mostrar panel'}
+                  >
+                    {showOutput ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {showOutput && (
+                  <div style={{ height: outputHeight }} className="flex flex-col bg-slate-900/50 overflow-hidden flex-shrink-0">
+                    {activeTab === 'output' && <HistoryPanel entries={history} viewMode={viewMode} />}
+                    {activeTab === 'problems' && <ProblemsPanel diagnostics={lastDiagnostics} />}
+                    {activeTab === 'symbols' && <SymbolsPanel symbolsList={currentSymbols} />}
+                  </div>
                 )}
-                <button
-                  onClick={() => setShowOutput(prev => !prev)}
-                  className="px-3 py-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-                  title={showOutput ? 'Ocultar panel' : 'Mostrar panel'}
-                >
-                  {showOutput ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                </button>
               </div>
-            </div>
-
-            {showOutput && (
-              <div style={{ height: outputHeight }} className="flex flex-col bg-slate-900/50 overflow-hidden flex-shrink-0">
-                {activeTab === 'output' && <HistoryPanel entries={history} viewMode={viewMode} />}
-                {activeTab === 'problems' && <ProblemsPanel diagnostics={lastDiagnostics} />}
-                {activeTab === 'symbols' && <SymbolsPanel symbolsList={currentSymbols} />}
-              </div>
-            )}
-          </>
-        ) : (
+            </>
+          ) : (
           /* REPL mode: output arriba, input abajo */
           <>
             <HistoryPanel entries={history} viewMode={viewMode} />
@@ -690,6 +727,7 @@ export default function STRunner({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

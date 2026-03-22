@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Zap, Play, List, Check, X, Copy, BarChart2 } from 'lucide-react';
+import { Zap, Play, Check, X, Copy, BarChart2 } from 'lucide-react';
 import { formalize, type LogicProfile } from '@stevenvo780/autologic';
 import { evaluate, type STEvalResult } from '@stevenvo780/st-lang/api';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
+import SnippetGallery from '@/components/SnippetGallery';
+import type { Snippet } from '@/services/snippetApi';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 /* ── Tipos ──────────────────────────────────────────────────── */
 
@@ -38,121 +41,33 @@ const PROFILES: { value: LogicProfile; label: string; short: string }[] = [
   { value: 'probabilistic.basic', label: 'Probabilística', short: 'PRO' }
 ];
 
-/* ── Ejemplos de prueba ─────────────────────────────────────── */
-
-const EXAMPLES: { label: string; text: string; profile: LogicProfile }[] = [
-  // ── Proposicional clásica ──
-  {
-    label: 'PROP · Modus Ponens',
-    text: 'Si llueve entonces la calle se moja. Llueve. Por lo tanto, la calle se moja.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'PROP · Modus Tollens',
-    text: 'Si el coche avanza, entonces hay gasolina. El coche no avanza. Por lo tanto, no hay gasolina.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'PROP · Silogismo Hipotético',
-    text: 'Si estudio, apruebo el examen. Si apruebo el examen, obtengo el título. Si obtengo el título, consigo trabajo.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'PROP · Conjunción',
-    text: 'El gato es negro y el perro es grande.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'PROP · Disyunción',
-    text: 'O viajamos en tren o viajamos en avión.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'PROP · Bicondicional',
-    text: 'Un número es par si y solo si es divisible entre dos.',
-    profile: 'classical.propositional'
-  },
-  {
-    label: 'PROP · Cadena + MP',
-    text: 'Si un animal es mamífero, entonces tiene sangre caliente. Si tiene sangre caliente, entonces puede regular su temperatura. Los perros son mamíferos. Por lo tanto, los perros pueden regular su temperatura.',
-    profile: 'classical.propositional'
-  },
-  // ── Primer orden ──
-  {
-    label: 'FOL · Silogismo universal',
-    text: 'Todos los filósofos buscan la verdad. Sócrates es filósofo. Por lo tanto, Sócrates busca la verdad.',
-    profile: 'classical.first_order'
-  },
-  // ── Silogística aristotélica ──
-  {
-    label: 'SYL · Barbara clásico',
-    text: 'Todos los humanos son mortales. Sócrates es humano. Por lo tanto, Sócrates es mortal.',
-    profile: 'aristotelian.syllogistic'
-  },
-  // ── Modal K ──
-  {
-    label: 'MOD · Necesidad + posibilidad',
-    text: 'Es necesario que si llueve, la calle se moje. Posiblemente llueve.',
-    profile: 'modal.k'
-  },
-  // ── Epistémica S5 ──
-  {
-    label: 'EPI · Conocimiento + MP',
-    text: 'Se sabe que la tierra es redonda. Si la tierra es redonda, entonces tiene gravedad.',
-    profile: 'epistemic.s5'
-  },
-  // ── Deóntica ──
-  {
-    label: 'DEO · Obligación + permiso',
-    text: 'Es obligatorio que todos respeten las leyes. Es permitido que se proteste pacíficamente.',
-    profile: 'deontic.standard'
-  },
-  // ── Temporal LTL ──
-  {
-    label: 'TMP · Siempre + eventualmente',
-    text: 'Siempre que llueve, eventualmente sale el sol. Actualmente llueve.',
-    profile: 'temporal.ltl'
-  },
-  // ── Intuicionista ──
-  {
-    label: 'INT · Doble negación',
-    text: 'No es cierto que no llueve. Si llueve entonces la calle se moja.',
-    profile: 'intuitionistic.propositional'
-  },
-  // ── Paraconsistente ──
-  {
-    label: 'PAR · Contradicción tolerada',
-    text: 'El gato está vivo y el gato no está vivo. El gato está en la caja.',
-    profile: 'paraconsistent.belnap'
-  },
-  // ── Aritmética ──
-  {
-    label: 'ARI · Divisibilidad',
-    text: 'Si un número es par, entonces es divisible entre dos. Cuatro es par. Por lo tanto, cuatro es divisible entre dos.',
-    profile: 'arithmetic'
-  },
-  // ── Probabilística ──
-  {
-    label: 'PRO · Inferencia probable',
-    text: 'Probablemente llueve. Si llueve, entonces posiblemente la calle se moje.',
-    profile: 'probabilistic.basic'
-  },
-  // ── Texto complejo (Aristóteles) ──
-  {
-    label: 'PROP · Aristóteles — Poética',
-    text: 'Puesto que realizan la representación actuando, primero sería necesariamente una parte de la tragedia la decoración del espectáculo, la melopeya y la elocución.',
-    profile: 'classical.propositional'
-  }
+const PROFILE_PREFIXES: Array<{ prefix: string; profile: LogicProfile }> = [
+  { prefix: 'PROP ·', profile: 'classical.propositional' },
+  { prefix: 'FOL ·', profile: 'classical.first_order' },
+  { prefix: 'SYL ·', profile: 'aristotelian.syllogistic' },
+  { prefix: 'MOD ·', profile: 'modal.k' },
+  { prefix: 'EPI ·', profile: 'epistemic.s5' },
+  { prefix: 'DEO ·', profile: 'deontic.standard' },
+  { prefix: 'TMP ·', profile: 'temporal.ltl' },
+  { prefix: 'INT ·', profile: 'intuitionistic.propositional' },
+  { prefix: 'PAR ·', profile: 'paraconsistent.belnap' },
+  { prefix: 'ARI ·', profile: 'arithmetic' },
+  { prefix: 'PRO ·', profile: 'probabilistic.basic' }
 ];
+
+function inferProfileFromSnippet(snippet?: Snippet): LogicProfile | null {
+  if (!snippet || snippet.category !== 'formalization') return null;
+  const match = PROFILE_PREFIXES.find((item) => snippet.title.startsWith(item.prefix));
+  return match?.profile ?? null;
+}
 
 /* ── Componente principal ───────────────────────────────────── */
 
-export default function FormalizerPlayground() {
+export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_ID }: { workspaceId?: string }) {
   const [input, setInput] = useState('');
   const [profile, setProfile] = useState<LogicProfile>('classical.propositional');
   const [results, setResults] = useState<FormalizeResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<string | null>(null);
-  const [batchMode, setBatchMode] = useState(false);
   const [autoRun, setAutoRun] = useState(false);
   const [viewMode, setViewMode] = useState<OutputViewMode>('graphic');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -213,55 +128,6 @@ export default function FormalizerPlayground() {
     runFormalize(input, profile);
   }, [input, profile, runFormalize]);
 
-  const handleBatchRun = useCallback(() => {
-    const newResults: FormalizeResult[] = [];
-    for (const ex of EXAMPLES) {
-      const t0 = performance.now();
-      try {
-        const r = formalize(ex.text, {
-          profile: ex.profile,
-          language: 'es',
-          atomStyle: 'keywords',
-          includeComments: true
-        });
-        let evalResult: STEvalResult | undefined;
-        if (r.ok && r.stCode.trim()) {
-          try {
-            evalResult = evaluate(r.stCode);
-          } catch { /* ignore eval errors */ }
-        }
-        newResults.push({
-          id: crypto.randomUUID(),
-          input: ex.text,
-          profile: ex.profile,
-          ok: r.ok,
-          stCode: r.stCode,
-          patterns: r.analysis.detectedPatterns,
-          atomCount: r.atoms.size,
-          formulaCount: r.formulas.length,
-          elapsed: Math.round(performance.now() - t0),
-          timestamp: Date.now(),
-          evalResult
-        });
-      } catch (err) {
-        newResults.push({
-          id: crypto.randomUUID(),
-          input: ex.text,
-          profile: ex.profile,
-          ok: false,
-          stCode: `// ERROR: ${err instanceof Error ? err.message : 'Error desconocido'}`,
-          patterns: [],
-          atomCount: 0,
-          formulaCount: 0,
-          elapsed: Math.round(performance.now() - t0),
-          timestamp: Date.now()
-        });
-      }
-    }
-    setResults(prev => [...newResults, ...prev]);
-    if (newResults.length > 0) setSelectedResult(newResults[0].id);
-  }, []);
-
   // Auto-run con debounce
   useEffect(() => {
     if (!autoRun || !input.trim()) return;
@@ -272,13 +138,14 @@ export default function FormalizerPlayground() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [input, profile, autoRun, runFormalize]);
 
-  const loadExample = useCallback((ex: typeof EXAMPLES[number]) => {
-    setInput(ex.text);
-    setProfile(ex.profile);
-    if (autoRun) {
-      setTimeout(() => runFormalize(ex.text, ex.profile), 50);
+  const handleInsertFormalizationSnippet = useCallback((content: string, snippet?: Snippet) => {
+    const inferredProfile = inferProfileFromSnippet(snippet);
+    setInput(content);
+    if (inferredProfile) {
+      setProfile(inferredProfile);
     }
-  }, [autoRun, runFormalize]);
+    textareaRef.current?.focus();
+  }, []);
 
   const clearHistory = useCallback(() => {
     setResults([]);
@@ -374,13 +241,6 @@ export default function FormalizerPlayground() {
                 Formalizar (Ctrl+Enter)
               </button>
 
-              <button
-                onClick={handleBatchRun}
-                className="rounded-lg border border-amber-800/60 bg-amber-950/40 px-4 py-2 text-xs font-medium text-amber-400 transition hover:bg-amber-900/40"
-              >
-                <Play className="w-3 h-3" /> Batch ({EXAMPLES.length} ejemplos)
-              </button>
-
               {results.length > 0 && (
                 <button
                   onClick={clearHistory}
@@ -391,25 +251,16 @@ export default function FormalizerPlayground() {
               )}
             </div>
 
-            {/* Ejemplos */}
+            {/* Snippets dinámicos */}
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
-              <details open>
-                <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-slate-400 select-none border-b border-slate-800 hover:text-slate-300">
-                  <List className="w-3.5 h-3.5 inline mr-1" />Ejemplos de prueba ({EXAMPLES.length})
-                </summary>
-                <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[300px] overflow-auto">
-                  {EXAMPLES.map((ex, i) => (
-                    <button
-                      key={i}
-                      onClick={() => loadExample(ex)}
-                      className="text-left rounded-lg px-3 py-2 text-[11px] leading-4 border border-slate-800/50 bg-slate-900/40 hover:bg-slate-800/60 hover:border-cyan-900/40 transition group"
-                    >
-                      <span className="font-medium text-cyan-400/80 group-hover:text-cyan-300">{ex.label}</span>
-                      <p className="text-slate-500 mt-0.5 line-clamp-2">{ex.text}</p>
-                    </button>
-                  ))}
-                </div>
-              </details>
+              <SnippetGallery
+                workspaceId={workspaceId}
+                allowedCategories={['formalization']}
+                hideClose
+                title="Snippets de formalización"
+                emptyLabel="Todavía no hay snippets de formalización en este workspace."
+                onInsert={handleInsertFormalizationSnippet}
+              />
             </div>
 
             {/* Historial */}
@@ -569,7 +420,7 @@ export default function FormalizerPlayground() {
                     Escribe texto y presiona <kbd className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono">Ctrl+Enter</kbd> para formalizar
                   </p>
                   <p className="text-xs text-slate-700">
-                    O usa <span className="text-amber-500/60">Batch</span> para ejecutar todos los ejemplos
+                    O inserta un snippet dinámico de formalización desde la biblioteca
                   </p>
                 </div>
               </div>
