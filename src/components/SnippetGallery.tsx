@@ -6,8 +6,8 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import {
-  X, Plus, Pencil, Trash2, Check, ChevronDown,
-  Search, GripVertical, Copy, Sigma, Code2, LayoutGrid, FileText
+  X, Plus, Pencil, Trash2, Check,
+  Search, Copy, Sigma, Code2, LayoutGrid, FileText, BookOpen, TerminalSquare
 } from 'lucide-react';
 import clsx from 'clsx';
 import {
@@ -28,19 +28,31 @@ const CATEGORIES = [
   { id: 'diagram', label: 'Diagramas', icon: FileText },
   { id: 'structure', label: 'Estructura', icon: LayoutGrid },
   { id: 'code', label: 'Código', icon: Code2 },
-  { id: 'general', label: 'General', icon: FileText }
+  { id: 'general', label: 'General', icon: FileText },
+  { id: 'formalization', label: 'Formalización', icon: BookOpen },
+  { id: 'st', label: 'ST', icon: TerminalSquare }
 ] as const;
 
 /**
  * Vista previa minimalista de Markdown que renderiza KaTeX y GFM.
  */
-const MiniPreview = React.memo(({ content }: { content: string }) => (
-  <div className="snippet-mini-preview overflow-hidden text-xs leading-relaxed text-slate-300 max-h-24">
-    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
-      {content}
-    </ReactMarkdown>
-  </div>
-));
+const MiniPreview = React.memo(({ content, category }: { content: string; category: string }) => {
+  if (category === 'st' || category === 'formalization') {
+    return (
+      <pre className="overflow-hidden whitespace-pre-wrap rounded bg-slate-950/60 p-2 font-mono text-[11px] leading-relaxed text-slate-300 max-h-24">
+        {content}
+      </pre>
+    );
+  }
+
+  return (
+    <div className="snippet-mini-preview overflow-hidden text-xs leading-relaxed text-slate-300 max-h-24">
+      <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
 MiniPreview.displayName = 'MiniPreview';
 
 /**
@@ -53,7 +65,7 @@ function SnippetCardInner({
   onDelete
 }: {
   snippet: Snippet;
-  onInsert: (markdown: string) => void;
+  onInsert: (markdown: string, snippet?: Snippet) => void;
   onEdit: (snippet: Snippet) => void;
   onDelete: (id: string) => void;
 }) {
@@ -64,7 +76,7 @@ function SnippetCardInner({
       <button
         type="button"
         className="w-full cursor-pointer p-3 text-left"
-        onClick={() => onInsert(snippet.markdown)}
+        onClick={() => onInsert(snippet.markdown, snippet)}
         title="Click para insertar"
       >
         <div className="mb-1.5 flex items-center gap-2">
@@ -76,13 +88,13 @@ function SnippetCardInner({
         {snippet.description && (
           <p className="mb-2 text-[10px] text-slate-500 line-clamp-1">{snippet.description}</p>
         )}
-        <MiniPreview content={snippet.markdown} />
+        <MiniPreview content={snippet.markdown} category={snippet.category} />
       </button>
 
       <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onInsert(snippet.markdown); }}
+          onClick={(e) => { e.stopPropagation(); onInsert(snippet.markdown, snippet); }}
           className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
           title="Insertar"
         >
@@ -188,12 +200,12 @@ export function SnippetEditorModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-[10px] font-medium uppercase text-slate-500">Markdown</label>
+              <label className="mb-1 block text-[10px] font-medium uppercase text-slate-500">Contenido</label>
               <textarea
                 ref={textareaRef}
                 value={markdown}
                 onChange={(e) => setMarkdown(e.target.value)}
-                placeholder="Escribe el markdown del snippet..."
+                placeholder="Escribe el contenido del snippet..."
                 rows={8}
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
               />
@@ -201,7 +213,7 @@ export function SnippetEditorModal({
             <div>
               <label className="mb-1 block text-[10px] font-medium uppercase text-slate-500">Preview</label>
               <div className="h-[calc(8*1.5rem+1rem)] overflow-auto rounded-lg border border-slate-700 bg-slate-950/50 p-3">
-                <MiniPreview content={markdown} />
+                <MiniPreview content={markdown} category={category} />
               </div>
             </div>
           </div>
@@ -236,11 +248,19 @@ export function SnippetEditorModal({
 export default function SnippetGallery({
   workspaceId,
   onInsert,
-  onClose
+  onClose,
+  allowedCategories,
+  hideClose = false,
+  title = 'Snippets',
+  emptyLabel
 }: {
   workspaceId: string;
-  onInsert: (markdown: string) => void;
-  onClose: () => void;
+  onInsert: (markdown: string, snippet?: Snippet) => void;
+  onClose?: () => void;
+  allowedCategories?: string[];
+  hideClose?: boolean;
+  title?: string;
+  emptyLabel?: string;
 }) {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -257,9 +277,9 @@ export default function SnippetGallery({
     setLoading(true);
     const items = await fetchSnippets(workspaceId);
 
-    if (items.length === 0 && !seededRef.current) {
+    if (!seededRef.current) {
       seededRef.current = true;
-      const seeded = await seedDefaultSnippets(workspaceId);
+      const seeded = await seedDefaultSnippets(workspaceId, items);
       setSnippets(seeded);
     } else {
       setSnippets(items);
@@ -271,6 +291,9 @@ export default function SnippetGallery({
 
   const filtered = useMemo(() => {
     let list = snippets;
+    if (allowedCategories && allowedCategories.length > 0) {
+      list = list.filter((s) => allowedCategories.includes(s.category));
+    }
     if (activeCategory !== 'all') {
       list = list.filter((s) => s.category === activeCategory);
     }
@@ -283,7 +306,14 @@ export default function SnippetGallery({
       );
     }
     return list;
-  }, [snippets, activeCategory, searchQuery]);
+  }, [allowedCategories, snippets, activeCategory, searchQuery]);
+
+  const visibleCategories = useMemo(() => {
+    if (!allowedCategories || allowedCategories.length === 0) {
+      return CATEGORIES;
+    }
+    return CATEGORIES.filter((category) => category.id === 'all' || allowedCategories.includes(category.id));
+  }, [allowedCategories]);
 
   const handleSave = useCallback(async (data: { title: string; description: string; markdown: string; category: string }) => {
     if (editingSnippet?.id) {
@@ -322,7 +352,7 @@ export default function SnippetGallery({
     <>
       <div className="flex h-full flex-col bg-slate-950 text-slate-200">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-3 py-2">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Snippets</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -332,14 +362,16 @@ export default function SnippetGallery({
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-white"
-              title="Cerrar galería"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            {!hideClose && onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                title="Cerrar galería"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -357,7 +389,7 @@ export default function SnippetGallery({
         </div>
 
         <div className="shrink-0 flex gap-1 overflow-x-auto border-b border-slate-800 px-3 py-1.5 scrollbar-thin">
-          {CATEGORIES.map((cat) => {
+          {visibleCategories.map((cat) => {
             const Icon = cat.icon;
             return (
               <button
@@ -385,7 +417,7 @@ export default function SnippetGallery({
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-500">
-              {searchQuery ? 'Sin resultados' : 'No hay snippets. ¡Crea el primero!'}
+              {searchQuery ? 'Sin resultados' : (emptyLabel ?? 'No hay snippets. ¡Crea el primero!')}
             </div>
           ) : (
             <div className="grid gap-2">

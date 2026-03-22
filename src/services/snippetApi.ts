@@ -179,14 +179,187 @@ export const DEFAULT_SNIPPETS: Omit<SnippetInput, 'workspaceId'>[] = [
     markdown: '## Acta cooperativa\n- Fecha:\n- Participantes:\n- Objetivo comun:\n\n### Acuerdos\n- \n\n### Responsables\n| Tarea | Responsable | Fecha |\n| --- | --- | --- |\n|  |  |  |\n\n### Riesgos y apoyos\n- Riesgo:\n- Apoyo:\n\n### Seguimiento\n- [ ]',
     category: 'general',
     order: 42
+  },
+  {
+    title: 'PROP · Modus Ponens',
+    description: 'Texto base para formalización proposicional clásica',
+    markdown: 'Si llueve entonces la calle se moja. Llueve. Por lo tanto, la calle se moja.',
+    category: 'formalization',
+    order: 60
+  },
+  {
+    title: 'PROP · Modus Tollens',
+    description: 'Texto base para formalización proposicional clásica',
+    markdown: 'Si el coche avanza, entonces hay gasolina. El coche no avanza. Por lo tanto, no hay gasolina.',
+    category: 'formalization',
+    order: 61
+  },
+  {
+    title: 'PROP · Silogismo Hipotético',
+    description: 'Texto base para formalización proposicional clásica',
+    markdown: 'Si estudio, apruebo el examen. Si apruebo el examen, obtengo el título. Si obtengo el título, consigo trabajo.',
+    category: 'formalization',
+    order: 62
+  },
+  {
+    title: 'PROP · Conjunción',
+    description: 'Texto base para formalización proposicional clásica',
+    markdown: 'El gato es negro y el perro es grande.',
+    category: 'formalization',
+    order: 63
+  },
+  {
+    title: 'PROP · Disyunción',
+    description: 'Texto base para formalización proposicional clásica',
+    markdown: 'O viajamos en tren o viajamos en avión.',
+    category: 'formalization',
+    order: 64
+  },
+  {
+    title: 'PROP · Bicondicional',
+    description: 'Texto base para formalización proposicional clásica',
+    markdown: 'Un número es par si y solo si es divisible entre dos.',
+    category: 'formalization',
+    order: 65
+  },
+  {
+    title: 'PROP · Cadena + MP',
+    description: 'Texto base para formalización proposicional clásica',
+    markdown: 'Si un animal es mamífero, entonces tiene sangre caliente. Si tiene sangre caliente, entonces puede regular su temperatura. Los perros son mamíferos. Por lo tanto, los perros pueden regular su temperatura.',
+    category: 'formalization',
+    order: 66
+  },
+  {
+    title: 'FOL · Silogismo universal',
+    description: 'Texto base para formalización de primer orden',
+    markdown: 'Todos los filósofos buscan la verdad. Sócrates es filósofo. Por lo tanto, Sócrates busca la verdad.',
+    category: 'formalization',
+    order: 67
+  },
+  {
+    title: 'SYL · Barbara clásico',
+    description: 'Texto base para formalización silogística aristotélica',
+    markdown: 'Todos los humanos son mortales. Sócrates es humano. Por lo tanto, Sócrates es mortal.',
+    category: 'formalization',
+    order: 68
+  },
+  {
+    title: 'MOD · Necesidad + posibilidad',
+    description: 'Texto base para formalización modal K',
+    markdown: 'Es necesario que si llueve, la calle se moje. Posiblemente llueve.',
+    category: 'formalization',
+    order: 69
+  },
+  {
+    title: 'EPI · Conocimiento + MP',
+    description: 'Texto base para formalización epistémica S5',
+    markdown: 'Se sabe que la tierra es redonda. Si la tierra es redonda, entonces tiene gravedad.',
+    category: 'formalization',
+    order: 70
+  },
+  {
+    title: 'DEO · Obligación + permiso',
+    description: 'Texto base para formalización deóntica',
+    markdown: 'Es obligatorio que todos respeten las leyes. Es permitido que se proteste pacíficamente.',
+    category: 'formalization',
+    order: 71
+  },
+  {
+    title: 'TMP · Siempre + eventualmente',
+    description: 'Texto base para formalización temporal LTL',
+    markdown: 'Siempre que llueve, eventualmente sale el sol. Actualmente llueve.',
+    category: 'formalization',
+    order: 72
+  },
+  {
+    title: 'INT · Doble negación',
+    description: 'Texto base para formalización intuicionista',
+    markdown: 'No es cierto que no llueve. Si llueve entonces la calle se moja.',
+    category: 'formalization',
+    order: 73
+  },
+  {
+    title: 'PAR · Contradicción tolerada',
+    description: 'Texto base para formalización paraconsistente',
+    markdown: 'El gato está vivo y el gato no está vivo. El gato está en la caja.',
+    category: 'formalization',
+    order: 74
+  },
+  {
+    title: 'ARI · Divisibilidad',
+    description: 'Texto base para formalización aritmética',
+    markdown: 'Si un número es par, entonces es divisible entre dos. Cuatro es par. Por lo tanto, cuatro es divisible entre dos.',
+    category: 'formalization',
+    order: 75
+  },
+  {
+    title: 'PRO · Inferencia probable',
+    description: 'Texto base para formalización probabilística',
+    markdown: 'Probablemente llueve. Si llueve, entonces posiblemente la calle se moje.',
+    category: 'formalization',
+    order: 76
+  },
+  {
+    title: 'PROP · Aristóteles — Poética',
+    description: 'Texto complejo para probar formalización',
+    markdown: 'Puesto que realizan la representación actuando, primero sería necesariamente una parte de la tragedia la decoración del espectáculo, la melopeya y la elocución.',
+    category: 'formalization',
+    order: 77
+  },
+  {
+    title: 'ST · Script base',
+    description: 'Plantilla inicial para ejecutar un script ST',
+    markdown: 'logic classical.propositional\n\naxiom a1 : P -> Q\naxiom a2 : P\n\nderive Q from {a1, a2}\n\ncheck valid ((P -> Q) -> (!Q -> !P))',
+    category: 'st',
+    order: 80
+  },
+  {
+    title: 'ST · Assumption proof',
+    description: 'Esqueleto de prueba con hipótesis y meta',
+    markdown: 'assume demo : P -> Q\nshow P -> Q\nqed',
+    category: 'st',
+    order: 81
+  },
+  {
+    title: 'ST · Tabla de verdad',
+    description: 'Snippet para explorar una fórmula con truth table',
+    markdown: 'logic classical.propositional\n\ntruth_table (P & Q)',
+    category: 'st',
+    order: 82
+  },
+  {
+    title: 'ST · Derivación modal',
+    description: 'Base para lógica modal K',
+    markdown: 'logic modal.k\n\naxiom m1 : [] (P -> Q)\naxiom m2 : <> P\n\ncheck satisfiable ([] (P -> Q) & <> P)',
+    category: 'st',
+    order: 83
+  },
+  {
+    title: 'ST · Primer orden',
+    description: 'Base para cuantificadores y verificación',
+    markdown: 'logic classical.first_order\n\naxiom a1 : forall x (Human(x) -> Mortal(x))\naxiom a2 : Human(socrates)\n\ncheck valid ((forall x (Human(x) -> Mortal(x)) & Human(socrates)) -> Mortal(socrates))',
+    category: 'st',
+    order: 84
   }
 ];
 
-/* ── Seed default snippets for a workspace if it has none ── */
-export const seedDefaultSnippets = async (workspaceId: string): Promise<Snippet[]> => {
-  const promises = DEFAULT_SNIPPETS.map((s) =>
-    createSnippet({ ...s, workspaceId })
+const buildSnippetKey = (snippet: Pick<Snippet, 'title' | 'category'> | Omit<SnippetInput, 'workspaceId'>) =>
+  `${snippet.category}::${snippet.title}`.trim().toLowerCase();
+
+/* ── Ensure default snippets exist for a workspace ── */
+export const seedDefaultSnippets = async (workspaceId: string, existingSnippets?: Snippet[]): Promise<Snippet[]> => {
+  const current = existingSnippets ?? await fetchSnippets(workspaceId);
+  const existingKeys = new Set(current.map((snippet) => buildSnippetKey(snippet)));
+  const missing = DEFAULT_SNIPPETS.filter((snippet) => !existingKeys.has(buildSnippetKey(snippet)));
+
+  if (missing.length === 0) {
+    return current.slice().sort((a, b) => a.order - b.order);
+  }
+
+  const created = await Promise.all(
+    missing.map((snippet) => createSnippet({ ...snippet, workspaceId }))
   );
-  const results = await Promise.all(promises);
-  return results.filter((s): s is Snippet => s !== null);
+
+  return [...current, ...created.filter((snippet): snippet is Snippet => snippet !== null)]
+    .sort((a, b) => a.order - b.order);
 };
