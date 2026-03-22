@@ -15,6 +15,7 @@ import {
 
 interface FileDocumentViewerProps {
   docId: string;
+  workspaceId?: string;
   docName: string;
   mimeType?: string;
   fileUrl?: string | null;
@@ -23,6 +24,7 @@ interface FileDocumentViewerProps {
 
 export default function FileDocumentViewer({
   docId,
+  workspaceId,
   docName,
   mimeType,
   fileUrl,
@@ -32,6 +34,7 @@ export default function FileDocumentViewer({
     return (
       <PdfDocumentViewer
         docId={docId}
+        workspaceId={workspaceId}
         docName={docName}
         fileUrl={fileUrl ?? null}
         onClose={onClose}

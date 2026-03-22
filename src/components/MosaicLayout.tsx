@@ -20,6 +20,7 @@ const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false });
 const STFileEditor = dynamic(() => import('@/components/editor/STFileEditor'), { ssr: false });
 const GlobalSemanticBrowser = dynamic(() => import('@/components/dashboard/GlobalSemanticBrowser'), { ssr: false });
 const FormalizerPlayground = dynamic(() => import('@/components/FormalizerPlayground'), { ssr: false });
+const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
 
 function isStFileDoc(doc: { name: string }): boolean {
   const lower = doc.name.toLowerCase();
@@ -603,7 +604,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isStRunner = doc.type === 'st-runner';
     const isSemanticBrowser = doc.type === 'semantic-browser';
     const isFormalizer = doc.type === 'formalizer';
-    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && !isFormalizer && isStFileDoc(doc);
+    const isSnippetsGallery = (doc.type as string) === 'snippets-gallery';
+    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && !isFormalizer && !isSnippetsGallery && isStFileDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
     const dropInfo = dragOverInfo?.tileId === doc.id ? dragOverInfo : null;
@@ -693,6 +695,16 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       />
                   ) : isFormalizer ? (
                       <FormalizerPlayground workspaceId={currentWorkspaceId} />
+                  ) : isSnippetsGallery ? (
+                      <SnippetGallery
+                        workspaceId={doc.workspaceId ?? currentWorkspaceId ?? ''}
+                        onInsert={(markdown) => {
+                          // Find an active editor to insert into if possible,
+                          // or just show a message. For now, we use a global event.
+                          window.dispatchEvent(new CustomEvent('agora:insert-snippet', { detail: { markdown } }));
+                        }}
+                        hideClose
+                      />
                   ) : isStFile ? (
                       <STFileEditor
                         docId={doc.id}
@@ -702,6 +714,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                   ) : (
                       <Editor
                         roomId={doc.id}
+                        workspaceId={doc.workspaceId ?? currentWorkspaceId}
                         embedded
                         forceInline
                         initialDocument={doc}

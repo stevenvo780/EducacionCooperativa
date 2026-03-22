@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, Minus, Plus, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Minus, Plus, Search, Sparkles } from 'lucide-react';
+import { createSnippet } from '@/services/snippetApi';
 
 interface PDFViewportProxy {
   width: number;
@@ -23,7 +24,7 @@ interface PDFRenderTask {
 
 interface PDFPageProxy {
   getViewport(params: { scale: number }): PDFViewportProxy;
-  getTextContent?: () => Promise<PDFTextContent>;
+  getTextContent?: (params?: any) => Promise<PDFTextContent>;
   render(params: { canvasContext: CanvasRenderingContext2D; viewport: PDFViewportProxy }): PDFRenderTask;
   cleanup?: () => void;
 }
@@ -38,6 +39,7 @@ interface PDFJSLib {
   getDocument(params: { url: string }): { promise: Promise<PDFDocumentProxy> };
   GlobalWorkerOptions: { workerSrc: string };
   version: string;
+  renderTextLayer(params: any): any;
 }
 
 declare global {
@@ -161,9 +163,10 @@ interface PdfViewerProps {
   fileUrl: string;
   fileName: string;
   storageKey: string;
+  workspaceId?: string;
 }
 
-export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerProps) {
+export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId }: PdfViewerProps) {
   const initialViewerState = useMemo(() => readViewerState(storageKey), [storageKey]);
   const [zoomLevel, setZoomLevel] = useState(() => initialViewerState.zoomLevel);
   const [searchQuery, setSearchQuery] = useState(() => initialViewerState.searchQuery);
@@ -175,9 +178,12 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
   const [isLoading, setIsLoading] = useState(true);
   const [useIframeFallback, setUseIframeFallback] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [isCreatingSnippet, setIsCreatingSnippet] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const textLayerRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
   const lastKnownStateRef = useRef<PersistedPdfViewerState>(initialViewerState);
   const isRestoringRef = useRef(true);
@@ -413,7 +419,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
     }
 
     let cancelled = false;
-    const renderTasks: PDFRenderTask[] = [];
+    const renderTasks: { promise: Promise<void>; cancel?: () => void }[] = [];
     const pdfDocument = pdfDocumentRef.current;
 
     const restoreScroll = (attempt = 0) => {
@@ -456,12 +462,14 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
 
     const renderPages = async () => {
       const targetWidth = Math.max(containerWidth - 48, 320);
+      const pdfjs = await loadPdfJs();
 
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
         if (cancelled) return;
 
         const canvas = canvasRefs.current[pageNumber];
-        if (!canvas) continue;
+        const textLayer = textLayerRefs.current[pageNumber];
+        if (!canvas || !textLayer) continue;
 
         const page = await pdfDocument.getPage(pageNumber);
         if (cancelled) return;
@@ -478,6 +486,10 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
         canvas.style.width = `${cssViewport.width}px`;
         canvas.style.height = `${cssViewport.height}px`;
 
+        textLayer.style.width = `${cssViewport.width}px`;
+        textLayer.style.height = `${cssViewport.height}px`;
+        textLayer.innerHTML = '';
+
         const context = canvas.getContext('2d');
         if (!context) {
           throw new Error('Canvas 2D context is not available');
@@ -486,6 +498,19 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
         const renderTask = page.render({ canvasContext: context, viewport: renderViewport });
         renderTasks.push(renderTask);
         await renderTask.promise;
+
+        if (page.getTextContent) {
+          const textContent = await page.getTextContent();
+          if (cancelled) return;
+
+          const textLayerTask = pdfjs.renderTextLayer({
+            textContent,
+            container: textLayer,
+            viewport: cssViewport
+          });
+          renderTasks.push(textLayerTask);
+          await textLayerTask.promise;
+        }
 
         page.cleanup?.();
       }
@@ -635,6 +660,54 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
     lastTouchDistRef.current = null;
   }, []);
 
+  const handleSelectionChange = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+      setSelection(null);
+      return;
+    }
+
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+
+    if (containerRect) {
+      setSelection({
+        text: sel.toString(),
+        x: rect.left - containerRect.left + rect.width / 2,
+        y: rect.top - containerRect.top - 40
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [handleSelectionChange]);
+
+  const handleCreateSnippetFromSelection = useCallback(async () => {
+    if (!selection || !workspaceId || isCreatingSnippet) return;
+
+    setIsCreatingSnippet(true);
+    try {
+      await createSnippet({
+        title: `Snippet de ${fileName}`,
+        description: `Extraído de ${fileName}, página ${currentPage}`,
+        markdown: selection.text,
+        workspaceId,
+        category: 'general',
+        order: 0
+      });
+      // Clear selection after creation
+      window.getSelection()?.removeAllRanges();
+      setSelection(null);
+    } catch (error) {
+      console.error('Error creating snippet from PDF:', error);
+    } finally {
+      setIsCreatingSnippet(false);
+    }
+  }, [selection, workspaceId, isCreatingSnippet, fileName, currentPage]);
+
   const handleSearchPrev = useCallback(() => {
     if (searchMatches.length === 0) return;
     setActiveSearchIndex((current) => (current - 1 + searchMatches.length) % searchMatches.length);
@@ -657,7 +730,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-900">
+    <div className="flex h-full min-h-0 flex-col bg-slate-900 relative">
       <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-700 bg-slate-950/95 px-3 py-2 backdrop-blur">
         <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/80 px-1 py-1">
           <button
@@ -833,12 +906,79 @@ export default function PdfViewer({ fileUrl, fileName, storageKey }: PdfViewerPr
                     className="block"
                     data-testid="pdf-page-canvas"
                   />
+                  <div
+                    ref={(node) => {
+                      textLayerRefs.current[pageNumber] = node;
+                    }}
+                    className="textLayer absolute inset-0 z-10 opacity-100 mix-blend-multiply"
+                  />
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Snippet Selection Menu */}
+      {selection && workspaceId && (
+        <div
+          className="pointer-events-auto absolute z-[100] flex animate-in fade-in zoom-in duration-150"
+          style={{
+            left: selection.x,
+            top: selection.y,
+            transform: 'translateX(-50%)'
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleCreateSnippetFromSelection}
+            disabled={isCreatingSnippet}
+            className="flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xl shadow-black/40 transition hover:bg-sky-500 disabled:opacity-50"
+          >
+            {isCreatingSnippet ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            <span>Crear Snippet</span>
+          </button>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .textLayer {
+          position: absolute;
+          text-align: initial;
+          left: 0;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          overflow: hidden;
+          opacity: 0.25;
+          line-height: 1;
+          text-wrap: nowrap;
+          white-space: pre;
+        }
+        .textLayer span, .textLayer br {
+          color: transparent;
+          position: absolute;
+          white-space: pre;
+          cursor: text;
+          transform-origin: 0% 0%;
+        }
+        .textLayer .highlight {
+          margin: -1px;
+          padding: 1px;
+          background-color: rgb(180, 0, 170);
+          border-radius: 4px;
+        }
+        .textLayer .highlight.selected {
+          background-color: rgb(0, 100, 0);
+        }
+        .textLayer ::selection {
+          background: rgb(0, 0, 255, 0.2);
+        }
+      `}</style>
     </div>
   );
 }

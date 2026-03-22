@@ -13,6 +13,7 @@ export interface SearchState {
 export interface EditorProps {
   initialContent?: string;
   roomId: string;
+  workspaceId?: string;
   onClose?: () => void;
   embedded?: boolean;
   forceInline?: boolean;

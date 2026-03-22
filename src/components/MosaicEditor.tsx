@@ -4,7 +4,6 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom';
 import Image from 'next/image';
 import {
-  MDXEditor,
   AdmonitionDirectiveDescriptor,
   headingsPlugin,
   listsPlugin,
@@ -36,6 +35,7 @@ import {
   UndoRedo,
   type MDXEditorMethods
 } from '@mdxeditor/editor';
+import { DynamicMDXEditor } from '@/components/editor/DynamicMDXEditor';
 import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
@@ -57,7 +57,11 @@ import { mermaidCodeBlockDescriptor } from '@/components/mosaic-editor/MermaidCo
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
-import { BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles, MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote, ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces, Ruler, RefreshCw } from 'lucide-react';
+import {
+  BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles,
+  MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote,
+  ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces, Ruler, RefreshCw
+} from 'lucide-react';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
@@ -1031,6 +1035,16 @@ export default function MosaicEditor({
 
     handleContentChange(nextContent);
   }, [handleContentChange, insertSnippet, statsContent, viewMode]);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail && typeof e.detail.markdown === 'string') {
+        appendMarkdownBlock(e.detail.markdown);
+      }
+    };
+    window.addEventListener('agora:insert-snippet' as any, handler);
+    return () => window.removeEventListener('agora:insert-snippet' as any, handler);
+  }, [appendMarkdownBlock]);
 
   const updateSemanticState = useCallback((nextState: SemanticWorkspaceState) => {
     const normalizedState = normalizeSemanticWorkspaceState(nextState);
@@ -2345,7 +2359,7 @@ export default function MosaicEditor({
             </>
           ) : (
             <div className="flex-1 relative overflow-hidden h-full">
-              <MDXEditor
+              <DynamicMDXEditor
                 key={editorKey}
                 ref={mdxEditorRef}
                 markdown={initialMarkdown}

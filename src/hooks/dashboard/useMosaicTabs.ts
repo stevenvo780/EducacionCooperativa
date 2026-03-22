@@ -29,6 +29,7 @@ interface UseMosaicTabsResult {
     openSemanticBrowser: () => Promise<void>;
     openFormalizer: () => Promise<void>;
     openFilesTab: () => Promise<void>;
+    openSnippetsGallery: () => Promise<void>;
     closeTabById: (docId: string) => Promise<void>;
     openDocument: (doc: DocItem) => Promise<void>;
     openDocumentInTile: (doc: DocItem, targetTileId?: string | null) => Promise<void>;
@@ -424,12 +425,40 @@ export function useMosaicTabs({
         setShowMobileSidebar(false);
     }, [currentWorkspace, setShowMobileSidebar, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    const openSnippetsGallery = useCallback(async () => {
+        if (!currentWorkspace || !user) return;
+        const snipId = `snippets-gallery-${currentWorkspace.id}`;
+        if (openTabs.find(tab => tab.id === snipId)) {
+            setSelectedDocId(snipId);
+            setShowMobileSidebar(false);
+            return;
+        }
+        const newSnipItem: DocItem = {
+            id: snipId,
+            name: 'Galería de Snippets',
+            type: 'snippets-gallery' as any,
+            workspaceId: currentWorkspace.id,
+            ownerId: user.uid,
+            updatedAt: new Date()
+        };
+        setOpenTabs(prev => [...prev, newSnipItem]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(snipId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, snipId]);
+        });
+        setShowMobileSidebar(false);
+        setSelectedDocId(snipId);
+    }, [currentWorkspace, user, openTabs, setShowMobileSidebar]); // eslint-disable-line react-hooks/exhaustive-deps
+
     return {
         openBoard,
         openStRunner,
         openSemanticBrowser,
         openFormalizer,
         openFilesTab,
+        openSnippetsGallery,
         closeTabById,
         openDocument,
         openDocumentInTile,
