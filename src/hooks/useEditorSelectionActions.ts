@@ -41,6 +41,28 @@ interface UseEditorSelectionActionsOptions {
 }
 
 const MIN_TEXT_LENGTH = 2;
+const PRE_CONTEXT_TTL_MS = 1500;
+
+/* ──── DEBUG: quitar cuando se confirme que funciona ──── */
+const DEBUG_SELECTION = true;
+const dbg = (...args: unknown[]) => {
+  if (DEBUG_SELECTION) console.warn('[SelectionCapture]', ...args);
+};
+
+/** Normalize whitespace for robust substring comparison */
+const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/**
+ * Check if `shorter` is contained within `longer` after normalizing whitespace.
+ * This detects when the browser reduced a multi-paragraph selection to a single
+ * paragraph on right-click in contenteditable.
+ */
+const isSubstringOf = (shorter: string, longer: string): boolean => {
+  if (!shorter || !longer) return false;
+  const a = norm(shorter);
+  const b = norm(longer);
+  return b.length > a.length && b.includes(a);
+};
 
 const makeId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -86,9 +108,60 @@ const resolveNodePath = (root: Node, path: number[]) => {
 
 const isValidText = (text: string) => text.replace(/\s+/g, ' ').trim().length >= MIN_TEXT_LENGTH;
 
+const buildContentEditableSnapshot = ({
+  shell,
+  docId,
+  range,
+  eventPoint
+}: {
+  shell: HTMLDivElement;
+  docId: string | null;
+  range: Range;
+  eventPoint?: { x: number; y: number };
+}): EditorSelectionSnapshot | null => {
+  const text = range.toString().trim();
+  if (!isValidText(text)) return null;
+  if (!shell.contains(range.commonAncestorContainer)) return null;
+
+  const startPath = getNodePath(shell, range.startContainer);
+  const endPath = getNodePath(shell, range.endContainer);
+  if (!startPath || !endPath) return null;
+
+  const rectCandidate = range.getBoundingClientRect();
+  const rect = rectCandidate.width > 0 || rectCandidate.height > 0
+    ? clampRect(rectCandidate)
+    : {
+        top: eventPoint?.y ?? 0,
+        bottom: eventPoint?.y ?? 0,
+        left: eventPoint?.x ?? 0,
+        right: eventPoint?.x ?? 0,
+        width: 0,
+        height: 0
+      };
+
+  return {
+    id: makeId(),
+    kind: 'contenteditable',
+    text,
+    docId,
+    rect,
+    createdAt: Date.now(),
+    range: {
+      start: { path: startPath, offset: range.startOffset },
+      end: { path: endPath, offset: range.endOffset }
+    }
+  };
+};
+
 export function useEditorSelectionActions({ editorShellRef, docId, enabled, onContextMenuWithoutSelection }: UseEditorSelectionActionsOptions) {
   const [selection, setSelection] = useState<EditorSelectionSnapshot | null>(null);
   const suppressClearUntilRef = useRef(0);
+  /**
+   * Snapshot captured at mousedown(button=2) — BEFORE the browser can
+   * reduce the selection. Only used as fallback when the DOM selection
+   * at contextmenu time is a strict substring of it.
+   */
+  const preContextRef = useRef<EditorSelectionSnapshot | null>(null);
 
   const clearSelection = useCallback(() => {
     suppressClearUntilRef.current = 0;
@@ -134,58 +207,53 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
     }
 
     const domSelection = window.getSelection();
+    const pre = preContextRef.current;
+    const preIsRecent = pre && (Date.now() - pre.createdAt) < PRE_CONTEXT_TTL_MS;
+
     if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+      // DOM selection is gone — use preContext as fallback if recent
+      dbg('DOM selection collapsed',
+        `| preContext: ${preIsRecent ? `${pre!.text.length} chars (recent)` : 'none/expired'}`);
+      if (preIsRecent && pre) {
+        suppressClearUntilRef.current = Date.now() + 800;
+        setSelection(pre);
+        return pre;
+      }
       setSelection(null);
       return null;
     }
 
     const range = domSelection.getRangeAt(0);
-    const text = domSelection.toString().trim();
-    if (!isValidText(text)) {
-      setSelection(null);
-      return null;
-    }
+    const currentSnapshot = buildContentEditableSnapshot({ shell, docId, range, eventPoint });
 
-    if (!shell.contains(range.commonAncestorContainer)) {
-      setSelection(null);
-      return null;
-    }
-
-    const startPath = getNodePath(shell, range.startContainer);
-    const endPath = getNodePath(shell, range.endContainer);
-    if (!startPath || !endPath) {
-      setSelection(null);
-      return null;
-    }
-
-    const rectCandidate = range.getBoundingClientRect();
-    const rect = rectCandidate.width > 0 || rectCandidate.height > 0
-      ? clampRect(rectCandidate)
-      : {
-          top: eventPoint?.y ?? 0,
-          bottom: eventPoint?.y ?? 0,
-          left: eventPoint?.x ?? 0,
-          right: eventPoint?.x ?? 0,
-          width: 0,
-          height: 0
-        };
-
-    const snapshot: EditorSelectionSnapshot = {
-      id: makeId(),
-      kind: 'contenteditable',
-      text,
-      docId,
-      rect,
-      createdAt: Date.now(),
-      range: {
-        start: { path: startPath, offset: range.startOffset },
-        end: { path: endPath, offset: range.endOffset }
+    // Decide: use DOM current, or preContext if the browser reduced the selection
+    let chosen = currentSnapshot;
+    if (currentSnapshot && preIsRecent && pre) {
+      // Only prefer preContext if current is a SUBSTRING of it (= browser reduced)
+      if (isSubstringOf(currentSnapshot.text, pre.text)) {
+        chosen = pre;
+        dbg('captureSelection: browser reduced selection → using preContext',
+          `| DOM: ${currentSnapshot.text.length} chars`,
+          `| preContext: ${pre.text.length} chars`);
+      } else {
+        dbg('captureSelection: DOM is NOT substring of preContext → using DOM',
+          `| DOM: ${currentSnapshot.text.length} chars`,
+          `| preContext: ${pre.text.length} chars`);
       }
-    };
+    } else {
+      dbg('captureSelection: using DOM selection',
+        `| ${currentSnapshot?.text.length ?? 0} chars`,
+        `| preContext: ${preIsRecent ? 'recent' : 'none/expired'}`);
+    }
+
+    if (!chosen) {
+      setSelection(null);
+      return null;
+    }
 
     suppressClearUntilRef.current = Date.now() + 800;
-    setSelection(snapshot);
-    return snapshot;
+    setSelection(chosen);
+    return chosen;
   }, [docId, editorShellRef, enabled]);
 
   const restoreSelection = useCallback((snapshot?: EditorSelectionSnapshot | null) => {
@@ -246,6 +314,27 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
       }
     };
 
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2) return;
+      // Capture the selection RIGHT NOW before the browser can reduce it
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+        dbg('mousedown(2): no active selection to pre-capture');
+        return;
+      }
+      const nextSnapshot = buildContentEditableSnapshot({
+        shell,
+        docId,
+        range: domSelection.getRangeAt(0),
+        eventPoint: { x: event.clientX, y: event.clientY }
+      });
+      if (nextSnapshot) {
+        preContextRef.current = nextSnapshot;
+        dbg(`mousedown(2): preContext saved (${nextSnapshot.text.length} chars)`,
+          `| preview: "${nextSnapshot.text.slice(0, 100)}…"`);
+      }
+    };
+
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
       touchStartPos = { x: touch.clientX, y: touch.clientY };
@@ -284,8 +373,9 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
     };
 
     const handleSelectionChange = () => {
-      if (Date.now() < suppressClearUntilRef.current) return;
       const domSelection = window.getSelection();
+
+      if (Date.now() < suppressClearUntilRef.current) return;
       if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
         const activeElement = document.activeElement;
         if (!(activeElement instanceof HTMLTextAreaElement) || activeElement.selectionStart === activeElement.selectionEnd) {
@@ -295,6 +385,7 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
     };
 
     shell.addEventListener('contextmenu', handleContextMenu as any, true);
+    shell.addEventListener('mousedown', handleMouseDown, true);
     shell.addEventListener('touchstart', handleTouchStart as any, { passive: true });
     shell.addEventListener('touchmove', handleTouchMove as any, { passive: true });
     shell.addEventListener('touchend', handleTouchEnd as any, { passive: true });
@@ -302,13 +393,14 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
 
     return () => {
       shell.removeEventListener('contextmenu', handleContextMenu as any, true);
+      shell.removeEventListener('mousedown', handleMouseDown, true);
       shell.removeEventListener('touchstart', handleTouchStart as any);
       shell.removeEventListener('touchmove', handleTouchMove as any);
       shell.removeEventListener('touchend', handleTouchEnd as any);
       document.removeEventListener('selectionchange', handleSelectionChange);
       if (longPressTimer) clearTimeout(longPressTimer);
     };
-  }, [captureSelection, editorShellRef, enabled, onContextMenuWithoutSelection]);
+  }, [captureSelection, docId, editorShellRef, enabled, onContextMenuWithoutSelection]);
 
   return {
     selection,
