@@ -215,6 +215,41 @@ export default function MosaicEditor({
   const linterRules = useMemo(() => [stDefinitionsRule], [stDefinitionsRule]);
   const { diagnostics: markdownDiagnostics, runLint } = useMarkdownLinter(statsContent, linterRules);
 
+  const noteDiagnostics = useMemo<LinterDiagnostic[]>(() => {
+    const diags: LinterDiagnostic[] = [];
+    const notes = semanticState.fragments.filter(f => f.kind === 'note' && f.note && f.text);
+
+    for (const n of notes) {
+      if (!n.note || !n.text) continue;
+      const idx = statsContent.indexOf(n.text);
+      if (idx !== -1) {
+         const before = statsContent.substring(0, idx);
+         const lines = before.split('\n');
+         const line = lines.length;
+         const column = lines[lines.length - 1].length + 1;
+
+         // Multi-line aware end column for single line fallbacks
+         const textLines = n.text.split('\n');
+         const endColumn = textLines.length === 1 ? column + n.text.length : undefined;
+
+         diags.push({
+           line,
+           column,
+           ...(endColumn ? { endColumn } : {}),
+           severity: 'info',
+           message: n.note,
+           source: 'Nota',
+           text: n.text
+         });
+      }
+    }
+    return diags;
+  }, [semanticState.fragments, statsContent]);
+
+  const allDiagnostics = useMemo(() => {
+    return [...markdownDiagnostics, ...noteDiagnostics];
+  }, [markdownDiagnostics, noteDiagnostics]);
+
   const toggleCompactMenu = useCallback(() => {
     if (!showCompactMenu && menuBtnRef.current) {
       const rect = menuBtnRef.current.getBoundingClientRect();
@@ -2337,42 +2372,50 @@ export default function MosaicEditor({
                 >
                   <FileCode2 className="h-3 w-3" />
                 </button>
-
-                <div className="h-4 w-px bg-slate-700 mx-1" />
-
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white"
-                  title="Alejar (Zoom Out)"
-                >
-                  <ZoomOut className="h-3.5 w-3.5" />
-                </button>
-
-                <span className="text-[10px] font-mono text-slate-400 min-w-[32px] text-center">
-                  {Math.round(zoomLevel * 100)}%
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel(prev => Math.min(3, prev + 0.1))}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white"
-                  title="Acercar (Zoom In)"
-                >
-                  <ZoomIn className="h-3.5 w-3.5" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel(1)}
-                  className="px-2 h-8 flex items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-[10px] text-slate-400 transition hover:bg-slate-700 hover:text-white"
-                  title="Restablecer zoom"
-                >
-                  100%
-                </button>
               </div>
-              <div className="flex-1 overflow-hidden" style={{ fontSize: `${zoomLevel * 15}px` }}>
+
+              <div
+                className="flex-1 relative overflow-hidden group/preview"
+                style={{ '--preview-font-size': `${zoomLevel * 15}px` } as any}
+                onWheel={(e) => {
+                  if (e.ctrlKey) {
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                    setZoomLevel(prev => Math.min(3, Math.max(0.5, prev + delta)));
+                  }
+                }}
+              >
                 <MarkdownPreview content={statsContent || contentRef.current} onOpenInternalLink={openInternalMarkdownLink} />
+
+                {/* Floating Zoom HUD */}
+                <div className="absolute bottom-6 right-6 flex items-center gap-1.5 p-1.5 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl opacity-0 translate-y-2 transition-all duration-300 group-hover/preview:opacity-100 group-hover/preview:translate-y-0">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                    title="Alejar (Ctrl + Scroll Down)"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(1)}
+                    className="px-2 min-w-[50px] text-center text-[11px] font-mono font-medium text-slate-300 hover:text-blue-400 transition-colors"
+                    title="Restablecer zoom (100%)"
+                  >
+                    {Math.round(zoomLevel * 100)}%
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(prev => Math.min(3, prev + 0.1))}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                    title="Acercar (Ctrl + Scroll Up)"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </>
           ) : viewMode === 'raw' ? (
@@ -2410,7 +2453,7 @@ export default function MosaicEditor({
                   placeholder="# Markdown puro\n\nEscribe aquí el contenido exacto del documento..."
                 />
                 <LinterOverlay
-                  diagnostics={markdownDiagnostics}
+                  diagnostics={allDiagnostics}
                   content={statsContent}
                   lineHeight={24}
                   charWidth={7.825}
@@ -2435,7 +2478,7 @@ export default function MosaicEditor({
                 placeholder="Escribe aquí... Usa Markdown como en Obsidian"
               />
               <LinterPlugin
-                diagnostics={markdownDiagnostics}
+                diagnostics={allDiagnostics}
                 editorShellRef={editorShellRef}
                 viewMode="edit"
                 content={statsContent}

@@ -316,7 +316,7 @@ export const mosaicEditorStyles = `
         .mdx-content-editable,
         .markdown-preview-container {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          font-size: 15px;
+          font-size: var(--preview-font-size, 15px);
           line-height: 1.75;
           letter-spacing: 0;
           word-break: break-word;
