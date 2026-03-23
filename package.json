@@ -34,7 +34,7 @@
     "@mdxeditor/editor": "^3.52.4",
     "@reduxjs/toolkit": "^2.11.2",
     "@replit/codemirror-minimap": "^0.5.2",
-    "@stevenvo780/autologic": "^2.2.0",
+    "@stevenvo780/autologic": "^2.2.1",
     "@stevenvo780/st-lang": "^3.0.0",
     "@types/jszip": "^3.4.0",
     "@uiw/react-codemirror": "^4.25.4",

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Zap, Play, Check, X, Copy, BarChart2 } from 'lucide-react';
+import { Zap, Play, Check, X, Copy, BarChart2, Brain, Cpu, Loader2, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import { formalize, type LogicProfile } from '@stevenvo780/autologic';
 import { evaluate, type STEvalResult } from '@stevenvo780/st-lang/api';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
@@ -10,6 +10,33 @@ import type { Snippet } from '@/services/snippetApi';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 /* ── Tipos ──────────────────────────────────────────────────── */
+
+type FormalizeEngine = 'nlp' | 'llm';
+type LLMProvider = 'ollama' | 'openwebui' | 'openai';
+
+interface LLMClientConfig {
+  provider: LLMProvider;
+  endpoint: string;
+  apiKey: string;
+  model: string;
+}
+
+const LLM_CONFIG_KEY = 'formalizerLLMConfig';
+const DEFAULT_LLM_CONFIG: LLMClientConfig = {
+  provider: 'ollama',
+  endpoint: '',
+  apiKey: '',
+  model: ''
+};
+
+function loadLLMConfig(): LLMClientConfig {
+  if (typeof window === 'undefined') return DEFAULT_LLM_CONFIG;
+  try {
+    const raw = localStorage.getItem(LLM_CONFIG_KEY);
+    if (!raw) return DEFAULT_LLM_CONFIG;
+    return { ...DEFAULT_LLM_CONFIG, ...JSON.parse(raw) };
+  } catch { return DEFAULT_LLM_CONFIG; }
+}
 
 interface FormalizeResult {
   id: string;
@@ -23,6 +50,7 @@ interface FormalizeResult {
   elapsed: number;
   timestamp: number;
   evalResult?: STEvalResult;
+  engine: FormalizeEngine;
 }
 
 /* ── Perfiles disponibles ───────────────────────────────────── */
@@ -70,10 +98,26 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
   const [selectedResult, setSelectedResult] = useState<string | null>(null);
   const [autoRun, setAutoRun] = useState(false);
   const [viewMode, setViewMode] = useState<OutputViewMode>('graphic');
+  const [engine, setEngine] = useState<FormalizeEngine>('nlp');
+  const [isLoading, setIsLoading] = useState(false);
+  const [llmConfig, setLlmConfigRaw] = useState<LLMClientConfig>(DEFAULT_LLM_CONFIG);
+  const [showLLMConfig, setShowLLMConfig] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const runFormalize = useCallback((text: string, prof: LogicProfile) => {
+  // Load persisted LLM config on mount
+  useEffect(() => { setLlmConfigRaw(loadLLMConfig()); }, []);
+
+  const setLlmConfig = useCallback((update: Partial<LLMClientConfig>) => {
+    setLlmConfigRaw(prev => {
+      const next = { ...prev, ...update };
+      try { localStorage.setItem(LLM_CONFIG_KEY, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }, []);
+
+  /* ── NLP formalize (sync, local) ─────────────────────────── */
+  const runFormalizeNLP = useCallback((text: string, prof: LogicProfile) => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
@@ -103,7 +147,8 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         formulaCount: r.formulas.length,
         elapsed: Math.round(performance.now() - t0),
         timestamp: Date.now(),
-        evalResult
+        evalResult,
+        engine: 'nlp'
       };
     } catch (err) {
       result = {
@@ -116,7 +161,8 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         atomCount: 0,
         formulaCount: 0,
         elapsed: Math.round(performance.now() - t0),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        engine: 'nlp'
       };
     }
 
@@ -124,19 +170,92 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
     setSelectedResult(result.id);
   }, []);
 
-  const handleFormalize = useCallback(() => {
-    runFormalize(input, profile);
-  }, [input, profile, runFormalize]);
+  /* ── LLM formalize (async, server-side via /api/formalize-llm) */
+  const runFormalizeLLM = useCallback(async (text: string, prof: LogicProfile) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
 
-  // Auto-run con debounce
+    setIsLoading(true);
+    const t0 = performance.now();
+    let result: FormalizeResult;
+    try {
+      const res = await fetch('/api/formalize-llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: trimmed,
+          profile: prof,
+          language: 'es',
+          // Client LLM overrides (empty strings are ignored server-side)
+          llmProvider: llmConfig.provider,
+          llmEndpoint: llmConfig.endpoint,
+          llmApiKey: llmConfig.apiKey,
+          llmModel: llmConfig.model
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+
+      const stCode: string = data.stCode ?? '';
+      let evalResult: STEvalResult | undefined;
+      if (stCode.trim()) {
+        try {
+          evalResult = evaluate(stCode);
+        } catch { /* ignore eval errors */ }
+      }
+      result = {
+        id: crypto.randomUUID(),
+        input: trimmed,
+        profile: prof,
+        ok: true,
+        stCode,
+        patterns: data.patterns ?? ['llm'],
+        atomCount: data.atomCount ?? 0,
+        formulaCount: data.formulaCount ?? 0,
+        elapsed: Math.round(performance.now() - t0),
+        timestamp: Date.now(),
+        evalResult,
+        engine: 'llm'
+      };
+    } catch (err) {
+      result = {
+        id: crypto.randomUUID(),
+        input: trimmed,
+        profile: prof,
+        ok: false,
+        stCode: `// LLM ERROR: ${err instanceof Error ? err.message : 'Error desconocido'}`,
+        patterns: [],
+        atomCount: 0,
+        formulaCount: 0,
+        elapsed: Math.round(performance.now() - t0),
+        timestamp: Date.now(),
+        engine: 'llm'
+      };
+    } finally {
+      setIsLoading(false);
+    }
+
+    setResults(prev => [result, ...prev]);
+    setSelectedResult(result.id);
+  }, [llmConfig]);
+
+  const handleFormalize = useCallback(() => {
+    if (engine === 'llm') {
+      runFormalizeLLM(input, profile);
+    } else {
+      runFormalizeNLP(input, profile);
+    }
+  }, [input, profile, engine, runFormalizeNLP, runFormalizeLLM]);
+
+  // Auto-run con debounce (solo NLP – LLM requiere acción manual)
   useEffect(() => {
-    if (!autoRun || !input.trim()) return;
+    if (!autoRun || !input.trim() || engine === 'llm') return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      runFormalize(input, profile);
+      runFormalizeNLP(input, profile);
     }, 600);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [input, profile, autoRun, runFormalize]);
+  }, [input, profile, autoRun, engine, runFormalizeNLP]);
 
   const handleInsertFormalizationSnippet = useCallback((content: string, snippet?: Snippet) => {
     const inferredProfile = inferProfileFromSnippet(snippet);
@@ -233,12 +352,44 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                 ))}
               </select>
 
+              {/* Engine toggle NLP / LLM */}
+              <div className="flex rounded-lg border border-slate-700 overflow-hidden">
+                <button
+                  onClick={() => setEngine('nlp')}
+                  className={`flex items-center gap-1 px-3 py-2 text-xs font-medium transition ${
+                    engine === 'nlp'
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-slate-950 text-slate-500 hover:text-slate-300'
+                  }`}
+                  title="Reglas NLP – local, instantáneo"
+                >
+                  <Cpu className="w-3 h-3" /> NLP
+                </button>
+                <button
+                  onClick={() => setEngine('llm')}
+                  className={`flex items-center gap-1 px-3 py-2 text-xs font-medium transition ${
+                    engine === 'llm'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-slate-950 text-slate-500 hover:text-slate-300'
+                  }`}
+                  title="LLM GPU – más preciso, ~3-8s"
+                >
+                  <Brain className="w-3 h-3" /> LLM
+                </button>
+              </div>
+
               <button
                 onClick={handleFormalize}
-                disabled={!input.trim()}
-                className="rounded-lg bg-cyan-600 px-5 py-2 text-xs font-semibold text-white transition hover:bg-cyan-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                disabled={!input.trim() || isLoading}
+                className={`rounded-lg px-5 py-2 text-xs font-semibold text-white transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+                  engine === 'llm' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-cyan-600 hover:bg-cyan-500'
+                }`}
               >
-                Formalizar (Ctrl+Enter)
+                {isLoading ? (
+                  <><Loader2 className="w-3 h-3 animate-spin" /> Procesando…</>
+                ) : (
+                  <>Formalizar (Ctrl+Enter)</>
+                )}
               </button>
 
               {results.length > 0 && (
@@ -250,6 +401,90 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                 </button>
               )}
             </div>
+
+            {/* ── LLM Config panel (collapsible) ───────────── */}
+            {engine === 'llm' && (
+              <div className="rounded-xl border border-purple-900/40 bg-purple-950/20 overflow-hidden">
+                <button
+                  onClick={() => setShowLLMConfig(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2 text-xs font-medium text-purple-300 hover:text-purple-200 transition"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Settings className="w-3 h-3" />
+                    Configuración LLM
+                    {llmConfig.endpoint && (
+                      <span className="rounded bg-purple-900/50 px-1.5 py-0.5 text-[9px] text-purple-400 font-mono ml-1">
+                        custom
+                      </span>
+                    )}
+                  </span>
+                  {showLLMConfig ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {showLLMConfig && (
+                  <div className="border-t border-purple-900/30 px-4 py-3 space-y-2">
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      Si dejas los campos vacíos se usará la configuración del servidor.
+                      Para usar tu propio Ollama, pon la URL (ej: <code className="text-purple-400">http://localhost:11434/api/chat</code>).
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5">Proveedor</label>
+                        <select
+                          value={llmConfig.provider}
+                          onChange={e => setLlmConfig({ provider: e.target.value as LLMProvider })}
+                          className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-purple-500/60"
+                        >
+                          <option value="ollama">Ollama (directo)</option>
+                          <option value="openwebui">Open WebUI</option>
+                          <option value="openai">OpenAI compatible</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5">Modelo</label>
+                        <input
+                          type="text"
+                          value={llmConfig.model}
+                          onChange={e => setLlmConfig({ model: e.target.value })}
+                          placeholder="qwen2.5-coder:14b"
+                          className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-300 outline-none placeholder:text-slate-700 focus:border-purple-500/60 font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500 block mb-0.5">Endpoint URL</label>
+                      <input
+                        type="url"
+                        value={llmConfig.endpoint}
+                        onChange={e => setLlmConfig({ endpoint: e.target.value })}
+                        placeholder={llmConfig.provider === 'ollama' ? 'http://localhost:11434/api/chat' : 'https://your-server.com/api/chat/completions'}
+                        className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-300 outline-none placeholder:text-slate-700 focus:border-purple-500/60 font-mono"
+                      />
+                    </div>
+                    {llmConfig.provider !== 'ollama' && (
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5">API Key</label>
+                        <input
+                          type="password"
+                          value={llmConfig.apiKey}
+                          onChange={e => setLlmConfig({ apiKey: e.target.value })}
+                          placeholder="sk-..."
+                          className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-300 outline-none placeholder:text-slate-700 focus:border-purple-500/60 font-mono"
+                        />
+                      </div>
+                    )}
+                    <button
+                      onClick={() => {
+                        setLlmConfigRaw(DEFAULT_LLM_CONFIG);
+                        try { localStorage.removeItem(LLM_CONFIG_KEY); } catch { /* noop */ }
+                      }}
+                      className="text-[10px] text-slate-600 hover:text-red-400 transition"
+                    >
+                      Restaurar defaults del servidor
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Snippets dinámicos */}
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
@@ -296,7 +531,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                           {r.input.slice(0, 80)}{r.input.length > 80 ? '…' : ''}
                         </span>
                         <span className="text-slate-600 font-mono shrink-0">
-                          {PROFILES.find(p => p.value === r.profile)?.short || '?'} · {r.elapsed}ms
+                          {r.engine === 'llm' ? '🧠' : '⚡'} {PROFILES.find(p => p.value === r.profile)?.short || '?'} · {r.elapsed}ms
                         </span>
                       </div>
                       {r.patterns.length > 0 && (
