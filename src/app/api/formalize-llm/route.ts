@@ -1,9 +1,10 @@
 /**
  * POST /api/formalize-llm
  *
- * Proxy server-side for Ollama-backed formalization.
- * Calls @stevenvo780/autologic formalizeWithLLM() which needs server-side fetch
- * to reach the Ollama GPU server (no CORS from browser).
+ * Server-side proxy for LLM-backed formalization.
+ * Accepts optional client-side LLM configuration (endpoint, apiKey, model, provider)
+ * so users can point to their own Ollama / Open WebUI instance.
+ * Falls back to server env vars when no client config is provided.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -13,8 +14,50 @@ import {
   type LLMConfig
 } from '@stevenvo780/autologic';
 
-const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://10.88.88.1:11434/api/chat';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5-coder:14b';
+// Server-side defaults (set via Vercel env vars or .env)
+const SERVER_OPENWEBUI_ENDPOINT = process.env.OPENWEBUI_ENDPOINT || '';
+const SERVER_OPENWEBUI_API_KEY = process.env.OPENWEBUI_API_KEY || '';
+const SERVER_OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api/chat';
+const SERVER_OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5-coder:14b';
+
+type LLMProvider = LLMConfig['provider'];
+
+function buildLLMConfig(body: Record<string, unknown>): LLMConfig {
+  // Client-supplied overrides
+  const clientProvider = body.llmProvider as LLMProvider | undefined;
+  const clientEndpoint = (body.llmEndpoint as string)?.trim() || '';
+  const clientApiKey = (body.llmApiKey as string)?.trim() || '';
+  const clientModel = (body.llmModel as string)?.trim() || '';
+
+  // If the client sends explicit config, use it
+  if (clientEndpoint) {
+    const provider: LLMProvider = clientProvider || (clientApiKey ? 'openwebui' : 'ollama');
+    return {
+      provider,
+      apiKey: clientApiKey,
+      endpoint: clientEndpoint,
+      model: clientModel || SERVER_OLLAMA_MODEL
+    };
+  }
+
+  // Otherwise fall back to server env vars
+  if (SERVER_OPENWEBUI_ENDPOINT && SERVER_OPENWEBUI_API_KEY) {
+    return {
+      provider: 'openwebui',
+      apiKey: SERVER_OPENWEBUI_API_KEY,
+      endpoint: SERVER_OPENWEBUI_ENDPOINT,
+      model: SERVER_OLLAMA_MODEL
+    };
+  }
+
+  // Last resort: direct Ollama on localhost / LAN
+  return {
+    provider: 'ollama',
+    apiKey: '',
+    endpoint: SERVER_OLLAMA_ENDPOINT,
+    model: SERVER_OLLAMA_MODEL
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,12 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Text is required' }, { status: 400 });
     }
 
-    const llmConfig: LLMConfig = {
-      provider: 'ollama',
-      apiKey: '',
-      endpoint: OLLAMA_ENDPOINT,
-      model: OLLAMA_MODEL
-    };
+    const llmConfig = buildLLMConfig(body);
 
     const opts: FormalizeWithLLMOptions = {
       profile: profile || 'classical.propositional',
