@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, Info, Lightbulb, Ruler, Wrench } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Info, Lightbulb, Ruler, Wrench, PenLine } from 'lucide-react';
 import type { LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import type { Diagnostic as STDiagnostic } from '@stevenvo780/st-lang/api';
 
@@ -189,18 +189,21 @@ export function LinterOverlay({
         }
 
         const isSTRef = 'source' in d && d.source === 'ST-Definitions';
+        const isNote = d.severity === 'info' && 'source' in d && d.source === 'Nota';
         const borderColor = d.severity === 'error' ? '#ef4444'
                            : d.severity === 'warning' ? '#f59e0b'
+                           : isNote ? '#f59e0b'
                            : isSTRef ? '#06b6d4' : '#3b82f6';
 
         const severityColor = d.severity === 'error' ? 'rgba(239, 68, 68, 0.4)'
                              : d.severity === 'warning' ? 'rgba(245, 158, 11, 0.4)'
+                             : isNote ? 'rgba(245, 158, 11, 0.15)'
                              : isSTRef ? 'rgba(6, 182, 212, 0.15)' : 'rgba(59, 130, 246, 0.4)';
 
         return (
           <React.Fragment key={i}>
             {/* Soft background highlight for ST references */}
-            {isSTRef && (
+            {(isSTRef || isNote) && (
               <div
                 className="absolute pointer-events-none"
                 style={{
@@ -208,7 +211,7 @@ export function LinterOverlay({
                   left,
                   width: Math.max(width, 4),
                   height: lineHeight,
-                  backgroundColor: 'rgba(6, 182, 212, 0.06)',
+                  backgroundColor: isNote ? 'rgba(245, 158, 11, 0.08)' : 'rgba(6, 182, 212, 0.06)',
                   borderRadius: '2px'
                 }}
               />
@@ -220,10 +223,10 @@ export function LinterOverlay({
                 top,
                 left,
                 width: Math.max(width, 4),
-                height: isSTRef ? 0 : 2,
-                backgroundColor: isSTRef ? 'transparent' : borderColor,
-                borderBottom: isSTRef ? `2px dotted ${borderColor}` : 'none',
-                boxShadow: isSTRef ? 'none' : `0 1px 2px ${severityColor}`
+                height: (isSTRef || isNote) ? 0 : 2,
+                backgroundColor: (isSTRef || isNote) ? 'transparent' : borderColor,
+                borderBottom: (isSTRef || isNote) ? `2px dotted ${borderColor}` : 'none',
+                boxShadow: (isSTRef || isNote) ? 'none' : `0 1px 2px ${severityColor}`
               }}
             />
             {/* Transparent hit area covering full text line */}
@@ -251,7 +254,7 @@ export function LinterOverlay({
                 }
                 hoverCloseTimerRef.current = window.setTimeout(() => {
                   setHoverTooltipKey((current) => current === tooltipKey ? null : current);
-                }, 90);
+                }, 300);
               }}
               onMouseDown={(event) => {
                 if (!linterInteractive || !supportsPinnedTooltip) return;
@@ -279,24 +282,26 @@ export function LinterOverlay({
                 if (openTooltipKey === tooltipKey) return;
                 hoverCloseTimerRef.current = window.setTimeout(() => {
                   setHoverTooltipKey((current) => current === tooltipKey ? null : current);
-                }, 90);
+                }, 300);
               }}
               onMouseDown={(event) => event.stopPropagation()}
             >
               <div className="flex items-center gap-2 mb-1">
-                {isSTRef ? <Ruler className="w-3 h-3 text-cyan-400 flex-shrink-0" /> :
+                {isNote ? <PenLine className="w-3 h-3 text-amber-400 flex-shrink-0" /> :
+                 isSTRef ? <Ruler className="w-3 h-3 text-cyan-400 flex-shrink-0" /> :
                  d.severity === 'error' ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" /> :
                  d.severity === 'warning' ? <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" /> :
                  <Info className="w-3 h-3 text-blue-400 flex-shrink-0" />}
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                  isNote ? 'text-amber-400' :
                   isSTRef ? 'text-cyan-400' :
                   d.severity === 'error' ? 'text-red-400' :
                   d.severity === 'warning' ? 'text-amber-400' :
                   'text-blue-400'
                 }`}>
-                  {isSTRef ? 'ST Reference' : d.severity}
+                  {isNote ? 'Nota Semántica' : isSTRef ? 'ST Reference' : d.severity}
                 </span>
-                {'source' in d && <span className="text-[10px] text-slate-500 ml-auto">{d.source}</span>}
+                {'source' in d && <span className="text-[10px] text-slate-500 ml-auto">{isNote ? 'Workspace' : d.source}</span>}
               </div>
               <div className="text-xs text-slate-200 leading-relaxed">
                 {d.message}
