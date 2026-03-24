@@ -155,11 +155,14 @@ const HeaderBar = ({
   currentPlanName
 }: HeaderBarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const toolsMenuRef = useRef<HTMLDivElement>(null);
+  const toolsMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   // Load storage usage when user menu opens
   useEffect(() => {
@@ -178,11 +181,24 @@ const HeaderBar = ({
   const workerStatus = workerToken ? getWorkerStatusForWorkspace(workerToken) : WorkerStatusValue.Unknown;
   const isWorkerOnline = workerStatus === WorkerStatusValue.Online;
   const workspaceSessions = workerToken ? getSessionsForWorkspace(workerToken) : [];
+  const boardPanelId = currentWorkspace ? `board-${currentWorkspace.id}` : '';
+  const stRunnerPanelId = currentWorkspace ? `st-runner-${currentWorkspace.id}` : '';
+  const semanticBrowserPanelId = currentWorkspace ? `semantic-browser-${currentWorkspace.id}` : '';
+  const formalizerPanelId = formalizerTileId || (currentWorkspace ? `formalizer-${currentWorkspace.id}` : '');
+  const snippetsGalleryPanelId = currentWorkspace ? `snippets-gallery-${currentWorkspace.id}` : '';
+  const filesPanelId = currentWorkspace ? `files-${currentWorkspace.id}` : '';
 
   const handleCreateSession = useCallback(() => {
     if (!currentWorkspace || !user || !workerToken) return;
     createSession(workerToken, currentWorkspace.type, `Terminal ${workspaceSessions.length + 1}`);
   }, [currentWorkspace, user, workerToken, createSession, workspaceSessions.length]);
+
+  const handleHeaderDragStart = useCallback((event: React.DragEvent<HTMLElement>, docId: string) => {
+    if (!docId) return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-doc-id', docId);
+    event.dataTransfer.setData('text/plain', docId);
+  }, []);
 
   const statusDot = isWorkerOnline
     ? 'bg-emerald-400'
@@ -206,6 +222,99 @@ const HeaderBar = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpenId]);
 
+  useEffect(() => {
+    if (!showToolsMenu) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const insideMenu = toolsMenuRef.current && toolsMenuRef.current.contains(target);
+      const insideButton = toolsMenuButtonRef.current && toolsMenuButtonRef.current.contains(target);
+      if (!insideMenu && !insideButton) {
+        setShowToolsMenu(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowToolsMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showToolsMenu]);
+
+  useEffect(() => {
+    if (showWorkspaceMenu || showUserMenu) {
+      setShowToolsMenu(false);
+    }
+  }, [showWorkspaceMenu, showUserMenu]);
+
+  const panelTools = [
+    {
+      id: 'st',
+      label: 'ST Logic',
+      description: 'Ejecutor lógico y pruebas formales',
+      icon: FlaskConical,
+      active: isStRunnerOpen,
+      dragId: stRunnerPanelId,
+      onClick: onOpenStRunner,
+      activeClasses: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-200',
+      iconClasses: 'text-indigo-300 bg-indigo-500/15 border-indigo-500/25'
+    },
+    {
+      id: 'semantic',
+      label: 'Semántica',
+      description: 'Mesa semántica global del espacio',
+      icon: BookMarked,
+      active: isSemanticBrowserOpen,
+      dragId: semanticBrowserPanelId,
+      onClick: onOpenSemanticBrowser,
+      activeClasses: 'border-blue-500/30 bg-blue-500/10 text-blue-200',
+      iconClasses: 'text-blue-300 bg-blue-500/15 border-blue-500/25'
+    },
+    {
+      id: 'formalizer',
+      label: 'Formalizar',
+      description: 'Conversión asistida a lenguaje ST',
+      icon: Zap,
+      active: isFormalizerOpen,
+      dragId: formalizerPanelId,
+      onClick: onOpenFormalizer,
+      activeClasses: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
+      iconClasses: 'text-cyan-300 bg-cyan-500/15 border-cyan-500/25'
+    },
+    {
+      id: 'snippets',
+      label: 'Snippets',
+      description: 'Galería reutilizable del workspace',
+      icon: Plus,
+      active: openTabs.some(t => t.type === ('snippets-gallery' as any)),
+      dragId: snippetsGalleryPanelId,
+      onClick: onOpenSnippetsGallery,
+      activeClasses: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+      iconClasses: 'text-amber-300 bg-amber-500/15 border-amber-500/25'
+    }
+  ] as const;
+
+  const utilityTools = [
+    {
+      id: 'team',
+      label: 'Equipo',
+      description: 'Ver miembros y colaboradores',
+      icon: Users,
+      onClick: onShowMembers
+    },
+    {
+      id: 'docs',
+      label: 'Ayuda',
+      description: 'Abrir documentación en otra pestaña',
+      icon: BookOpen,
+      href: '/docs'
+    }
+  ] as const;
+
   return (
     <header className="h-11 bg-surface-800 border-b border-surface-600/50 flex items-center px-3 shrink-0 z-50 relative gap-2">
       {/* ── Left: Logo + Workspace ── */}
@@ -223,7 +332,11 @@ const HeaderBar = ({
 
         <div className="relative">
           <button
-            onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
+            onClick={() => {
+              setShowToolsMenu(false);
+              setShowUserMenu(false);
+              setShowWorkspaceMenu(!showWorkspaceMenu);
+            }}
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-surface-700 rounded-lg transition border border-transparent hover:border-surface-600"
             title={currentWorkspace?.id && currentWorkspace.id !== personalWorkspaceId ? `ID: ${currentWorkspace.id}` : undefined}
           >
@@ -533,13 +646,8 @@ const HeaderBar = ({
           <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
         </div>
         <button
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            const id = currentWorkspace ? `board-${currentWorkspace.id}` : '';
-            e.dataTransfer.setData('application/x-doc-id', id);
-            e.dataTransfer.setData('text/plain', id);
-          }}
+          draggable={Boolean(boardPanelId)}
+          onDragStart={(e) => handleHeaderDragStart(e, boardPanelId)}
           onClick={onOpenBoard}
           className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
             isBoardOpen
@@ -547,101 +655,138 @@ const HeaderBar = ({
               : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
           }`}
           title="Tablero (arrastrar al grid)"
+          aria-label="Tablero"
         >
           <KanbanSquare className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">Tablero</span>
         </button>
+        <div className="relative">
+          <button
+            ref={toolsMenuButtonRef}
+            onClick={() => {
+              setShowWorkspaceMenu(false);
+              setShowUserMenu(false);
+              setShowToolsMenu(prev => !prev);
+            }}
+            className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition border ${
+              showToolsMenu
+                ? 'border-surface-500/60 bg-surface-700 text-surface-100'
+                : 'border-transparent text-surface-500 hover:text-surface-200 hover:bg-surface-700/80 hover:border-surface-600/50'
+            }`}
+            title="Paneles y herramientas"
+            aria-label="Paneles y herramientas"
+            aria-haspopup="menu"
+            aria-expanded={showToolsMenu}
+          >
+            <MoreVertical className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Paneles</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showToolsMenu && (
+            <div
+              ref={toolsMenuRef}
+              className="absolute top-full right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-80 rounded-2xl border border-surface-600/60 bg-surface-800 shadow-2xl shadow-black/50 z-30 overflow-hidden"
+            >
+              <div className="px-4 py-3 border-b border-surface-600/50 bg-surface-700/50">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-surface-500">Paneles</p>
+                <p className="mt-1 text-xs text-surface-400">Arrastra cualquier panel al grid para fijarlo en el espacio de trabajo.</p>
+              </div>
+
+              <div className="p-2 space-y-1.5">
+                {panelTools.map(tool => {
+                  const Icon = tool.icon;
+                  return (
+                    <button
+                      key={tool.id}
+                      draggable={Boolean(tool.dragId)}
+                      onDragStart={(event) => handleHeaderDragStart(event, tool.dragId)}
+                      onClick={() => {
+                        tool.onClick();
+                        setShowToolsMenu(false);
+                      }}
+                      className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                        tool.active
+                          ? tool.activeClasses
+                          : 'border-surface-700/80 bg-surface-900/40 text-surface-300 hover:border-surface-500/50 hover:bg-surface-700/70'
+                      } ${tool.dragId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                      title={`${tool.label}${tool.dragId ? ' (arrastrar al grid)' : ''}`}
+                      aria-label={tool.label}
+                    >
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${tool.active ? tool.iconClasses : 'border-surface-700 bg-surface-900/70 text-surface-400'}`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold">{tool.label}</div>
+                        <div className="text-[11px] text-surface-500 truncate">{tool.description}</div>
+                      </div>
+                      {tool.dragId && (
+                        <span className="shrink-0 rounded-full border border-surface-600/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-surface-500">
+                          Arrastra
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="border-t border-surface-600/40 px-2 py-2 space-y-1">
+                {utilityTools.map(tool => {
+                  const Icon = tool.icon;
+                  const content = (
+                    <>
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-700 bg-surface-900/70 text-surface-400">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-surface-200">{tool.label}</div>
+                        <div className="text-[11px] text-surface-500 truncate">{tool.description}</div>
+                      </div>
+                    </>
+                  );
+
+                  if ('href' in tool) {
+                    return (
+                      <a
+                        key={tool.id}
+                        href={tool.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setShowToolsMenu(false)}
+                        className="w-full flex items-center gap-3 rounded-xl border border-surface-700/80 bg-surface-900/40 px-3 py-2.5 text-left transition hover:border-surface-500/50 hover:bg-surface-700/70"
+                      >
+                        {content}
+                      </a>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={tool.id}
+                      onClick={() => {
+                        tool.onClick();
+                        setShowToolsMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 rounded-xl border border-surface-700/80 bg-surface-900/40 px-3 py-2.5 text-left transition hover:border-surface-500/50 hover:bg-surface-700/70"
+                    >
+                      {content}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
         <button
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            const id = currentWorkspace ? `st-runner-${currentWorkspace.id}` : '';
-            e.dataTransfer.setData('application/x-doc-id', id);
-            e.dataTransfer.setData('text/plain', id);
-          }}
-          onClick={onOpenStRunner}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
-            isStRunnerOpen
-              ? 'bg-indigo-500/15 text-indigo-300'
-              : 'text-surface-500 hover:text-indigo-400 hover:bg-indigo-500/10'
-          }`}
-          title="ST Logic Runner (arrastrar al grid)"
-        >
-          <FlaskConical className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">ST</span>
-        </button>
-        <button
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            const id = currentWorkspace ? `semantic-browser-${currentWorkspace.id}` : '';
-            e.dataTransfer.setData('application/x-doc-id', id);
-            e.dataTransfer.setData('text/plain', id);
-          }}
-          onClick={onOpenSemanticBrowser}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
-            isSemanticBrowserOpen
-              ? 'bg-blue-500/15 text-blue-300'
-              : 'text-surface-500 hover:text-blue-400 hover:bg-blue-500/10'
-          }`}
-          title="Mesa Semántica (arrastrar al grid)"
-        >
-          <BookMarked className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Semántica</span>
-        </button>
-        <button
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            const id = formalizerTileId || '';
-            e.dataTransfer.setData('application/x-doc-id', id);
-            e.dataTransfer.setData('text/plain', id);
-          }}
-          onClick={onOpenFormalizer}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
-            isFormalizerOpen
-              ? 'bg-cyan-500/15 text-cyan-300'
-              : 'text-surface-500 hover:text-cyan-400 hover:bg-cyan-500/10'
-          }`}
-          title="Formalizador ST (arrastrar al grid)"
-        >
-          <Zap className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Formalizar</span>
-        </button>
-        <button
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            const id = currentWorkspace ? `snippets-gallery-${currentWorkspace.id}` : '';
-            e.dataTransfer.setData('application/x-doc-id', id);
-            e.dataTransfer.setData('text/plain', id);
-          }}
-          onClick={onOpenSnippetsGallery}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
-            openTabs.some(t => t.type === ('snippets-gallery' as any))
-              ? 'bg-amber-500/15 text-amber-300'
-              : 'text-surface-500 hover:text-amber-400 hover:bg-amber-500/10'
-          }`}
-          title="Galería de Snippets (arrastrar al grid)"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Snippets</span>
-        </button>
-        <button
+          draggable={Boolean(filesPanelId)}
+          onDragStart={(e) => handleHeaderDragStart(e, filesPanelId)}
           onClick={openFilesTab}
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
-          title="Explorador de archivos"
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 cursor-grab active:cursor-grabbing"
+          title="Explorador de archivos (arrastrar al grid)"
+          aria-label="Archivos"
         >
           <FolderOpen className="w-3.5 h-3.5" />
           <span className="hidden lg:inline">Archivos</span>
-        </button>
-        <button
-          onClick={onShowMembers}
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
-          title="Miembros"
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Equipo</span>
         </button>
         <button
           onClick={onOpenQuickSearch}
@@ -652,22 +797,14 @@ const HeaderBar = ({
           <Search className="w-3.5 h-3.5" />
           <span className="hidden xl:inline">Buscar</span>
         </button>
-        <a
-          href="/docs"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
-          title="Abrir documentación"
-          aria-label="Abrir documentación"
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span className="hidden xl:inline">Ayuda</span>
-        </a>
-
         {/* User menu */}
         <div className="relative">
           <button
-            onClick={() => setShowUserMenu(!showUserMenu)}
+            onClick={() => {
+              setShowToolsMenu(false);
+              setShowWorkspaceMenu(false);
+              setShowUserMenu(!showUserMenu);
+            }}
             className="p-1.5 text-surface-400 hover:text-mandy-400 hover:bg-mandy-500/10 rounded-full transition"
             title={user?.email || 'Usuario'}
           >
