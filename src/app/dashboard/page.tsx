@@ -1410,6 +1410,25 @@ function DashboardContent() {
         await deleteDocRecords([docItem.id], docItem.name);
     };
 
+    const deleteDocuments = async (docItems: DocItem[]) => {
+        const validDocs = docItems.filter(d => !deletingIds[d.id]);
+        if (validDocs.length === 0) return;
+        if (validDocs.length === 1) {
+            return deleteDocument(validDocs[0] as DocItem, { stopPropagation: () => {} } as ReactMouseEvent);
+        }
+
+        const confirmResult = await showDialog({
+            type: DialogKind.Confirm,
+            title: 'Eliminar múltiples elementos',
+            message: `¿Estás seguro de que deseas eliminar ${validDocs.length} elementos? Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            cancelLabel: 'Cancelar',
+            danger: true
+        });
+        if (!confirmResult.confirmed) return;
+        await deleteDocRecords(validDocs.map(d => d.id), `${validDocs.length} elementos`);
+    };
+
     const getIcon = (doc: DocItem) => {
         if (doc.type === 'terminal') return <TerminalIcon className="w-5 h-5" />;
         if (doc.type === 'board') return <KanbanSquare className="w-5 h-5" />;
@@ -1635,6 +1654,7 @@ function DashboardContent() {
                         handleDocDragStart={handleDocDragStart}
                         handleDocDragEnd={handleDocDragEnd}
                         deleteDocument={deleteDocument}
+                        onDeleteDocuments={deleteDocuments}
                         onRenameDocument={promptRenameDocument}
                         onDownloadDoc={handleDownloadDoc}
                         getIcon={getIcon}
