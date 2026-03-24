@@ -18,7 +18,7 @@ import {
 const SERVER_OPENWEBUI_ENDPOINT = process.env.OPENWEBUI_ENDPOINT || '';
 const SERVER_OPENWEBUI_API_KEY = process.env.OPENWEBUI_API_KEY || '';
 const SERVER_OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api/chat';
-const SERVER_OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5-coder:14b';
+const SERVER_OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'autologic-formalizer';
 
 type LLMProvider = LLMConfig['provider'];
 

@@ -309,7 +309,6 @@ const Sidebar = ({
     return treeItems;
   }, [isSearchMode, actualFilteredDocs, treeItems]);
 
-
   const handleDocClick = (e: React.MouseEvent, index: number, doc: DocItem) => {
     if (e.shiftKey && lastSelectedIndex !== null) {
       e.preventDefault();
@@ -349,7 +348,7 @@ const Sidebar = ({
         if (!selectedDocsIds.has(doc.id)) {
           setSelectedDocsIds(new Set([doc.id]));
         }
-        getContextTriggerProps({ type: 'doc', id: doc.id, doc: doc }).onContextMenu?.(e);
+        getContextTriggerProps({ type: 'doc', id: doc.id, doc }).onContextMenu?.(e);
       }
     };
   };
