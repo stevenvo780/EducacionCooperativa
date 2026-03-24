@@ -72,6 +72,7 @@ interface SidebarProps {
   handleDocDragStart: (e: React.DragEvent, doc: DocItem) => void;
   handleDocDragEnd: () => void;
   deleteDocument: (doc: DocItem, e: React.MouseEvent) => void;
+  onDeleteDocuments?: (docs: DocItem[]) => void;
   onRenameDocument: (doc: DocItem) => void;
   onDownloadDoc?: (doc: DocItem) => void;
   getIcon: (doc: DocItem) => React.ReactNode;
@@ -117,6 +118,7 @@ const Sidebar = ({
   handleDocDragStart,
   handleDocDragEnd,
   deleteDocument,
+  onDeleteDocuments,
   onRenameDocument,
   onDownloadDoc,
   getIcon,
@@ -140,6 +142,8 @@ const Sidebar = ({
 }: SidebarProps) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
+  const [selectedDocsIds, setSelectedDocsIds] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
   const { menu: contextMenu, open: openContextMenu, close: closeContextMenu, getTriggerProps: getContextTriggerProps } = useContextMenu<{
     type: 'doc' | 'folder' | 'sidebar';
@@ -305,7 +309,53 @@ const Sidebar = ({
     return treeItems;
   }, [isSearchMode, actualFilteredDocs, treeItems]);
 
+
+  const handleDocClick = (e: React.MouseEvent, index: number, doc: DocItem) => {
+    if (e.shiftKey && lastSelectedIndex !== null) {
+      e.preventDefault();
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const newSelected = new Set(selectedDocsIds);
+      if (!e.ctrlKey && !e.metaKey) {
+        newSelected.clear();
+      }
+      for (let i = start; i <= end; i++) {
+        const rowItem = listItems[i];
+        if (rowItem && (rowItem.kind === 'doc' || rowItem.kind === 'search')) {
+          newSelected.add(rowItem.doc.id);
+        }
+      }
+      setSelectedDocsIds(newSelected);
+    } else if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const newSelected = new Set(selectedDocsIds);
+      if (newSelected.has(doc.id)) {
+        newSelected.delete(doc.id);
+      } else {
+        newSelected.add(doc.id);
+      }
+      setSelectedDocsIds(newSelected);
+      setLastSelectedIndex(index);
+    } else {
+      setSelectedDocsIds(new Set([doc.id]));
+      setLastSelectedIndex(index);
+      openDocument(doc);
+    }
+  };
+
+  const getDocContextMenuProps = (doc: DocItem) => {
+    return {
+      onContextMenu: (e: React.MouseEvent) => {
+        if (!selectedDocsIds.has(doc.id)) {
+          setSelectedDocsIds(new Set([doc.id]));
+        }
+        getContextTriggerProps({ type: 'doc', id: doc.id, doc: doc }).onContextMenu?.(e);
+      }
+    };
+  };
+
   const renderSidebarRow = ({ index, style, ariaAttributes }: RowComponentProps) => {
+
     const item = listItems[index];
     if (!item) return null;
 
@@ -317,16 +367,16 @@ const Sidebar = ({
           {...ariaAttributes}
         >
           <div
-            onClick={() => openDocument(item.doc)}
+            onClick={(e) => handleDocClick(e, index, item.doc)}
             draggable
             onDragStart={(e) => handleDocDragStart(e, item.doc)}
             onDragEnd={handleDocDragEnd}
-            {...getContextTriggerProps({ type: 'doc', id: item.doc.id, doc: item.doc })}
+            {...getDocContextMenuProps(item.doc)}
             className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${
-              selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-300 hover:bg-surface-700/50'
+              (selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'bg-surface-700 text-white font-medium ring-1 ring-inset ring-surface-500/50' : 'text-surface-300 hover:bg-surface-700/50'
             }`}
           >
-            <div className={`${selectedDocId === item.doc.id ? 'text-white' : 'text-surface-500'}`}>
+            <div className={`${(selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'text-white' : 'text-surface-500'}`}>
               {getIcon(item.doc)}
             </div>
             <span className="truncate flex-1">{item.doc.name}</span>
@@ -391,17 +441,17 @@ const Sidebar = ({
     return (
       <div style={style} {...ariaAttributes}>
         <div
-          onClick={() => openDocument(item.doc)}
+          onClick={(e) => handleDocClick(e, index, item.doc)}
           draggable
           onDragStart={(e) => handleDocDragStart(e, item.doc)}
           onDragEnd={handleDocDragEnd}
-          {...getContextTriggerProps({ type: 'doc', id: item.doc.id, doc: item.doc })}
+          {...getDocContextMenuProps(item.doc)}
           className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
-            selectedDocId === item.doc.id ? 'bg-surface-700 text-white font-medium' : 'text-surface-400 hover:bg-surface-700/40'
+            (selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'bg-surface-700 text-white font-medium ring-1 ring-inset ring-surface-500/50' : 'text-surface-400 hover:bg-surface-700/40'
           }`}
           style={{ paddingLeft }}
         >
-          <div className={`${selectedDocId === item.doc.id ? 'text-white' : 'text-surface-500'}`}>
+          <div className={`${(selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'text-white' : 'text-surface-500'}`}>
             {getIcon(item.doc)}
           </div>
           <span className="truncate flex-1">{item.doc.name}</span>
@@ -618,7 +668,56 @@ const Sidebar = ({
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={closeContextMenu}
-          sections={contextMenu.data.type === 'doc' ? [
+          sections={contextMenu.data.type === 'doc' ? selectedDocsIds.size > 1 ? [
+            {
+              actions: [
+                {
+                  label: `Fijar en favoritos (${selectedDocsIds.size})`,
+                  icon: <Star className="w-4 h-4" />,
+                  onClick: () => {
+                    const toFavorite = Array.from(selectedDocsIds);
+                    toFavorite.forEach(id => {
+                      const doc = docs.find(d => d.id === id);
+                      if (doc && !favoriteDocIdSet.has(doc.id)) onToggleFavorite(doc);
+                    });
+                  }
+                },
+                ...(onDownloadDoc ? [{
+                  label: `Descargar (${selectedDocsIds.size})`,
+                  icon: <Download className="w-4 h-4" />,
+                  onClick: () => {
+                    const toDownload = Array.from(selectedDocsIds);
+                    toDownload.forEach(id => {
+                      const doc = docs.find(d => d.id === id);
+                      if (doc) onDownloadDoc(doc);
+                    });
+                  }
+                }] : [])
+              ]
+            },
+            {
+              actions: [
+                {
+                  label: `Eliminar (${selectedDocsIds.size})`,
+                  icon: <Trash2 className="w-4 h-4" />,
+                  onClick: () => {
+                    if (onDeleteDocuments) {
+                        const selectedDocsItems = docs.filter(d => selectedDocsIds.has(d.id));
+                        onDeleteDocuments(selectedDocsItems);
+                        setSelectedDocsIds(new Set());
+                    } else {
+                        Array.from(selectedDocsIds).forEach(id => {
+                            const doc = docs.find(d => d.id === id);
+                            if (doc) deleteDocument(doc, { stopPropagation: () => {} } as React.MouseEvent);
+                        });
+                        setSelectedDocsIds(new Set());
+                    }
+                  },
+                  destructive: true
+                }
+              ]
+            }
+          ] : [
             {
               actions: [
                 {

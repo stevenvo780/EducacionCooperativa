@@ -299,9 +299,6 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         <div className="flex items-center gap-2">
           <Zap className="w-3 h-3 text-cyan-400" />
           <span className="text-[10px] font-medium text-slate-400">Formalizador ST</span>
-          <span className="rounded bg-cyan-950/50 px-1.5 py-0.5 text-[9px] font-mono text-cyan-400/70 border border-cyan-900/30">
-            v2
-          </span>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
           {totalRuns > 0 && <span>{successRuns}/{totalRuns} OK · {avgTime}ms avg</span>}
