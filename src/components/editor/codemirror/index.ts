@@ -16,6 +16,8 @@ export {
   type EditorCompartments,
   DEFAULT_CONFIG,
   TOUCH_DEVICE_CONFIG,
+  ST_NATIVE_INPUT_ATTRIBUTES,
+  stInputGuardsExtension,
   isTouchDeviceProfile,
   getDefaultConfig,
   loadConfig,

@@ -79,6 +79,16 @@ export const TOUCH_DEVICE_CONFIG: EditorConfig = {
   hover: false
 };
 
+export const ST_NATIVE_INPUT_ATTRIBUTES: Readonly<Record<string, string>> = {
+  spellcheck: 'false',
+  autocorrect: 'off',
+  autocapitalize: 'off',
+  autocomplete: 'off',
+  translate: 'no',
+  'data-enable-grammarly': 'false',
+  'data-gramm': 'false'
+};
+
 function matchesMediaQuery(query: string): boolean {
   return typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
@@ -88,13 +98,21 @@ function matchesMediaQuery(query: string): boolean {
 export function isTouchDeviceProfile(): boolean {
   if (typeof window === 'undefined') return false;
 
-  const coarsePointer = matchesMediaQuery('(pointer: coarse)') || matchesMediaQuery('(any-pointer: coarse)');
+  const primaryCoarsePointer = matchesMediaQuery('(pointer: coarse)');
+  const anyCoarsePointer = matchesMediaQuery('(any-pointer: coarse)');
+  const primaryFinePointer = matchesMediaQuery('(pointer: fine)');
+  const hoverCapable = matchesMediaQuery('(hover: hover)') || matchesMediaQuery('(any-hover: hover)');
+  const noHover = matchesMediaQuery('(hover: none)') || matchesMediaQuery('(any-hover: none)');
   const hasTouchPoints = typeof navigator !== 'undefined'
     && typeof navigator.maxTouchPoints === 'number'
     && navigator.maxTouchPoints > 0;
-  const tabletViewport = typeof window.innerWidth === 'number' && window.innerWidth <= 1024;
+  const touchOnlyDevice = (primaryCoarsePointer || (hasTouchPoints && !primaryFinePointer)) && !hoverCapable;
+  const compactTouchViewport = typeof window.innerWidth === 'number'
+    && window.innerWidth <= 1180
+    && (primaryCoarsePointer || anyCoarsePointer || hasTouchPoints)
+    && noHover;
 
-  return (coarsePointer || hasTouchPoints) && tabletViewport;
+  return touchOnlyDevice || compactTouchViewport;
 }
 
 export function getDefaultConfig(): EditorConfig {
@@ -175,6 +193,10 @@ function activeLineExtension(enabled: boolean): Extension {
 
 function lineWrappingExtension(enabled: boolean): Extension {
   return enabled ? EditorView.lineWrapping : [];
+}
+
+export function stInputGuardsExtension(): Extension {
+  return EditorView.contentAttributes.of(ST_NATIVE_INPUT_ATTRIBUTES);
 }
 
 function bracketMatchingExtension(enabled: boolean): Extension {
