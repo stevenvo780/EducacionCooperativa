@@ -62,6 +62,7 @@ export default function STCodeEditor({
   const onKeyDownRef = useRef(onKeyDown);
   const prevConfigRef = useRef<EditorConfig | null>(null);
   const isTouchDevice = useMemo(() => isTouchDeviceProfile(), []);
+  const resolvedConfig = useMemo(() => editorConfig ?? loadConfig(), [editorConfig]);
 
   // Keep refs in sync
   onChangeRef.current = onChange;
@@ -125,19 +126,18 @@ export default function STCodeEditor({
 
   // ── Initialize EditorView ──
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (isTouchDevice || !containerRef.current) return;
 
     const compartments = createCompartments();
     compartmentsRef.current = compartments;
 
-    const config = editorConfig ?? loadConfig();
-    prevConfigRef.current = config;
+    prevConfigRef.current = resolvedConfig;
 
     const state = EditorState.create({
       doc: value,
       extensions: [
         ...fixedExtensions,
-        ...buildCompartmentExtensions(compartments, config)
+        ...buildCompartmentExtensions(compartments, resolvedConfig)
       ]
     });
 
@@ -154,6 +154,7 @@ export default function STCodeEditor({
 
   // ── Sync config changes → reconfigure compartments ──
   useEffect(() => {
+    if (isTouchDevice) return;
     const view = viewRef.current;
     const compartments = compartmentsRef.current;
     const prev = prevConfigRef.current;
@@ -168,10 +169,11 @@ export default function STCodeEditor({
       }
     }
     prevConfigRef.current = config;
-  }, [editorConfig]);
+  }, [editorConfig, isTouchDevice]);
 
   // ── Sync value from parent → CM ──
   useEffect(() => {
+    if (isTouchDevice) return;
     const view = viewRef.current;
     if (!view) return;
     const currentDoc = view.state.doc.toString();
@@ -180,14 +182,39 @@ export default function STCodeEditor({
         changes: { from: 0, to: currentDoc.length, insert: value }
       });
     }
-  }, [value]);
+  }, [isTouchDevice, value]);
 
   // ── Sync diagnostics → CM lint ──
   useEffect(() => {
+    if (isTouchDevice) return;
     const view = viewRef.current;
     if (!view) return;
     dispatchDiagnostics(view, diagnostics);
-  }, [diagnostics]);
+  }, [diagnostics, isTouchDevice]);
+
+  // Android/tablet IMEs are much more reliable with a native textarea than a
+  // contenteditable-based code editor. Keep touch-first devices on the stable path.
+  if (isTouchDevice) {
+    return (
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        wrap={resolvedConfig.lineWrapping ? 'soft' : 'off'}
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
+        autoComplete="off"
+        translate="no"
+        data-enable-grammarly="false"
+        data-gramm="false"
+        data-st-editor-mode="touch-textarea"
+        className={`h-full w-full resize-none overflow-auto bg-slate-950 px-4 py-3 font-mono text-[13px] leading-6 text-slate-100 outline-none ${className}`}
+      />
+    );
+  }
 
   return (
     <div
