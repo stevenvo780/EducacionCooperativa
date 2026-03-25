@@ -309,11 +309,21 @@ function truthValueColor(value: unknown, isBelnap: boolean): string {
     }
   }
 
+  // Handle probabilistic numeric strings (e.g. "0.5000")
+  if (typeof value === 'string' && !isNaN(Number(value))) {
+    const n = Number(value);
+    if (n >= 0.7) return 'text-emerald-400';
+    if (n <= 0.3) return 'text-red-400';
+    return 'text-amber-400';
+  }
+
   return value ? 'text-emerald-400' : 'text-red-400';
 }
 
 function truthValueLabel(value: unknown, isBelnap: boolean): string {
   if (isBelnap && typeof value === 'string') return value;
+  // Show numeric value for probabilistic strings
+  if (typeof value === 'string' && !isNaN(Number(value))) return value;
   return value ? 'V' : 'F';
 }
 
