@@ -365,4 +365,3 @@ function unescapeSTString(value: string): string {
 }
 
 export const STDefinitionsRegistry = new STDefinitionsRegistryClass();
-

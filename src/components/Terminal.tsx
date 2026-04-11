@@ -176,7 +176,6 @@ const Terminal: React.FC<TerminalProps> = ({
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.15),rgba(2,6,23,1))] text-slate-200 overflow-y-auto relative">
         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none" />
-        
         <div className="max-w-2xl w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] p-8 text-center space-y-6 relative z-10 transition-all">
             <div className="flex justify-center">
                 <div className={`relative p-5 rounded-full border shadow-xl transition-all duration-500 ${

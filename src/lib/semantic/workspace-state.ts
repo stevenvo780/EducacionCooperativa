@@ -593,4 +593,3 @@ export const getRecentSemanticItems = (state: SemanticWorkspaceState) => {
     relations: normalized.relations.slice(0, 5)
   };
 };
-

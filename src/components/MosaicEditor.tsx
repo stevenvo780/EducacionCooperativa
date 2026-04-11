@@ -712,7 +712,6 @@ export default function MosaicEditor({
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
-
   const stats = useMemo(() => {
     const trimmed = statsContent.trim();
     const words = trimmed ? trimmed.split(/\s+/).length : 0;
@@ -1148,7 +1147,7 @@ export default function MosaicEditor({
     } catch {
       setAutologicPreview(null);
     }
-  }, [semanticSelection]);
+  }, [semanticSelection, setDefineConceptDraft, setAutologicPreview]);
 
   const handleAddSelectionToDictionary = useCallback(() => {
     if (!dictionaryCandidate) return;
@@ -1164,7 +1163,7 @@ export default function MosaicEditor({
   const handleToggleToolsPanelFromContextMenu = useCallback(() => {
     setShowToolsPanel((current) => !current);
     closeEditorUtilityMenu();
-  }, [closeEditorUtilityMenu]);
+  }, [closeEditorUtilityMenu, setShowToolsPanel]);
 
   const handleOpenSemanticDeskFromContextMenu = useCallback(() => {
     semanticBrowserBus.open(docName || currentDocMetaRef.current.name);
@@ -1179,7 +1178,7 @@ export default function MosaicEditor({
   const handleToggleSnippetGalleryFromContextMenu = useCallback(() => {
     setShowSnippetGallery((current) => !current);
     closeEditorUtilityMenu();
-  }, [closeEditorUtilityMenu]);
+  }, [closeEditorUtilityMenu, setShowSnippetGallery]);
 
   const handleToggleRawModeFromContextMenu = useCallback(() => {
     setViewModeWithSync(viewMode === 'raw' ? 'edit' : 'raw');
@@ -1236,19 +1235,19 @@ export default function MosaicEditor({
         setSemanticNotice('Concepto registrado, pero falló la generación del archivo ST.');
       }
     });
-  }, [autologicPreview, clearSemanticSelection, defineConceptDraft, docName, effectiveWorkspaceId, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, syncCompanionST, updateSemanticState, user?.uid]);
+  }, [autologicPreview, clearSemanticSelection, defineConceptDraft, docName, effectiveWorkspaceId, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, syncCompanionST, updateSemanticState, user?.uid, setDefineConceptDraft, setAutologicPreview]);
 
   const handleSaveAsSnippet = useCallback(() => {
     if (!semanticSelection) return;
     setSnippetDraft({ markdown: semanticSelection.text });
     clearSemanticSelection();
-  }, [clearSemanticSelection, semanticSelection]);
+  }, [clearSemanticSelection, semanticSelection, setSnippetDraft]);
 
   const handleAddNote = useCallback(() => {
     if (!semanticSelection) return;
     setNoteDraft({ selectionText: semanticSelection.text, note: '' });
     clearSemanticSelection();
-  }, [clearSemanticSelection, semanticSelection]);
+  }, [clearSemanticSelection, semanticSelection, setNoteDraft]);
 
   const handleConfirmSaveNote = useCallback(() => {
     if (!noteDraft?.note.trim()) return;
@@ -1262,7 +1261,7 @@ export default function MosaicEditor({
       setNoteDraft(null);
       setSemanticNotice('Nota guardada en la mesa semántica y sincronizada con Firebase.');
     });
-  }, [getSemanticPayload, noteDraft, runSemanticAction, semanticStoreContext, updateSemanticState]);
+  }, [getSemanticPayload, noteDraft, runSemanticAction, semanticStoreContext, updateSemanticState, setNoteDraft]);
 
   const handleConfirmSnippetSave = useCallback(async (data: { title: string; description: string; markdown: string; category: string }) => {
     const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
@@ -1273,7 +1272,7 @@ export default function MosaicEditor({
       setSemanticNotice('No se pudo guardar el snippet.');
     }
     setSnippetDraft(null);
-  }, [currentWorkspaceId]);
+  }, [currentWorkspaceId, setSnippetDraft]);
 
   const handleCreateAnalyticalCard = useCallback(() => {
     if (!semanticSelection) return;
@@ -1696,7 +1695,7 @@ export default function MosaicEditor({
         {sections}
       </>
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName, menuBtnRef]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)

@@ -8,8 +8,7 @@ import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/
 import SnippetGallery from '@/components/SnippetGallery';
 import type { Snippet } from '@/services/snippetApi';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
-import type { FormalizationResultPayload } from '@/lib/formalization-contract';
-import { FORMALIZATION_CONTRACT_VERSION } from '@/lib/formalization-contract';
+import { FORMALIZATION_CONTRACT_VERSION, type FormalizationResultPayload } from '@/lib/formalization-contract';
 import { ST_RUNTIME_PROFILES } from '@/lib/st-runtime-manifest';
 
 /* ── Tipos ──────────────────────────────────────────────────── */

@@ -374,4 +374,3 @@ export function formalizeText(
     return { ok: false, stCode: '', patterns: [], atomCount: 0, formulaCount: 0 };
   }
 }
-

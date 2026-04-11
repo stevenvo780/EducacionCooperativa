@@ -31,4 +31,3 @@ export const createStableSemanticId = (
   prefix: string,
   ...parts: Array<string | null | undefined>
 ) => `${prefix}-${createSemanticFingerprint(prefix, ...parts)}`;
-
