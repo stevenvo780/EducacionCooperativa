@@ -82,7 +82,7 @@ function getWordRangeAtColumn(lineText: string, column: number): { start: number
   return start === end ? null : { start, end };
 }
 
-function stHoverHandler(view: EditorView, pos: number, side: 1 | -1): Tooltip | null {
+function stHoverHandler(view: EditorView, pos: number, _side: 1 | -1): Tooltip | null {
   const doc = view.state.doc;
   const line = doc.lineAt(pos);
   const lineNum = line.number;

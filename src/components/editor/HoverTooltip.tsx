@@ -33,7 +33,7 @@ export function HoverTooltip({
   paddingLeft,
   scrollTop,
   scrollLeft,
-  gutterWidth
+  gutterWidth: _gutterWidth
 }: HoverTooltipProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

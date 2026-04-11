@@ -230,7 +230,7 @@ export default function STRunner({
   workspaceId = PERSONAL_WORKSPACE_ID,
   fileMode
 }: STRunnerProps) {
-  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles, isRunning, getSymbols, validate, lastDiagnostics } =
+  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles: _profiles, isRunning, getSymbols, validate, lastDiagnostics } =
     useSTInterpreter();
 
   const [mode, setMode] = useState<STRunnerMode>(initialMode);

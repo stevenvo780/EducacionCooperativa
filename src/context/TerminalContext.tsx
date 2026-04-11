@@ -192,7 +192,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
     const debugLog = useCallback((...args: unknown[]) => {
         if (process.env.NODE_ENV !== 'production') {
-            console.debug(...args);
+            console.warn(...args);
         }
     }, []);
 

@@ -40,7 +40,7 @@ export function handleDuplicateLine(
   onChange: (v: string) => void
 ): boolean {
   const { value, selectionStart } = ta;
-  const { start, end, lineText } = getLineRange(value, selectionStart);
+  const { start: _start, end, lineText } = getLineRange(value, selectionStart);
   const newValue = `${value.slice(0, end)}\n${lineText}${value.slice(end)}`;
   const newCursor = selectionStart + lineText.length + 1;
   setTextareaValue(ta, newValue, newCursor, newCursor, onChange);

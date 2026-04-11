@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, Minus, Plus, Search, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { createSnippet } from '@/services/snippetApi';
 import { authFetch } from '@/services/apiClient';
 import { PdfViewerToolbar } from '@/components/pdf-viewer/PdfViewerToolbar';
@@ -34,7 +34,7 @@ interface PDFRenderTask {
 
 interface PDFPageProxy {
   getViewport(params: { scale: number }): PDFViewportProxy;
-  getTextContent?: (params?: any) => Promise<PDFTextContent>;
+  getTextContent?: (params?: Record<string, unknown>) => Promise<PDFTextContent>;
   render(params: { canvasContext: CanvasRenderingContext2D; viewport: PDFViewportProxy }): PDFRenderTask;
   cleanup?: () => void;
 }
@@ -49,7 +49,7 @@ interface PDFJSLib {
   getDocument(params: { url: string }): { promise: Promise<PDFDocumentProxy> };
   GlobalWorkerOptions: { workerSrc: string };
   version: string;
-  renderTextLayer(params: any): any;
+  renderTextLayer(params: Record<string, unknown>): PDFRenderTask;
 }
 
 declare global {
@@ -522,7 +522,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
     setZoomLevel((current) => clampZoomLevel(Number((current * 1.25).toFixed(2))));
   }, []);
 
-  const handleResetZoom = useCallback(() => {
+  const _handleResetZoom = useCallback(() => {
     setZoomLevel(1);
   }, []);
 

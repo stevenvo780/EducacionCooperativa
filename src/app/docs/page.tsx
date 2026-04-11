@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import {
-  ArrowLeft, Terminal, Server, Download, Settings, Users, RefreshCw,
+  ArrowLeft, Terminal, Server, Download, Settings, Users,
   Shield, HardDrive, BookOpen, ChevronDown, ChevronRight, Copy, Check,
-  ExternalLink, Columns, PenTool, Layout, LayoutGrid, WifiOff, FileSpreadsheet,
+  ExternalLink, PenTool, Layout, LayoutGrid, WifiOff, FileSpreadsheet,
   KanbanSquare, Sparkles, Network, Quote, BookmarkPlus, Briefcase,
-  Zap, FlaskConical, Monitor, Key, LogOut, Crown, Trash2, Plus,
-  FolderPlus, Upload, Search, User, Globe, Lock, Layers
+  Zap, FlaskConical, Monitor, Key, Crown,
+  FolderPlus, Globe, Lock, Layers
 } from 'lucide-react';
 import Link from 'next/link';
 import { ST_RUNTIME_VERSION } from '@/lib/st-runtime-manifest';

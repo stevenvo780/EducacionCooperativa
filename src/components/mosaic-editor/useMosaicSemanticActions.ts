@@ -6,7 +6,8 @@ import {
   pinSelectionFragment,
   registerSemanticBlockWithReference,
   relateSelectionToConcept,
-  type SemanticWorkspaceState
+  type SemanticWorkspaceState,
+  type SemanticStoreContext
 } from '@/services/editorSemanticStore';
 import { wrapSemanticDocumentBlock } from '@/lib/semanticDocumentBlocks';
 import {
@@ -16,14 +17,31 @@ import {
 } from '@/components/editor/SemanticWorkbench';
 import { companionSTName } from '@/lib/buildSTFromSemantic';
 import { fetchBoardApi, createBoardCardApi } from '@/services/boardApi';
+import type { BoardCard } from '@/components/dashboard/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+
+interface SemanticPayload {
+  text: string;
+  docId: string | null;
+  docName: string;
+  workspaceId: string;
+}
+
+interface SyncCompanionSTParams {
+  semanticState: SemanticWorkspaceState;
+  docName: string;
+  docId: string | null;
+  folder: string;
+  workspaceId: string;
+  userId: string | undefined;
+}
 
 interface UseMosaicSemanticActionsProps {
   semanticState: SemanticWorkspaceState;
-  semanticStoreContext: any;
+  semanticStoreContext: SemanticStoreContext;
   semanticItemCount: number;
-  semanticSelection: { text: string; location?: any } | null;
-  linkedTasks: any[];
+  semanticSelection: { text: string; location?: unknown } | null;
+  linkedTasks: BoardCard[];
   docName: string;
   roomId?: string;
   currentDocMetaRef: React.MutableRefObject<{ name?: string; folder?: string }>;
@@ -35,14 +53,14 @@ interface UseMosaicSemanticActionsProps {
   setSemanticNotice: (msg: string) => void;
   clearSemanticSelection: () => void;
   updateSemanticState: (state: SemanticWorkspaceState) => void;
-  runSemanticAction: (actionName: string, action: () => any) => void;
-  getSemanticPayload: (text: string) => any;
+  runSemanticAction: (actionName: string, action: () => unknown) => void;
+  getSemanticPayload: (text: string) => SemanticPayload;
   createSemanticDocBlockId: (prefix: string) => string;
   loadLinkedTasks: () => Promise<void>;
-  syncCompanionST: (params: any) => Promise<{ scopedState: any }>;
-  setDefineConceptDraft: (draft: any) => void;
-  setNoteDraft: (draft: any) => void;
-  setSnippetDraft: (draft: any) => void;
+  syncCompanionST: (params: SyncCompanionSTParams) => Promise<{ scopedState: SemanticWorkspaceState }>;
+  setDefineConceptDraft: (draft: unknown) => void;
+  setNoteDraft: (draft: unknown) => void;
+  setSnippetDraft: (draft: unknown) => void;
 }
 
 export function useMosaicSemanticActions({
@@ -67,7 +85,7 @@ export function useMosaicSemanticActions({
   createSemanticDocBlockId,
   loadLinkedTasks,
   syncCompanionST,
-  setDefineConceptDraft,
+  setDefineConceptDraft: _setDefineConceptDraft,
   setNoteDraft,
   setSnippetDraft
 }: UseMosaicSemanticActionsProps) {

@@ -7,12 +7,11 @@
  */
 
 import { StreamLanguage, StringStream, LanguageSupport, indentService, foldService } from '@codemirror/language';
-import { tags as t } from '@lezer/highlight';
 import { KEYWORDS, BUILTINS, PROFILES } from '../st-editor/tokenizer';
 
 // ── Operators multi-char ────────────────────────────────────
 
-const MULTI_OPS: Record<string, true> = {
+const _MULTI_OPS: Record<string, true> = {
   '<->': true,
   '->': true,
   '<-': true,
@@ -167,9 +166,9 @@ const stStreamParser = {
       const word = stream.current();
       const lower = word.toLowerCase();
 
-      if (PROFILES.has(word as any) || PROFILES.has(lower as any)) return 'typeName';
-      if (KEYWORDS.has(lower as any)) return 'keyword';
-      if (BUILTINS.has(lower as any)) return 'builtin';
+      if (PROFILES.has(word as Parameters<typeof PROFILES.has>[0]) || PROFILES.has(lower as Parameters<typeof PROFILES.has>[0])) return 'typeName';
+      if (KEYWORDS.has(lower as Parameters<typeof KEYWORDS.has>[0])) return 'keyword';
+      if (BUILTINS.has(lower as Parameters<typeof BUILTINS.has>[0])) return 'builtin';
       // Uppercase single letters → atoms
       if (/^[A-Z]$/.test(word)) return 'atom';
       return 'variableName';
@@ -226,7 +225,7 @@ const stIndentService = indentService.of((context, pos) => {
   return null; // Fall back to default
 });
 
-const stFoldService = foldService.of((state, lineStart, lineEnd) => {
+const stFoldService = foldService.of((state, lineStart, _lineEnd) => {
   const doc = state.doc;
   const line = doc.lineAt(lineStart);
   const text = line.text;

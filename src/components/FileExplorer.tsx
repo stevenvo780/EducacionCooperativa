@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import {
   Folder,
@@ -33,7 +33,6 @@ import {
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
 import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
-import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { FileExplorerContextMenu } from '@/components/file-explorer/FileExplorerContextMenu';
 import { useFileExplorerDND, DOC_REORDER_TYPE, FOLDER_REORDER_TYPE } from '@/components/file-explorer/useFileExplorerDND';
@@ -183,7 +182,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
   const lastSelectedIndex = useRef<number>(-1);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [overflowMenuId, setOverflowMenuId] = useState<string | null>(null);
+  const [_overflowMenuId, _setOverflowMenuId] = useState<string | null>(null);
   const [downloadingFolder, setDownloadingFolder] = useState<string | null>(null);
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);

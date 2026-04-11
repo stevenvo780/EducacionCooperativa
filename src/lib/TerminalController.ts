@@ -81,7 +81,7 @@ export class TerminalController {
 
   private debugLog(...args: unknown[]) {
     if (this.debugEnabled) {
-      console.debug(...args);
+      console.warn(...args);
     }
   }
 
@@ -236,7 +236,7 @@ export class TerminalController {
         try {
             fitAddon.fit();
             term.refresh(0, term.rows - 1);
-        } catch (e) {
+        } catch (_e) {
             // Ignorar errores de fit si el contenedor aún no está listo
         }
     });
@@ -525,7 +525,7 @@ export class TerminalController {
       if (isOwner && this.socket?.connected && cols > 0 && rows > 0) {
         this.socket.emit('resize', { sessionId, cols, rows });
       }
-    } catch (e) {
+    } catch (_e) {
     }
   }
 

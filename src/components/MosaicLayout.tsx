@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { Mosaic, MosaicNode, MosaicZeroState, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
+import { Mosaic, MosaicNode, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { Columns, Eye, Pencil, X, Terminal as TerminalIcon, Search, ChevronUp, ChevronDown, Check, XCircle, Maximize2, Minimize2 } from 'lucide-react';
+import { Columns, Pencil, X, Search, ChevronUp, ChevronDown, Check, XCircle, Maximize2, Minimize2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -129,7 +129,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   docs,
   folders,
   docModes,
-  onSetDocMode,
+  onSetDocMode: _onSetDocMode,
   onCloseTab,
   onSelectDoc,
   onActivateTab,
@@ -358,7 +358,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     }
   }, [cancelInlineRename, editingTitleValue, onRenameDocInline]);
 
-  const renderToolbarControls = useCallback((doc: { id: string; type?: string; name: string; mimeType?: string }, mode: ViewMode) => {
+  const renderToolbarControls = useCallback((doc: { id: string; type?: string; name: string; mimeType?: string }, _mode: ViewMode) => {
     const isTextDoc = isTextSearchableDoc(doc);
     const searchTerm = docSearchTerms[doc.id] || '';
     const searchState = docSearchStates[doc.id] || { currentMatch: 0, totalMatches: 0 };

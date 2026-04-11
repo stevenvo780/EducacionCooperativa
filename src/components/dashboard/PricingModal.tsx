@@ -17,7 +17,7 @@ interface PricingModalProps {
 
 const WHATSAPP_ENTERPRISE_URL = 'https://wa.me/573246780067?text=Hola%2C%20me%20interesa%20el%20plan%20Enterprise%20de%20Agora';
 
-export default function PricingModal({ isOpen, onClose, currentPlan, userEmail, endDate }: PricingModalProps) {
+export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: _userEmail, endDate }: PricingModalProps) {
   const [loading, setLoading] = useState<PlanId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);

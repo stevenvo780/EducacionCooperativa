@@ -490,7 +490,7 @@ function stCompletionSource(context: CompletionContext): CompletionResult | null
 
   if (contextualMode === 'logic') {
     filtered = filtered.filter((completion) =>
-      completion.label.startsWith('logic ') || PROFILES.has(completion.label as any)
+      completion.label.startsWith('logic ') || PROFILES.has(completion.label as Parameters<typeof PROFILES.has>[0])
     );
   } else if (contextualMode === 'premises') {
     filtered = symbolCompletions.length > 0 ? symbolCompletions : filtered;

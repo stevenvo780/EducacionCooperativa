@@ -409,15 +409,6 @@ async function csvToMarkdown(file: File, onProgress?: (progress: number) => void
   return markdown;
 }
 
-/**
- * Convert plain text file to Markdown
- */
-async function textToMarkdown(file: File): Promise<string> {
-  const content = await file.text();
-  const title = file.name.replace(/\.[^.]+$/, '');
-  return `# ${title}\n\n${content}`;
-}
-
 // ...existing code...
 /**
  * Convert HTML file to Markdown using Turndown
@@ -535,7 +526,7 @@ export async function convertToMarkdown(
       if (extension === 'json' || mimeType === 'application/json') {
           try {
               formattedContent = JSON.stringify(JSON.parse(content), null, 2);
-          } catch (e) {
+          } catch (_e) {
               // Si falla el parseo, dejar como está
           }
       }

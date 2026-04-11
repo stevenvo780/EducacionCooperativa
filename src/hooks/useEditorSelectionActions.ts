@@ -384,19 +384,19 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
       }
     };
 
-    shell.addEventListener('contextmenu', handleContextMenu as any, true);
+    shell.addEventListener('contextmenu', handleContextMenu as EventListener, true);
     shell.addEventListener('mousedown', handleMouseDown, true);
-    shell.addEventListener('touchstart', handleTouchStart as any, { passive: true });
-    shell.addEventListener('touchmove', handleTouchMove as any, { passive: true });
-    shell.addEventListener('touchend', handleTouchEnd as any, { passive: true });
+    shell.addEventListener('touchstart', handleTouchStart as EventListener, { passive: true });
+    shell.addEventListener('touchmove', handleTouchMove as EventListener, { passive: true });
+    shell.addEventListener('touchend', handleTouchEnd as EventListener, { passive: true });
     document.addEventListener('selectionchange', handleSelectionChange);
 
     return () => {
-      shell.removeEventListener('contextmenu', handleContextMenu as any, true);
+      shell.removeEventListener('contextmenu', handleContextMenu as EventListener, true);
       shell.removeEventListener('mousedown', handleMouseDown, true);
-      shell.removeEventListener('touchstart', handleTouchStart as any);
-      shell.removeEventListener('touchmove', handleTouchMove as any);
-      shell.removeEventListener('touchend', handleTouchEnd as any);
+      shell.removeEventListener('touchstart', handleTouchStart as EventListener);
+      shell.removeEventListener('touchmove', handleTouchMove as EventListener);
+      shell.removeEventListener('touchend', handleTouchEnd as EventListener);
       document.removeEventListener('selectionchange', handleSelectionChange);
       if (longPressTimer) clearTimeout(longPressTimer);
     };

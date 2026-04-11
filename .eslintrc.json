@@ -2,9 +2,13 @@
   "extends": [
     "next/core-web-vitals"
   ],
+  "plugins": ["@typescript-eslint"],
   "rules": {
-    "no-console": ["error", { "allow": ["warn", "error", "debug"] }],
+    "no-console": ["error", { "allow": ["warn", "error"] }],
     "no-duplicate-imports": "error",
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "error",
     "prefer-const": "error",
     "object-shorthand": "error",
     "prefer-template": "error",
@@ -35,6 +39,12 @@
   "overrides": [
     {
       "files": ["tests/**/*", "scripts/**/*"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["src/app/api/**/*"],
       "rules": {
         "no-console": "off"
       }

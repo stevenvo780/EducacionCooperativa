@@ -52,8 +52,8 @@ export function escapeHtml(str: string): string {
 
 function classifyWord(word: string): HighlightToken {
   const lower = word.toLowerCase();
-  if (KEYWORDS.has(lower as any)) return { text: word, category: 'keyword' };
-  if (BUILTINS.has(lower as any)) return { text: word, category: 'builtin' };
+  if (KEYWORDS.has(lower as Parameters<typeof KEYWORDS.has>[0])) return { text: word, category: 'keyword' };
+  if (BUILTINS.has(lower as Parameters<typeof BUILTINS.has>[0])) return { text: word, category: 'builtin' };
   if (/^[A-Z]$/.test(word)) return { text: word, category: 'atom' };
   return { text: word, category: 'identifier' };
 }
@@ -202,11 +202,11 @@ export function tokenizeLine(
       while (j < line.length && /[a-zA-Z0-9_.]/.test(line[j])) j++;
       const word = line.slice(i, j);
 
-      if (PROFILES.has(word as any)) {
+      if (PROFILES.has(word as Parameters<typeof PROFILES.has>[0])) {
         tokens.push({ text: word, category: 'profile' });
       } else {
         const parts = word.split('.');
-        if (parts.length > 1 && !PROFILES.has(word as any)) {
+        if (parts.length > 1 && !PROFILES.has(word as Parameters<typeof PROFILES.has>[0])) {
           for (let p = 0; p < parts.length; p++) {
             if (p > 0) tokens.push({ text: '.', category: 'punctuation' });
             tokens.push(classifyWord(parts[p]));

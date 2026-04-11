@@ -264,7 +264,7 @@ export function useMosaicTabs({
                     return {
                         id: docId,
                         name: panel.name,
-                        type: panel.type as any,
+                        type: panel.type as DocItem['type'],
                         workspaceId: wsId,
                         ownerId: uid,
                         updatedAt: new Date()
@@ -461,7 +461,7 @@ export function useMosaicTabs({
         const newSnipItem: DocItem = {
             id: snipId,
             name: 'Galería de Snippets',
-            type: 'snippets-gallery' as any,
+            type: 'snippets-gallery' as DocItem['type'],
             workspaceId: currentWorkspace.id,
             ownerId: user.uid,
             updatedAt: new Date()
