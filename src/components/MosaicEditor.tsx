@@ -40,7 +40,6 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import { getErrorMessage, isAbortError } from '@/lib/error-utils';
 import type { ViewMode, SearchState, EditorProps, ToolbarGroupKey, ToolbarVisibility, MarkdownDocMeta } from '@/components/mosaic-editor/types';
 import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS, SAVE_DEBOUNCE_MS, ST_DEBOUNCE_MS, SEMANTIC_NOTICE_TIMEOUT_MS } from '@/components/mosaic-editor/constants';
 import {
@@ -70,10 +69,9 @@ import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
 import { createSnippet } from '@/services/snippetApi';
-import { authFetch, getAuthToken } from '@/services/apiClient';
+import { authFetch } from '@/services/apiClient';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
-import { createDocumentApi, fetchDocsApi, updateDocumentApi } from '@/services/dashboardApi';
-import type { BoardCard, DocItem } from '@/components/dashboard/types';
+import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { useMarkdownLinter, type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
@@ -148,7 +146,7 @@ export default function MosaicEditor({
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(PERSONAL_WORKSPACE_ID);
-  const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>({ concepts: [], fragments: [], relations: [], updatedAt: 0 });
+  const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
   const [semanticNotice, setSemanticNotice] = useState<string | null>(null);
   const [semanticBusyAction, setSemanticBusyAction] = useState<string | null>(null);
   const [linkableDocuments, setLinkableDocuments] = useState<Array<{ id: string; name: string; folder?: string }>>([]);
@@ -195,7 +193,6 @@ export default function MosaicEditor({
     toolbarVisibility,
     applyToolbarVisibility,
     toggleToolbarGroup,
-    enabledToolbarGroupsCount,
     showToolsPanel,
     setShowToolsPanel,
     isFullscreen,
@@ -263,18 +260,15 @@ export default function MosaicEditor({
     return [...markdownDiagnostics, ...noteDiagnostics];
   }, [markdownDiagnostics, noteDiagnostics]);
 
-  const toggleCompactMenu = useCallback(() => {
-    if (!showCompactMenu && menuBtnRef.current) {
-      const rect = menuBtnRef.current.getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + 4, left: rect.left });
-    }
-    setShowCompactMenu(prev => !prev);
-  }, [showCompactMenu]);
+  const effectiveWorkspaceId = useMemo(
+    () => currentWorkspaceId || PERSONAL_WORKSPACE_ID,
+    [currentWorkspaceId]
+  );
 
   const semanticStoreContext = useMemo(() => ({
-    workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID,
+    workspaceId: effectiveWorkspaceId,
     userId: user?.uid ?? null
-  }), [currentWorkspaceId, user?.uid]);
+  }), [effectiveWorkspaceId, user?.uid]);
 
   const semanticOverview = useMemo(() => getRecentSemanticItems(semanticState), [semanticState]);
   const semanticItemCount = useMemo(() => (
@@ -284,6 +278,12 @@ export default function MosaicEditor({
   useEffect(() => {
     semanticStateRef.current = semanticState;
   }, [semanticState]);
+
+  const { syncCompanionST } = useCompanionSTSync({
+    companionStDocId,
+    setCompanionStDocId,
+    setSemanticNotice
+  });
 
   // Auto-register ST definitions from semantic state so the linter works on page load
   // Debounced to avoid rebuilds on every small semantic change
@@ -314,7 +314,7 @@ export default function MosaicEditor({
       } else {
         STDefinitionsRegistry.removeFile(stFileName);
       }
-    }, 500);
+    }, ST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [docName, roomId, semanticState]);
   // Cleanup on unmount
@@ -337,13 +337,7 @@ export default function MosaicEditor({
     onContextMenuWithoutSelection: ({ x, y }) => {
       clearSemanticSelection();
       setShowCompactMenu(false);
-      setEditorUtilityMenu({
-        id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-        x,
-        y
-      });
+      setEditorUtilityMenu({ id: generateId(), x, y });
     }
   });
 
@@ -725,22 +719,6 @@ export default function MosaicEditor({
     return { words, chars: statsContent.length };
   }, [statsContent]);
 
-  const enabledToolbarGroupsCount = useMemo(
-    () => Object.values(toolbarVisibility).filter(Boolean).length,
-    [toolbarVisibility]
-  );
-
-  const applyToolbarVisibility = useCallback((nextVisibility: ToolbarVisibility) => {
-    dispatch(setEditorToolbarVisibility(nextVisibility));
-  }, [dispatch]);
-
-  const toggleToolbarGroup = useCallback((group: ToolbarGroupKey) => {
-    applyToolbarVisibility({
-      ...toolbarVisibility,
-      [group]: !toolbarVisibility[group]
-    });
-  }, [applyToolbarVisibility, toolbarVisibility]);
-
   const setViewModeWithSync = useCallback((nextMode: ViewMode) => {
     const editor = mdxEditorRef.current;
     const latestMarkdown = editor ? editor.getMarkdown() : contentRef.current;
@@ -978,12 +956,7 @@ export default function MosaicEditor({
     workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID
   }), [currentWorkspaceId, docName, roomId]);
 
-  const createSemanticDocBlockId = useCallback((kind: string) => {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return `${kind}-${crypto.randomUUID()}`;
-    }
-    return `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  }, []);
+  const createSemanticDocBlockId = useCallback((kind: string) => generateId(kind), []);
 
   const applySelectionMarkdown = useCallback((markdown: string) => {
     const activeSelection = semanticSelection;
@@ -1184,32 +1157,6 @@ export default function MosaicEditor({
     clearSemanticSelection();
   }, [clearSemanticSelection, dictionaryCandidate, runLint]);
 
-  const toggleFullscreen = useCallback(async () => {
-    if (typeof document === 'undefined') return;
-
-    if (document.fullscreenElement) {
-      try {
-        await document.exitFullscreen();
-      } catch (err) {
-        console.error('Error exiting fullscreen:', err);
-      }
-    } else {
-      const target = editorShellRef.current;
-      if (target) {
-        try {
-          await target.requestFullscreen();
-        } catch (error) {
-          console.error('Error toggling fullscreen editor:', error);
-          try {
-            await document.documentElement.requestFullscreen();
-          } catch (e2) {
-            console.error('Critical fullscreen error:', e2);
-          }
-        }
-      }
-    }
-  }, []);
-
   const closeEditorUtilityMenu = useCallback(() => {
     setEditorUtilityMenu(null);
   }, []);
@@ -1257,94 +1204,39 @@ export default function MosaicEditor({
   const handleConfirmDefineConcept = useCallback(() => {
     if (!defineConceptDraft) return;
     void runSemanticAction('define-concept', async () => {
-      // Auto-generar fórmula con autologic si el usuario no escribió una
       let formulaToUse = defineConceptDraft.formula.trim();
       if (!formulaToUse && autologicPreview?.ok && autologicPreview.formulaCount > 0) {
-        // Extraer la primera fórmula del código ST generado como sugerencia
         const axiomMatch = autologicPreview.stCode.match(/axiom\s+\w+\s*=\s*(.+)/);
-        if (axiomMatch) {
-          formulaToUse = axiomMatch[1].trim();
-        }
+        if (axiomMatch) formulaToUse = axiomMatch[1].trim();
       }
 
       const payload = getSemanticPayload(defineConceptDraft.selectionText);
-      const nextState = registerConceptFromSelection(
-        semanticStoreContext,
-        payload,
-        {
-          title: defineConceptDraft.title.trim() || undefined,
-          definition: defineConceptDraft.definition.trim() || undefined,
-          logicProfile: defineConceptDraft.logicProfile || undefined,
-          formula: formulaToUse || undefined
-        }
-      );
+      const nextState = registerConceptFromSelection(semanticStoreContext, payload, {
+        title: defineConceptDraft.title.trim() || undefined,
+        definition: defineConceptDraft.definition.trim() || undefined,
+        logicProfile: defineConceptDraft.logicProfile || undefined,
+        formula: formulaToUse || undefined
+      });
       updateSemanticState(nextState);
       clearSemanticSelection();
       setDefineConceptDraft(null);
       setAutologicPreview(null);
 
-      // --- Auto-crear / actualizar archivo(s) .st companion ---
-      const currentName = docName || currentDocMetaRef.current.name || 'Documento';
-      const stFileName = companionSTName(currentName);
-      const scopedSemanticState = filterSemanticWorkspaceStateByDocument(nextState, {
-        docId: roomId ?? null,
-        docName: currentName
-      });
-      const stContent = buildSTFromSemantic(scopedSemanticState, currentName);
-      const folder = currentDocMetaRef.current.folder || 'Material';
-      const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
-
       try {
-        /* Fetch all docs to find every companion with the expected name */
-        const allDocs = await fetchDocsApi({ workspaceId });
-        const companionDocs = allDocs.filter((d: DocItem) => d.name === stFileName);
-
-        const syncRegistry = () => {
-          const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
-          if (definitions.length > 0) {
-            STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
-          } else {
-            STDefinitionsRegistry.removeFile(stFileName);
-          }
-        };
-
-        if (companionDocs.length > 0) {
-          /* Update ALL existing companions */
-          await Promise.all(companionDocs.map((doc: DocItem) => updateDocumentApi(doc.id, { content: stContent })));
-          if (!companionStDocId) setCompanionStDocId(companionDocs[0].id);
-          syncRegistry();
-          setSemanticNotice(`Concepto registrado → ${stFileName} actualizado.`);
-        } else {
-          /* Create a new companion */
-          const result = await createDocumentApi({
-            name: stFileName,
-            content: stContent,
-            type: 'text',
-            ownerId: user?.uid,
-            workspaceId,
-            folder
-          });
-          if (result?.id) {
-            setCompanionStDocId(result.id);
-            companionDocs.push({ id: result.id, name: stFileName } as DocItem);
-          }
-          syncRegistry();
-          setSemanticNotice(`Concepto registrado → ${stFileName} creado en ${folder}/.`);
-          window.dispatchEvent(new CustomEvent('agora:docs-changed'));
-        }
-
-        /* Notify every open STFileEditor so they refresh their content */
-        for (const doc of companionDocs) {
-          window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
-            detail: { docId: doc.id, docName: stFileName }
-          }));
-        }
+        await syncCompanionST({
+          semanticState: nextState,
+          docName: docName || currentDocMetaRef.current.name || 'Documento',
+          docId: roomId ?? null,
+          folder: currentDocMetaRef.current.folder || 'Material',
+          workspaceId: effectiveWorkspaceId,
+          userId: user?.uid
+        });
       } catch (error) {
         console.error('Error auto-generating ST companion:', error);
         setSemanticNotice('Concepto registrado, pero falló la generación del archivo ST.');
       }
     });
-  }, [autologicPreview, clearSemanticSelection, companionStDocId, currentWorkspaceId, defineConceptDraft, docName, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, updateSemanticState, user?.uid]);
+  }, [autologicPreview, clearSemanticSelection, defineConceptDraft, docName, effectiveWorkspaceId, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, syncCompanionST, updateSemanticState, user?.uid]);
 
   const handleSaveAsSnippet = useCallback(() => {
     if (!semanticSelection) return;
@@ -1562,61 +1454,24 @@ export default function MosaicEditor({
       return;
     }
     const currentName = docName || currentDocMetaRef.current.name || 'Documento';
-    const stFileName = companionSTName(currentName);
-    const scopedSemanticState = filterSemanticWorkspaceStateByDocument(semanticState, {
+    const { scopedState } = await syncCompanionST({
+      semanticState,
+      docName: currentName,
       docId: roomId ?? null,
-      docName: currentName
-    });
-    const stContent = buildSTFromSemantic(scopedSemanticState, currentName);
-    const folder = currentDocMetaRef.current.folder || 'Material';
-    const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
-
-    try {
-      const allDocs = await fetchDocsApi({ workspaceId });
-      const companionDocs = allDocs.filter((d: DocItem) => d.name === stFileName);
-
-      const syncRegistry = () => {
-        const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
-        if (definitions.length > 0) {
-          STDefinitionsRegistry.setFileDefinitions(stFileName, definitions);
-        } else {
-          STDefinitionsRegistry.removeFile(stFileName);
-        }
-      };
-
-      if (companionDocs.length > 0) {
-        await Promise.all(companionDocs.map((doc: DocItem) => updateDocumentApi(doc.id, { content: stContent })));
-        if (!companionStDocId) setCompanionStDocId(companionDocs[0].id);
-        syncRegistry();
-        setSemanticNotice(`Archivo ${stFileName} actualizado con ${scopedSemanticState.concepts.length} definiciones.`);
-      } else {
-        const result = await createDocumentApi({
-          name: stFileName,
-          content: stContent,
-          type: 'text',
-          ownerId: user?.uid,
-          workspaceId,
-          folder
-        });
-        if (result?.id) {
-          setCompanionStDocId(result.id);
-          companionDocs.push({ id: result.id, name: stFileName } as DocItem);
-        }
-        syncRegistry();
-        setSemanticNotice(`Archivo ${stFileName} creado en ${folder}/ con ${scopedSemanticState.concepts.length} definiciones.`);
-        window.dispatchEvent(new CustomEvent('agora:docs-changed'));
-      }
-
-      for (const doc of companionDocs) {
-        window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
-          detail: { docId: doc.id, docName: stFileName }
-        }));
-      }
-    } catch (error) {
+      folder: currentDocMetaRef.current.folder || 'Material',
+      workspaceId: effectiveWorkspaceId,
+      userId: user?.uid
+    }).catch((error) => {
       console.error('Error generating ST file:', error);
       setSemanticNotice('Error al generar el archivo ST.');
+      return { scopedState: null };
+    });
+    if (scopedState) {
+      // Notice is set by syncCompanionST, override with count info
+      const stFileName = companionSTName(currentName);
+      setSemanticNotice(`Archivo ${stFileName} sincronizado con ${scopedState.concepts.length} definiciones.`);
     }
-  }, [companionStDocId, currentWorkspaceId, docName, roomId, semanticState, user?.uid]);
+  }, [docName, effectiveWorkspaceId, roomId, semanticState, syncCompanionST, user?.uid]);
 
   // Obsidian-style inline LaTeX rendering (extracted to hook)
   useKatexOverlayDecorations({ editorShellRef, viewMode });
