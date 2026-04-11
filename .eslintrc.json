@@ -4,8 +4,6 @@
   ],
   "rules": {
     "no-console": ["error", { "allow": ["warn", "error", "debug"] }],
-    "no-unused-vars": "off",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "no-duplicate-imports": "error",
     "prefer-const": "error",
     "object-shorthand": "error",
