@@ -16,6 +16,7 @@ import {
   buildResearchBriefMarkdown
 } from '@/components/editor/SemanticWorkbench';
 import { companionSTName } from '@/lib/buildSTFromSemantic';
+import type { DefineConceptDraft } from './useEditorModals';
 import { fetchBoardApi, createBoardCardApi } from '@/services/boardApi';
 import type { BoardCard } from '@/components/dashboard/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
@@ -53,14 +54,14 @@ interface UseMosaicSemanticActionsProps {
   setSemanticNotice: (msg: string) => void;
   clearSemanticSelection: () => void;
   updateSemanticState: (state: SemanticWorkspaceState) => void;
-  runSemanticAction: (actionName: string, action: () => unknown) => void;
+  runSemanticAction: (actionName: string, action: () => Promise<void> | void) => void;
   getSemanticPayload: (text: string) => SemanticPayload;
   createSemanticDocBlockId: (prefix: string) => string;
   loadLinkedTasks: () => Promise<void>;
   syncCompanionST: (params: SyncCompanionSTParams) => Promise<{ scopedState: SemanticWorkspaceState }>;
-  setDefineConceptDraft: (draft: unknown) => void;
-  setNoteDraft: (draft: unknown) => void;
-  setSnippetDraft: (draft: unknown) => void;
+  setDefineConceptDraft: (draft: DefineConceptDraft | null) => void;
+  setNoteDraft: (draft: { selectionText: string; note: string } | null) => void;
+  setSnippetDraft: (draft: { markdown: string } | null) => void;
 }
 
 export function useMosaicSemanticActions({
