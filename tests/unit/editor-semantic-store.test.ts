@@ -30,19 +30,15 @@ const payload = {
   workspaceId: 'ws-1'
 };
 
+const DEFAULT_PREFERENCES = {
+  experienceMode: 'hybrid' as const,
+  showSTPreview: true,
+  showPedagogicalHints: true
+};
+
 describe('editor semantic store', () => {
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(1_710_000_000_000);
-    vi.stubGlobal('crypto', {
-      randomUUID: vi.fn()
-        .mockReturnValueOnce('uuid-fragment-1')
-        .mockReturnValueOnce('uuid-concept-1')
-        .mockReturnValueOnce('uuid-fragment-2')
-        .mockReturnValueOnce('uuid-relation-1')
-        .mockReturnValueOnce('uuid-fragment-3')
-        .mockReturnValueOnce('uuid-fragment-4')
-        .mockReturnValueOnce('uuid-fragment-5')
-    });
   });
 
   it('loads empty and malformed state safely', () => {
@@ -50,7 +46,8 @@ describe('editor semantic store', () => {
       concepts: [],
       fragments: [],
       relations: [],
-      updatedAt: 0
+      updatedAt: 0,
+      preferences: DEFAULT_PREFERENCES
     });
 
     window.localStorage.setItem('editor-semantic:ws-1:u1', '{bad json');
@@ -58,7 +55,8 @@ describe('editor semantic store', () => {
       concepts: [],
       fragments: [],
       relations: [],
-      updatedAt: 0
+      updatedAt: 0,
+      preferences: DEFAULT_PREFERENCES
     });
 
     window.localStorage.setItem('editor-semantic:ws-1:u1', JSON.stringify({
@@ -71,7 +69,8 @@ describe('editor semantic store', () => {
       concepts: [],
       fragments: [],
       relations: [],
-      updatedAt: 0
+      updatedAt: 0,
+      preferences: DEFAULT_PREFERENCES
     });
 
     window.localStorage.setItem('editor-semantic:ws-1:u1', '1');
@@ -79,7 +78,8 @@ describe('editor semantic store', () => {
       concepts: [],
       fragments: [],
       relations: [],
-      updatedAt: 0
+      updatedAt: 0,
+      preferences: DEFAULT_PREFERENCES
     });
   });
 
@@ -89,15 +89,15 @@ describe('editor semantic store', () => {
     const firstState = registerConceptFromSelection(context, payload);
     expect(firstState.updatedAt).toBe(1_710_000_000_000);
     expect(firstState.fragments[0]).toMatchObject({
-      id: 'fragment-uuid-fragment-1',
+      id: expect.stringMatching(/^fragment-fragment::/),
       kind: 'concept',
       docId: 'doc-1',
       selectionHash: 'doc-1:memoria-colonial-y-archivo-comun:32'
     });
     expect(firstState.concepts[0]).toMatchObject({
-      id: 'concept-uuid-concept-1',
+      id: expect.stringMatching(/^concept-concept::/),
       title: 'Memória colonial y archivo común',
-      sourceFragmentId: 'fragment-uuid-fragment-1'
+      sourceFragmentId: firstState.fragments[0].id
     });
 
     const updatedState = registerConceptFromSelection(context, {
@@ -223,7 +223,7 @@ describe('editor semantic store', () => {
 
     vi.stubGlobal('crypto', undefined);
     const fallback = pinSelectionFragment(context, { ...payload, text: 'Sin UUID' });
-    expect(fallback.fragments[0].id).toMatch(/^fragment-1710000000000-/);
+    expect(fallback.fragments[0].id).toMatch(/^fragment-fragment::/);
 
     expect(createSelectionHash({
       text: '!!!',

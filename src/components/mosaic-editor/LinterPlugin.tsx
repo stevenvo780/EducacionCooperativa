@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
+import { compareDiagnosticsForSharedRange } from '@/lib/markdown-linter/diagnostic-priority';
 
 const LINTER_OVERLAY_CONTAINER_CLASS = 'mdx-linter-overlay-container';
 const TOOLTIP_CLASS = 'mdx-linter-tooltip';
@@ -432,9 +433,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       container.appendChild(sharedTooltip);
 
       // Sort diagnostics by position for consistent text-search matching
-      const sortedDiags = [...currentDiags].sort((a, b) =>
-        a.line !== b.line ? a.line - b.line : a.column - b.column
-      );
+      const sortedDiags = [...currentDiags].sort(compareDiagnosticsForSharedRange);
       const usedPositions = new Set<string>();
       const textIndex = buildDocumentTextIndex(editable);
 

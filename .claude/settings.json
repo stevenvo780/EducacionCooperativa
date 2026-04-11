@@ -11,7 +11,9 @@
       "Bash(printf '')",
       "Bash(xxd)",
       "Bash(grep -v \"^$\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -r \"export.*Agora\\\\|component.*Agora\\\\|interface.*Agora\" /home/operador/proyectos/humanizar/EducacionCooperativa/src --include=*.ts --include=*.tsx)"
     ]
   }
 }

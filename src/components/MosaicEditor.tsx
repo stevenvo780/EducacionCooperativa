@@ -258,8 +258,10 @@ export default function MosaicEditor({
     setSemanticNotice
   });
 
-  // Auto-register ST definitions from semantic state so the linter works on page load
-  // Debounced to avoid rebuilds on every small semantic change
+  // Auto-register ST definitions from semantic state so the linter works on page load.
+  // Include concepts even when they only have a title/excerpt, because `buildSTFromSemantic`
+  // can still project them into hoverable ST interpretations without requiring a manual formula.
+  // Debounced to avoid rebuilds on every small semantic change.
   const prevConceptsHashRef = useRef('');
   useEffect(() => {
     const currentName = docName || currentDocMetaRef.current.name || 'Documento';
@@ -267,16 +269,25 @@ export default function MosaicEditor({
       docId: roomId ?? null,
       docName: currentName
     });
-    const definedConcepts = scopedSemanticState.concepts.filter(c => c.definition || c.formula);
-    const hash = definedConcepts
-      .map(c => `${c.id}:${c.definition || ''}:${c.formula || ''}:${c.logicProfile || ''}`)
-      .join('|');
+    const sourceFragmentById = new Map(
+      scopedSemanticState.fragments.map((fragment) => [fragment.id, fragment.text])
+    );
+    const projectedConcepts = scopedSemanticState.concepts;
+    const hash = JSON.stringify(projectedConcepts.map((concept) => ({
+      id: concept.id,
+      title: concept.title,
+      definition: concept.definition || '',
+      formula: concept.formula || '',
+      logicProfile: concept.logicProfile || '',
+      excerpt: concept.excerpt || '',
+      sourceText: concept.sourceFragmentId ? sourceFragmentById.get(concept.sourceFragmentId) || '' : ''
+    })));
     if (hash === prevConceptsHashRef.current) return;
 
     const timer = setTimeout(() => {
       prevConceptsHashRef.current = hash;
       const stFileName = companionSTName(currentName);
-      if (definedConcepts.length > 0) {
+      if (projectedConcepts.length > 0) {
         const stContent = buildSTFromSemantic(scopedSemanticState, currentName);
         const definitions = STDefinitionsRegistry.extractFromSource(stContent, stFileName);
         if (definitions.length > 0) {

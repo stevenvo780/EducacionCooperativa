@@ -28,6 +28,7 @@ interface UseMosaicTabsResult {
     openStRunner: () => Promise<void>;
     openSemanticBrowser: () => Promise<void>;
     openFormalizer: () => Promise<void>;
+    openAgoraAI: () => Promise<void>;
     openFilesTab: () => Promise<void>;
     openSnippetsGallery: () => Promise<void>;
     closeTabById: (docId: string) => Promise<void>;
@@ -256,6 +257,7 @@ export function useMosaicTabs({
                 { prefix: 'st-runner-', name: 'ST Logic', type: 'st-runner' },
                 { prefix: 'semantic-browser-', name: 'Mesa Semántica', type: 'semantic-browser' },
                 { prefix: 'formalizer-', name: 'Formalizador', type: 'formalizer' },
+                { prefix: 'agora-ai-', name: 'Agora AI', type: 'agora-ai' },
                 { prefix: 'snippets-gallery-', name: 'Galería de Snippets', type: 'snippets-gallery' },
                 { prefix: 'files-', name: 'Archivos', type: 'files' }
             ];
@@ -450,6 +452,33 @@ export function useMosaicTabs({
         setShowMobileSidebar(false);
     }, [currentWorkspace, setShowMobileSidebar, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    const openAgoraAI = useCallback(async () => {
+        if (!currentWorkspace || !user) return;
+        const aiId = `agora-ai-${currentWorkspace.id}`;
+        if (openTabs.find(tab => tab.id === aiId)) {
+            setSelectedDocId(aiId);
+            setShowMobileSidebar(false);
+            return;
+        }
+        const newAIItem: DocItem = {
+            id: aiId,
+            name: 'Agora AI',
+            type: 'agora-ai',
+            workspaceId: currentWorkspace.id,
+            ownerId: user.uid,
+            updatedAt: new Date()
+        };
+        setOpenTabs(prev => [...prev, newAIItem]);
+        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
+        setMosaicNode(current => {
+            const leaves = getLeaves(current);
+            if (leaves.includes(aiId)) return current;
+            return createBalancedTreeFromLeaves([...leaves, aiId]);
+        });
+        setShowMobileSidebar(false);
+        setSelectedDocId(aiId);
+    }, [currentWorkspace, user, openTabs, setShowMobileSidebar]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const openSnippetsGallery = useCallback(async () => {
         if (!currentWorkspace || !user) return;
         const snipId = `snippets-gallery-${currentWorkspace.id}`;
@@ -482,6 +511,7 @@ export function useMosaicTabs({
         openStRunner,
         openSemanticBrowser,
         openFormalizer,
+        openAgoraAI,
         openFilesTab,
         openSnippetsGallery,
         closeTabById,

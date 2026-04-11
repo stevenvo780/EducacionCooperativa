@@ -7,7 +7,8 @@ export enum DocumentType {
   Board = 'board',
   STRunner = 'st-runner',
   SemanticBrowser = 'semantic-browser',
-  Formalizer = 'formalizer'
+  Formalizer = 'formalizer',
+  AgoraAI = 'agora-ai'
 }
 
 export type DocumentTypeId = `${DocumentType}`;

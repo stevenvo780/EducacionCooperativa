@@ -29,7 +29,8 @@ import {
   User,
   Users,
   X,
-  Zap
+  Zap,
+  Bot
 } from 'lucide-react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
@@ -64,6 +65,8 @@ interface HeaderBarProps {
   isFormalizerOpen: boolean;
   onOpenFormalizer: () => void;
   formalizerTileId: string | null;
+  isAgoraAIOpen: boolean;
+  onOpenAgoraAI: () => void;
   onOpenSnippetsGallery: () => void;
   onOpenQuickSearch: () => void;
   onAcceptInvite: (ws: Workspace) => void;
@@ -123,6 +126,8 @@ const HeaderBar = ({
   isFormalizerOpen,
   onOpenFormalizer,
   formalizerTileId,
+  isAgoraAIOpen,
+  onOpenAgoraAI,
   onOpenSnippetsGallery,
   onOpenQuickSearch,
   onAcceptInvite,
@@ -185,6 +190,7 @@ const HeaderBar = ({
   const stRunnerPanelId = currentWorkspace ? `st-runner-${currentWorkspace.id}` : '';
   const semanticBrowserPanelId = currentWorkspace ? `semantic-browser-${currentWorkspace.id}` : '';
   const formalizerPanelId = formalizerTileId || (currentWorkspace ? `formalizer-${currentWorkspace.id}` : '');
+  const agoraAIPanelId = currentWorkspace ? `agora-ai-${currentWorkspace.id}` : '';
   const snippetsGalleryPanelId = currentWorkspace ? `snippets-gallery-${currentWorkspace.id}` : '';
   const filesPanelId = currentWorkspace ? `files-${currentWorkspace.id}` : '';
 
@@ -295,6 +301,17 @@ const HeaderBar = ({
       onClick: onOpenSnippetsGallery,
       activeClasses: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
       iconClasses: 'text-amber-300 bg-amber-500/15 border-amber-500/25'
+    },
+    {
+      id: 'agora-ai',
+      label: 'Agora AI',
+      description: 'Chat con IA usando el contexto del workspace',
+      icon: Bot,
+      active: isAgoraAIOpen,
+      dragId: agoraAIPanelId,
+      onClick: onOpenAgoraAI,
+      activeClasses: 'border-sky-500/30 bg-sky-500/10 text-sky-200',
+      iconClasses: 'text-sky-300 bg-sky-500/15 border-sky-500/25'
     }
   ] as const;
 

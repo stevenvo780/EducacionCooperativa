@@ -21,6 +21,7 @@ const STFileEditor = dynamic(() => import('@/components/editor/STFileEditor'), {
 const GlobalSemanticBrowser = dynamic(() => import('@/components/dashboard/GlobalSemanticBrowser'), { ssr: false });
 const FormalizerPlayground = dynamic(() => import('@/components/FormalizerPlayground'), { ssr: false });
 const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
+const AgoraAIChat = dynamic(() => import('@/components/AgoraAIChat'), { ssr: false });
 
 function isStFileDoc(doc: { name: string }): boolean {
   const lower = doc.name.toLowerCase();
@@ -35,6 +36,7 @@ function isTextSearchableDoc(doc: { type?: string; name: string; mimeType?: stri
     || doc.type === DocumentType.STRunner
     || doc.type === DocumentType.SemanticBrowser
     || doc.type === DocumentType.Formalizer
+    || doc.type === DocumentType.AgoraAI
     || isStFileDoc(doc)
   ) {
     return false;
@@ -443,7 +445,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [onCloseTab, openTabs]);
 
   const renderWindowToolbar = useCallback((doc: DocItem, mode: ViewMode) => {
-    const canRenameInline = Boolean(onRenameDocInline) && doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && doc.type !== 'st-runner';
+    const canRenameInline = Boolean(onRenameDocInline) && doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && doc.type !== 'st-runner' && doc.type !== 'agora-ai';
     const isEditingTitle = editingTitleDocId === doc.id;
     const isRenaming = renamingDocId === doc.id;
 
@@ -605,7 +607,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isSemanticBrowser = doc.type === 'semantic-browser';
     const isFormalizer = doc.type === 'formalizer';
     const isSnippetsGallery = (doc.type as string) === 'snippets-gallery';
-    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && !isFormalizer && !isSnippetsGallery && isStFileDoc(doc);
+    const isAgoraAI = doc.type === 'agora-ai';
+    const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && !isFormalizer && !isSnippetsGallery && !isAgoraAI && isStFileDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
     const dropInfo = dragOverInfo?.tileId === doc.id ? dragOverInfo : null;
@@ -695,6 +698,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                       />
                   ) : isFormalizer ? (
                       <FormalizerPlayground workspaceId={currentWorkspaceId} />
+                  ) : isAgoraAI ? (
+                      <AgoraAIChat workspaceId={currentWorkspaceId} />
                   ) : isSnippetsGallery ? (
                       <SnippetGallery
                         workspaceId={doc.workspaceId ?? currentWorkspaceId ?? ''}
