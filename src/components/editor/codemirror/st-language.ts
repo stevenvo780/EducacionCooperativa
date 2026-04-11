@@ -167,9 +167,9 @@ const stStreamParser = {
       const word = stream.current();
       const lower = word.toLowerCase();
 
-      if (PROFILES.has(word) || PROFILES.has(lower)) return 'typeName';
-      if (KEYWORDS.has(lower)) return 'keyword';
-      if (BUILTINS.has(lower)) return 'builtin';
+      if (PROFILES.has(word as any) || PROFILES.has(lower as any)) return 'typeName';
+      if (KEYWORDS.has(lower as any)) return 'keyword';
+      if (BUILTINS.has(lower as any)) return 'builtin';
       // Uppercase single letters → atoms
       if (/^[A-Z]$/.test(word)) return 'atom';
       return 'variableName';

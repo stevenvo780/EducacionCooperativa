@@ -250,7 +250,7 @@ const normalizeSourceRefs = (value: unknown): SemanticSourceRef[] => {
         ...(typeof raw.nodeId === 'string' ? { nodeId: raw.nodeId } : {})
       };
     })
-    .filter((item): item is SemanticSourceRef => item !== null);
+    .filter((item) => item !== null) as SemanticSourceRef[];
 };
 
 const normalizeTrace = (value: unknown): SemanticTraceEntry[] => {

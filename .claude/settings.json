@@ -8,7 +8,8 @@
       "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/.next/cache -name *.js -newer /home/operador/proyectos/humanizar/EducacionCooperativa/src/components/FormalizerPlayground.tsx)",
       "Bash(git stash:*)",
       "Bash(truncate -s -1 /home/operador/proyectos/humanizar/EducacionCooperativa/src/lib/buildSTFromSemantic.ts)",
-      "Bash(printf '')"
+      "Bash(printf '')",
+      "Bash(xxd)"
     ]
   }
 }

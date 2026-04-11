@@ -40,7 +40,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import type { ViewMode, SearchState, EditorProps, ToolbarGroupKey, ToolbarVisibility, MarkdownDocMeta } from '@/components/mosaic-editor/types';
+import type { ViewMode, SearchState, EditorProps, ToolbarVisibility, MarkdownDocMeta } from '@/components/mosaic-editor/types';
 import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS, SAVE_DEBOUNCE_MS, ST_DEBOUNCE_MS, SEMANTIC_NOTICE_TIMEOUT_MS } from '@/components/mosaic-editor/constants';
 import {
   isMarkdownName, isMarkdownMime, isImageMime, isVideoMime, isAudioMime, isPdfMime,
@@ -63,11 +63,13 @@ import {
   BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles,
   MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote,
   ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces, Ruler, RefreshCw,
-  ZoomIn, ZoomOut
+  ZoomIn, ZoomOut, SidebarIcon
 } from 'lucide-react';
+import { useMosaicSemanticActions } from '@/components/mosaic-editor/useMosaicSemanticActions';
+import { MosaicToolbarContents, type ToolbarGroupKey } from '@/components/mosaic-editor/MosaicToolbarContents';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
-import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
+
 import { createSnippet } from '@/services/snippetApi';
 import { authFetch } from '@/services/apiClient';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
@@ -123,6 +125,7 @@ import {
 } from '@/services/semanticStateApi';
 import { wrapSemanticDocumentBlock } from '@/lib/semanticDocumentBlocks';
 import PdfViewer from '@/components/PdfViewer';
+import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
 
 export default function MosaicEditor({
   initialContent = '',
@@ -1237,17 +1240,47 @@ export default function MosaicEditor({
     });
   }, [autologicPreview, clearSemanticSelection, defineConceptDraft, docName, effectiveWorkspaceId, getSemanticPayload, roomId, runSemanticAction, semanticStoreContext, syncCompanionST, updateSemanticState, user?.uid, setDefineConceptDraft, setAutologicPreview]);
 
-  const handleSaveAsSnippet = useCallback(() => {
-    if (!semanticSelection) return;
-    setSnippetDraft({ markdown: semanticSelection.text });
-    clearSemanticSelection();
-  }, [clearSemanticSelection, semanticSelection, setSnippetDraft]);
-
-  const handleAddNote = useCallback(() => {
-    if (!semanticSelection) return;
-    setNoteDraft({ selectionText: semanticSelection.text, note: '' });
-    clearSemanticSelection();
-  }, [clearSemanticSelection, semanticSelection, setNoteDraft]);
+  const {
+    handleSaveAsSnippet,
+    handleAddNote,
+    handleCreateAnalyticalCard,
+    handleRelateConcept,
+    handleCreateSemanticBlock,
+    handleCreateTask,
+    handleSendToWorkbench,
+    handleMarkEvidence,
+    handlePinFragment,
+    handleLinkDocument,
+    handleInsertSemanticAtlas,
+    handleInsertEvidenceMatrix,
+    handleInsertResearchBrief,
+    handleGenerateSTFile
+  } = useMosaicSemanticActions({
+    semanticState,
+    semanticStoreContext,
+    semanticItemCount,
+    semanticSelection,
+    linkedTasks,
+    docName,
+    roomId,
+    currentDocMetaRef,
+    currentWorkspaceId,
+    effectiveWorkspaceId,
+    user: user ?? undefined,
+    appendMarkdownBlock,
+    applySelectionMarkdown,
+    setSemanticNotice,
+    clearSemanticSelection,
+    updateSemanticState,
+    runSemanticAction,
+    getSemanticPayload,
+    createSemanticDocBlockId,
+    loadLinkedTasks,
+    syncCompanionST,
+    setDefineConceptDraft,
+    setNoteDraft,
+    setSnippetDraft
+  });
 
   const handleConfirmSaveNote = useCallback(() => {
     if (!noteDraft?.note.trim()) return;
@@ -1261,7 +1294,7 @@ export default function MosaicEditor({
       setNoteDraft(null);
       setSemanticNotice('Nota guardada en la mesa semántica y sincronizada con Firebase.');
     });
-  }, [getSemanticPayload, noteDraft, runSemanticAction, semanticStoreContext, updateSemanticState, setNoteDraft]);
+  }, [getSemanticPayload, noteDraft, runSemanticAction, semanticStoreContext, updateSemanticState, setNoteDraft, setSemanticNotice]);
 
   const handleConfirmSnippetSave = useCallback(async (data: { title: string; description: string; markdown: string; category: string }) => {
     const workspaceId = currentWorkspaceId || PERSONAL_WORKSPACE_ID;
@@ -1272,205 +1305,7 @@ export default function MosaicEditor({
       setSemanticNotice('No se pudo guardar el snippet.');
     }
     setSnippetDraft(null);
-  }, [currentWorkspaceId, setSnippetDraft]);
-
-  const handleCreateAnalyticalCard = useCallback(() => {
-    if (!semanticSelection) return;
-    void runSemanticAction('analytic-card', () => {
-      const docBlockId = createSemanticDocBlockId('analysis');
-      const quoted = semanticSelection.text
-        .split(/\r?\n/)
-        .map((line) => `> ${line || ' '}`)
-        .join('\n');
-      const analyticalCard = wrapSemanticDocumentBlock(docBlockId, [
-        '> [!analysis] Ficha analitica',
-        `> origen: ${docName || 'Documento actual'}`,
-        quoted,
-        '> interpretacion:',
-        '> - ',
-        '> accion sugerida:',
-        '> - [ ]'
-      ].join('\n'));
-      const inserted = applySelectionMarkdown(analyticalCard);
-      if (!inserted) {
-        throw new Error('Analytical card insertion failed');
-      }
-      const nextState = captureAnalyticalFragmentWithReference(
-        semanticStoreContext,
-        getSemanticPayload(semanticSelection.text),
-        { docBlockId }
-      );
-      updateSemanticState(nextState);
-      setSemanticNotice('Ficha analitica insertada y fragmento guardado como evidencia y fijado.');
-      clearSemanticSelection();
-    });
-  }, [applySelectionMarkdown, clearSemanticSelection, createSemanticDocBlockId, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
-
-  const handleRelateConcept = useCallback((conceptId: string) => {
-    if (!semanticSelection) return;
-    void runSemanticAction('relate-concept', () => {
-      const nextState = relateSelectionToConcept(semanticStoreContext, getSemanticPayload(semanticSelection.text), conceptId);
-      updateSemanticState(nextState);
-      setSemanticNotice('Fragmento relacionado con el concepto elegido.');
-      clearSemanticSelection();
-    });
-  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
-
-  const handleCreateSemanticBlock = useCallback(() => {
-    if (!semanticSelection) return;
-    void runSemanticAction('semantic-block', () => {
-      const docBlockId = createSemanticDocBlockId('semantic-block');
-      const quoted = semanticSelection.text
-        .split(/\r?\n/)
-        .map((line) => `> ${line || ' '}`)
-        .join('\n');
-      const blockMarkdown = wrapSemanticDocumentBlock(
-        docBlockId,
-        `${semanticSelection.text}\n\n> [!semantic] Fragmento académico\n${quoted}\n> origen: ${docName || 'Documento actual'}\n`
-      );
-      const inserted = applySelectionMarkdown(blockMarkdown);
-      if (!inserted) {
-        throw new Error('Selection block insertion failed');
-      }
-      const nextState = registerSemanticBlockWithReference(
-        semanticStoreContext,
-        getSemanticPayload(semanticSelection.text),
-        { docBlockId }
-      );
-      updateSemanticState(nextState);
-      setSemanticNotice('Bloque semántico insertado en el documento.');
-      clearSemanticSelection();
-    });
-  }, [applySelectionMarkdown, clearSemanticSelection, createSemanticDocBlockId, docName, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
-
-  const handleCreateTask = useCallback(() => {
-    if (!semanticSelection) return;
-    void runSemanticAction('create-task', async () => {
-      const board = await fetchBoardApi({ workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID });
-      const targetColumn = board.columns.find((column) => /por hacer|to do|todo/i.test(column.name)) ?? board.columns[0];
-      if (!targetColumn) {
-        throw new Error('No board columns available');
-      }
-      const title = semanticSelection.text.replace(/\s+/g, ' ').trim().slice(0, 80) || 'Fragmento del editor';
-      await createBoardCardApi({
-        workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID,
-        columnId: targetColumn.id,
-        title,
-        description: `Origen: ${docName || 'Documento'}\n\n${semanticSelection.text}`,
-        ownerId: user?.uid ?? null,
-        sourceDocId: roomId || undefined,
-        sourceDocName: docName || 'Documento',
-        sourceFragment: semanticSelection.text
-      });
-      await loadLinkedTasks();
-      setSemanticNotice(`Fragmento enviado a “${targetColumn.name}”.`);
-      clearSemanticSelection();
-    });
-  }, [clearSemanticSelection, currentWorkspaceId, docName, loadLinkedTasks, roomId, runSemanticAction, semanticSelection, user?.uid]);
-
-  const handleMarkEvidence = useCallback(() => {
-    if (!semanticSelection) return;
-    void runSemanticAction('mark-evidence', () => {
-      const nextState = markSelectionAsEvidence(semanticStoreContext, getSemanticPayload(semanticSelection.text));
-      updateSemanticState(nextState);
-      setSemanticNotice('Evidencia guardada en el panel semántico.');
-      clearSemanticSelection();
-    });
-  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
-
-  const handlePinFragment = useCallback(() => {
-    if (!semanticSelection) return;
-    void runSemanticAction('pin-fragment', () => {
-      const nextState = pinSelectionFragment(semanticStoreContext, getSemanticPayload(semanticSelection.text));
-      updateSemanticState(nextState);
-      setSemanticNotice('Fragmento fijado para acceso rápido.');
-      clearSemanticSelection();
-    });
-  }, [clearSemanticSelection, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
-
-  const handleLinkDocument = useCallback((documentItem: { id: string; name: string; folder?: string }) => {
-    if (!semanticSelection) return;
-    void runSemanticAction('link-document', () => {
-      const docBlockId = createSemanticDocBlockId('doc-link');
-      const markdownLink = wrapSemanticDocumentBlock(
-        docBlockId,
-        `[${semanticSelection.text}](/editor/${encodeURIComponent(documentItem.id)})`
-      );
-      const inserted = applySelectionMarkdown(markdownLink);
-      if (!inserted) {
-        throw new Error('Document link insertion failed');
-      }
-      const nextState = attachLinkedDocumentToSelectionWithReference(
-        semanticStoreContext,
-        getSemanticPayload(semanticSelection.text),
-        documentItem.id,
-        documentItem.name,
-        { docBlockId }
-      );
-      updateSemanticState(nextState);
-      setSemanticNotice(`Enlace interno creado hacia “${documentItem.name}”.`);
-      clearSemanticSelection();
-    });
-  }, [applySelectionMarkdown, clearSemanticSelection, createSemanticDocBlockId, getSemanticPayload, runSemanticAction, semanticSelection, semanticStoreContext, updateSemanticState]);
-
-  const handleInsertSemanticAtlas = useCallback(() => {
-    if (semanticItemCount === 0) {
-      setSemanticNotice('Todavia no hay material semantico para construir un atlas.');
-      return;
-    }
-    appendMarkdownBlock(buildSemanticAtlasMarkdown({
-      state: semanticState,
-      docName: docName || currentDocMetaRef.current.name || 'Documento'
-    }));
-    setSemanticNotice('Atlas semantico insertado al documento.');
-  }, [appendMarkdownBlock, docName, semanticItemCount, semanticState]);
-
-  const handleInsertEvidenceMatrix = useCallback(() => {
-    if (semanticState.fragments.length === 0) {
-      setSemanticNotice('Marca evidencias o fija fragmentos antes de generar la matriz.');
-      return;
-    }
-    appendMarkdownBlock(buildEvidenceMatrixMarkdown({ state: semanticState }));
-    setSemanticNotice('Matriz de evidencias insertada al documento.');
-  }, [appendMarkdownBlock, semanticState]);
-
-  const handleInsertResearchBrief = useCallback(() => {
-    if (semanticItemCount === 0 && linkedTasks.length === 0) {
-      setSemanticNotice('Todavia no hay conceptos, fragmentos ni tareas para resumir.');
-      return;
-    }
-    appendMarkdownBlock(buildResearchBriefMarkdown({
-      state: semanticState,
-      docName: docName || currentDocMetaRef.current.name || 'Documento',
-      linkedTasks
-    }));
-    setSemanticNotice('Bitacora de investigacion insertada al documento.');
-  }, [appendMarkdownBlock, docName, linkedTasks, semanticItemCount, semanticState]);
-
-  const handleGenerateSTFile = useCallback(async () => {
-    if (semanticState.concepts.length === 0) {
-      setSemanticNotice('Define al menos un concepto para generar el archivo ST.');
-      return;
-    }
-    const currentName = docName || currentDocMetaRef.current.name || 'Documento';
-    const { scopedState } = await syncCompanionST({
-      semanticState,
-      docName: currentName,
-      docId: roomId ?? null,
-      folder: currentDocMetaRef.current.folder || 'Material',
-      workspaceId: effectiveWorkspaceId,
-      userId: user?.uid
-    }).catch((error) => {
-      console.error('Error generating ST file:', error);
-      setSemanticNotice('Error al generar el archivo ST.');
-      return { scopedState: null };
-    });
-    if (scopedState) {
-      // Notice is set by syncCompanionST, override with count info
-      const stFileName = companionSTName(currentName);
-      setSemanticNotice(`Archivo ${stFileName} sincronizado con ${scopedState.concepts.length} definiciones.`);
-    }
-  }, [docName, effectiveWorkspaceId, roomId, semanticState, syncCompanionST, user?.uid]);
+  }, [currentWorkspaceId, setSemanticNotice, setSnippetDraft]);
 
   // Obsidian-style inline LaTeX rendering (extracted to hook)
   useKatexOverlayDecorations({ editorShellRef, viewMode });
@@ -1494,206 +1329,32 @@ export default function MosaicEditor({
   }, [closeEditorUtilityMenu, toggleFullscreen]);
 
   const renderToolbarContents = useCallback(() => {
-    const sections: React.ReactNode[] = [];
-
-    const pushSection = (key: ToolbarGroupKey, content: React.ReactNode) => {
-      if (!toolbarVisibility[key]) return;
-      if (sections.length > 0) {
-        sections.push(<Separator key={`separator-${key}`} />);
-      }
-      sections.push(<React.Fragment key={key}>{content}</React.Fragment>);
-    };
-
-    pushSection('history', <UndoRedo />);
-    pushSection('inline', (
-      <>
-        <BoldItalicUnderlineToggles />
-        <CodeToggle />
-        <HighlightToggle />
-        <StrikeThroughSupSubToggles options={['Strikethrough', 'Sub', 'Sup']} />
-      </>
-    ));
-    pushSection('structure', (
-      <>
-        <BlockTypeSelect />
-        <ToolbarShortcutButton
-          title="Insertar cita"
-          icon={<Quote className="h-3.5 w-3.5" />}
-          onClick={() => insertSnippet('\n> Escribe una cita aquí\n')}
-        />
-      </>
-    ));
-    pushSection('lists', (
-      <>
-        <ListsToggle />
-        <ToolbarShortcutButton
-          title="Insertar lista de tareas"
-          icon={<ListTodo className="h-3.5 w-3.5" />}
-          onClick={() => insertSnippet('\n- [ ] Primera tarea\n- [ ] Segunda tarea\n')}
-        />
-        <ToolbarShortcutButton
-          title="Crear tarea en tablero"
-          icon={isCreatingTask ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KanbanSquare className="h-3.5 w-3.5" />}
-          onClick={() => { void createTaskFromSelection(); }}
-          disabled={isCreatingTask}
-        />
-        <ToolbarShortcutButton
-          title="Detectar pendientes en texto"
-          icon={isCreatingTask ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          onClick={() => { void scanPendings(); }}
-          disabled={isCreatingTask}
-        />
-      </>
-    ));
-    pushSection('media', (
-      <>
-        <CreateLink />
-        <InsertImage />
-      </>
-    ));
-    pushSection('insert', (
-      <>
-        <TableGridPicker portalContainer={editorShellRef.current} onInsert={(rows, cols) => {
-          const header = `| ${Array.from({ length: cols }, (_, i) => `Col ${i + 1}`).join(' | ')} |`;
-          const sep = `| ${Array.from({ length: cols }, () => '---').join(' | ')} |`;
-          const body = Array.from({ length: rows - 1 }, () =>
-            `| ${Array.from({ length: cols }, () => '   ').join(' | ')} |`
-          ).join('\n');
-          const tableMd = `\n${header}\n${sep}\n${body}\n`;
-          insertSnippet(tableMd);
-        }} />
-        <InsertThematicBreak />
-        <InsertCodeBlock />
-      </>
-    ));
-    pushSection('snippets', (
-      <>
-        <ToolbarShortcutButton
-          title="LaTeX en línea"
-          icon={<Sigma className="h-3.5 w-3.5" />}
-          onClick={() => insertSnippet('$E = mc^2$')}
-        />
-        <ToolbarShortcutButton
-          title="Bloque LaTeX"
-          icon={<Braces className="h-3.5 w-3.5" />}
-          onClick={() => insertSnippet('\n$$\n\\int_{a}^{b} f(x) \\, dx = F(b) - F(a)\n$$\n')}
-        />
-        <ToolbarShortcutButton
-          title="Galería de snippets"
-          icon={<Library className="h-3.5 w-3.5" />}
-          onClick={() => setShowSnippetGallery(s => !s)}
-        />
-      </>
-    ));
-    pushSection('advanced', (
-      <>
-        <InsertAdmonition />
-        <InsertFrontmatter />
-      </>
-    ));
-
     return (
-      <>
-        {/* ── Custom controls ── */}
-        <div className="relative shrink-0" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <button
-            ref={menuBtnRef}
-            type="button"
-            onClick={toggleCompactMenu}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
-            title="Más opciones"
-            aria-label="Más opciones del editor"
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewModeWithSync(viewMode === 'raw' ? 'edit' : 'raw')}
-            className={clsx(
-              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-              viewMode === 'raw'
-                ? 'bg-violet-600/25 text-violet-300 hover:bg-violet-600/35'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-            )}
-            title={viewMode === 'raw' ? 'Volver al editor visual' : 'Ver Markdown puro'}
-            aria-label={viewMode === 'raw' ? 'Volver al editor visual' : 'Ver Markdown puro'}
-            aria-pressed={viewMode === 'raw'}
-          >
-            {viewMode === 'raw' ? <PenLine className="h-4 w-4" /> : <FileCode2 className="h-4 w-4" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewModeWithSync(viewMode === 'preview' ? 'edit' : 'preview')}
-            className={clsx(
-              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-              viewMode === 'preview'
-                ? 'bg-blue-600/25 text-blue-300 hover:bg-blue-600/35'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-            )}
-            title={viewMode === 'preview' ? 'Volver a editar' : 'Vista previa (LaTeX, Mermaid)'}
-            aria-label={viewMode === 'preview' ? 'Volver al editor' : 'Abrir vista previa renderizada'}
-            aria-pressed={viewMode === 'preview'}
-          >
-            {viewMode === 'preview' ? <PenLine className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => void toggleFullscreen()}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-700 hover:text-white"
-            title={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'}
-            aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Entrar en pantalla completa'}
-          >
-            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-        {showCompactMenu && menuPos && ReactDOM.createPortal(
-          <div
-            className="table-grid-popover"
-            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99998 }}
-            onClick={() => setShowCompactMenu(false)}
-          >
-            <div
-              style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 99999 }}
-              className="min-w-[200px] rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-2xl shadow-black/60"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-                <Settings2 className="h-3.5 w-3.5 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
-              </button>
-              <button type="button" title="Abrir mesa semántica" aria-label="Abrir mesa semántica" onClick={() => { semanticBrowserBus.open(docName || currentDocMetaRef.current.name); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-                <BookMarked className="h-3.5 w-3.5 text-blue-400" />Mesa semántica
-              </button>
-              <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-                <Sparkles className="h-3.5 w-3.5 text-slate-400" />Restaurar barra completa
-              </button>
-              <button type="button" title={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} onClick={() => { void toggleFullscreen(); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5 text-slate-400" /> : <Maximize2 className="h-3.5 w-3.5 text-slate-400" />}
-                {isFullscreen ? 'Salir pantalla completa' : 'Pantalla completa'}
-              </button>
-              <div className="my-1 h-px bg-slate-700" />
-              <button type="button" title="Abrir galería de snippets" aria-label="Abrir galería de snippets" onClick={() => { setShowSnippetGallery(s => !s); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-                <Library className="h-3.5 w-3.5 text-blue-400" />Galería de snippets
-              </button>
-              {QUICK_INSERTS.map((snippet) => (
-                <button
-                  key={snippet.id}
-                  type="button"
-                  title={snippet.title}
-                  aria-label={snippet.title}
-                  onClick={() => { insertSnippet(snippet.markdown); setShowCompactMenu(false); }}
-                  className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                >
-                  <Sparkles className="h-3 w-3 text-blue-400" />{snippet.title}
-                </button>
-              ))}
-            </div>
-          </div>,
-          editorShellRef.current ?? document.body
-        )}
-
-        {/* ── MDXEditor toolbar groups ── */}
-        {sections}
-      </>
+      <MosaicToolbarContents
+        toolbarVisibility={toolbarVisibility as Record<ToolbarGroupKey, boolean>}
+        showCompactMenu={showCompactMenu}
+        menuPos={menuPos}
+        isFullscreen={isFullscreen}
+        showToolsPanel={showToolsPanel}
+        viewMode={viewMode}
+        isCreatingTask={isCreatingTask}
+        docName={docName || ''}
+        editorShellRef={editorShellRef}
+        menuBtnRef={menuBtnRef}
+        currentDocMetaRef={currentDocMetaRef}
+        DEFAULT_TOOLBAR_VISIBILITY={DEFAULT_TOOLBAR_VISIBILITY as Record<ToolbarGroupKey, boolean>}
+        QUICK_INSERTS={QUICK_INSERTS}
+        applyToolbarVisibility={applyToolbarVisibility}
+        insertSnippet={insertSnippet}
+        toggleCompactMenu={toggleCompactMenu}
+        toggleFullscreen={toggleFullscreen}
+        setShowCompactMenu={setShowCompactMenu}
+        setShowSnippetGallery={setShowSnippetGallery}
+        setShowToolsPanel={setShowToolsPanel}
+        setViewModeWithSync={setViewModeWithSync}
+        createTaskFromSelection={createTaskFromSelection}
+        scanPendings={scanPendings}
+      />
     );
   }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName, menuBtnRef]);
 
