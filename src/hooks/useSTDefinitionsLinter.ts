@@ -17,10 +17,12 @@ function kindIcon(kind: STDefinition['kind']): string {
     case 'define': return '[def]';
     case 'axiom': return '[axiom]';
     case 'theorem': return '[thm]';
+    case 'claim': return '[claim]';
     case 'let': return '[let]';
     case 'source': return '[src]';
     case 'theory': return '[theory]';
     case 'function': return '[fn]';
+    case 'passage': return '[passage]';
     case 'interpretation': return '[interp]';
     default: return '[·]';
   }

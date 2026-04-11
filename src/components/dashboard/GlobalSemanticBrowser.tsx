@@ -9,6 +9,7 @@ import {
   deleteFragmentsByDocBlockId,
   deleteFragment,
   deleteRelation,
+  setSemanticWorkspacePreferences,
   updateConcept,
   updateFragment,
   type SemanticWorkspaceState
@@ -23,6 +24,8 @@ import type { BoardCard } from '@/components/dashboard/types';
 import { fetchSemanticWorkspaceStateApi, saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
 import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
 import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
+import { buildTheoryGraphFromSemanticState, type TheoryGraphQuickFix } from '@/lib/semantic/theory-graph';
+import { buildSTFromSemantic } from '@/lib/buildSTFromSemantic';
 
 interface GlobalSemanticBrowserProps {
   workspaceId?: string;
@@ -185,6 +188,80 @@ export default function GlobalSemanticBrowser({
 
   const noop = useMemo(() => () => {}, []);
 
+  const theoryGraph = useMemo(() => buildTheoryGraphFromSemanticState(state, {
+    sourceDocument: { docName: filterDocName || 'Espacio de trabajo' }
+  }), [filterDocName, state]);
+
+  const stPreviewContent = useMemo(() => buildSTFromSemantic(state, filterDocName || 'Espacio de trabajo'), [filterDocName, state]);
+
+  const handleExperienceModeChange = useCallback((mode: 'assisted' | 'hybrid' | 'expert') => {
+    if (!ctx) return;
+    const nextState = setSemanticWorkspacePreferences(ctx, { experienceMode: mode });
+    void persistAndSync(nextState, [])
+      .catch((err) => console.error('[GlobalSemanticBrowser] handleExperienceModeChange failed', err));
+  }, [ctx, persistAndSync]);
+
+  const handleApplyQuickFix = useCallback((fix: TheoryGraphQuickFix) => {
+    if (!ctx) return;
+
+    if (fix.kind === 'weaken-claim' || fix.kind === 'add-condition' || fix.kind === 'mark-dialectical-tension') {
+      const targetNode = theoryGraph.nodes.find((node) => node.id === fix.targetNodeId || node.id === fix.sourceNodeId);
+      const conceptId = typeof targetNode?.metadata?.conceptId === 'string'
+        ? targetNode.metadata.conceptId
+        : state.concepts.find((concept) => concept.title === targetNode?.label)?.id;
+      if (!conceptId) return;
+      const nextState = updateConcept(ctx, conceptId, {
+        status: fix.kind === 'mark-dialectical-tension' ? 'contradicted' : 'draft'
+      });
+      void persistAndSync(nextState, [])
+        .catch((err) => console.error('[GlobalSemanticBrowser] handleApplyQuickFix(concept) failed', err));
+      return;
+    }
+
+    if (fix.kind === 'link-missing-evidence') {
+      const targetNode = theoryGraph.nodes.find((node) => node.id === fix.targetNodeId);
+      const sourceNode = theoryGraph.nodes.find((node) => node.id === fix.sourceNodeId);
+      const conceptId = typeof targetNode?.metadata?.conceptId === 'string'
+        ? targetNode.metadata.conceptId
+        : state.concepts.find((concept) => concept.title === targetNode?.label)?.id;
+      const fragmentId = typeof sourceNode?.metadata?.fragmentId === 'string'
+        ? sourceNode.metadata.fragmentId
+        : state.fragments.find((fragment) => fragment.excerpt === sourceNode?.label || fragment.text === sourceNode?.text)?.id;
+
+      if (!conceptId) return;
+      const sourceFragment = fragmentId
+        ? state.fragments.find((fragment) => fragment.id === fragmentId)
+        : state.fragments.find((fragment) => fragment.kind === 'evidence');
+      if (!sourceFragment) return;
+
+      const nextState = {
+        ...state,
+        relations: [
+          {
+            id: `${sourceFragment.id}:${conceptId}:evidence-for`,
+            fragmentId: sourceFragment.id,
+            conceptId,
+            conceptTitle: state.concepts.find((concept) => concept.id === conceptId)?.title || targetNode?.label || conceptId,
+            relationType: 'evidence-for' as const,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            docId: sourceFragment.docId,
+            origin: 'semantic-ui' as const,
+            scope: 'document' as const,
+            status: 'validated' as const,
+            stableKey: `${sourceFragment.id}:${conceptId}:evidence-for`,
+            sourceEntityId: sourceFragment.id,
+            targetEntityId: conceptId,
+            sourceRefs: sourceFragment.sourceRefs || []
+          },
+          ...state.relations.filter((relation) => !(relation.fragmentId === sourceFragment.id && relation.conceptId === conceptId))
+        ]
+      };
+      void persistAndSync(nextState, [{ docId: sourceFragment.docId, docName: sourceFragment.docName }])
+        .catch((err) => console.error('[GlobalSemanticBrowser] handleApplyQuickFix(evidence) failed', err));
+    }
+  }, [ctx, persistAndSync, state, theoryGraph.nodes]);
+
   return (
     <SemanticBrowser
       docName={filterDocName || 'Espacio de trabajo'}
@@ -197,6 +274,12 @@ export default function GlobalSemanticBrowser({
       standalone
       initialTab={initialTab}
       filterSTFile={filterDocName}
+      experienceMode={state.preferences.experienceMode}
+      onExperienceModeChange={handleExperienceModeChange}
+      theoryGraph={theoryGraph}
+      verificationDiagnostics={theoryGraph.diagnostics}
+      onApplyQuickFix={handleApplyQuickFix}
+      stPreviewContent={stPreviewContent}
       onDeleteConcept={handleDeleteConcept}
       onDeleteFragment={handleDeleteFragment}
       onDeleteRelation={handleDeleteRelation}

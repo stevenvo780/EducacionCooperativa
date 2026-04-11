@@ -9,6 +9,7 @@ import {
     downloadDocumentBlobApi
 } from '@/services/dashboardApi';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
+import { ST_RUNTIME_VERSION } from '@/lib/st-runtime-manifest';
 import { DialogKind, type DocItem, type FolderItem, type Workspace, type DialogConfig, type DialogResult } from '@/components/dashboard/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { TerminalSession } from '@/context/TerminalContext';
@@ -235,7 +236,7 @@ console.log(listProfiles());
 \\\`\\\`\\\`
 
 ---
-*Runtime documentado para EducacionCooperativa con \\\`@stevenvo780/st-lang\\\` 2.0.4 — https://github.com/stevenvo780/ST*
+*Runtime documentado para EducacionCooperativa con \\\`@stevenvo780/st-lang\\\` ${ST_RUNTIME_VERSION} — https://github.com/stevenvo780/ST*
 `;
 
 interface UseDocumentActionsOptions {

@@ -1,3 +1,5 @@
+import { ST_RUNTIME_KEYWORDS, ST_RUNTIME_PROFILE_IDS } from '@/lib/st-runtime-manifest';
+
 /**
  * Tokenizer & syntax highlighting para el editor ST.
  * Extraído de STCodeEditor para modularidad.
@@ -28,26 +30,7 @@ export interface HighlightToken {
 
 // ── Conjuntos léxicos ───────────────────────────────────────
 
-export const KEYWORDS = new Set([
-  'logic', 'axiom', 'theorem', 'derive', 'from', 'check', 'prove',
-  'countermodel', 'truth_table', 'let', 'passage', 'formalize', 'as',
-  'claim', 'support', 'confidence', 'context', 'render', 'explain',
-  'forall', 'exists', 'analyze', 'refute',
-  'next', 'until', 'import', 'assume', 'show', 'qed',
-  'export', 'theory', 'extends', 'private', 'print', 'set', 'if', 'else', 'for', 'in', 'while', 'fn', 'return',
-  'nand', 'nor', 'xor',
-  // v3: definitions, sources, glossary
-  'define', 'unfold', 'fold', 'source', 'interpret', 'glossary', 'description',
-  // Aliases en español
-  'logica', 'axioma', 'teorema', 'derivar', 'desde', 'verificar',
-  'probar', 'contramodelo', 'refutar', 'tabla_verdad', 'sea', 'pasaje',
-  'formalizar', 'como', 'afirmacion', 'soporte', 'confianza', 'contexto',
-  'mostrar', 'explicar', 'analizar', 'paratodo', 'existe',
-  'siguiente', 'hasta', 'importar', 'asumir', 'demostrar',
-  'exportar', 'teoria', 'extiende', 'privado', 'imprimir', 'asignar', 'si', 'sino', 'para', 'en', 'mientras', 'funcion', 'retornar',
-  // v3 aliases en español
-  'definir', 'desplegar', 'plegar', 'fuente', 'interpretar', 'glosario', 'descripcion'
-]);
+export const KEYWORDS = new Set(ST_RUNTIME_KEYWORDS);
 
 export const BUILTINS = new Set([
   'valid', 'invalid', 'satisfiable', 'unsatisfiable', 'equivalent', 'claims',
@@ -55,18 +38,7 @@ export const BUILTINS = new Set([
   'valido', 'invalido', 'satisfacible', 'insatisfacible', 'equivalente'
 ]);
 
-export const PROFILES = new Set([
-  'classical.propositional', 'classical.first_order',
-  'modal.k',
-  'paraconsistent.belnap',
-  'deontic.standard',
-  'epistemic.s5',
-  'intuitionistic.propositional',
-  'temporal.ltl',
-  'probabilistic.basic',
-  'aristotelian.syllogistic',
-  'arithmetic'
-]);
+export const PROFILES = new Set(ST_RUNTIME_PROFILE_IDS);
 
 // ── Helpers ─────────────────────────────────────────────────
 

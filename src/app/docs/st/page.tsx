@@ -7,6 +7,12 @@ import {
   FlaskConical, Info, Layers3, Scale, ShieldAlert, Sigma, Terminal, X, AlertTriangle
 } from 'lucide-react';
 import CopyBlock from '@/components/docs/STDocCodeBlock';
+import {
+  ST_RUNTIME_CLI_VERSION,
+  ST_RUNTIME_MANIFEST,
+  ST_RUNTIME_PROFILE_IDS,
+  ST_RUNTIME_VERSION
+} from '@/lib/st-runtime-manifest';
 
 /* ──────────── Types ──────────── */
 interface NavItem { id: string; label: string }
@@ -81,8 +87,6 @@ interface PackageHelper {
   code: string;
   note: string;
 }
-
-const ST_RUNTIME_VERSION = '2.5.0';
 
 const ST_AI_PROMPT = `# Prompt de contexto: Lenguaje ST
 
@@ -514,7 +518,7 @@ const SYNTAX: SyntaxBlock[] = [
   {
     title: 'Funciones reutilizables y llamadas dentro de expresiones',
     code: 'fn identidad(X) {\n  return X\n}\n\ncheck valid identidad((P -> P))\nprint get_atoms(identidad((P -> Q) & R))',
-    note: 'En ST 2.0.4 las llamadas a función también pueden reutilizarse dentro de otros comandos si la función ya fue declarada.'
+    note: `En ST ${ST_RUNTIME_VERSION} las llamadas a función también pueden reutilizarse dentro de otros comandos si la función ya fue declarada.`
   },
   {
     title: 'Singletons, clases y acceso con punto',
@@ -734,7 +738,7 @@ const RUNTIME_FACETS: RuntimeFacet[] = [
     note: 'Por eso derive, prove, render y countermodel pueden reutilizar let como si fueran premisas con nombre.'
   },
   {
-    title: 'Qué significa theory en ST 2.0.4',
+    title: `Qué significa theory en ST ${ST_RUNTIME_VERSION}`,
     description: 'Una theory sin parámetros es un singleton instanciado al declararse; una theory con parámetros es una plantilla de clase que se instancia al llamarla como función. Los métodos usan notación con punto y los miembros privados no salen del scope.',
     bullets: [
       'sin parámetros: objeto o singleton inmediato',
@@ -1876,7 +1880,7 @@ export default function STDocsPage() {
 
           {/* ── Profiles ── */}
           <section>
-            <SectionTitle id="profiles" icon={Layers3} title="Perfiles Lógicos (11)" />
+            <SectionTitle id="profiles" icon={Layers3} title={`Perfiles Lógicos (${ST_RUNTIME_PROFILE_IDS.length})`} />
             <p className="text-surface-400 text-sm mb-6">
               Cada perfil activa un motor semántico específico. Haz clic en un perfil para ver su manual completo
               con semántica, operadores, axiomas, ejemplos válidos e inválidos, y limitaciones del motor.
@@ -2091,7 +2095,8 @@ export default function STDocsPage() {
           {/* Footer */}
           <footer className="border-t border-surface-700/30 pt-8 pb-16 text-center">
             <p className="text-xs text-surface-500">
-              Documentación generada y validada automáticamente contra ST v{ST_RUNTIME_VERSION}.
+              Documentación generada y validada automáticamente contra ST v{ST_RUNTIME_VERSION}
+              {ST_RUNTIME_MANIFEST.versionMismatch ? ` (CLI reporta ${ST_RUNTIME_CLI_VERSION}; la versión canónica del contrato es ${ST_RUNTIME_VERSION}).` : '.'}
             </p>
             <p className="text-xs text-surface-400 mt-2">
               Lenguaje ST, ejemplos y derechos de autor de esta documentación: Steven Vallejo Ortiz.

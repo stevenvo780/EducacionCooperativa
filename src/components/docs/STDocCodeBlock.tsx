@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronUp, Copy, Loader2, Play, RotateCcw } from 'l
 import type { STEvalResult } from '@stevenvo780/st-lang/api';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 import { useSTInterpreter } from '@/hooks/useSTInterpreter';
+import { ST_RUNTIME_KEYWORDS } from '@/lib/st-runtime-manifest';
 
 const STCodeEditor = dynamic(() => import('@/components/editor/STCodeEditor'), {
   ssr: false,
@@ -17,7 +18,9 @@ const STCodeEditor = dynamic(() => import('@/components/editor/STCodeEditor'), {
 });
 
 const SHELL_PREFIX = /^(npm|pnpm|yarn|bun|node|bash|sh|st)\b/;
-const ST_RUN_KEYWORDS = /(?:^|\n)\s*(logic|axiom|theory|let|set|claim|support|confidence|context|passage|formalize|check|derive|prove|countermodel|refute|truth_table|analyze|explain|render|print|if|for|while|fn|import|export|define|definir|unfold|desplegar|fold|plegar|source|fuente|interpret|interpretar|glossary|glosario)\b/;
+const ST_RUN_KEYWORDS = new RegExp(
+  `(?:^|\\n)\\s*(${ST_RUNTIME_KEYWORDS.filter((keyword) => /^[a-z_]+$/i.test(keyword)).join('|')})\\b`
+);
 const DEFAULT_PROFILE = 'logic classical.propositional';
 
 function canRunAsST(code: string): boolean {

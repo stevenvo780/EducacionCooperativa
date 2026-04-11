@@ -13,6 +13,11 @@ import {
   type LogicProfile,
   type LLMConfig
 } from '@stevenvo780/autologic';
+import {
+  FORMALIZATION_CONTRACT_VERSION,
+  clampConfidence,
+  emptyFormalizationResultPayload
+} from '@/lib/formalization-contract';
 
 // Server-side defaults (set via Vercel env vars or .env)
 const SERVER_OPENWEBUI_ENDPOINT = process.env.OPENWEBUI_ENDPOINT || '';
@@ -69,7 +74,10 @@ export async function POST(request: NextRequest) {
     };
 
     if (!text?.trim()) {
-      return NextResponse.json({ ok: false, error: 'Text is required' }, { status: 400 });
+      return NextResponse.json(
+        emptyFormalizationResultPayload('llm', 'Text is required'),
+        { status: 400 }
+      );
     }
 
     const llmConfig = buildLLMConfig(body);
@@ -85,17 +93,39 @@ export async function POST(request: NextRequest) {
 
     const result = await formalizeWithLLM(text, opts);
 
+    const warningCount = result.diagnostics.filter((diagnostic) => diagnostic.severity === 'warning').length;
+    const errorCount = result.diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length;
+    const confidence = clampConfidence(
+      0.9
+      - (warningCount * 0.08)
+      - (errorCount * 0.18)
+      - ((result.linterDiagnostics?.length ?? 0) * 0.03)
+    );
+
     return NextResponse.json({
+      contractVersion: FORMALIZATION_CONTRACT_VERSION,
       ok: result.ok,
       stCode: result.stCode,
-      diagnostics: result.diagnostics,
+      ast: result.llmRawAst ?? null,
       linterDiagnostics: result.linterDiagnostics,
-      axiomCount: result.llmRawAst?.axioms?.length ?? 0,
-      conclusionCount: result.llmRawAst?.conclusions?.length ?? 0,
-      patterns: ['llm_extracted']
+      diagnostics: result.diagnostics,
+      atomCount: result.atoms.size,
+      formulaCount: result.formulas.length,
+      claimCount: result.llmRawAst?.conclusions?.length ?? 0,
+      confidence,
+      engine: 'llm',
+      patterns: ['llm_extracted'],
+      trace: {
+        inferredByRules: false,
+        inferredByLLM: true,
+        userEdited: false
+      }
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      emptyFormalizationResultPayload('llm', message),
+      { status: 500 }
+    );
   }
 }
