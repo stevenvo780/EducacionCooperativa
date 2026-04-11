@@ -273,6 +273,8 @@ function DashboardContent() {
     const isSemanticBrowserOpen = semanticBrowserTabId ? openTabs.some(tab => tab.id === semanticBrowserTabId) : false;
     const formalizerTabId = currentWorkspaceId ? `formalizer-${currentWorkspaceId}` : null;
     const isFormalizerOpen = formalizerTabId ? openTabs.some(tab => tab.id === formalizerTabId) : false;
+    const agoraAITabId = currentWorkspaceId ? `agora-ai-${currentWorkspaceId}` : null;
+    const isAgoraAIOpen = agoraAITabId ? openTabs.some(tab => tab.id === agoraAITabId) : false;
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [showNewFileModal, setShowNewFileModal] = useState(false);
@@ -729,6 +731,7 @@ function DashboardContent() {
         openStRunner,
         openSemanticBrowser,
         openFormalizer,
+        openAgoraAI,
         openFilesTab,
         openSnippetsGallery,
         closeTabById,
@@ -1532,6 +1535,8 @@ function DashboardContent() {
                         isFormalizerOpen={isFormalizerOpen}
                         onOpenFormalizer={openFormalizer}
                         formalizerTileId={formalizerTabId}
+                        isAgoraAIOpen={isAgoraAIOpen}
+                        onOpenAgoraAI={openAgoraAI}
                         onOpenSnippetsGallery={openSnippetsGallery}
                         onOpenQuickSearch={openQuickSearch}
                         onAcceptInvite={acceptInvite}

@@ -34,17 +34,30 @@ describe('non-browser fallbacks', () => {
       concepts: [],
       fragments: [],
       relations: [],
-      updatedAt: 0
+      updatedAt: 0,
+      preferences: {
+        experienceMode: 'hybrid',
+        showSTPreview: true,
+        showPedagogicalHints: true
+      }
     });
 
     expect(saveSemanticWorkspaceState(
       { workspaceId: 'ws-1', userId: 'u1' },
-      { concepts: [], fragments: [], relations: [], updatedAt: 10 }
+      {
+        concepts: [], fragments: [], relations: [], updatedAt: 10,
+        preferences: { experienceMode: 'hybrid', showSTPreview: true, showPedagogicalHints: true }
+      }
     )).toEqual({
       concepts: [],
       fragments: [],
       relations: [],
-      updatedAt: 10
+      updatedAt: 10,
+      preferences: {
+        experienceMode: 'hybrid',
+        showSTPreview: true,
+        showPedagogicalHints: true
+      }
     });
   });
 

@@ -4,6 +4,7 @@ import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, AlertTriangle, Info, Lightbulb, Ruler, Wrench, PenLine } from 'lucide-react';
 import type { LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import type { Diagnostic as STDiagnostic } from '@stevenvo780/st-lang/api';
+import { compareDiagnosticsForOverlay } from '@/lib/markdown-linter/diagnostic-priority';
 
 type GenericDiagnostic = LinterDiagnostic | STDiagnostic;
 
@@ -97,6 +98,10 @@ export function LinterOverlay({
   interactive = true
 }: LinterOverlayProps) {
   const _lines = useMemo(() => content.split('\n'), [content]);
+  const orderedDiagnostics = useMemo(
+    () => [...diagnostics].sort(compareDiagnosticsForOverlay),
+    [diagnostics]
+  );
   const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);
   const [hoverTooltipKey, setHoverTooltipKey] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -170,7 +175,7 @@ export function LinterOverlay({
 
   return (
     <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-[100050]">
-      {diagnostics.map((d, i) => {
+      {orderedDiagnostics.map((d, i) => {
         const tooltipKey = `${d.line ?? 1}:${d.column ?? 1}:${d.message}:${i}`;
         const quickFixes = generateQuickFixes(d, content);
         const supportsPinnedTooltip = quickFixes.length > 0 && Boolean(onApplyFix);
