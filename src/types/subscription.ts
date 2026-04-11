@@ -73,7 +73,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   [Plan.Pro]: {
     id: Plan.Pro,
     name: 'Pro',
-    price: 50000,
+    price: 80000,
     currency: 'COP',
     features: [
       'Todo lo del plan Básico',
@@ -90,7 +90,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   [Plan.Enterprise]: {
     id: Plan.Enterprise,
     name: 'Enterprise',
-    price: 150000,
+    price: 240000,
     currency: 'COP',
     features: [
       'Todo lo del plan Pro',

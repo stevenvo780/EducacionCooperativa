@@ -23,6 +23,7 @@ import {
 import type { BoardCard } from '@/components/dashboard/types';
 import { fetchSemanticWorkspaceStateApi, saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
 import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
+import { syncSTSourceToSemanticWorkspace } from '@/services/semanticSyncService';
 import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
 import { buildTheoryGraphFromSemanticState, type TheoryGraphQuickFix } from '@/lib/semantic/theory-graph';
 import { buildSTFromSemantic } from '@/lib/buildSTFromSemantic';
@@ -73,6 +74,27 @@ export default function GlobalSemanticBrowser({
     const interval = setInterval(reload, 3000);
     return () => clearInterval(interval);
   }, [workspaceId, reload]);
+
+  /* Round-trip: when a .md.st companion is saved, sync its content back into the semantic workspace */
+  useEffect(() => {
+    if (!workspaceId) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ docId?: string; docName?: string; content?: string }>).detail;
+      if (!detail?.docName?.endsWith('.md.st') || !detail.content) return;
+      void syncSTSourceToSemanticWorkspace({
+        workspaceId,
+        userId,
+        docId: detail.docId ?? null,
+        docName: detail.docName,
+        source: detail.content,
+        persistRemote: false
+      }).then(() => reload()).catch((err) => {
+        console.error('[GlobalSemanticBrowser] Round-trip sync failed', err);
+      });
+    };
+    window.addEventListener('agora:st-source-saved', handler);
+    return () => window.removeEventListener('agora:st-source-saved', handler);
+  }, [workspaceId, userId, reload]);
 
   const ctx = useMemo(() => workspaceId ? { workspaceId, userId: userId ?? undefined } : null, [workspaceId, userId]);
 

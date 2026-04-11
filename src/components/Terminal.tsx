@@ -174,14 +174,17 @@ const Terminal: React.FC<TerminalProps> = ({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8 bg-black text-slate-200 overflow-y-auto">
-        <div className="max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl p-8 text-center space-y-6">
+    <div className="flex flex-col items-center justify-center h-full p-8 bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.15),rgba(2,6,23,1))] text-slate-200 overflow-y-auto relative">
+        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none" />
+        
+        <div className="max-w-2xl w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] p-8 text-center space-y-6 relative z-10 transition-all">
             <div className="flex justify-center">
-                <div className={`p-4 rounded-full border ${
-                    workerOnline ? 'bg-emerald-500/10 border-emerald-500/20' :
-                    workerOffline ? 'bg-amber-500/10 border-amber-500/20' :
-                    'bg-red-500/10 border-red-500/20'
+                <div className={`relative p-5 rounded-full border shadow-xl transition-all duration-500 ${
+                    workerOnline ? 'bg-emerald-500/10 border-emerald-500/30 shadow-emerald-500/20' :
+                    workerOffline ? 'bg-amber-500/10 border-amber-500/30 shadow-amber-500/20' :
+                    'bg-red-500/10 border-red-500/30 shadow-red-500/20'
                 }`}>
+                    {workerOnline && <div className="absolute inset-0 rounded-full bg-emerald-400 blur-xl opacity-20 animate-pulse" />}
                     {workerOnline && <CheckCircle className="w-12 h-12 text-emerald-500" />}
                     {workerOffline && <AlertCircle className="w-12 h-12 text-amber-500" />}
                     {showHubError && <X className="w-12 h-12 text-red-500" />}
@@ -207,12 +210,12 @@ const Terminal: React.FC<TerminalProps> = ({
                     <p className="text-slate-400">El servicio está listo. Puedes iniciar una nueva terminal.</p>
                     <button
                         onClick={handleCreateSession}
-                        className="group/btn relative px-10 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-base flex items-center gap-3 mx-auto transition-all shadow-xl shadow-emerald-900/30 hover:shadow-emerald-500/30 hover:scale-105 active:scale-95 ring-2 ring-emerald-500/20 hover:ring-emerald-400/40"
+                        className="group/btn relative px-10 py-4 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl font-bold text-base flex items-center gap-3 mx-auto transition-all shadow-xl shadow-emerald-900/40 hover:shadow-emerald-500/40 hover:scale-[1.02] active:scale-[0.98] ring-1 ring-emerald-500/50 hover:ring-emerald-400"
                     >
                         <span className="absolute inset-0 rounded-xl bg-emerald-400/20 animate-ping opacity-30 group-hover/btn:opacity-0 transition-opacity" />
-                        <TerminalIcon className="w-6 h-6" /> Iniciar Terminal
+                        <TerminalIcon className="w-6 h-6 drop-shadow-md" /> Iniciar Terminal
                     </button>
-                    <p className="text-xs text-slate-500">O selecciona una sesión existente en la barra lateral.</p>
+                    <p className="text-xs text-slate-400 mt-2">O selecciona una sesión existente en la barra lateral.</p>
 
                     {/* Show active sessions in this workspace for joining */}
                     {sessions.filter(s => s.workspaceId === workerToken).length > 0 && (
@@ -221,7 +224,7 @@ const Terminal: React.FC<TerminalProps> = ({
                                 <Monitor className="w-3.5 h-3.5" />
                                 Sesiones activas en este espacio:
                             </p>
-                            <div className="space-y-1.5 max-w-sm mx-auto">
+                            <div className="space-y-2 max-w-md mx-auto">
                                 {sessions.filter(s => s.workspaceId === workerToken).map(sess => (
                                     <button
                                         key={sess.id}
@@ -229,11 +232,11 @@ const Terminal: React.FC<TerminalProps> = ({
                                             joinSession(sess.id);
                                             selectSession(sess.id);
                                         }}
-                                        className="w-full px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-indigo-300 hover:bg-indigo-500/20 flex items-center gap-2 text-xs transition-colors"
+                                        className="w-full px-5 py-3 bg-indigo-500/10 backdrop-blur-sm border border-indigo-500/20 rounded-xl text-indigo-200 hover:bg-indigo-500/20 hover:border-indigo-500/40 flex items-center gap-3 text-sm transition-all hover:scale-[1.01]"
                                     >
-                                        <TerminalIcon className="w-3.5 h-3.5 shrink-0" />
-                                        <span className="truncate flex-1 text-left">{sess.name || `Sesión ${sess.id.slice(-4)}`}</span>
-                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                        <TerminalIcon className="w-4 h-4 shrink-0 text-indigo-400" />
+                                        <span className="truncate flex-1 text-left font-medium">{sess.name || `Sesión ${sess.id.slice(-4)}`}</span>
+                                        <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse shrink-0" />
                                     </button>
                                 ))}
                             </div>
@@ -305,17 +308,17 @@ const Terminal: React.FC<TerminalProps> = ({
                         </>
                     ) : (
                         <>
-                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
-                                <p className="text-center text-amber-400 font-medium mb-2">
-                                    ¿Cómo funciona?
+                            <div className="bg-amber-500/10 backdrop-blur-md border border-amber-500/20 rounded-xl p-5 shadow-lg shadow-amber-900/10">
+                                <p className="text-center text-amber-400 font-semibold mb-2 flex items-center justify-center gap-2">
+                                    <AlertCircle className="w-4 h-4" />¿Cómo funciona?
                                 </p>
-                                <p className="text-center text-sm text-slate-400">
-                                    Cada espacio de trabajo necesita su propio <strong className="text-white">worker</strong> (contenedor Docker)
-                                    para ejecutar comandos y sincronizar archivos de forma aislada.
+                                <p className="text-center text-sm text-amber-200/80">
+                                    Cada espacio de trabajo necesita su propio <strong className="text-amber-100 bg-amber-500/20 px-1 py-0.5 rounded">worker</strong> (contenedor aislado)
+                                    para ejecutar comandos de forma segura.
                                 </p>
                             </div>
 
-                            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
+                            <div className="bg-slate-900 border border-slate-700/50 rounded-xl p-4 space-y-3 shadow-inner">
                                 <div className="flex justify-between items-center text-xs font-mono">
                                     <span className="text-slate-400 font-bold flex items-center gap-2">
                                         <Key className="w-3 h-3" /> WORKER TOKEN

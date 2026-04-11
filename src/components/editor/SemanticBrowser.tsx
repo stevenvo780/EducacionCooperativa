@@ -2,11 +2,15 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import {
+  AlertCircle,
+  AlertTriangle,
   BookMarked,
   Check,
+  ChevronDown,
   ClipboardList,
   FileCode2,
   FileText,
+  Info,
   Link2,
   MessageSquareText,
   Network,
@@ -14,9 +18,11 @@ import {
   Pin,
   Quote,
   Search,
+  ShieldCheck,
   Sparkles,
   Trash2,
-  X
+  X,
+  Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { BoardCard } from '@/components/dashboard/types';
@@ -26,6 +32,12 @@ import type {
   SemanticRelationRecord,
   SemanticWorkspaceState
 } from '@/services/editorSemanticStore';
+import type { WorkspaceExperienceMode } from '@/lib/semantic/workspace-state';
+import type {
+  TheoryGraph,
+  TheoryGraphDiagnostic,
+  TheoryGraphQuickFix
+} from '@/lib/semantic/theory-graph';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 
 export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
@@ -62,6 +74,15 @@ interface SemanticBrowserProps {
   onDeleteRelation?: (relationId: string) => void;
   onEditConcept?: (conceptId: string, updates: { title?: string; definition?: string; formula?: string }) => void;
   onEditFragment?: (fragmentId: string, updates: { text?: string; note?: string }) => void;
+  /** Modo de experiencia del usuario: oculta o expone capas avanzadas de ST. */
+  experienceMode?: WorkspaceExperienceMode;
+  onExperienceModeChange?: (mode: WorkspaceExperienceMode) => void;
+  /** Grafo teórico y diagnósticos de verificación argumental. */
+  theoryGraph?: TheoryGraph;
+  verificationDiagnostics?: TheoryGraphDiagnostic[];
+  onApplyQuickFix?: (fix: TheoryGraphQuickFix) => void;
+  /** Código ST generado desde el estado semántico (preview). */
+  stPreviewContent?: string;
 }
 
 const compactText = (value: string, maxLength = 140) => {
@@ -603,6 +624,33 @@ function ChevronLeftIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+/* ── ST Preview Block (modo experto) ── */
+function STPreviewBlock({ content }: { content: string }) {
+  const [collapsed, setCollapsed] = useState(true);
+  const lines = content.split('\n').length;
+  return (
+    <div className="rounded-xl border border-cyan-500/20 bg-slate-950 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setCollapsed(c => !c)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-900/50 transition"
+      >
+        <div className="flex items-center gap-2">
+          <FileCode2 className="h-3.5 w-3.5 text-cyan-400" />
+          <span className="text-xs font-semibold text-cyan-300">Código ST generado</span>
+          <span className="text-[10px] text-slate-500">{lines} líneas</span>
+        </div>
+        <ChevronDown className={clsx('h-3.5 w-3.5 text-slate-500 transition-transform', !collapsed && 'rotate-180')} />
+      </button>
+      {!collapsed && (
+        <pre className="px-4 pb-4 text-[11px] font-mono text-cyan-300/80 overflow-x-auto leading-5 max-h-96 overflow-y-auto border-t border-slate-800">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════
    ══  SemanticBrowser — Full Tab Component  ══
    ══════════════════════════════════════════════ */
@@ -624,7 +672,12 @@ export function SemanticBrowser({
   onDeleteFragment,
   onDeleteRelation,
   onEditConcept,
-  onEditFragment
+  onEditFragment,
+  experienceMode,
+  onExperienceModeChange,
+  verificationDiagnostics,
+  onApplyQuickFix,
+  stPreviewContent
 }: SemanticBrowserProps) {
   const [activeTab, setActiveTab] = useState<SemanticTab>(initialTab ?? 'resumen');
   const [searchQuery, setSearchQuery] = useState('');
@@ -741,8 +794,29 @@ export function SemanticBrowser({
             </div>
           )}
 
-          <div className="text-[11px] text-slate-500 shrink-0 ml-3">
-            {docName || 'Documento'}
+          <div className="flex items-center gap-3 shrink-0 ml-3">
+            {onExperienceModeChange && (
+              <div className="flex items-center rounded-lg border border-slate-700 bg-slate-900 p-0.5 gap-0.5">
+                {(['assisted', 'hybrid', 'expert'] as WorkspaceExperienceMode[]).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => onExperienceModeChange(mode)}
+                    className={clsx(
+                      'px-2 py-1 rounded text-[10px] font-semibold transition',
+                      experienceMode === mode
+                        ? 'bg-blue-500/20 text-blue-300'
+                        : 'text-slate-500 hover:text-slate-300'
+                    )}
+                  >
+                    {mode === 'assisted' ? 'Asistido' : mode === 'hybrid' ? 'Híbrido' : 'Experto'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="text-[11px] text-slate-500">
+              {docName || 'Documento'}
+            </div>
           </div>
         </div>
 
@@ -793,6 +867,64 @@ export function SemanticBrowser({
               <MetricCard label="Archivos ST" value={STDefinitionsRegistry.getRegisteredFiles().length} hint="Archivos con definiciones" />
               <MetricCard label="Definiciones" value={state.concepts.filter(c => c.definition).length} hint="Conceptos con definición formal" />
             </div>
+
+            {/* ── Verification Diagnostics ── */}
+            {verificationDiagnostics && verificationDiagnostics.length > 0 ? (
+              <div>
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 flex items-center gap-2">
+                  <ShieldCheck className="h-3.5 w-3.5 text-slate-500" /> Verificación argumental
+                </h3>
+                <div className="space-y-2">
+                  {verificationDiagnostics.map(diag => (
+                    <div
+                      key={diag.id}
+                      className={clsx(
+                        'rounded-xl border p-3',
+                        diag.severity === 'error' && 'border-red-500/30 bg-red-500/5',
+                        diag.severity === 'warning' && 'border-amber-500/30 bg-amber-500/5',
+                        diag.severity === 'info' && 'border-blue-500/30 bg-blue-500/5'
+                      )}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="mt-0.5 shrink-0">
+                          {diag.severity === 'error' && <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
+                          {diag.severity === 'warning' && <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />}
+                          {diag.severity === 'info' && <Info className="h-3.5 w-3.5 text-blue-400" />}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className={clsx(
+                            'text-xs font-medium',
+                            diag.severity === 'error' && 'text-red-300',
+                            diag.severity === 'warning' && 'text-amber-300',
+                            diag.severity === 'info' && 'text-blue-300'
+                          )}>{diag.message}</p>
+                          {diag.quickFixes.length > 0 && onApplyQuickFix && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {diag.quickFixes.map(fix => (
+                                <button
+                                  key={fix.id}
+                                  type="button"
+                                  onClick={() => onApplyQuickFix(fix)}
+                                  title={fix.description}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-700 bg-slate-900 text-[10px] font-semibold text-slate-300 hover:text-white hover:border-slate-500 transition"
+                                >
+                                  <Zap className="h-2.5 w-2.5 text-amber-400" /> {fix.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : verificationDiagnostics && (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+                <p className="text-xs text-emerald-300 font-medium">Sin inconsistencias detectadas en el espacio de trabajo</p>
+              </div>
+            )}
 
             {/* Actions */}
             {!standalone && (
@@ -860,7 +992,7 @@ export function SemanticBrowser({
             )}
 
             {/* Workflow */}
-            {!standalone && (
+            {!standalone && experienceMode !== 'expert' && (
             <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/70 p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Flujo recomendado</div>
               <div className="mt-3 grid gap-2 sm:grid-cols-4">
@@ -877,6 +1009,11 @@ export function SemanticBrowser({
                 ))}
               </div>
             </div>
+            )}
+
+            {/* ST Preview — visible solo en modo experto */}
+            {experienceMode === 'expert' && stPreviewContent && (
+              <STPreviewBlock content={stPreviewContent} />
             )}
           </div>
         )}

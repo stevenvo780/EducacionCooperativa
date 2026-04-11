@@ -112,7 +112,8 @@ export function useOfflineSync() {
   useEffect(() => {
     refreshCounts();
     if (!isPageVisible) return;
-    const interval = setInterval(refreshCounts, 15000);
+    // Reducido a 60 segundos para evitar sobrecarga de IndexedDB
+    const interval = setInterval(refreshCounts, 60000);
     return () => clearInterval(interval);
   }, [refreshCounts, isPageVisible]);
 
