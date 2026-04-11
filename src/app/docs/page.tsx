@@ -10,6 +10,7 @@ import {
   FolderPlus, Upload, Search, User, Globe, Lock, Layers
 } from 'lucide-react';
 import Link from 'next/link';
+import { ST_RUNTIME_VERSION } from '@/lib/st-runtime-manifest';
 
 function CopyBlock({ code, label }: { code: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -110,7 +111,7 @@ export default function DocsPage() {
           <div className="flex-1" />
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-800 border border-surface-700 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Versión 2.5.0
+            Versión {ST_RUNTIME_VERSION}
           </div>
         </div>
       </header>

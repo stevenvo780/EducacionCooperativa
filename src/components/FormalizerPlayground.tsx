@@ -8,6 +8,9 @@ import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/
 import SnippetGallery from '@/components/SnippetGallery';
 import type { Snippet } from '@/services/snippetApi';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import type { FormalizationResultPayload } from '@/lib/formalization-contract';
+import { FORMALIZATION_CONTRACT_VERSION } from '@/lib/formalization-contract';
+import { ST_RUNTIME_PROFILES } from '@/lib/st-runtime-manifest';
 
 /* ── Tipos ──────────────────────────────────────────────────── */
 
@@ -42,11 +45,7 @@ interface FormalizeResult {
   id: string;
   input: string;
   profile: LogicProfile;
-  ok: boolean;
-  stCode: string;
-  patterns: string[];
-  atomCount: number;
-  formulaCount: number;
+  payload: FormalizationResultPayload;
   elapsed: number;
   timestamp: number;
   evalResult?: STEvalResult;
@@ -55,19 +54,21 @@ interface FormalizeResult {
 
 /* ── Perfiles disponibles ───────────────────────────────────── */
 
-const PROFILES: { value: LogicProfile; label: string; short: string }[] = [
-  { value: 'classical.propositional', label: 'Proposicional clásica', short: 'PROP' },
-  { value: 'classical.first_order', label: 'Primer orden clásica', short: 'FOL' },
-  { value: 'intuitionistic.propositional', label: 'Intuicionista', short: 'INT' },
-  { value: 'modal.k', label: 'Modal K', short: 'MOD' },
-  { value: 'epistemic.s5', label: 'Epistémica S5', short: 'EPI' },
-  { value: 'deontic.standard', label: 'Deóntica', short: 'DEO' },
-  { value: 'temporal.ltl', label: 'Temporal LTL', short: 'TMP' },
-  { value: 'paraconsistent.belnap', label: 'Paraconsistente (Belnap)', short: 'PAR' },
-  { value: 'aristotelian.syllogistic', label: 'Silogística aristotélica', short: 'SYL' },
-  { value: 'arithmetic', label: 'Aritmética', short: 'ARI' },
-  { value: 'probabilistic.basic', label: 'Probabilística', short: 'PRO' }
-];
+const profileShortLabel = (profile: string) => (
+  profile
+    .split('.')
+    .slice(-2)
+    .join('.')
+    .replace(/[^a-z]/gi, '')
+    .slice(0, 4)
+    .toUpperCase()
+);
+
+const PROFILES: { value: LogicProfile; label: string; short: string }[] = ST_RUNTIME_PROFILES.map((profile) => ({
+  value: profile.id as LogicProfile,
+  label: profile.detail || profile.id,
+  short: profileShortLabel(profile.id)
+}));
 
 const PROFILE_PREFIXES: Array<{ prefix: string; profile: LogicProfile }> = [
   { prefix: 'PROP ·', profile: 'classical.propositional' },
@@ -140,11 +141,25 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         id: crypto.randomUUID(),
         input: trimmed,
         profile: prof,
-        ok: r.ok,
-        stCode: r.stCode,
-        patterns: r.analysis.detectedPatterns,
-        atomCount: r.atoms.size,
-        formulaCount: r.formulas.length,
+        payload: {
+          contractVersion: FORMALIZATION_CONTRACT_VERSION,
+          ok: r.ok,
+          stCode: r.stCode,
+          ast: r.analysis,
+          linterDiagnostics: [],
+          diagnostics: r.diagnostics,
+          atomCount: r.atoms.size,
+          formulaCount: r.formulas.length,
+          claimCount: r.analysis.argumentStructure.conclusions.length,
+          confidence: r.ok ? 0.85 : 0.25,
+          engine: 'nlp',
+          patterns: r.analysis.detectedPatterns,
+          trace: {
+            inferredByRules: true,
+            inferredByLLM: false,
+            userEdited: false
+          }
+        },
         elapsed: Math.round(performance.now() - t0),
         timestamp: Date.now(),
         evalResult,
@@ -155,11 +170,26 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         id: crypto.randomUUID(),
         input: trimmed,
         profile: prof,
-        ok: false,
-        stCode: `// ERROR: ${err instanceof Error ? err.message : 'Error desconocido'}`,
-        patterns: [],
-        atomCount: 0,
-        formulaCount: 0,
+        payload: {
+          contractVersion: FORMALIZATION_CONTRACT_VERSION,
+          ok: false,
+          stCode: `// ERROR: ${err instanceof Error ? err.message : 'Error desconocido'}`,
+          ast: null,
+          linterDiagnostics: [],
+          diagnostics: [],
+          atomCount: 0,
+          formulaCount: 0,
+          claimCount: 0,
+          confidence: 0,
+          engine: 'nlp',
+          patterns: [],
+          trace: {
+            inferredByRules: true,
+            inferredByLLM: false,
+            userEdited: false
+          },
+          error: err instanceof Error ? err.message : 'Error desconocido'
+        },
         elapsed: Math.round(performance.now() - t0),
         timestamp: Date.now(),
         engine: 'nlp'
@@ -196,7 +226,8 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
 
-      const stCode: string = data.stCode ?? '';
+      const payload = data as FormalizationResultPayload;
+      const stCode: string = payload.stCode ?? '';
       let evalResult: STEvalResult | undefined;
       if (stCode.trim()) {
         try {
@@ -207,11 +238,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         id: crypto.randomUUID(),
         input: trimmed,
         profile: prof,
-        ok: true,
-        stCode,
-        patterns: data.patterns ?? ['llm'],
-        atomCount: data.atomCount ?? 0,
-        formulaCount: data.formulaCount ?? 0,
+        payload,
         elapsed: Math.round(performance.now() - t0),
         timestamp: Date.now(),
         evalResult,
@@ -222,11 +249,26 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         id: crypto.randomUUID(),
         input: trimmed,
         profile: prof,
-        ok: false,
-        stCode: `// LLM ERROR: ${err instanceof Error ? err.message : 'Error desconocido'}`,
-        patterns: [],
-        atomCount: 0,
-        formulaCount: 0,
+        payload: {
+          contractVersion: FORMALIZATION_CONTRACT_VERSION,
+          ok: false,
+          stCode: `// LLM ERROR: ${err instanceof Error ? err.message : 'Error desconocido'}`,
+          ast: null,
+          linterDiagnostics: [],
+          diagnostics: [],
+          atomCount: 0,
+          formulaCount: 0,
+          claimCount: 0,
+          confidence: 0,
+          engine: 'llm',
+          patterns: [],
+          trace: {
+            inferredByRules: false,
+            inferredByLLM: true,
+            userEdited: false
+          },
+          error: err instanceof Error ? err.message : 'Error desconocido'
+        },
         elapsed: Math.round(performance.now() - t0),
         timestamp: Date.now(),
         engine: 'llm'
@@ -274,9 +316,9 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
   const activeResult = results.find(r => r.id === selectedResult);
 
   const reRunST = useCallback(() => {
-    if (!activeResult || !activeResult.stCode.trim()) return;
+    if (!activeResult || !activeResult.payload.stCode.trim()) return;
     try {
-      const evalResult = evaluate(activeResult.stCode);
+      const evalResult = evaluate(activeResult.payload.stCode);
       setResults(prev => prev.map(r =>
         r.id === activeResult.id ? { ...r, evalResult } : r
       ));
@@ -289,7 +331,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
 
   // Stats globales
   const totalRuns = results.length;
-  const successRuns = results.filter(r => r.ok).length;
+  const successRuns = results.filter(r => r.payload.ok).length;
   const avgTime = totalRuns > 0 ? Math.round(results.reduce((s, r) => s + r.elapsed, 0) / totalRuns) : 0;
 
   return (
@@ -521,8 +563,8 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className={r.ok ? 'text-green-500' : 'text-red-500'}>
-                          {r.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                        <span className={r.payload.ok ? 'text-green-500' : 'text-red-500'}>
+                          {r.payload.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
                         </span>
                         <span className="text-slate-400 truncate flex-1">
                           {r.input.slice(0, 80)}{r.input.length > 80 ? '…' : ''}
@@ -531,9 +573,9 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                           {r.engine === 'llm' ? '🧠' : '⚡'} {PROFILES.find(p => p.value === r.profile)?.short || '?'} · {r.elapsed}ms
                         </span>
                       </div>
-                      {r.patterns.length > 0 && (
+                      {r.payload.patterns.length > 0 && (
                         <div className="mt-0.5 flex gap-1 flex-wrap">
-                          {r.patterns.map(p => (
+                          {r.payload.patterns.map(p => (
                             <span key={p} className="rounded bg-cyan-950/40 px-1.5 py-0.5 text-[9px] text-cyan-500/70">
                               {p}
                             </span>
@@ -554,11 +596,11 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                 {/* Badges */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${
-                    activeResult.ok
+                    activeResult.payload.ok
                       ? 'bg-green-950/50 text-green-400 border border-green-800/40'
                       : 'bg-red-950/50 text-red-400 border border-red-800/40'
                   }`}>
-                    {activeResult.ok
+                    {activeResult.payload.ok
                       ? <><Check className="w-3 h-3 inline mr-1" />Formalizado</>
                       : <><X className="w-3 h-3 inline mr-1" />Error</>}
                   </span>
@@ -566,11 +608,14 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                     {PROFILES.find(p => p.value === activeResult.profile)?.label}
                   </span>
                   <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] text-slate-500 border border-slate-800 font-mono">
-                    {activeResult.atomCount} átomos · {activeResult.formulaCount} fórmulas · {activeResult.elapsed}ms
+                    {activeResult.payload.atomCount} átomos · {activeResult.payload.formulaCount} fórmulas · {activeResult.payload.claimCount} claims · {activeResult.elapsed}ms
                   </span>
-                  {activeResult.patterns.length > 0 && (
+                  <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] text-slate-500 border border-slate-800 font-mono">
+                    confianza {Math.round(activeResult.payload.confidence * 100)}%
+                  </span>
+                  {activeResult.payload.patterns.length > 0 && (
                     <div className="flex gap-1 flex-wrap">
-                      {activeResult.patterns.map(p => (
+                      {activeResult.payload.patterns.map(p => (
                         <span key={p} className="rounded-full bg-cyan-950/40 px-2.5 py-1 text-[10px] font-medium text-cyan-400 border border-cyan-900/40">
                           {p}
                         </span>
@@ -584,14 +629,14 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                   <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2">
                     <span className="text-xs font-medium text-slate-400">Salida ST</span>
                     <button
-                      onClick={() => copyToClipboard(activeResult.stCode)}
+                      onClick={() => copyToClipboard(activeResult.payload.stCode)}
                       className="text-[10px] text-slate-600 hover:text-cyan-400 transition"
                     >
                       <Copy className="w-3 h-3 inline mr-1" />Copiar
                     </button>
                   </div>
                   <pre className="p-4 text-xs font-mono leading-relaxed overflow-auto max-h-[500px] whitespace-pre-wrap">
-                    <STHighlight code={activeResult.stCode} />
+                    <STHighlight code={activeResult.payload.stCode} />
                   </pre>
                 </div>
 
@@ -618,7 +663,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                       )}
                       <button
                         onClick={reRunST}
-                        disabled={!activeResult.stCode.trim()}
+                        disabled={!activeResult.payload.stCode.trim()}
                         className="rounded bg-emerald-700 px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         <Play className="w-3 h-3 inline mr-1" />Ejecutar
@@ -631,7 +676,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                     </div>
                   ) : (
                     <div className="px-4 py-6 text-center text-xs text-slate-600">
-                      {activeResult.ok
+                      {activeResult.payload.ok
                         ? 'Presiona Ejecutar para correr el código ST'
                         : 'La formalización contiene errores — no se puede ejecutar'}
                     </div>
@@ -688,8 +733,8 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                             }`}
                           >
                             <td className="px-3 py-1.5">
-                              <span className={r.ok ? 'text-green-500' : 'text-red-500'}>
-                                {r.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                              <span className={r.payload.ok ? 'text-green-500' : 'text-red-500'}>
+                                {r.payload.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
                               </span>
                             </td>
                             <td className="px-3 py-1.5 text-slate-400 max-w-[200px] truncate">
@@ -700,14 +745,14 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                             </td>
                             <td className="px-3 py-1.5">
                               <div className="flex gap-1 flex-wrap">
-                                {r.patterns.map(p => (
+                                {r.payload.patterns.map(p => (
                                   <span key={p} className="text-cyan-600 text-[9px]">{p}</span>
                                 ))}
-                                {r.patterns.length === 0 && <span className="text-slate-700">—</span>}
+                                {r.payload.patterns.length === 0 && <span className="text-slate-700">—</span>}
                               </div>
                             </td>
-                            <td className="px-3 py-1.5 text-right text-slate-500 font-mono">{r.atomCount}</td>
-                            <td className="px-3 py-1.5 text-right text-slate-500 font-mono">{r.formulaCount}</td>
+                            <td className="px-3 py-1.5 text-right text-slate-500 font-mono">{r.payload.atomCount}</td>
+                            <td className="px-3 py-1.5 text-right text-slate-500 font-mono">{r.payload.formulaCount}</td>
                             <td className="px-3 py-1.5 text-right text-slate-600 font-mono">{r.elapsed}</td>
                           </tr>
                         ))}

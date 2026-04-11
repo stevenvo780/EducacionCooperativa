@@ -4,17 +4,30 @@ import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
   normalizeSemanticWorkspaceState,
   type SemanticConceptRecord,
+  type SemanticEntityKind,
   type SemanticFragmentKind,
   type SemanticFragmentRecord,
+  type SemanticNodeOrigin,
   type SemanticRelationRecord,
+  type SemanticRelationType,
+  type SemanticScope,
+  type SemanticStatus,
+  type SemanticWorkspacePreferences,
   type SemanticWorkspaceState
 } from '@/lib/semantic/workspace-state';
+import { createStableSemanticId } from '@/lib/semantic/ids';
 
 export type {
   SemanticConceptRecord,
+  SemanticEntityKind,
   SemanticFragmentKind,
   SemanticFragmentRecord,
+  SemanticNodeOrigin,
   SemanticRelationRecord,
+  SemanticRelationType,
+  SemanticScope,
+  SemanticStatus,
+  SemanticWorkspacePreferences,
   SemanticWorkspaceState
 } from '@/lib/semantic/workspace-state';
 export { getRecentSemanticItems } from '@/lib/semantic/workspace-state';
@@ -35,6 +48,21 @@ export interface SemanticDocumentReference {
   docBlockId?: string;
 }
 
+interface SemanticMutationOptions {
+  entityKind?: SemanticEntityKind;
+  origin?: SemanticNodeOrigin;
+  scope?: SemanticScope;
+  logicProfile?: string;
+  confidence?: number;
+  status?: SemanticStatus;
+}
+
+interface RegisterConceptOptions extends SemanticMutationOptions {
+  definition?: string;
+  title?: string;
+  formula?: string;
+}
+
 const getStorageKey = ({ workspaceId, userId }: SemanticStoreContext) => (
   `editor-semantic:${workspaceId}:${userId || 'anon'}`
 );
@@ -50,13 +78,6 @@ const slugify = (value: string) => (
     .replace(/(^-|-$)/g, '')
 );
 
-const makeId = (prefix: string) => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-};
-
 export const createSelectionHash = (payload: SemanticSelectionPayload) => {
   const slug = slugify(payload.text).slice(0, 48) || 'fragmento';
   return `${payload.docId || 'sin-doc'}:${slug}:${payload.text.length}`;
@@ -69,6 +90,22 @@ const excerptFromText = (value: string, maxLength = 140) => {
 };
 
 const sanitizeNote = (value: string) => value.replace(/\r\n?/g, '\n').trim();
+
+const clampConfidence = (value: number | undefined) => {
+  if (value === undefined || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.min(1, value));
+};
+
+const defaultStatusForEntity = (entityKind: SemanticEntityKind, fallback: SemanticStatus = 'draft'): SemanticStatus => {
+  if (entityKind === 'evidence' || entityKind === 'source' || entityKind === 'definition') return 'validated';
+  return fallback;
+};
+
+const buildSourceRefs = (payload: SemanticSelectionPayload) => [{
+  docId: payload.docId,
+  docName: payload.docName,
+  excerpt: excerptFromText(payload.text)
+}];
 
 export const loadSemanticWorkspaceState = (context: SemanticStoreContext): SemanticWorkspaceState => {
   if (!isBrowser()) return EMPTY_SEMANTIC_WORKSPACE_STATE;
@@ -103,17 +140,53 @@ const ensureFragment = (
   state: SemanticWorkspaceState,
   kind: SemanticFragmentKind,
   payload: SemanticSelectionPayload,
-  extra?: Partial<SemanticFragmentRecord>
+  extra?: Partial<SemanticFragmentRecord> & SemanticMutationOptions
 ) => {
   const selectionHash = createSelectionHash(payload);
+  const stableKey = createStableSemanticId(
+    'fragment',
+    payload.workspaceId,
+    payload.docId || payload.docName,
+    kind,
+    selectionHash,
+    extra?.conceptId,
+    extra?.linkedDocId,
+    extra?.docBlockId
+  );
+
   const existing = state.fragments.find((fragment) => (
-    fragment.kind === kind
-    && fragment.selectionHash === selectionHash
-    && fragment.docId === payload.docId
+    fragment.stableKey === stableKey
+    || (
+      fragment.kind === kind
+      && fragment.selectionHash === selectionHash
+      && fragment.docId === payload.docId
+      && fragment.conceptId === extra?.conceptId
+    )
   ));
+
+  const entityKind = extra?.entityKind || (
+    kind === 'evidence'
+      ? 'evidence'
+      : kind === 'source'
+        ? 'source'
+        : kind === 'passage' || kind === 'semantic-block' || kind === 'note' || kind === 'pinned' || kind === 'relation'
+          ? 'passage'
+          : 'concept'
+  );
+  const origin = extra?.origin || 'semantic-ui';
+  const scope = extra?.scope || 'document';
+  const confidence = clampConfidence(extra?.confidence);
+  const status = extra?.status || defaultStatusForEntity(entityKind);
 
   if (existing) {
     existing.updatedAt = Date.now();
+    existing.entityKind = entityKind;
+    existing.origin = origin;
+    existing.scope = scope;
+    existing.status = status;
+    existing.stableKey = stableKey;
+    existing.sourceRefs = buildSourceRefs(payload);
+    if (confidence !== undefined) existing.confidence = confidence;
     if (extra) {
       Object.assign(existing, extra);
     }
@@ -121,8 +194,9 @@ const ensureFragment = (
   }
 
   const fragment: SemanticFragmentRecord = {
-    id: makeId('fragment'),
+    id: createStableSemanticId('fragment', payload.workspaceId, payload.docId || payload.docName, kind, selectionHash, extra?.conceptId, extra?.linkedDocId, extra?.docBlockId),
     kind,
+    entityKind,
     text: payload.text,
     excerpt: excerptFromText(payload.text),
     docId: payload.docId,
@@ -131,6 +205,12 @@ const ensureFragment = (
     createdAt: Date.now(),
     updatedAt: Date.now(),
     selectionHash,
+    origin,
+    scope,
+    status,
+    stableKey,
+    sourceRefs: buildSourceRefs(payload),
+    ...(confidence !== undefined ? { confidence } : {}),
     ...extra
   };
   state.fragments.unshift(fragment);
@@ -140,27 +220,52 @@ const ensureFragment = (
 export const registerConceptFromSelection = (
   context: SemanticStoreContext,
   payload: SemanticSelectionPayload,
-  options?: { definition?: string; title?: string; logicProfile?: string; formula?: string }
+  options?: RegisterConceptOptions
 ) => updateState(context, (state) => {
-  const sourceFragment = ensureFragment(state, 'concept', payload);
+  const sourceFragment = ensureFragment(state, 'concept', payload, options);
   const normalizedTitle = options?.title?.trim() || excerptFromText(payload.text, 60);
-  const existing = state.concepts.find((concept) => concept.title.toLowerCase() === normalizedTitle.toLowerCase());
+  const entityKind = options?.entityKind || (options?.formula ? 'claim' : options?.definition ? 'definition' : 'concept');
+  const scope = options?.scope || 'document';
+  const origin = options?.origin || 'semantic-ui';
+  const confidence = clampConfidence(options?.confidence);
+  const stableKey = createStableSemanticId(
+    'concept',
+    payload.workspaceId,
+    scope === 'workspace' ? 'workspace' : payload.docId || payload.docName,
+    normalizedTitle,
+    sourceFragment.selectionHash
+  );
+
+  const existing = state.concepts.find((concept) => (
+    concept.stableKey === stableKey
+    || concept.id === stableKey
+    || concept.sourceFragmentId === sourceFragment.id
+  ));
 
   if (existing) {
     existing.updatedAt = Date.now();
+    existing.title = normalizedTitle;
+    existing.entityKind = entityKind;
     existing.excerpt = excerptFromText(payload.text);
     existing.docId = payload.docId;
     existing.docName = payload.docName;
     existing.sourceFragmentId = sourceFragment.id;
-    if (options?.definition) existing.definition = options.definition;
-    if (options?.logicProfile) existing.logicProfile = options.logicProfile;
-    if (options?.formula) existing.formula = options.formula;
+    existing.origin = origin;
+    existing.scope = scope;
+    existing.status = options?.status || defaultStatusForEntity(entityKind);
+    existing.stableKey = stableKey;
+    existing.sourceRefs = buildSourceRefs(payload);
+    if (options?.definition !== undefined) existing.definition = options.definition;
+    if (options?.logicProfile !== undefined) existing.logicProfile = options.logicProfile;
+    if (options?.formula !== undefined) existing.formula = options.formula;
+    if (confidence !== undefined) existing.confidence = confidence;
     return state;
   }
 
   state.concepts.unshift({
-    id: makeId('concept'),
+    id: stableKey,
     title: normalizedTitle,
+    entityKind,
     ...(options?.definition ? { definition: options.definition } : {}),
     ...(options?.logicProfile ? { logicProfile: options.logicProfile } : {}),
     ...(options?.formula ? { formula: options.formula } : {}),
@@ -170,19 +275,29 @@ export const registerConceptFromSelection = (
     workspaceId: payload.workspaceId,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    sourceFragmentId: sourceFragment.id
+    sourceFragmentId: sourceFragment.id,
+    origin,
+    scope,
+    status: options?.status || defaultStatusForEntity(entityKind),
+    stableKey,
+    sourceRefs: buildSourceRefs(payload),
+    ...(confidence !== undefined ? { confidence } : {})
   });
 
   return state;
 });
 
 export const pinSelectionFragment = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
-  ensureFragment(state, 'pinned', payload);
+  ensureFragment(state, 'pinned', payload, { entityKind: 'passage', status: 'draft' });
   return state;
 });
 
-export const markSelectionAsEvidence = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
-  ensureFragment(state, 'evidence', payload);
+export const markSelectionAsEvidence = (
+  context: SemanticStoreContext,
+  payload: SemanticSelectionPayload,
+  options?: SemanticMutationOptions
+) => updateState(context, (state) => {
+  ensureFragment(state, 'evidence', payload, { entityKind: 'evidence', status: 'validated', ...options });
   return state;
 });
 
@@ -193,13 +308,13 @@ export const saveSelectionNote = (
 ) => updateState(context, (state) => {
   const normalizedNote = sanitizeNote(note);
   if (!normalizedNote) return state;
-  ensureFragment(state, 'note', payload, { note: normalizedNote });
+  ensureFragment(state, 'note', payload, { note: normalizedNote, entityKind: 'passage', status: 'draft' });
   return state;
 });
 
 export const captureAnalyticalFragment = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
-  ensureFragment(state, 'evidence', payload);
-  ensureFragment(state, 'pinned', payload);
+  ensureFragment(state, 'evidence', payload, { entityKind: 'evidence', status: 'validated' });
+  ensureFragment(state, 'pinned', payload, { entityKind: 'passage', status: 'draft' });
   return state;
 });
 
@@ -208,13 +323,13 @@ export const captureAnalyticalFragmentWithReference = (
   payload: SemanticSelectionPayload,
   reference: SemanticDocumentReference
 ) => updateState(context, (state) => {
-  ensureFragment(state, 'evidence', payload, reference);
-  ensureFragment(state, 'pinned', payload, reference);
+  ensureFragment(state, 'evidence', payload, { entityKind: 'evidence', status: 'validated', ...reference });
+  ensureFragment(state, 'pinned', payload, { entityKind: 'passage', status: 'draft', ...reference });
   return state;
 });
 
 export const registerSemanticBlock = (context: SemanticStoreContext, payload: SemanticSelectionPayload) => updateState(context, (state) => {
-  ensureFragment(state, 'semantic-block', payload);
+  ensureFragment(state, 'semantic-block', payload, { entityKind: 'passage', status: 'draft' });
   return state;
 });
 
@@ -223,34 +338,59 @@ export const registerSemanticBlockWithReference = (
   payload: SemanticSelectionPayload,
   reference: SemanticDocumentReference
 ) => updateState(context, (state) => {
-  ensureFragment(state, 'semantic-block', payload, reference);
+  ensureFragment(state, 'semantic-block', payload, { entityKind: 'passage', status: 'draft', ...reference });
   return state;
 });
 
 export const relateSelectionToConcept = (
   context: SemanticStoreContext,
   payload: SemanticSelectionPayload,
-  conceptId: string
+  conceptId: string,
+  relationType: SemanticRelationType = 'supports'
 ) => updateState(context, (state) => {
   const concept = state.concepts.find((item) => item.id === conceptId);
   if (!concept) return state;
 
   const fragment = ensureFragment(state, 'relation', payload, {
+    entityKind: 'passage',
     conceptId: concept.id,
-    conceptTitle: concept.title
+    conceptTitle: concept.title,
+    logicProfile: concept.logicProfile,
+    status: 'draft'
   });
 
-  const relationExists = state.relations.some((relation) => relation.fragmentId === fragment.id && relation.conceptId === concept.id);
+  const stableKey = createStableSemanticId(
+    'relation',
+    context.workspaceId,
+    payload.docId || payload.docName,
+    fragment.id,
+    concept.id,
+    relationType
+  );
+  const relationExists = state.relations.some((relation) => relation.stableKey === stableKey || (
+    relation.fragmentId === fragment.id
+    && relation.conceptId === concept.id
+    && relation.relationType === relationType
+  ));
   if (!relationExists) {
     state.relations.unshift({
-      id: makeId('relation'),
+      id: stableKey,
       fragmentId: fragment.id,
       conceptId: concept.id,
       conceptTitle: concept.title,
-      relationType: 'related-to',
+      relationType,
       createdAt: Date.now(),
+      updatedAt: Date.now(),
       selectionHash: fragment.selectionHash,
-      docId: payload.docId
+      docId: payload.docId,
+      origin: 'semantic-ui',
+      scope: concept.scope || 'document',
+      logicProfile: concept.logicProfile,
+      status: 'draft',
+      stableKey,
+      sourceEntityId: fragment.id,
+      targetEntityId: concept.id,
+      sourceRefs: buildSourceRefs(payload)
     });
   }
 
@@ -264,8 +404,10 @@ export const attachLinkedDocumentToSelection = (
   linkedDocName: string
 ) => updateState(context, (state) => {
   ensureFragment(state, 'relation', payload, {
+    entityKind: 'source',
     linkedDocId,
-    linkedDocName
+    linkedDocName,
+    status: 'draft'
   });
   return state;
 });
@@ -278,12 +420,25 @@ export const attachLinkedDocumentToSelectionWithReference = (
   reference: SemanticDocumentReference
 ) => updateState(context, (state) => {
   ensureFragment(state, 'relation', payload, {
+    entityKind: 'source',
     linkedDocId,
     linkedDocName,
+    status: 'draft',
     ...reference
   });
   return state;
 });
+
+export const setSemanticWorkspacePreferences = (
+  context: SemanticStoreContext,
+  updates: Partial<SemanticWorkspacePreferences>
+) => updateState(context, (state) => ({
+  ...state,
+  preferences: {
+    ...state.preferences,
+    ...updates
+  }
+}));
 
 /* ── Delete / Edit operations ── */
 
@@ -331,7 +486,15 @@ export const deleteRelation = (context: SemanticStoreContext, relationId: string
 export const updateConcept = (
   context: SemanticStoreContext,
   conceptId: string,
-  updates: { title?: string; definition?: string; formula?: string; logicProfile?: string }
+  updates: {
+    title?: string;
+    definition?: string;
+    formula?: string;
+    logicProfile?: string;
+    status?: SemanticStatus;
+    confidence?: number;
+    entityKind?: SemanticEntityKind;
+  }
 ) => updateState(context, (state) => {
   const concept = state.concepts.find(c => c.id === conceptId);
   if (!concept) return state;
@@ -339,6 +502,9 @@ export const updateConcept = (
   if (updates.definition !== undefined) concept.definition = updates.definition;
   if (updates.formula !== undefined) concept.formula = updates.formula;
   if (updates.logicProfile !== undefined) concept.logicProfile = updates.logicProfile;
+  if (updates.status !== undefined) concept.status = updates.status;
+  if (updates.entityKind !== undefined) concept.entityKind = updates.entityKind;
+  if (updates.confidence !== undefined) concept.confidence = clampConfidence(updates.confidence);
   concept.updatedAt = Date.now();
   return state;
 });
@@ -346,7 +512,7 @@ export const updateConcept = (
 export const updateFragment = (
   context: SemanticStoreContext,
   fragmentId: string,
-  updates: { text?: string; note?: string }
+  updates: { text?: string; note?: string; status?: SemanticStatus; confidence?: number }
 ) => updateState(context, (state) => {
   const fragment = state.fragments.find(f => f.id === fragmentId);
   if (!fragment) return state;
@@ -362,6 +528,9 @@ export const updateFragment = (
       delete fragment.note;
     }
   }
+  if (updates.status !== undefined) fragment.status = updates.status;
+  if (updates.confidence !== undefined) fragment.confidence = clampConfidence(updates.confidence);
   fragment.updatedAt = Date.now();
   return state;
 });
+
