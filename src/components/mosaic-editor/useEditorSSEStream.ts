@@ -52,7 +52,7 @@ export function useEditorSSEStream({
               } else if (data?.type === 'deleted') {
                 onDeleted();
               }
-            } catch (_e) { /* ignore parse errors */ }
+            } catch { /* ignore parse errors */ }
           }
         }
       } catch (error: unknown) {

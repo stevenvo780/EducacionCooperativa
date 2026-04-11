@@ -96,7 +96,7 @@ export function LinterOverlay({
   onApplyFix,
   interactive = true
 }: LinterOverlayProps) {
-  const lines = useMemo(() => content.split('\n'), [content]);
+  const _lines = useMemo(() => content.split('\n'), [content]);
   const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);
   const [hoverTooltipKey, setHoverTooltipKey] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);

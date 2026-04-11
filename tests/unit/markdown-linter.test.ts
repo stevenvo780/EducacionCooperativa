@@ -8,7 +8,7 @@
  *  - Edge cases: unicode, LaTeX, contenido vacío, bloques de código
  */
 
-import { describe, it, expect, beforeEach, vi, type MockInstance } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('@/lib/markdown-linter/spell-engine', () => {
   const validWords = new Set([
@@ -32,7 +32,7 @@ vi.mock('@/lib/markdown-linter/spell-engine', () => {
   };
 });
 
-import { getCodeBlockLines, escapeRegex, type LinterDiagnostic, type LinterRule, type RuleCategory } from '@/lib/markdown-linter/types';
+import { getCodeBlockLines, escapeRegex, type LinterDiagnostic, type LinterRule } from '@/lib/markdown-linter/types';
 import {
   spellingRule,
   doubledWordsRule,
@@ -55,12 +55,9 @@ import {
   suspiciousPatternsRule,
   ALL_BUILTIN_RULES
 } from '@/lib/markdown-linter/rules';
-import { MarkdownLinterRegistry, _MarkdownLinterRegistryClass, type RuleState } from '@/lib/markdown-linter/registry';
+import { MarkdownLinterRegistry, _MarkdownLinterRegistryClass } from '@/lib/markdown-linter/registry';
 
 // ── helpers ──────────────────────────────────────────────
-
-/** Genera N líneas en blanco para separadores */
-const blank = (n = 1) => '\n'.repeat(n);
 
 /** Genera un párrafo con N palabras */
 const wordsN = (n: number) => Array.from({ length: n }, (_, i) => `palabra${i}`).join(' ');

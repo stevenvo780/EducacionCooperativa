@@ -366,7 +366,7 @@ test.describe('Editor raw mode — content integrity', () => {
     const rawTextarea = page.locator('textarea.markdown-raw-textarea');
     await expect(rawTextarea).toBeVisible({ timeout: 10000 });
 
-    const rawContent = await rawTextarea.inputValue();
+    await rawTextarea.inputValue();
 
     // Switch to edit mode
     await page.locator('button[title="Volver al editor visual"]').click();

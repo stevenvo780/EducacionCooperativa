@@ -2,7 +2,7 @@ import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
-import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { isPersonalWorkspaceId } from '@/types/workspace';
 import { mockGetDoc } from '@/lib/insecure-mock-store';
 
 type StoredDocumentRecord = Record<string, unknown>;

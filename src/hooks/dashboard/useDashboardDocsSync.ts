@@ -97,7 +97,7 @@ export const useDashboardDocsSync = ({
         showLoading: Boolean(pendingRefetchOptionsRef.current?.showLoading || options?.showLoading)
       };
       if (process.env.NODE_ENV !== 'production') {
-        console.debug('[Sync] fetchDocs skipped (in-flight), trailing refetch queued');
+        console.warn('[Sync] fetchDocs skipped (in-flight), trailing refetch queued');
       }
       return fetchInFlightRef.current;
     }
@@ -108,7 +108,7 @@ export const useDashboardDocsSync = ({
     }
 
     if (process.env.NODE_ENV !== 'production') {
-      console.debug('[Sync] fetchDocs starting API call…');
+      console.warn('[Sync] fetchDocs starting API call…');
     }
 
     const requestWorkspaceId = request.workspaceId;
@@ -121,7 +121,7 @@ export const useDashboardDocsSync = ({
         });
 
         if (process.env.NODE_ENV !== 'production') {
-          console.debug('[Sync] fetchDocs got', fetched.length, 'docs from API');
+          console.warn('[Sync] fetchDocs got', fetched.length, 'docs from API');
         }
 
         const activeRequest = resolveWorkspaceRequest(
@@ -130,7 +130,7 @@ export const useDashboardDocsSync = ({
         );
         if (activeRequest?.workspaceId !== requestWorkspaceId) {
           if (process.env.NODE_ENV !== 'production') {
-            console.debug('[Sync] ignoring stale docs response for workspace', requestWorkspaceId);
+            console.warn('[Sync] ignoring stale docs response for workspace', requestWorkspaceId);
           }
           return;
         }
@@ -214,7 +214,7 @@ export const useDashboardDocsSync = ({
     syncFetchTimerRef.current = setTimeout(() => {
       syncFetchTimerRef.current = null;
       if (process.env.NODE_ENV !== 'production') {
-        console.debug('[Sync] debounced fetch triggered');
+        console.warn('[Sync] debounced fetch triggered');
       }
       void requestDocsRefresh({ delayMs: 0 });
     }, 600);
@@ -222,7 +222,7 @@ export const useDashboardDocsSync = ({
 
   const handleSyncEvent = useCallback((event: { type: string; path: string }) => {
     if (process.env.NODE_ENV !== 'production') {
-      console.debug('[Sync] RTDB event received:', event.type, event.path);
+      console.warn('[Sync] RTDB event received:', event.type, event.path);
     }
     scheduleSyncFetch();
   }, [scheduleSyncFetch]);
@@ -242,7 +242,7 @@ export const useDashboardDocsSync = ({
       const now = Date.now();
       if (now - lastSyncEventRef.current >= 60000) {
         if (process.env.NODE_ENV !== 'production') {
-          console.debug('[Sync] fallback polling triggered (no RTDB event in 60s)');
+          console.warn('[Sync] fallback polling triggered (no RTDB event in 60s)');
         }
         void requestDocsRefresh({ force: true, delayMs: 0 });
       }
@@ -283,7 +283,7 @@ export const useDashboardDocsSync = ({
   useEffect(() => {
     const handler = () => {
       if (process.env.NODE_ENV !== 'production') {
-        console.debug('[Sync] agora:docs-changed event received, refreshing…');
+        console.warn('[Sync] agora:docs-changed event received, refreshing…');
       }
       void requestDocsRefresh({ force: true, delayMs: 0 });
     };

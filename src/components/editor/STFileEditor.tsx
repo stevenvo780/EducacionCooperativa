@@ -82,9 +82,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
 
       // Skip if we have unsaved local edits or a save is in-flight
       if (dirtyRef.current || savingRef.current) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.debug('[STFileEditor] Skipping remote update (local edits pending)');
-        }
         return;
       }
 
@@ -93,9 +90,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
         if (text === null) return;
         // Only update if content actually differs from what we have
         if (text !== latestContent.current) {
-          if (process.env.NODE_ENV !== 'production') {
-            console.debug('[STFileEditor] Applying remote update for', docId);
-          }
           setContent(text);
           lastSyncedRef.current = text;
           setDirty(false);
@@ -118,9 +112,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
       fetchContent().then((text) => {
         if (text === null) return;
         if (text !== latestContent.current) {
-          if (process.env.NODE_ENV !== 'production') {
-            console.debug('[STFileEditor] Applying companion-sync update for', docId, '(matched:', matchesId ? 'id' : 'name', ')');
-          }
           setContent(text);
           lastSyncedRef.current = text;
           setDirty(false);

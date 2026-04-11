@@ -19,20 +19,6 @@ import {
   directivesPlugin,
   frontmatterPlugin,
   toolbarPlugin,
-  BoldItalicUnderlineToggles,
-  BlockTypeSelect,
-  CodeToggle,
-  CreateLink,
-  HighlightToggle,
-  InsertAdmonition,
-  InsertFrontmatter,
-  InsertImage,
-  InsertThematicBreak,
-  ListsToggle,
-  Separator,
-  InsertCodeBlock,
-  StrikeThroughSupSubToggles,
-  UndoRedo,
   type MDXEditorMethods
 } from '@mdxeditor/editor';
 import { DynamicMDXEditor } from '@/components/editor/DynamicMDXEditor';
@@ -40,7 +26,7 @@ import '@mdxeditor/editor/style.css';
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
-import type { ViewMode, SearchState, EditorProps, ToolbarVisibility, MarkdownDocMeta } from '@/components/mosaic-editor/types';
+import type { ViewMode, EditorProps, MarkdownDocMeta } from '@/components/mosaic-editor/types';
 import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS, SAVE_DEBOUNCE_MS, ST_DEBOUNCE_MS, SEMANTIC_NOTICE_TIMEOUT_MS } from '@/components/mosaic-editor/constants';
 import {
   isMarkdownName, isMarkdownMime, isImageMime, isVideoMime, isAudioMime, isPdfMime,
@@ -56,14 +42,13 @@ import { useSemanticStateSyncer } from '@/components/mosaic-editor/useSemanticSt
 import { useCompanionSTSync } from '@/components/mosaic-editor/useCompanionSTSync';
 import { MarkdownPreview } from '@/components/mosaic-editor/MarkdownPreview';
 import { mermaidCodeBlockDescriptor } from '@/components/mosaic-editor/MermaidCodeBlockEditor';
-import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
 import {
-  BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Settings2, Sparkles,
-  MoreHorizontal, Maximize2, Minimize2, Monitor, PenLine, FileCode2, Quote,
-  ListTodo, Sigma, Library, KanbanSquare, Loader2, Braces, Ruler, RefreshCw,
-  ZoomIn, ZoomOut, SidebarIcon
+  BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Sparkles,
+  Monitor, PenLine, FileCode2,
+  KanbanSquare, Loader2, Ruler, RefreshCw,
+  ZoomIn, ZoomOut
 } from 'lucide-react';
 import { useMosaicSemanticActions } from '@/components/mosaic-editor/useMosaicSemanticActions';
 import { MosaicToolbarContents, type ToolbarGroupKey } from '@/components/mosaic-editor/MosaicToolbarContents';
@@ -87,11 +72,6 @@ import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import { EditorUtilityMenu } from '@/components/editor/EditorUtilityMenu';
-import {
-  buildEvidenceMatrixMarkdown,
-  buildResearchBriefMarkdown,
-  buildSemanticAtlasMarkdown
-} from '@/components/editor/SemanticWorkbench';
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
 import { LinterConfigPanel } from '@/components/mosaic-editor/LinterConfigPanel';
@@ -103,19 +83,10 @@ import {
   normalizeSemanticWorkspaceState
 } from '@/lib/semantic/workspace-state';
 import {
-  attachLinkedDocumentToSelection,
-  captureAnalyticalFragment,
-  attachLinkedDocumentToSelectionWithReference,
-  captureAnalyticalFragmentWithReference,
   getRecentSemanticItems,
   loadSemanticWorkspaceState,
   saveSemanticWorkspaceState,
-  markSelectionAsEvidence,
-  pinSelectionFragment,
   registerConceptFromSelection,
-  registerSemanticBlock,
-  registerSemanticBlockWithReference,
-  relateSelectionToConcept,
   saveSelectionNote,
   type SemanticWorkspaceState
 } from '@/services/editorSemanticStore';
@@ -123,7 +94,6 @@ import {
   fetchSemanticWorkspaceStateApi,
   saveSemanticWorkspaceStateApi
 } from '@/services/semanticStateApi';
-import { wrapSemanticDocumentBlock } from '@/lib/semanticDocumentBlocks';
 import PdfViewer from '@/components/PdfViewer';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
 
@@ -188,7 +158,7 @@ export default function MosaicEditor({
     setSearchTerm,
     currentMatch,
     totalMatches,
-    setTotalMatches,
+    setTotalMatches: _setTotalMatches,
     navigateSearch
   } = useEditorSearch({ externalSearchTerm, onSearchStateChange, searchNavRef });
 
@@ -935,13 +905,14 @@ export default function MosaicEditor({
   }, [handleContentChange, insertSnippet, statsContent, viewMode]);
 
   useEffect(() => {
-    const handler = (e: any) => {
-      if (e.detail && typeof e.detail.markdown === 'string') {
-        appendMarkdownBlock(e.detail.markdown);
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ markdown?: unknown }>).detail;
+      if (detail && typeof detail.markdown === 'string') {
+        appendMarkdownBlock(detail.markdown);
       }
     };
-    window.addEventListener('agora:insert-snippet' as any, handler);
-    return () => window.removeEventListener('agora:insert-snippet' as any, handler);
+    window.addEventListener('agora:insert-snippet' as keyof WindowEventMap, handler);
+    return () => window.removeEventListener('agora:insert-snippet' as keyof WindowEventMap, handler);
   }, [appendMarkdownBlock]);
 
   const updateSemanticState = useCallback((nextState: SemanticWorkspaceState) => {
@@ -1247,12 +1218,12 @@ export default function MosaicEditor({
     handleRelateConcept,
     handleCreateSemanticBlock,
     handleCreateTask,
-    handleSendToWorkbench,
+    handleSendToWorkbench: _handleSendToWorkbench,
     handleMarkEvidence,
     handlePinFragment,
     handleLinkDocument,
     handleInsertSemanticAtlas,
-    handleInsertEvidenceMatrix,
+    handleInsertEvidenceMatrix: _handleInsertEvidenceMatrix,
     handleInsertResearchBrief,
     handleGenerateSTFile
   } = useMosaicSemanticActions({
@@ -1770,7 +1741,7 @@ export default function MosaicEditor({
 
               <div
                 className="flex-1 relative overflow-hidden group/preview"
-                style={{ '--preview-font-size': `${zoomLevel * 15}px` } as any}
+                style={{ '--preview-font-size': `${zoomLevel * 15}px` } as React.CSSProperties}
                 onWheel={(e) => {
                   if (e.ctrlKey) {
                     e.preventDefault();

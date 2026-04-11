@@ -320,7 +320,7 @@ const SortableCard = ({
 const SortableColumn = ({
   column,
   cards,
-  columns,
+  columns: _columns,
   draftValue,
   onDraftChange,
   onRenameColumn,
@@ -328,7 +328,7 @@ const SortableColumn = ({
   onAddCard,
   newCardTitle,
   onNewCardTitleChange,
-  onMoveCard,
+  onMoveCard: _onMoveCard,
   onDeleteCard,
   onUpdateCardTitle
 }: {

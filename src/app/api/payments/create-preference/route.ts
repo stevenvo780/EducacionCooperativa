@@ -3,7 +3,7 @@ import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { requireAuth } from '@/lib/server-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
-import { PLANS, SubscriptionStatus, isPlanId, type PlanId } from '@/types/subscription';
+import { PLANS, SubscriptionStatus, isPlanId } from '@/types/subscription';
 import { MercadoPagoAutoReturn } from '@/types/payments';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();

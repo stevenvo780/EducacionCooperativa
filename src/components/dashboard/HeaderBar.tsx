@@ -290,7 +290,7 @@ const HeaderBar = ({
       label: 'Snippets',
       description: 'Galería reutilizable del workspace',
       icon: Plus,
-      active: openTabs.some(t => t.type === ('snippets-gallery' as any)),
+      active: openTabs.some(t => t.type === ('snippets-gallery' as string)),
       dragId: snippetsGalleryPanelId,
       onClick: onOpenSnippetsGallery,
       activeClasses: 'border-amber-500/30 bg-amber-500/10 text-amber-200',

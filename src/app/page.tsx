@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import {
   BookOpen, Edit3, Cloud, Users, ArrowRight, Terminal,
-  Shield, Layout, FolderOpen, Zap, HardDrive, Kanban,
+  Shield, FolderOpen, Zap, HardDrive, Kanban,
   MonitorSmartphone, Lock, Check
 } from 'lucide-react';
 

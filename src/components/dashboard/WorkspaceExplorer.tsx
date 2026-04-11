@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { Briefcase, Cloud, CloudOff, Code, Copy, Download, FilePlus2, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Info, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
+import { Briefcase, Cloud, CloudOff, Code, Copy, FilePlus2, Folder, FolderInput, FolderPlus, FolderUp, GripVertical, Info, Pencil, Plus, Trash2, Upload, User } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { isDocUploaded } from '@/services/dashboardDocUtils';
 import { WorkspaceType } from '@/types/workspace';
@@ -588,7 +588,7 @@ const WorkspaceExplorer = ({
                 {
                   label: 'Eliminar',
                   icon: <Trash2 className="w-4 h-4" />,
-                  onClick: () => { if (contextMenu.data.doc) onDeleteDocument(contextMenu.data.doc, { stopPropagation: () => {} } as any); },
+                  onClick: () => { if (contextMenu.data.doc) onDeleteDocument(contextMenu.data.doc, { stopPropagation: () => {} } as unknown as React.MouseEvent); },
                   destructive: true
                 }
               ]

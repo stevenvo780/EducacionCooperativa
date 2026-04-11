@@ -37,6 +37,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
+import type { QuickInsert } from '@/components/mosaic-editor/types';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
 export type ToolbarGroupKey = 'history' | 'inline' | 'structure' | 'lists' | 'media' | 'insert' | 'snippets' | 'advanced';
@@ -51,10 +52,10 @@ export interface MosaicToolbarContentsProps {
   isCreatingTask: boolean;
   docName: string;
   editorShellRef: React.RefObject<HTMLElement | null>;
-  menuBtnRef: any;
+  menuBtnRef: React.RefObject<HTMLButtonElement>;
   currentDocMetaRef: React.MutableRefObject<{ name?: string }>;
   DEFAULT_TOOLBAR_VISIBILITY: Record<ToolbarGroupKey, boolean>;
-  QUICK_INSERTS: any[];
+  QUICK_INSERTS: QuickInsert[];
   applyToolbarVisibility: (visibility: Record<ToolbarGroupKey, boolean>) => void;
   insertSnippet: (markdown: string) => void;
   toggleCompactMenu: (e: React.MouseEvent) => void;
@@ -151,7 +152,7 @@ export function MosaicToolbarContents({
   ));
   pushSection('insert', (
     <>
-      <TableGridPicker portalContainer={editorShellRef.current as any} onInsert={(rows: number, cols: number) => {
+      <TableGridPicker portalContainer={editorShellRef.current} onInsert={(rows: number, cols: number) => {
         const header = `| ${Array.from({ length: cols }, (_, i) => `Col ${i + 1}`).join(' | ')} |`;
         const sep = `| ${Array.from({ length: cols }, () => '---').join(' | ')} |`;
         const body = Array.from({ length: rows - 1 }, () =>

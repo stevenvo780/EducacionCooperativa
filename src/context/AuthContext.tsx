@@ -100,7 +100,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     setUserEmail(parsedUser.email || storedEmail);
                     setLoading(false);
                     return;
-                } catch (e) {
+                } catch (_e) {
                     localStorage.removeItem('agora_user');
                 }
             }
@@ -125,7 +125,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 setLoading(false);
             });
             return () => unsubscribe();
-        } catch (e) {
+        } catch (_e) {
             setLoading(false);
         }
     }, []);
@@ -371,7 +371,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const firebaseAuth = getAuth();
             await signOut(firebaseAuth);
-        } catch (error) {
+        } catch (_error) {
         }
         setUser(null);
         setUserEmail(null);

@@ -5,9 +5,9 @@ import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { getErrorMessage } from '@/lib/error-utils';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
-import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId } from '@/types/terminal';
+import { TerminalConnectionStatus, WorkerStatusValue } from '@/types/terminal';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
-import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Download, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TerminalProps {
   nexusUrl: string;

@@ -10,13 +10,11 @@ import {
   useState,
   type InputHTMLAttributes,
   type DragEvent as ReactDragEvent,
-  type FormEvent as ReactFormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode
 } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useTerminal, type TerminalSession } from '@/context/TerminalContext';
+import { useTerminal } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, PanelLeftOpen, Terminal as TerminalIcon } from 'lucide-react';
 import { LazyMotion, domAnimation, useReducedMotion, type Transition } from 'framer-motion';
@@ -46,21 +44,12 @@ import {
 } from '@/store/dashboardSlice';
 import {
     acceptInviteApi,
-    createDocumentApi,
-    createWorkspaceApi,
     fetchCurrentUserApi,
-    deleteWorkspaceApi,
-    downloadDocumentBlobApi,
-    fetchDocumentRawApi,
-    inviteMemberApi,
-    removeMemberApi,
-    updateDocumentApi,
-    uploadFileApi,
     fetchUserProfilesApi
 } from '@/services/dashboardApi';
 import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue } from '@/services/dashboardUtils';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
-import { clearDashboardState, loadFavoriteDocIds, MAX_FAVORITE_DOCS, saveFavoriteDocIds } from '@/services/dashboardPersistence';
+import { loadFavoriteDocIds, MAX_FAVORITE_DOCS, saveFavoriteDocIds } from '@/services/dashboardPersistence';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
 import { useDashboardPersistence } from '@/hooks/dashboard/useDashboardPersistence';
 import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
@@ -76,7 +65,7 @@ import ChangePasswordModal from '@/components/dashboard/ChangePasswordModal';
 import NewWorkspaceModal from '@/components/dashboard/NewWorkspaceModal';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
-import { PLANS, canAccessTerminals } from '@/types/subscription';
+import { PLANS } from '@/types/subscription';
 import PricingModal from '@/components/dashboard/PricingModal';
 import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
 import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
@@ -91,10 +80,7 @@ import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
-const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
-const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 const MosaicLayout = dynamic(() => import('@/components/MosaicLayout'), { ssr: false });
-const FileExplorer = dynamic(() => import('@/components/FileExplorer'), { ssr: false });
 
 const ROOT_FOLDER_PATH = '';
 
@@ -158,7 +144,7 @@ function DashboardContent() {
                 if (cancelled) return;
                 const role = typeof data.role === 'string' ? data.role.toLowerCase().trim() : '';
                 setIsAdmin(role === 'admin' || role === 'superadmin');
-            } catch (error) {
+            } catch (_error) {
                 if (!cancelled) {
                     setIsAdmin(false);
                 }
@@ -374,7 +360,7 @@ function DashboardContent() {
         }
     }, [enterZenMode, exitZenMode, isZenMode]);
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
-    const [dropPosition, setDropPosition] = useState<number | null>(null);
+    const [_dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
 
     const {
@@ -384,7 +370,7 @@ function DashboardContent() {
         semanticSearchError,
         quickSearchFilter,
         setQuickSearchFilter,
-        quickSearchResults,
+        quickSearchResults: _quickSearchResults,
         closeQuickSearch,
         handleQuickSearchSelect,
         handleQuickSearchKeyDown
@@ -414,7 +400,7 @@ function DashboardContent() {
     const [newDocName, setNewDocName] = useState('');
     const [newWorkspaceName, setNewWorkspaceName] = useState('');
     const [inviteEmail, setInviteEmail] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
+    const [_isCreating, setIsCreating] = useState(false);
     const [loadingDocs, setLoadingDocs] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
@@ -482,7 +468,7 @@ function DashboardContent() {
         if (!currentWorkspace) return;
 
         const sanitized = fetched.map(docItem => {
-            const { content, ...rest } = docItem;
+            const { content: _content, ...rest } = docItem;
             return rest;
         });
 
@@ -589,16 +575,10 @@ function DashboardContent() {
 
         setDocs(prev => {
             const changed = !areDocsEquivalent(prev, normalizedFileDocs);
-            if (changed && process.env.NODE_ENV !== 'production') {
-                console.debug('[Sync] docs updated:', prev.length, '->', normalizedFileDocs.length);
-            }
             return changed ? normalizedFileDocs : prev;
         });
         setFolders(prev => {
             const changed = !areFoldersEquivalent(prev, folderList);
-            if (changed && process.env.NODE_ENV !== 'production') {
-                console.debug('[Sync] folders updated:', prev.length, '->', folderList.length);
-            }
             return changed ? folderList : prev;
         });
     }, [currentWorkspace]);
@@ -801,7 +781,7 @@ function DashboardContent() {
     });
 
     const {
-        createFolderRecord,
+        createFolderRecord: _createFolderRecord,
         createFolder,
         moveDocumentToFolder,
         renameDocument,
@@ -1315,7 +1295,7 @@ function DashboardContent() {
         setDropPosition(null);
     };
 
-    const handleDropZoneDragOver = (e: ReactDragEvent, position: number) => {
+    const _handleDropZoneDragOver = (e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
         if (isReorderDrag) return;
@@ -1326,13 +1306,13 @@ function DashboardContent() {
         setDropPosition(prev => (prev === position ? prev : position));
     };
 
-    const handleDropZoneDragLeave = (e: ReactDragEvent) => {
+    const _handleDropZoneDragLeave = (e: ReactDragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         setDropPosition(null);
     };
 
-    const handleDropZoneDrop = (e: ReactDragEvent, position: number) => {
+    const _handleDropZoneDrop = (e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
         if (isReorderDrag) return;

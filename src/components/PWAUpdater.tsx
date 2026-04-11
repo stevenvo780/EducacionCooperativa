@@ -3,6 +3,19 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 
+interface WorkboxInstance {
+  addEventListener(event: string, handler: () => void): void;
+  removeEventListener(event: string, handler: () => void): void;
+  register(): Promise<{ waiting: unknown } | null>;
+  messageSkipWaiting(): void;
+}
+
+declare global {
+  interface Window {
+    workbox?: WorkboxInstance;
+  }
+}
+
 /**
  * PWAUpdater - Componente para notificar nuevas versiones de la aplicación (PWA).
  * Se encarga de escuchar eventos de Workbox y mostrar una UI de actualización.
@@ -27,15 +40,15 @@ export default function PWAUpdater() {
     if (!mounted || typeof window === 'undefined') return;
 
     // Solo actuamos si el Service Worker y Workbox están disponibles.
-    if ('serviceWorker' in navigator && (window as any).workbox !== undefined) {
-      const wb = (window as any).workbox;
+    if ('serviceWorker' in navigator && window.workbox !== undefined) {
+      const wb = window.workbox;
 
       wb.addEventListener('waiting', onWaiting);
       wb.addEventListener('externalwaiting', onWaiting);
 
       // Comprobamos si ya hay un service worker esperando.
       // wb.register() devuelve una promesa con el registro.
-      wb.register().then((registration: any) => {
+      wb.register().then((registration) => {
         if (registration && registration.waiting) {
           setShow(true);
         }
@@ -49,11 +62,11 @@ export default function PWAUpdater() {
   }, [mounted, onWaiting]);
 
   const reloadPage = () => {
-    if (typeof window !== 'undefined' && (window as any).workbox !== undefined) {
-      (window as any).workbox.addEventListener('controlling', () => {
+    if (typeof window !== 'undefined' && window.workbox !== undefined) {
+      window.workbox.addEventListener('controlling', () => {
         window.location.reload();
       });
-      (window as any).workbox.messageSkipWaiting();
+      window.workbox.messageSkipWaiting();
     } else {
       window.location.reload();
     }
