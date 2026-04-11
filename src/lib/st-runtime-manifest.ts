@@ -30,4 +30,3 @@ export const getRuntimeProfileManifest = (profileId: string) => (
 export const getRuntimeCommandManifest = (label: string) => (
   ST_RUNTIME_VALIDATED_COMMANDS.find((command) => command === label) ?? null
 );
-

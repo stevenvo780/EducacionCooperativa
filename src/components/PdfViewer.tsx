@@ -4,6 +4,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ChevronLeft, ChevronRight, Loader2, Minus, Plus, Search, Sparkles } from 'lucide-react';
 import { createSnippet } from '@/services/snippetApi';
 import { authFetch } from '@/services/apiClient';
+import { PdfViewerToolbar } from '@/components/pdf-viewer/PdfViewerToolbar';
+import {
+  type PersistedPdfViewerState,
+  PDFJS_CDN,
+  clampZoomLevel,
+  readViewerState,
+  saveViewerState
+} from '@/components/pdf-viewer/pdfStorage';
+import { usePdfGestures } from '@/components/pdf-viewer/usePdfGestures';
 
 interface PDFViewportProxy {
   width: number;
@@ -49,71 +58,7 @@ declare global {
   }
 }
 
-interface PersistedPdfViewerState {
-  top: number;
-  left: number;
-  zoomLevel: number;
-  searchQuery: string;
-  activeSearchIndex: number;
-}
-
-const PDFJS_VERSION = '3.11.174';
-const PDFJS_CDN = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
-const PDF_VIEWER_STATE_PREFIX = 'agora-pdf-viewer:';
-const DEFAULT_VIEWER_STATE: PersistedPdfViewerState = {
-  top: 0,
-  left: 0,
-  zoomLevel: 1,
-  searchQuery: '',
-  activeSearchIndex: 0
-};
-const pdfViewerStateMemory = new Map<string, PersistedPdfViewerState>();
 let pdfJsPromise: Promise<PDFJSLib> | null = null;
-
-function clampZoomLevel(value: number) {
-  return Math.min(5, Math.max(0.25, Number.isFinite(value) ? value : 1));
-}
-
-function normalizeViewerState(value?: Partial<PersistedPdfViewerState> | null): PersistedPdfViewerState {
-  return {
-    top: typeof value?.top === 'number' ? value.top : DEFAULT_VIEWER_STATE.top,
-    left: typeof value?.left === 'number' ? value.left : DEFAULT_VIEWER_STATE.left,
-    zoomLevel: clampZoomLevel(value?.zoomLevel ?? DEFAULT_VIEWER_STATE.zoomLevel),
-    searchQuery: typeof value?.searchQuery === 'string' ? value.searchQuery : DEFAULT_VIEWER_STATE.searchQuery,
-    activeSearchIndex: typeof value?.activeSearchIndex === 'number' ? value.activeSearchIndex : DEFAULT_VIEWER_STATE.activeSearchIndex
-  };
-}
-
-function getStorageKey(storageKey: string) {
-  return `${PDF_VIEWER_STATE_PREFIX}${storageKey}`;
-}
-
-function readViewerState(storageKey: string): PersistedPdfViewerState {
-  const inMemory = pdfViewerStateMemory.get(storageKey);
-  if (inMemory) return inMemory;
-  if (typeof window === 'undefined') return DEFAULT_VIEWER_STATE;
-
-  try {
-    const raw = window.sessionStorage.getItem(getStorageKey(storageKey));
-    if (!raw) return DEFAULT_VIEWER_STATE;
-    const parsed = normalizeViewerState(JSON.parse(raw) as Partial<PersistedPdfViewerState>);
-    pdfViewerStateMemory.set(storageKey, parsed);
-    return parsed;
-  } catch {
-    return DEFAULT_VIEWER_STATE;
-  }
-}
-
-function saveViewerState(storageKey: string, state: PersistedPdfViewerState) {
-  const normalized = normalizeViewerState(state);
-  pdfViewerStateMemory.set(storageKey, normalized);
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.sessionStorage.setItem(getStorageKey(storageKey), JSON.stringify(normalized));
-  } catch {
-  }
-}
 
 async function loadPdfJs(): Promise<PDFJSLib> {
   if (typeof window === 'undefined') {
@@ -180,7 +125,6 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
   const [containerWidth, setContainerWidth] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [useIframeFallback, setUseIframeFallback] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const [isCreatingSnippet, setIsCreatingSnippet] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -190,8 +134,6 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
   const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
   const lastKnownStateRef = useRef<PersistedPdfViewerState>(initialViewerState);
   const isRestoringRef = useRef(true);
-  const dragStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
-  const lastTouchDistRef = useRef<number | null>(null);
 
   useEffect(() => {
     const nextState = readViewerState(storageKey);
@@ -584,100 +526,15 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
     setZoomLevel(1);
   }, []);
 
-  // Ctrl+rueda para zoom
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || useIframeFallback) return;
-
-    const handleWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return;
-      event.preventDefault();
-      const delta = event.deltaY > 0 ? 1 / 1.15 : 1.15;
-      setZoomLevel((current) => clampZoomLevel(Number((current * delta).toFixed(2))));
-    };
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [useIframeFallback]);
-
-  // Atajos de teclado
-  useEffect(() => {
-    if (useIframeFallback) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return;
-      if (event.key === '=' || event.key === '+') {
-        event.preventDefault();
-        setZoomLevel((current) => clampZoomLevel(Number((current * 1.25).toFixed(2))));
-      } else if (event.key === '-') {
-        event.preventDefault();
-        setZoomLevel((current) => clampZoomLevel(Number((current / 1.25).toFixed(2))));
-      } else if (event.key === '0') {
-        event.preventDefault();
-        setZoomLevel(1);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [useIframeFallback]);
-
-  // Arrastrar para mover (pan)
-  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    const container = containerRef.current;
-    if (!container) return;
-    // Solo arrastrar con botón izquierdo y si hay overflow
-    if (event.button !== 0) return;
-    if (container.scrollWidth <= container.clientWidth && container.scrollHeight <= container.clientHeight) return;
-    event.preventDefault();
-    dragStartRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      scrollLeft: container.scrollLeft,
-      scrollTop: container.scrollTop
-    };
-    setIsDragging(true);
-  }, []);
-
-  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!dragStartRef.current) return;
-    const container = containerRef.current;
-    if (!container) return;
-    event.preventDefault();
-    const dx = event.clientX - dragStartRef.current.x;
-    const dy = event.clientY - dragStartRef.current.y;
-    container.scrollLeft = dragStartRef.current.scrollLeft - dx;
-    container.scrollTop = dragStartRef.current.scrollTop - dy;
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    dragStartRef.current = null;
-    setIsDragging(false);
-  }, []);
-
-  // Pellizco táctil para zoom
-  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length === 2) {
-      const dx = event.touches[0].clientX - event.touches[1].clientX;
-      const dy = event.touches[0].clientY - event.touches[1].clientY;
-      lastTouchDistRef.current = Math.hypot(dx, dy);
-    }
-  }, []);
-
-  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length !== 2 || lastTouchDistRef.current === null) return;
-    event.preventDefault();
-    const dx = event.touches[0].clientX - event.touches[1].clientX;
-    const dy = event.touches[0].clientY - event.touches[1].clientY;
-    const dist = Math.hypot(dx, dy);
-    const ratio = dist / lastTouchDistRef.current;
-    lastTouchDistRef.current = dist;
-    setZoomLevel((current) => clampZoomLevel(Number((current * ratio).toFixed(2))));
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    lastTouchDistRef.current = null;
-  }, []);
+  const {
+    isDragging,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = usePdfGestures({ containerRef, useIframeFallback, setZoomLevel });
 
   const handleSelectionChange = useCallback(() => {
     const sel = window.getSelection();
@@ -750,122 +607,22 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-900 relative">
-      <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-700 bg-slate-950/95 px-3 py-2 backdrop-blur">
-        <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/80 px-1 py-1">
-          <button
-            type="button"
-            onClick={handlePrevPage}
-            disabled={currentPage <= 1}
-            className="rounded p-1 text-slate-300 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            title="Página anterior"
-            aria-label="Página anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <label className="flex items-center gap-2 px-2 text-xs text-slate-300">
-            <span className="hidden sm:inline">Página</span>
-            <input
-              type="number"
-              min={1}
-              max={Math.max(pageCount, 1)}
-              value={currentPage}
-              onChange={(event) => handlePageInputChange(event.target.value)}
-              className="w-14 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-center text-xs text-slate-100 outline-none focus:border-sky-500"
-              aria-label="Página actual"
-            />
-            <span className="text-slate-500">/ {pageCount || '—'}</span>
-          </label>
-          <button
-            type="button"
-            onClick={handleNextPage}
-            disabled={pageCount === 0 || currentPage >= pageCount}
-            className="rounded p-1 text-slate-300 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            title="Página siguiente"
-            aria-label="Página siguiente"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/80 px-1 py-1">
-          <button
-            type="button"
-            onClick={handleZoomOut}
-            className="rounded p-1 text-slate-300 transition hover:bg-slate-800 hover:text-white"
-            title="Alejar"
-            aria-label="Alejar PDF"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleResetZoom}
-            className="min-w-[4.5rem] rounded px-2 py-1 text-xs font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white"
-            title="Ajustar al ancho"
-            aria-label="Ajustar PDF al ancho"
-          >
-            {Math.round(zoomLevel * 100)}%
-          </button>
-          <button
-            type="button"
-            onClick={handleZoomIn}
-            className="rounded p-1 text-slate-300 transition hover:bg-slate-800 hover:text-white"
-            title="Acercar"
-            aria-label="Acercar PDF"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="flex min-w-[15rem] flex-1 items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-1">
-          <Search className="h-4 w-4 text-slate-500" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                if (event.shiftKey) {
-                  handleSearchPrev();
-                } else {
-                  handleSearchNext();
-                }
-              }
-            }}
-            placeholder="Buscar en PDF..."
-            className="min-w-0 flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-500"
-            aria-label="Buscar en PDF"
-          />
-          <span className="text-[11px] text-slate-500">
-            {searchQuery.trim()
-              ? searchMatches.length > 0
-                ? `${activeSearchIndex + 1}/${searchMatches.length}`
-                : '0'
-              : '—'}
-          </span>
-          <button
-            type="button"
-            onClick={handleSearchPrev}
-            disabled={searchMatches.length === 0}
-            className="rounded p-1 text-slate-300 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            title="Resultado anterior"
-            aria-label="Resultado anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleSearchNext}
-            disabled={searchMatches.length === 0}
-            className="rounded p-1 text-slate-300 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            title="Resultado siguiente"
-            aria-label="Resultado siguiente"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      <PdfViewerToolbar
+        currentPage={currentPage}
+        pageCount={pageCount}
+        zoomLevel={zoomLevel}
+        searchQuery={searchQuery}
+        searchMatchesLength={searchMatches.length}
+        activeSearchIndex={activeSearchIndex}
+        onPrevPage={handlePrevPage}
+        onNextPage={handleNextPage}
+        onPageInputChange={handlePageInputChange}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onSearchQueryChange={setSearchQuery}
+        onSearchPrev={handleSearchPrev}
+        onSearchNext={handleSearchNext}
+      />
 
       <div
         ref={containerRef}

@@ -38,7 +38,7 @@ export function useFileExplorerDND({
   filteredChildFolders,
   activeFolder,
   onReorderDocs,
-  onReorderFolders,
+  onReorderFolders
 }: UseFileExplorerDNDProps) {
 
   const reorderDocs = useCallback((dragId: string, targetId: string, placeAfter: boolean) => {

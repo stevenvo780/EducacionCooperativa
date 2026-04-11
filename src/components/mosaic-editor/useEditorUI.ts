@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
 import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
@@ -7,7 +6,7 @@ import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_VISIBILITY_STORAGE_KEY } from './co
 import type { ToolbarGroupKey, ToolbarVisibility } from './types';
 
 interface UseEditorUIOptions {
-  editorShellRef: React.RefObject<HTMLDivElement | null>;
+  editorShellRef: RefObject<HTMLDivElement | null>;
   embedded: boolean;
   roomId: string;
 }

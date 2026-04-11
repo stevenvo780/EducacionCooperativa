@@ -52,4 +52,3 @@ export const emptyFormalizationResultPayload = (
 });
 
 export const clampConfidence = (value: number) => Math.max(0, Math.min(1, value));
-

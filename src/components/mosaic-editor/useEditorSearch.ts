@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type React from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import type { SearchState } from './types';
 
 interface UseEditorSearchOptions {
   externalSearchTerm?: string;
   onSearchStateChange?: (state: SearchState) => void;
-  searchNavRef?: React.MutableRefObject<{ next: () => void; prev: () => void } | null>;
+  searchNavRef?: MutableRefObject<{ next: () => void; prev: () => void } | null>;
 }
 
 export function useEditorSearch({
