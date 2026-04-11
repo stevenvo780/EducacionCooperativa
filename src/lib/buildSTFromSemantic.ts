@@ -55,7 +55,7 @@ const escapeSTString = (text: string): string =>
   text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ');
 
 const isValidProfile = (profile?: string): profile is LogicProfile =>
-  !!profile && VALID_PROFILES.has(profile);
+  !!profile && VALID_PROFILES.has(profile as any);
 
 const extractFirstFormula = (stCode: string) => {
   const axiomMatch = stCode.match(/(?:axiom|claim)\s+\w+\s*[:=]\s*(.+)/);

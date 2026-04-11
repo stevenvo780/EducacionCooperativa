@@ -11,7 +11,10 @@ export const ST_RUNTIME_VERSION = ST_RUNTIME_MANIFEST.canonicalVersion;
 export const ST_RUNTIME_PACKAGE_VERSION = ST_RUNTIME_MANIFEST.packageVersion;
 export const ST_RUNTIME_CLI_VERSION = ST_RUNTIME_MANIFEST.cliVersion;
 export const ST_RUNTIME_PROFILE_IDS = [...ST_RUNTIME_MANIFEST.profileIds];
-export const ST_RUNTIME_PROFILES = [...ST_RUNTIME_MANIFEST.profiles];
+export const ST_RUNTIME_PROFILES: Array<{ id: string; label: string; detail: string; insertText: string }> =
+  [...ST_RUNTIME_MANIFEST.profiles].map(
+    ({ id, label, detail, insertText }) => ({ id, label, detail, insertText })
+  );
 export const ST_RUNTIME_KEYWORDS = [...ST_RUNTIME_MANIFEST.keywords];
 export const ST_RUNTIME_VALIDATED_COMMANDS = [...ST_RUNTIME_MANIFEST.validatedCommands];
 
