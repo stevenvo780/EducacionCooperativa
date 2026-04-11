@@ -83,3 +83,8 @@ export const QUICK_INSERTS: QuickInsert[] = [
 
 export const TABLE_MAX_ROWS = 8;
 export const TABLE_MAX_COLS = 8;
+
+// Timing constants
+export const SAVE_DEBOUNCE_MS = 700;
+export const ST_DEBOUNCE_MS = 500;
+export const SEMANTIC_NOTICE_TIMEOUT_MS = 3_200;

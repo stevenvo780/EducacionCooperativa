@@ -68,32 +68,32 @@ function LandingPage() {
     }
   ];
 
-  const plans = [
-    {
-      name: 'Gratuito',
-      price: 'Gratis',
-      features: ['Editor Markdown completo', 'Documentos ilimitados', 'Workspace personal', '50 MB de almacenamiento'],
-      highlight: false
-    },
-    {
-      name: 'Básico',
-      price: '$30.000/mes',
-      features: ['Todo lo del plan Gratuito', 'Workspaces colaborativos', 'Tableros Kanban', 'Soporte por email', '1 GB de almacenamiento'],
-      highlight: false
-    },
-    {
-      name: 'Pro',
-      price: '$50.000/mes',
-      features: ['Todo lo del plan Básico', 'Terminales ilimitadas', 'Acceso completo a workers', 'Soporte prioritario', '1 GB de almacenamiento'],
-      highlight: true
-    },
-    {
-      name: 'Enterprise',
-      price: '$150.000/mes',
-      features: ['Todo lo del plan Pro', 'Máquina dedicada', 'Terminal dedicada', 'Soporte personalizado', '10 GB de almacenamiento'],
-      highlight: false
-    }
-  ];
+    const plans = [
+        {
+            name: 'Gratuito',
+            price: 'Gratis',
+            features: ['Editor Markdown completo', 'Documentos ilimitados', 'Workspace personal', '50 MB de almacenamiento'],
+            highlight: false
+        },
+        {
+            name: 'Básico',
+            price: '$30.000/mes',
+            features: ['Todo lo del plan Gratuito', 'Workspaces colaborativos', 'Tableros Kanban', 'Soporte por email', '1 GB de almacenamiento'],
+            highlight: false
+        },
+        {
+            name: 'Pro',
+            price: '$80.000/mes',
+            features: ['Todo lo del plan Básico', 'Terminales ilimitadas', 'Acceso completo a workers', 'Soporte prioritario', '1 GB de almacenamiento'],
+            highlight: true
+        },
+        {
+            name: 'Enterprise',
+            price: '$240.000/mes',
+            features: ['Todo lo del plan Pro', 'Máquina dedicada', 'Terminal dedicada', 'Soporte personalizado', '10 GB de almacenamiento'],
+            highlight: false
+        }
+    ];
 
   return (
     <LazyMotion features={domAnimation}>

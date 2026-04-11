@@ -156,13 +156,18 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
         await updateDocumentApi(docId, { content: value });
         lastSyncedRef.current = value;
         setDirty(false);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agora:st-source-saved', {
+            detail: { docId, docName, content: value }
+          }));
+        }
       } catch (err) {
         console.error('[STFileEditor] Auto-save failed', err);
       } finally {
         setSaving(false);
       }
     }, 2000);
-  }, [docId]);
+  }, [docId, docName]);
 
   // Cleanup timer on unmount
   useEffect(() => {

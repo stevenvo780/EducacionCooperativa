@@ -5,7 +5,8 @@
       "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/src -name *.ts -o -name *.tsx)",
       "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/services -name *.ts -not -path */node_modules/*)",
       "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/services/hub/src -name *.ts)",
-      "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/.next/cache -name *.js -newer /home/operador/proyectos/humanizar/EducacionCooperativa/src/components/FormalizerPlayground.tsx)"
+      "Bash(find /home/operador/proyectos/humanizar/EducacionCooperativa/.next/cache -name *.js -newer /home/operador/proyectos/humanizar/EducacionCooperativa/src/components/FormalizerPlayground.tsx)",
+      "Bash(git stash:*)"
     ]
   }
 }

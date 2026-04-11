@@ -41,17 +41,20 @@ import '@mdxeditor/editor/style.css';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { getErrorMessage, isAbortError } from '@/lib/error-utils';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
-import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
 import type { ViewMode, SearchState, EditorProps, ToolbarGroupKey, ToolbarVisibility, MarkdownDocMeta } from '@/components/mosaic-editor/types';
-import { TOOLBAR_VISIBILITY_STORAGE_KEY, DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS } from '@/components/mosaic-editor/constants';
+import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS, SAVE_DEBOUNCE_MS, ST_DEBOUNCE_MS, SEMANTIC_NOTICE_TIMEOUT_MS } from '@/components/mosaic-editor/constants';
 import {
   isMarkdownName, isMarkdownMime, isImageMime, isVideoMime, isAudioMime, isPdfMime,
   stripQueryAndHash, isExternalMarkdownHref, isBrowserNavigationHref,
   normalizeRelativeMarkdownPath, ensureMarkdownCandidateNames,
-  buildWorkspaceAwarePathCandidates, extractWorkspaceSegments
+  buildWorkspaceAwarePathCandidates, extractWorkspaceSegments, generateId
 } from '@/components/mosaic-editor/utils';
+import { useEditorSearch } from '@/components/mosaic-editor/useEditorSearch';
+import { useEditorUI } from '@/components/mosaic-editor/useEditorUI';
+import { useEditorModals } from '@/components/mosaic-editor/useEditorModals';
+import { useEditorSSEStream } from '@/components/mosaic-editor/useEditorSSEStream';
+import { useSemanticStateSyncer } from '@/components/mosaic-editor/useSemanticStateSyncer';
+import { useCompanionSTSync } from '@/components/mosaic-editor/useCompanionSTSync';
 import { MarkdownPreview } from '@/components/mosaic-editor/MarkdownPreview';
 import { mermaidCodeBlockDescriptor } from '@/components/mosaic-editor/MermaidCodeBlockEditor';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
@@ -145,27 +148,24 @@ export default function MosaicEditor({
   const [fileMime, setFileMime] = useState('');
   const [docName, setDocName] = useState('');
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(PERSONAL_WORKSPACE_ID);
-  const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [semanticState, setSemanticState] = useState<SemanticWorkspaceState>({ concepts: [], fragments: [], relations: [], updatedAt: 0 });
   const [semanticNotice, setSemanticNotice] = useState<string | null>(null);
   const [semanticBusyAction, setSemanticBusyAction] = useState<string | null>(null);
   const [linkableDocuments, setLinkableDocuments] = useState<Array<{ id: string; name: string; folder?: string }>>([]);
   const [loadingLinkableDocuments, setLoadingLinkableDocuments] = useState(false);
   const [isDocLoading, setIsDocLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('edit');
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
+  const [companionStDocId, setCompanionStDocId] = useState<string | null>(null);
+  const [editorUtilityMenu, setEditorUtilityMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
-  // Search state
-  const [internalSearchTerm, setInternalSearchTerm] = useState('');
-  const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearchTerm;
-  const setSearchTerm = setInternalSearchTerm;
-  const [currentMatch, setCurrentMatch] = useState(0);
-  const [totalMatches, setTotalMatches] = useState(0);
-  const lastReportedSearchStateRef = useRef<SearchState | null>(null);
   const renderToolbarContentsRef = useRef<(() => React.ReactNode) | null>(null);
+  const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
+  const semanticSyncRequestIdRef = useRef(0);
 
   const { user } = useAuth();
   const { onDocChangeCallback } = useTerminal();
-  const dispatch = useAppDispatch();
-  const toolbarVisibility = useAppSelector(selectEditorToolbarVisibility);
   const isPageVisible = usePageVisibility();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
@@ -180,36 +180,49 @@ export default function MosaicEditor({
   const saveRequestIdRef = useRef(0);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const currentDocMetaRef = useRef<MarkdownDocMeta>({ workspaceId: null, folder: '', name: '' });
-  const [showCompactMenu, setShowCompactMenu] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('edit');
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [showSnippetGallery, setShowSnippetGallery] = useState(false);
-  const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
-  const [companionStDocId, setCompanionStDocId] = useState<string | null>(null);
-  const [defineConceptDraft, setDefineConceptDraft] = useState<{
-    selectionText: string;
-    title: string;
-    definition: string;
-    logicProfile: string;
-    formula: string;
-  } | null>(null);
-  const [autologicPreview, setAutologicPreview] = useState<{
-    ok: boolean;
-    stCode: string;
-    patterns: string[];
-    atomCount: number;
-    formulaCount: number;
-  } | null>(null);
-  const [snippetDraft, setSnippetDraft] = useState<{ markdown: string } | null>(null);
-  const [noteDraft, setNoteDraft] = useState<{ selectionText: string; note: string } | null>(null);
-  const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
-  const semanticSyncRequestIdRef = useRef(0);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const [rawScrollPos, setRawScrollPos] = useState({ top: 0, left: 0 });
-  const [editorUtilityMenu, setEditorUtilityMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+
+  // ── Custom hooks ──
+  const {
+    searchTerm,
+    setSearchTerm,
+    currentMatch,
+    totalMatches,
+    setTotalMatches,
+    navigateSearch
+  } = useEditorSearch({ externalSearchTerm, onSearchStateChange, searchNavRef });
+
+  const {
+    toolbarVisibility,
+    applyToolbarVisibility,
+    toggleToolbarGroup,
+    enabledToolbarGroupsCount,
+    showToolsPanel,
+    setShowToolsPanel,
+    isFullscreen,
+    showSnippetGallery,
+    setShowSnippetGallery,
+    showCompactMenu,
+    setShowCompactMenu,
+    menuPos,
+    rawScrollPos,
+    setRawScrollPos,
+    zoomLevel,
+    setZoomLevel,
+    menuBtnRef,
+    toggleCompactMenu,
+    toggleFullscreen
+  } = useEditorUI({ editorShellRef, embedded, roomId });
+
+  const {
+    defineConceptDraft,
+    setDefineConceptDraft,
+    autologicPreview,
+    setAutologicPreview,
+    snippetDraft,
+    setSnippetDraft,
+    noteDraft,
+    setNoteDraft
+  } = useEditorModals();
 
   const { stDefinitionsRule } = useSTDefinitionsLinter();
   const linterRules = useMemo(() => [stDefinitionsRule], [stDefinitionsRule]);
@@ -358,50 +371,6 @@ export default function MosaicEditor({
       setEditorUtilityMenu(null);
     }
   }, [docType, viewMode]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const rawValue = window.localStorage.getItem(TOOLBAR_VISIBILITY_STORAGE_KEY);
-      if (!rawValue) return;
-      const parsed = JSON.parse(rawValue) as Partial<ToolbarVisibility>;
-      dispatch(setEditorToolbarVisibility({ ...DEFAULT_TOOLBAR_VISIBILITY, ...parsed }));
-    } catch {
-    }
-  }, [dispatch]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(TOOLBAR_VISIBILITY_STORAGE_KEY, JSON.stringify(toolbarVisibility));
-    } catch {
-    }
-  }, [toolbarVisibility]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const updateFullscreenState = () => {
-      const fullscreenElement = document.fullscreenElement;
-      const frameElement = typeof window !== 'undefined' ? window.frameElement : null;
-      setIsFullscreen(Boolean(
-        fullscreenElement
-        && (
-          fullscreenElement === document.documentElement
-          || fullscreenElement === document.body
-          || (editorShellRef.current && (fullscreenElement === editorShellRef.current || fullscreenElement.contains(editorShellRef.current)))
-          || (frameElement && (fullscreenElement === frameElement || fullscreenElement.contains(frameElement)))
-        )
-      ));
-    };
-
-    updateFullscreenState();
-    document.addEventListener('fullscreenchange', updateFullscreenState);
-
-    return () => {
-      document.removeEventListener('fullscreenchange', updateFullscreenState);
-    };
-  }, [embedded, roomId]);
 
   /** Helper: update the editor content (remount with new key) */
   const setEditorContent = useCallback((md: string) => {
@@ -613,26 +582,16 @@ export default function MosaicEditor({
     }
   }, [persistSemanticStateRemotely, semanticStoreContext]);
 
-  useEffect(() => {
-    if (!user?.uid) {
-      setSemanticState(EMPTY_SEMANTIC_WORKSPACE_STATE);
-      return;
-    }
-    void loadSemanticStateFromWorkspace({ seedFromLocal: true, persistMerged: true });
-  }, [loadSemanticStateFromWorkspace, user?.uid]);
-
-  useEffect(() => {
-    if (!user?.uid || !isPageVisible) return;
-    void loadSemanticStateFromWorkspace({ seedFromLocal: false, persistMerged: false });
-    const interval = window.setInterval(() => {
-      void loadSemanticStateFromWorkspace({ seedFromLocal: false, persistMerged: false });
-    }, 15000);
-    return () => window.clearInterval(interval);
-  }, [isPageVisible, loadSemanticStateFromWorkspace, user?.uid]);
+  useSemanticStateSyncer({
+    userId: user?.uid,
+    isPageVisible,
+    loadSemanticStateFromWorkspace,
+    setSemanticState
+  });
 
   useEffect(() => {
     if (!semanticNotice) return;
-    const timeout = window.setTimeout(() => setSemanticNotice(null), 3200);
+    const timeout = window.setTimeout(() => setSemanticNotice(null), SEMANTIC_NOTICE_TIMEOUT_MS);
     return () => window.clearTimeout(timeout);
   }, [semanticNotice]);
 
@@ -680,59 +639,12 @@ export default function MosaicEditor({
   }, [onDocChangeCallback, roomId, loadDoc, isPageVisible]);
 
   // SSE stream for real-time updates (Firestore onSnapshot via server)
-  useEffect(() => {
-    if (!roomId || !isPageVisible) return;
-    const controller = new AbortController();
-    let cancelled = false;
-
-    const init = async () => {
-      const token = await getAuthToken();
-      if (cancelled) return;
-
-      try {
-        const res = await fetch(`/api/documents/${roomId}/stream`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          signal: controller.signal
-        });
-
-        if (!res.ok) throw new Error('Stream connection failed');
-        if (!res.body) throw new Error('No body');
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-
-        while (!cancelled) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.substring(6));
-                if (data?.type === 'snapshot') {
-                  applyDocData(data.data);
-                } else if (data?.type === 'deleted') {
-                  resetDocState();
-                }
-              } catch (_e) { /* ignore parse errors */ }
-            }
-          }
-        }
-      } catch (error: unknown) {
-        if (!isAbortError(error) && !cancelled) {
-          console.error('Stream error:', getErrorMessage(error));
-        }
-      }
-    };
-
-    init();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [roomId, applyDocData, resetDocState, isPageVisible]);
+  useEditorSSEStream({
+    roomId,
+    isPageVisible,
+    onSnapshot: (data) => applyDocData(data as Parameters<typeof applyDocData>[0]),
+    onDeleted: resetDocState
+  });
 
   useEffect(() => {
     if (!isPageVisible || !roomId) return;
@@ -799,46 +711,13 @@ export default function MosaicEditor({
           setSaving(stillUnsaved);
         }
       }
-    }, 700);
+    }, SAVE_DEBOUNCE_MS);
   }, [roomId, user?.uid, docType]);
 
   useEffect(() => () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
-  // Notify parent of search state changes
-  useEffect(() => {
-    if (!onSearchStateChange) return;
-    const nextState = { currentMatch, totalMatches };
-    const previousState = lastReportedSearchStateRef.current;
-    if (previousState && previousState.currentMatch === nextState.currentMatch && previousState.totalMatches === nextState.totalMatches) {
-      return;
-    }
-    lastReportedSearchStateRef.current = nextState;
-    onSearchStateChange(nextState);
-  }, [currentMatch, totalMatches, onSearchStateChange]);
-
-  const navigateSearch = useCallback((direction: 'next' | 'prev') => {
-    if (totalMatches === 0) return;
-    setCurrentMatch(prev => {
-      let next = direction === 'next' ? prev + 1 : prev - 1;
-      if (next >= totalMatches) next = 0;
-      if (next < 0) next = totalMatches - 1;
-      return next;
-    });
-  }, [totalMatches]);
-
-  useEffect(() => {
-    if (searchNavRef) {
-      searchNavRef.current = {
-        next: () => navigateSearch('next'),
-        prev: () => navigateSearch('prev')
-      };
-    }
-    return () => {
-      if (searchNavRef) searchNavRef.current = null;
-    };
-  }, [searchNavRef, totalMatches, navigateSearch]);
 
   const stats = useMemo(() => {
     const trimmed = statsContent.trim();

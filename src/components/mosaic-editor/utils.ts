@@ -147,3 +147,11 @@ export const resolveWorkspaceDocPath = (folder: string, href: string) => {
     ? normalizeRelativeMarkdownPath(normalizedHref)
     : normalizeRelativeMarkdownPath(currentFolder ? `${currentFolder}/${normalizedHref}` : normalizedHref);
 };
+
+/** Generates a collision-resistant short ID. Prefers crypto.randomUUID when available. */
+export const generateId = (prefix = '') => {
+  const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return prefix ? `${prefix}-${id}` : id;
+};

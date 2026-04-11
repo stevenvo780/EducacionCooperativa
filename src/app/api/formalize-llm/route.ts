@@ -16,7 +16,9 @@ import {
 import {
   FORMALIZATION_CONTRACT_VERSION,
   clampConfidence,
-  emptyFormalizationResultPayload
+  emptyFormalizationResultPayload,
+  type FormalizationResultPayload,
+  type FormalizationEngine
 } from '@/lib/formalization-contract';
 
 // Server-side defaults (set via Vercel env vars or .env)
@@ -102,25 +104,26 @@ export async function POST(request: NextRequest) {
       - ((result.linterDiagnostics?.length ?? 0) * 0.03)
     );
 
-    return NextResponse.json({
+    const responsePayload: FormalizationResultPayload = {
       contractVersion: FORMALIZATION_CONTRACT_VERSION,
       ok: result.ok,
       stCode: result.stCode,
       ast: result.llmRawAst ?? null,
-      linterDiagnostics: result.linterDiagnostics,
+      linterDiagnostics: result.linterDiagnostics ?? [],
       diagnostics: result.diagnostics,
       atomCount: result.atoms.size,
       formulaCount: result.formulas.length,
       claimCount: result.llmRawAst?.conclusions?.length ?? 0,
       confidence,
-      engine: 'llm',
+      engine: 'llm' as FormalizationEngine,
       patterns: ['llm_extracted'],
       trace: {
         inferredByRules: false,
         inferredByLLM: true,
         userEdited: false
       }
-    });
+    };
+    return NextResponse.json(responsePayload);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
