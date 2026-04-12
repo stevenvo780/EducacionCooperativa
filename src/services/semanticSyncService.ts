@@ -43,6 +43,10 @@ export interface SyncSemanticCompanionFilesResult {
   logs: CompanionSyncLog[];
 }
 
+export interface SyncSemanticCompanionForDocumentResult extends CompanionSyncLog {
+  content: string | null;
+}
+
 const getDocKey = (ref: SemanticDocumentRef) => `${ref.docId || ''}::${ref.docName || ''}`;
 
 const resolveSourceDocument = (docs: DocItem[], ref: SemanticDocumentRef) => {
@@ -72,6 +76,126 @@ const syncRegistryFromContent = (fileName: string, content: string) => {
   }
 };
 
+const emitCompanionEvents = (companionName: string, companionDocIds: string[]) => {
+  if (typeof window === 'undefined' || companionDocIds.length === 0) return;
+
+  window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+  companionDocIds.forEach((docId) => {
+    window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
+      detail: { docId, docName: companionName }
+    }));
+  });
+};
+
+const syncSemanticCompanionForSourceDocument = async (options: {
+  workspaceId: string;
+  state: SemanticWorkspaceState;
+  docs: DocItem[];
+  sourceDoc: Pick<DocItem, 'id' | 'name' | 'folder' | 'content'>;
+  ownerId?: string | null;
+}): Promise<SyncSemanticCompanionForDocumentResult> => {
+  const scopedState = filterSemanticWorkspaceStateByDocument(options.state, {
+    docId: options.sourceDoc.id,
+    docName: options.sourceDoc.name
+  });
+  const companionName = companionSTName(options.sourceDoc.name);
+  const companionDocs = resolveCompanionDocuments(options.docs, options.sourceDoc as DocItem);
+
+  if (scopedState.concepts.length === 0 && scopedState.fragments.length === 0 && scopedState.relations.length === 0) {
+    STDefinitionsRegistry.removeFile(companionName);
+    return {
+      sourceDocName: options.sourceDoc.name,
+      companionName,
+      action: 'skipped',
+      companionDocIds: companionDocs.map((doc) => doc.id),
+      content: null
+    };
+  }
+
+  if (companionDocs.length > 0) {
+    const mergedContents = await Promise.all(companionDocs.map(async (doc) => {
+      let existingContent = '';
+      try {
+        existingContent = await fetchDocumentRawApi(doc.id);
+      } catch {
+        existingContent = doc.content || '';
+      }
+      const content = buildSTFromSemantic(scopedState, options.sourceDoc.name, { existingContent });
+      await updateDocumentApi(doc.id, { content });
+      return { docId: doc.id, content };
+    }));
+
+    const nextContent = mergedContents[0]?.content || '';
+    syncRegistryFromContent(companionName, nextContent);
+    emitCompanionEvents(companionName, companionDocs.map((doc) => doc.id));
+    return {
+      sourceDocName: options.sourceDoc.name,
+      companionName,
+      action: 'updated',
+      companionDocIds: companionDocs.map((doc) => doc.id),
+      content: nextContent
+    };
+  }
+
+  const content = buildSTFromSemantic(scopedState, options.sourceDoc.name);
+  const created = await createDocumentApi({
+    name: companionName,
+    content,
+    type: 'text',
+    ownerId: options.ownerId || undefined,
+    workspaceId: options.workspaceId,
+    folder: options.sourceDoc.folder || 'Material'
+  });
+
+  if (created?.id) {
+    syncRegistryFromContent(companionName, content);
+    emitCompanionEvents(companionName, [created.id]);
+    return {
+      sourceDocName: options.sourceDoc.name,
+      companionName,
+      action: 'created',
+      companionDocIds: [created.id],
+      content
+    };
+  }
+
+  return {
+    sourceDocName: options.sourceDoc.name,
+    companionName,
+    action: 'skipped',
+    companionDocIds: [],
+    content: null
+  };
+};
+
+export const syncSemanticCompanionForDocument = async (options: {
+  workspaceId: string;
+  state: SemanticWorkspaceState;
+  docId?: string | null;
+  docName: string;
+  folder?: string | null;
+  ownerId?: string | null;
+}): Promise<SyncSemanticCompanionForDocumentResult> => {
+  const docs = await fetchDocsApi({ workspaceId: options.workspaceId });
+  const resolvedSourceDoc = resolveSourceDocument(docs, {
+    docId: options.docId ?? null,
+    docName: options.docName
+  }) ?? {
+    id: options.docId || options.docName,
+    name: options.docName,
+    folder: options.folder || 'Material',
+    content: ''
+  };
+
+  return syncSemanticCompanionForSourceDocument({
+    workspaceId: options.workspaceId,
+    state: normalizeSemanticWorkspaceState(options.state),
+    docs,
+    sourceDoc: resolvedSourceDoc,
+    ownerId: options.ownerId
+  });
+};
+
 export const syncSemanticCompanionFiles = async ({
   workspaceId,
   state,
@@ -92,81 +216,14 @@ export const syncSemanticCompanionFiles = async ({
   await Promise.all(uniqueRefs.map(async (ref) => {
     const sourceDoc = resolveSourceDocument(docs, ref);
     if (!sourceDoc?.name) return;
-
-    const scopedState = filterSemanticWorkspaceStateByDocument(normalizedState, {
-      docId: sourceDoc.id,
-      docName: sourceDoc.name
-    });
-    const fileName = companionSTName(sourceDoc.name);
-    const companionDocs = resolveCompanionDocuments(docs, sourceDoc);
-
-    if (scopedState.concepts.length === 0 && scopedState.fragments.length === 0 && scopedState.relations.length === 0) {
-      STDefinitionsRegistry.removeFile(fileName);
-      logs.push({
-        sourceDocName: sourceDoc.name,
-        companionName: fileName,
-        action: 'skipped',
-        companionDocIds: companionDocs.map((doc) => doc.id)
-      });
-      return;
-    }
-
-    if (companionDocs.length > 0) {
-      const mergedContents = await Promise.all(companionDocs.map(async (doc) => {
-        let existingContent = '';
-        try {
-          existingContent = await fetchDocumentRawApi(doc.id);
-        } catch {
-          existingContent = doc.content || '';
-        }
-        const content = buildSTFromSemantic(scopedState, sourceDoc.name, { existingContent });
-        await updateDocumentApi(doc.id, { content });
-        return { docId: doc.id, content };
-      }));
-
-      syncRegistryFromContent(fileName, mergedContents[0]?.content || '');
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('agora:docs-changed'));
-        companionDocs.forEach((doc) => {
-          window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
-            detail: { docId: doc.id, docName: fileName }
-          }));
-        });
-      }
-      logs.push({
-        sourceDocName: sourceDoc.name,
-        companionName: fileName,
-        action: 'updated',
-        companionDocIds: companionDocs.map((doc) => doc.id)
-      });
-      return;
-    }
-
-    const content = buildSTFromSemantic(scopedState, sourceDoc.name);
-    const created = await createDocumentApi({
-      name: fileName,
-      content,
-      type: 'text',
-      ownerId: ownerId || undefined,
+    const log = await syncSemanticCompanionForSourceDocument({
       workspaceId,
-      folder: sourceDoc.folder || 'Material'
+      state: normalizedState,
+      docs,
+      sourceDoc,
+      ownerId
     });
-
-    if (created?.id) {
-      syncRegistryFromContent(fileName, content);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('agora:docs-changed'));
-        window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
-          detail: { docId: created.id, docName: fileName }
-        }));
-      }
-      logs.push({
-        sourceDocName: sourceDoc.name,
-        companionName: fileName,
-        action: 'created',
-        companionDocIds: [created.id]
-      });
-    }
+    logs.push(log);
   }));
 
   return { logs };
@@ -243,4 +300,3 @@ export const syncSTSourceToSemanticWorkspace = async (options: {
 
   return { state: nextState, graph };
 };
-

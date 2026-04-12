@@ -10,6 +10,7 @@ import {
   Loader2, Trash2, Copy, Check, AlertCircle
 } from 'lucide-react';
 import { authFetch } from '@/services/apiClient';
+import { loadClientConfig, saveClientConfig } from '@/lib/clientConfigStorage';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,22 +76,20 @@ const DEFAULT_CONFIG: AIProviderConfig = {
   endpoint: ''
 };
 
+const CONFIG_STORAGE = {
+  storageKey: CONFIG_KEY,
+  defaults: DEFAULT_CONFIG,
+  sensitiveKeys: ['apiKey'] as const
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function loadConfig(): AIProviderConfig {
-  if (typeof window === 'undefined') return DEFAULT_CONFIG;
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_CONFIG;
-  }
+  return loadClientConfig(CONFIG_STORAGE);
 }
 
 function saveConfig(cfg: AIProviderConfig) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+  saveClientConfig(CONFIG_STORAGE, cfg);
 }
 
 function uid() {

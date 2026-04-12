@@ -10,6 +10,11 @@ import type { Snippet } from '@/services/snippetApi';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { FORMALIZATION_CONTRACT_VERSION, type FormalizationResultPayload } from '@/lib/formalization-contract';
 import { ST_RUNTIME_PROFILES } from '@/lib/st-runtime-manifest';
+import {
+  clearClientConfig,
+  loadClientConfig,
+  saveClientConfig
+} from '@/lib/clientConfigStorage';
 
 /* ── Tipos ──────────────────────────────────────────────────── */
 
@@ -31,13 +36,14 @@ const DEFAULT_LLM_CONFIG: LLMClientConfig = {
   model: ''
 };
 
+const LLM_CONFIG_STORAGE = {
+  storageKey: LLM_CONFIG_KEY,
+  defaults: DEFAULT_LLM_CONFIG,
+  sensitiveKeys: ['apiKey'] as const
+};
+
 function loadLLMConfig(): LLMClientConfig {
-  if (typeof window === 'undefined') return DEFAULT_LLM_CONFIG;
-  try {
-    const raw = localStorage.getItem(LLM_CONFIG_KEY);
-    if (!raw) return DEFAULT_LLM_CONFIG;
-    return { ...DEFAULT_LLM_CONFIG, ...JSON.parse(raw) };
-  } catch { return DEFAULT_LLM_CONFIG; }
+  return loadClientConfig(LLM_CONFIG_STORAGE);
 }
 
 interface FormalizeResult {
@@ -111,7 +117,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
   const setLlmConfig = useCallback((update: Partial<LLMClientConfig>) => {
     setLlmConfigRaw(prev => {
       const next = { ...prev, ...update };
-      try { localStorage.setItem(LLM_CONFIG_KEY, JSON.stringify(next)); } catch { /* quota */ }
+      saveClientConfig(LLM_CONFIG_STORAGE, next);
       return next;
     });
   }, []);
@@ -513,7 +519,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                     <button
                       onClick={() => {
                         setLlmConfigRaw(DEFAULT_LLM_CONFIG);
-                        try { localStorage.removeItem(LLM_CONFIG_KEY); } catch { /* noop */ }
+                        clearClientConfig(LLM_CONFIG_STORAGE);
                       }}
                       className="text-[10px] text-slate-600 hover:text-red-400 transition"
                     >
