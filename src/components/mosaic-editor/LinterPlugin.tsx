@@ -6,7 +6,8 @@ import { compareDiagnosticsForSharedRange } from '@/lib/markdown-linter/diagnost
 
 const LINTER_OVERLAY_CONTAINER_CLASS = 'mdx-linter-overlay-container';
 const TOOLTIP_CLASS = 'mdx-linter-tooltip';
-const TOOLTIP_GUTTER = 8;
+const TOOLTIP_GUTTER = 2;
+const TOOLTIP_BRIDGE_CLASS = 'mdx-linter-tooltip-bridge';
 
 interface LinterPluginProps {
   diagnostics: LinterDiagnostic[];
@@ -205,6 +206,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   const rafIdRef = useRef(0);
   const decorateRef = useRef<(() => void) | null>(null);
   const hoverHideTimerRef = useRef(0);
+  const activeHitAreaRef = useRef<HTMLElement | null>(null);
   const [hasActiveTextSelection, setHasActiveTextSelection] = useState(false);
 
   useEffect(() => {
@@ -313,11 +315,27 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       sharedTooltip.className = `${TOOLTIP_CLASS} absolute hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100100] min-w-[220px] max-w-[380px]`;
       sharedTooltip.style.pointerEvents = 'none';
 
+      // Remove any existing bridge element
+      const removeBridge = () => {
+        container.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
+      };
+
       const scheduleHideTooltip = () => {
         if (hoverHideTimerRef.current) {
           window.clearTimeout(hoverHideTimerRef.current);
         }
-        hoverHideTimerRef.current = window.setTimeout(() => hideTooltip(sharedTooltip), 300);
+        hoverHideTimerRef.current = window.setTimeout(() => {
+          hideTooltip(sharedTooltip);
+          removeBridge();
+          activeHitAreaRef.current = null;
+        }, 350);
+      };
+
+      const cancelHideTooltip = () => {
+        if (hoverHideTimerRef.current) {
+          window.clearTimeout(hoverHideTimerRef.current);
+          hoverHideTimerRef.current = 0;
+        }
       };
 
       const positionTooltip = (targetRect: DOMRect) => {
@@ -334,11 +352,43 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
 
         const preferredTop = baseTop - tooltipHeight - TOOLTIP_GUTTER;
         const fallbackTop = baseTop + targetRect.height + TOOLTIP_GUTTER;
-        const top = preferredTop >= editable.scrollTop + 8 ? preferredTop : fallbackTop;
+        const tooltipAbove = preferredTop >= editable.scrollTop + 8;
+        const top = tooltipAbove ? preferredTop : fallbackTop;
 
         sharedTooltip.style.left = `${left}px`;
         sharedTooltip.style.top = `${top}px`;
         sharedTooltip.style.visibility = 'visible';
+
+        // Create an invisible bridge element that covers the gap between
+        // hit area and tooltip so the mouse doesn't lose hover state
+        removeBridge();
+        const bridge = document.createElement('div');
+        bridge.className = TOOLTIP_BRIDGE_CLASS;
+        bridge.style.position = 'absolute';
+        bridge.style.pointerEvents = 'auto';
+        bridge.style.zIndex = '100099';
+
+        if (tooltipAbove) {
+          // Tooltip is above: bridge fills gap below tooltip to hit area
+          bridge.style.left = `${left}px`;
+          bridge.style.top = `${top + tooltipHeight}px`;
+          bridge.style.width = `${tooltipWidth}px`;
+          bridge.style.height = `${Math.max(0, baseTop - (top + tooltipHeight))}px`;
+        } else {
+          // Tooltip is below: bridge fills gap above tooltip to hit area
+          bridge.style.left = `${left}px`;
+          bridge.style.top = `${baseTop + targetRect.height}px`;
+          bridge.style.width = `${tooltipWidth}px`;
+          bridge.style.height = `${Math.max(0, top - (baseTop + targetRect.height))}px`;
+        }
+
+        bridge.addEventListener('mouseenter', cancelHideTooltip);
+        bridge.addEventListener('mouseleave', (e) => {
+          const related = e.relatedTarget as Node | null;
+          if (related && (sharedTooltip.contains(related) || (related as HTMLElement).closest?.('.mdx-linter-marker'))) return;
+          scheduleHideTooltip();
+        });
+        container.appendChild(bridge);
       };
 
       const showSharedTooltip = (diag: LinterDiagnostic, targetRect: DOMRect, hasReplacements: boolean) => {
@@ -420,13 +470,16 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       };
 
       sharedTooltip.addEventListener('mouseenter', () => {
-        if (hoverHideTimerRef.current) {
-          window.clearTimeout(hoverHideTimerRef.current);
-          hoverHideTimerRef.current = 0;
-        }
+        cancelHideTooltip();
       });
 
-      sharedTooltip.addEventListener('mouseleave', () => {
+      sharedTooltip.addEventListener('mouseleave', (e) => {
+        const related = (e as MouseEvent).relatedTarget as Node | null;
+        // If mouse moves to the bridge or back to a marker, don't hide
+        if (related && (
+          (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`) ||
+          (related as HTMLElement).closest?.('.mdx-linter-marker')
+        )) return;
         scheduleHideTooltip();
       });
 
@@ -510,15 +563,18 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
           hitArea.style.cursor = hasReplacements ? 'pointer' : 'help';
 
           hitArea.addEventListener('mouseenter', () => {
-            if (hoverHideTimerRef.current) {
-              window.clearTimeout(hoverHideTimerRef.current);
-              hoverHideTimerRef.current = 0;
-            }
-            dismissAllTooltips(container);
+            cancelHideTooltip();
+            activeHitAreaRef.current = hitArea;
             showSharedTooltip(d, firstRect, Boolean(hasReplacements));
           });
 
-          hitArea.addEventListener('mouseleave', () => {
+          hitArea.addEventListener('mouseleave', (e) => {
+            const related = (e as MouseEvent).relatedTarget as Node | null;
+            // If mouse moves to the tooltip or the bridge, don't hide
+            if (related && (
+              sharedTooltip.contains(related) ||
+              (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`)
+            )) return;
             scheduleHideTooltip();
           });
 

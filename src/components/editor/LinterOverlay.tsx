@@ -259,7 +259,7 @@ export function LinterOverlay({
                 }
                 hoverCloseTimerRef.current = window.setTimeout(() => {
                   setHoverTooltipKey((current) => current === tooltipKey ? null : current);
-                }, 300);
+                }, 350);
               }}
               onMouseDown={(event) => {
                 if (!linterInteractive || !supportsPinnedTooltip) return;
@@ -275,7 +275,7 @@ export function LinterOverlay({
             >
             {/* Tooltip */}
             <div
-              className={linterInteractive ? 'absolute bottom-full left-0 mb-2 flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100100] min-w-[220px] max-w-[320px]' : 'hidden'}
+              className={linterInteractive ? 'absolute bottom-full left-0 mb-0.5 flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-[100100] min-w-[220px] max-w-[320px]' : 'hidden'}
               style={{ display: isTooltipOpen ? 'flex' : 'none' }}
               onMouseEnter={() => {
                 if (hoverCloseTimerRef.current !== null) {
@@ -287,7 +287,7 @@ export function LinterOverlay({
                 if (openTooltipKey === tooltipKey) return;
                 hoverCloseTimerRef.current = window.setTimeout(() => {
                   setHoverTooltipKey((current) => current === tooltipKey ? null : current);
-                }, 300);
+                }, 350);
               }}
               onMouseDown={(event) => event.stopPropagation()}
             >
