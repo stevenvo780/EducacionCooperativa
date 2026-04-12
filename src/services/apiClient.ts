@@ -90,7 +90,8 @@ export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}
     if (!response.ok) {
       let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
       try {
-        const errorData = await response.json();
+        // Clone before reading so the original body stays available for the caller
+        const errorData = await response.clone().json();
         if (errorData?.message) errorMessage = errorData.message;
       } catch (e) { /* ignore json parse error */ }
       

@@ -259,6 +259,28 @@ const HeaderBar = ({
 
   const panelTools = [
     {
+      id: 'board',
+      label: 'Tablero',
+      description: 'Panel de tablero Kanban del espacio',
+      icon: KanbanSquare,
+      active: isBoardOpen,
+      dragId: boardPanelId,
+      onClick: onOpenBoard,
+      activeClasses: 'border-mandy-500/30 bg-mandy-500/10 text-mandy-200',
+      iconClasses: 'text-mandy-300 bg-mandy-500/15 border-mandy-500/25'
+    },
+    {
+      id: 'files',
+      label: 'Archivos',
+      description: 'Explorador de archivos del workspace',
+      icon: FolderOpen,
+      active: false,
+      dragId: filesPanelId,
+      onClick: openFilesTab,
+      activeClasses: 'border-surface-500/30 bg-surface-500/10 text-surface-200',
+      iconClasses: 'text-surface-300 bg-surface-500/15 border-surface-500/25'
+    },
+    {
       id: 'st',
       label: 'ST Logic',
       description: 'Ejecutor lógico y pruebas formales',
@@ -662,21 +684,6 @@ const HeaderBar = ({
           <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
           <span>{isOnline ? 'En línea' : 'Sin conexión'}</span>
         </div>
-        <button
-          draggable={Boolean(boardPanelId)}
-          onDragStart={(e) => handleHeaderDragStart(e, boardPanelId)}
-          onClick={onOpenBoard}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition cursor-grab active:cursor-grabbing ${
-            isBoardOpen
-              ? 'bg-mandy-500/15 text-mandy-300'
-              : 'text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10'
-          }`}
-          title="Tablero (arrastrar al grid)"
-          aria-label="Tablero"
-        >
-          <KanbanSquare className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Tablero</span>
-        </button>
         <div className="relative">
           <button
             ref={toolsMenuButtonRef}
@@ -690,13 +697,13 @@ const HeaderBar = ({
                 ? 'border-surface-500/60 bg-surface-700 text-surface-100'
                 : 'border-transparent text-surface-500 hover:text-surface-200 hover:bg-surface-700/80 hover:border-surface-600/50'
             }`}
-            title="Paneles y herramientas"
-            aria-label="Paneles y herramientas"
+            title="Herramientas"
+            aria-label="Herramientas"
             aria-haspopup="menu"
             aria-expanded={showToolsMenu}
           >
             <MoreVertical className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Paneles</span>
+            <span className="hidden xl:inline">Herramientas</span>
             <ChevronDown className={`w-3 h-3 transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
           </button>
 
@@ -706,7 +713,7 @@ const HeaderBar = ({
               className="absolute top-full right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-80 rounded-2xl border border-surface-600/60 bg-surface-800 shadow-2xl shadow-black/50 z-30 overflow-hidden"
             >
               <div className="px-4 py-3 border-b border-surface-600/50 bg-surface-700/50">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-surface-500">Paneles</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-surface-500">Herramientas</p>
                 <p className="mt-1 text-xs text-surface-400">Arrastra cualquier panel al grid para fijarlo en el espacio de trabajo.</p>
               </div>
 
@@ -794,17 +801,6 @@ const HeaderBar = ({
             </div>
           )}
         </div>
-        <button
-          draggable={Boolean(filesPanelId)}
-          onDragStart={(e) => handleHeaderDragStart(e, filesPanelId)}
-          onClick={openFilesTab}
-          className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 cursor-grab active:cursor-grabbing"
-          title="Explorador de archivos (arrastrar al grid)"
-          aria-label="Archivos"
-        >
-          <FolderOpen className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Archivos</span>
-        </button>
         <button
           onClick={onOpenQuickSearch}
           className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10"
