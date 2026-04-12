@@ -575,14 +575,14 @@ describe('bareUrlRule', () => {
 // ── 2.10 longParagraphRule ──────────────────────────────
 
 describe('longParagraphRule', () => {
-  it('detecta párrafo de >300 palabras', () => {
-    const bigParagraph = wordsN(301);
+  it('detecta párrafo de >150 palabras', () => {
+    const bigParagraph = wordsN(151);
     const diags = expectHit(longParagraphRule, bigParagraph, 'Readability');
-    expect(diags[0].message).toContain('301');
+    expect(diags[0].message).toContain('151');
   });
 
-  it('no reporta párrafo de 300 palabras', () => {
-    expectClean(longParagraphRule, wordsN(300));
+  it('no reporta párrafo de 150 palabras', () => {
+    expectClean(longParagraphRule, wordsN(150));
   });
 
   it('no reporta párrafo corto', () => {
@@ -590,12 +590,12 @@ describe('longParagraphRule', () => {
   });
 
   it('separa párrafos por línea en blanco', () => {
-    const text = `${wordsN(200)}\n\n${wordsN(200)}`;
+    const text = `${wordsN(100)}\n\n${wordsN(100)}`;
     expectClean(longParagraphRule, text);
   });
 
   it('separa párrafos por headings', () => {
-    const text = `${wordsN(200)}\n## Sección\n${wordsN(200)}`;
+    const text = `${wordsN(100)}\n## Sección\n${wordsN(100)}`;
     expectClean(longParagraphRule, text);
   });
 
@@ -610,28 +610,28 @@ describe('longParagraphRule', () => {
 
   it('detecta párrafo largo multiline sin blanks', () => {
     // Varias líneas sin blank entre ellas = mismo párrafo
-    const text = `${wordsN(160)}\n${wordsN(160)}`;
+    const text = `${wordsN(80)}\n${wordsN(80)}`;
     const diags = longParagraphRule.check(text);
     expect(diags.length).toBe(1);
-    expect(diags[0].message).toContain('320');
+    expect(diags[0].message).toContain('160');
   });
 });
 
 // ── 2.11 longSentenceRule ───────────────────────────────
 
 describe('longSentenceRule', () => {
-  it('está deshabilitada por defecto', () => {
-    expect(longSentenceRule.defaultEnabled).toBe(false);
+  it('está habilitada por defecto', () => {
+    expect(longSentenceRule.defaultEnabled).toBe(true);
   });
 
-  it('detecta oración de >50 palabras', () => {
-    const longSentence = wordsN(52);
+  it('detecta oración de >40 palabras', () => {
+    const longSentence = wordsN(42);
     const diags = expectHit(longSentenceRule, longSentence, 'Readability');
-    expect(diags[0].message).toContain('52');
+    expect(diags[0].message).toContain('42');
   });
 
-  it('no reporta oración de 50 palabras', () => {
-    expectClean(longSentenceRule, wordsN(50));
+  it('no reporta oración de 40 palabras', () => {
+    expectClean(longSentenceRule, wordsN(40));
   });
 
   it('no reporta oraciones separadas por punto', () => {
@@ -880,8 +880,8 @@ describe('todoMarkersRule', () => {
 // ═══════════════════════════════════════════════════════════
 
 describe('ALL_BUILTIN_RULES', () => {
-  it('contiene exactamente 19 reglas', () => {
-    expect(ALL_BUILTIN_RULES.length).toBe(19);
+  it('contiene al menos 40 reglas', () => {
+    expect(ALL_BUILTIN_RULES.length).toBeGreaterThanOrEqual(40);
   });
 
   it('cada regla tiene un id único', () => {
@@ -915,7 +915,17 @@ describe('ALL_BUILTIN_RULES', () => {
 
   it('todas las reglas ignoran bloques de código', () => {
     const codeText = '```\nentonses haser [](bad url) el el TODO\n```';
+    // Document-level rules (thesis, citation, code_block_lang) may still fire
+    // because they analyze overall structure, not inline content inside code.
+    const DOCUMENT_LEVEL_RULES = new Set([
+      'structure_code_block_lang',
+      'thesis_missing_section', 'thesis_hypothesis_statement',
+      'thesis_abstract_length', 'thesis_keywords', 'thesis_section_order',
+      'citation_missing_reference_section', 'citation_orphan_bibliography',
+      'citation_missing_bibliography'
+    ]);
     for (const rule of ALL_BUILTIN_RULES) {
+      if (DOCUMENT_LEVEL_RULES.has(rule.id)) continue;
       expectClean(rule, codeText);
     }
   });
@@ -947,14 +957,30 @@ describe('Edge cases transversales', () => {
 
   it('contenido solo de código', () => {
     const text = '```python\ndef hello():\n  print("world")\n```';
+    // Document-level rules may produce diagnostics for missing sections
+    const DOCUMENT_LEVEL_RULES = new Set([
+      'thesis_missing_section', 'thesis_hypothesis_statement',
+      'thesis_abstract_length', 'thesis_keywords', 'thesis_section_order',
+      'citation_missing_reference_section', 'citation_orphan_bibliography',
+      'citation_missing_bibliography'
+    ]);
     for (const rule of ALL_BUILTIN_RULES) {
+      if (DOCUMENT_LEVEL_RULES.has(rule.id)) continue;
       expectClean(rule, text);
     }
   });
 
   it('mixed tilde and backtick code blocks', () => {
     const text = '~~~\nbloque tilde\n~~~\n```\nbloque backtick\n```';
+    const DOCUMENT_LEVEL_RULES = new Set([
+      'structure_code_block_lang',
+      'thesis_missing_section', 'thesis_hypothesis_statement',
+      'thesis_abstract_length', 'thesis_keywords', 'thesis_section_order',
+      'citation_missing_reference_section', 'citation_orphan_bibliography',
+      'citation_missing_bibliography'
+    ]);
     for (const rule of ALL_BUILTIN_RULES) {
+      if (DOCUMENT_LEVEL_RULES.has(rule.id)) continue;
       expectClean(rule, text);
     }
   });

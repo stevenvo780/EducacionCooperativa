@@ -1,20 +1,26 @@
 'use client';
 
 import React, { useState, useCallback, useSyncExternalStore } from 'react';
-import { Settings2, RotateCcw, ChevronDown, ChevronRight, X, PenLine, Layers, Link, BookOpen, Accessibility, RefreshCw, AlignJustify, GraduationCap, Ruler } from 'lucide-react';
+import {
+  Settings2, RotateCcw, ChevronDown, ChevronRight, X,
+  PenLine, Layers, Link, BookOpen, Accessibility, RefreshCw,
+  AlignJustify, GraduationCap, Ruler, Quote, FileText
+} from 'lucide-react';
 import { MarkdownLinterRegistry, type RuleState } from '@/lib/markdown-linter/registry';
-import { RULE_CATEGORY_LABELS, type RuleCategory } from '@/lib/markdown-linter/types';
+import { RULE_CATEGORY_LABELS, type RuleCategory, type ProfileId } from '@/lib/markdown-linter/types';
 
 const RULE_CATEGORY_ICONS: Record<RuleCategory, React.ReactNode> = {
-  spelling: <PenLine className="w-3 h-3" />,
-  structure: <Layers className="w-3 h-3" />,
-  links: <Link className="w-3 h-3" />,
-  readability: <BookOpen className="w-3 h-3" />,
+  spelling:      <PenLine className="w-3 h-3" />,
+  structure:     <Layers className="w-3 h-3" />,
+  links:         <Link className="w-3 h-3" />,
+  readability:   <BookOpen className="w-3 h-3" />,
   accessibility: <Accessibility className="w-3 h-3" />,
-  consistency: <RefreshCw className="w-3 h-3" />,
-  whitespace: <AlignJustify className="w-3 h-3" />,
-  academic: <GraduationCap className="w-3 h-3" />,
-  semantic: <Ruler className="w-3 h-3" />
+  consistency:   <RefreshCw className="w-3 h-3" />,
+  whitespace:    <AlignJustify className="w-3 h-3" />,
+  academic:      <GraduationCap className="w-3 h-3" />,
+  semantic:      <Ruler className="w-3 h-3" />,
+  citation:      <Quote className="w-3 h-3" />,
+  thesis:        <FileText className="w-3 h-3" />
 };
 
 // ── Sync with registry ──────────────────────────────────────
@@ -28,6 +34,9 @@ function subscribe(cb: () => void): () => void {
 function getEnabledCount(): string {
   return `${MarkdownLinterRegistry.getEnabledCount()}/${MarkdownLinterRegistry.getTotalCount()}`;
 }
+function getActiveProfile(): ProfileId {
+  return MarkdownLinterRegistry.getActiveProfile();
+}
 
 // ── Component ───────────────────────────────────────────────
 
@@ -35,14 +44,15 @@ export function LinterConfigPanel() {
   const [open, setOpen] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState<Set<RuleCategory>>(new Set());
 
-  const ruleStates = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const countLabel = useSyncExternalStore(subscribe, getEnabledCount, getEnabledCount);
+  const ruleStates  = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const countLabel  = useSyncExternalStore(subscribe, getEnabledCount, getEnabledCount);
+  const activeProfile = useSyncExternalStore(subscribe, getActiveProfile, getActiveProfile);
+  const profiles    = MarkdownLinterRegistry.getProfiles();
 
   const toggleCategory = useCallback((cat: RuleCategory) => {
     setCollapsedCats(prev => {
       const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
       return next;
     });
   }, []);
@@ -71,7 +81,7 @@ export function LinterConfigPanel() {
   }
 
   return (
-    <div className="absolute right-2 top-10 z-50 w-80 max-h-[70vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col">
+    <div className="absolute right-2 top-10 z-50 w-80 max-h-[80vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-700/60 px-3 py-2">
         <div className="flex items-center gap-2">
@@ -96,6 +106,27 @@ export function LinterConfigPanel() {
         </div>
       </div>
 
+      {/* Profile selector */}
+      <div className="border-b border-slate-700/60 px-3 py-2 space-y-1">
+        <span className="text-[10px] text-slate-500 uppercase tracking-wide">Perfil</span>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => MarkdownLinterRegistry.applyProfile(p.id as ProfileId)}
+              title={p.description}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                activeProfile === p.id
+                  ? 'bg-blue-500/30 text-blue-300 ring-1 ring-blue-500/50'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+              }`}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Rules by category */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {Array.from(grouped.entries()).map(([category, rules]) => {
@@ -107,8 +138,10 @@ export function LinterConfigPanel() {
           return (
             <div key={category} className="rounded-lg border border-slate-800 overflow-hidden">
               {/* Category header */}
-              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-800/40 cursor-pointer select-none"
-                   onClick={() => toggleCategory(category)}>
+              <div
+                className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-800/40 cursor-pointer select-none"
+                onClick={() => toggleCategory(category)}
+              >
                 {isCollapsed
                   ? <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                   : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}

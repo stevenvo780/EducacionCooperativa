@@ -36,7 +36,9 @@ export type RuleCategory =
   | 'consistency'
   | 'whitespace'
   | 'academic'
-  | 'semantic';
+  | 'semantic'
+  | 'citation'
+  | 'thesis';
 
 export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   spelling: 'Ortografía',
@@ -47,8 +49,20 @@ export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   consistency: 'Consistencia',
   whitespace: 'Espacios en blanco',
   academic: 'Escritura académica',
-  semantic: 'Semántica ST'
+  semantic: 'Semántica ST',
+  citation: 'Citas y referencias',
+  thesis: 'Formato de tesis'
 };
+
+// ── Perfiles de reglas ──────────────────────────────────────
+
+export type ProfileId = 'default' | 'academic' | 'blog' | 'technical' | 'st-heavy' | 'thesis';
+
+export interface LinterProfile {
+  id: ProfileId;
+  name: string;
+  description: string;
+}
 
 // ── Definición de regla (plugin) ────────────────────────────
 
@@ -63,6 +77,11 @@ export interface LinterRuleMeta {
   category: RuleCategory;
   /** ¿Activada por defecto? */
   defaultEnabled: boolean;
+  /**
+   * Si false, la regla necesita el documento completo y no puede ejecutarse
+   * de forma incremental por párrafo. Por defecto: true.
+   */
+  supportsIncremental?: boolean;
 }
 
 export interface LinterRule extends LinterRuleMeta {

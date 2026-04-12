@@ -63,6 +63,7 @@ import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useEditorSelectionActions } from '@/hooks/useEditorSelectionActions';
 import { useMarkdownLinter, type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
+import { useSTLinterRules } from '@/hooks/useSTLinterRules';
 import { addToPersonalDictionary, getPersonalDictionary } from '@/lib/markdown-linter/spell-engine';
 import { normalizePath } from '@/lib/folder-utils';
 import { buildSTFromSemantic, companionSTName, formalizeText } from '@/lib/buildSTFromSemantic';
@@ -195,7 +196,11 @@ export default function MosaicEditor({
   } = useEditorModals();
 
   const { stDefinitionsRule } = useSTDefinitionsLinter();
-  const linterRules = useMemo(() => [stDefinitionsRule], [stDefinitionsRule]);
+  const { stUndefinedRefRule, stUnusedTheoremRule, stCrossDocConflictRule } = useSTLinterRules();
+  const linterRules = useMemo(
+    () => [stDefinitionsRule, stUndefinedRefRule, stUnusedTheoremRule, stCrossDocConflictRule],
+    [stDefinitionsRule, stUndefinedRefRule, stUnusedTheoremRule, stCrossDocConflictRule]
+  );
   const { diagnostics: markdownDiagnostics, runLint } = useMarkdownLinter(statsContent, linterRules);
 
   const noteDiagnostics = useMemo<LinterDiagnostic[]>(() => {

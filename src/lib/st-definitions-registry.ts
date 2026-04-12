@@ -201,6 +201,29 @@ class STDefinitionsRegistryClass {
     return names;
   }
 
+  /**
+   * Devuelve nombres definidos en múltiples archivos con kind o detail diferente.
+   * Útil para detectar inconsistencias semánticas entre archivos .st del workspace.
+   */
+  getCrossDocumentConflicts(): Array<{ name: string; definitions: STDefinition[] }> {
+    const nameMap = new Map<string, STDefinition[]>();
+    for (const defs of this._fileDefinitions.values()) {
+      for (const def of defs) {
+        if (!nameMap.has(def.name)) nameMap.set(def.name, []);
+        nameMap.get(def.name)!.push(def);
+      }
+    }
+    const conflicts: Array<{ name: string; definitions: STDefinition[] }> = [];
+    for (const [name, defs] of nameMap) {
+      if (defs.length < 2) continue;
+      const hasConflict = defs.some((d, i) =>
+        defs.slice(i + 1).some((other) => d.kind !== other.kind || d.detail !== other.detail)
+      );
+      if (hasConflict) conflicts.push({ name, definitions: defs });
+    }
+    return conflicts;
+  }
+
   lookup(name: string): STDefinition | undefined {
     for (const defs of this._fileDefinitions.values()) {
       const found = defs.find((definition) => definition.name === name);
