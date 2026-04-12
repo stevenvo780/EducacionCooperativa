@@ -203,23 +203,18 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     tooltip.classList.remove('flex');
     tooltip.style.pointerEvents = 'none';
     tooltipVisibleRef.current = false;
-    // NOTE: hoverActiveRef is managed exclusively by mouseenter/mouseleave
-    // on hit areas — do NOT reset it here to prevent decorate() from
-    // destroying hit areas while the cursor is still over a marker.
+    hoverActiveRef.current = false;
     // Remove bridges
     containerRef.current?.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
     // Set cooldown to prevent mouseenter re-trigger on recreated hit areas
     hideCooldownRef.current = true;
     window.setTimeout(() => { hideCooldownRef.current = false; }, 120);
-    // Flush deferred decoration after cooldown so new hit areas don't
-    // immediately fire mouseenter while cursor is still in the same spot
+    // Flush deferred decoration after cooldown
     if (pendingDecorateRef.current) {
       pendingDecorateRef.current = false;
       if (decorateRef.current) {
         cancelAnimationFrame(rafIdRef.current);
         window.setTimeout(() => {
-          // Only flush if cursor is no longer hovering a marker
-          if (hoverActiveRef.current) { pendingDecorateRef.current = true; return; }
           rafIdRef.current = requestAnimationFrame(() => decorateRef.current?.());
         }, 150);
       }
@@ -291,11 +286,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const scrollParent = editable.parentElement;
     if (!scrollParent) return;
 
-    // Ensure scrollParent is a positioning context for the overlay
-    if (getComputedStyle(scrollParent).position === 'static') {
-      scrollParent.style.position = 'relative';
-    }
-
     // ── Ensure overlay container ──
     if (!containerRef.current) {
       let existing = scrollParent.querySelector(`.${LINTER_OVERLAY_CONTAINER_CLASS}`) as HTMLDivElement | null;
@@ -306,9 +296,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
         existing.style.top = '0';
         existing.style.left = '0';
         existing.style.width = '100%';
-        // Full height ensures the stacking context covers the entire
-        // editable area, preventing cursor z-fighting with contenteditable
-        existing.style.height = '100%';
+        existing.style.height = '0';
         existing.style.overflow = 'visible';
         existing.style.pointerEvents = 'none';
         existing.style.zIndex = '20';
@@ -593,8 +581,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
           hitArea.style.cursor = 'pointer';
 
           hitArea.addEventListener('mouseenter', () => {
-            // Always mark hover active to protect hit areas from decorate() destruction,
-            // even during the post-hide cooldown period
             hoverActiveRef.current = true;
             if (hideCooldownRef.current) return;
             cancelHideTooltip();
@@ -605,8 +591,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
             const related = e.relatedTarget as Node | null;
             if (related && (
               sharedTooltip.contains(related) ||
-              (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`) ||
-              (related as HTMLElement).closest?.('.mdx-linter-marker')
+              (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`)
             )) return;
             hoverActiveRef.current = false;
             scheduleHideTooltip();
