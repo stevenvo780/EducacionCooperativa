@@ -286,6 +286,12 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const scrollParent = editable.parentElement;
     if (!scrollParent) return;
 
+    // scrollParent must be a positioning context so the overlay container
+    // (position:absolute) anchors to it instead of a distant ancestor.
+    if (getComputedStyle(scrollParent).position === 'static') {
+      scrollParent.style.position = 'relative';
+    }
+
     // ── Ensure overlay container ──
     if (!containerRef.current) {
       let existing = scrollParent.querySelector(`.${LINTER_OVERLAY_CONTAINER_CLASS}`) as HTMLDivElement | null;
@@ -333,22 +339,22 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     // ── Tooltip presentation helpers ──
 
     const positionTooltip = (targetRect: DOMRect) => {
-      const editableRect = editable.getBoundingClientRect();
+      const spRect = scrollParent.getBoundingClientRect();
       sharedTooltip.classList.remove('hidden');
       sharedTooltip.classList.add('flex');
       sharedTooltip.style.visibility = 'hidden';
 
-      const baseLeft = targetRect.left - editableRect.left + editable.scrollLeft;
-      const baseTop = targetRect.top - editableRect.top + editable.scrollTop;
+      const baseLeft = targetRect.left - spRect.left + scrollParent.scrollLeft;
+      const baseTop = targetRect.top - spRect.top + scrollParent.scrollTop;
       const tooltipWidth = sharedTooltip.offsetWidth || 320;
       const tooltipHeight = sharedTooltip.offsetHeight || 180;
-      const minLeft = editable.scrollLeft + 8;
-      const maxLeft = editable.scrollLeft + Math.max(8, scrollParent.clientWidth - tooltipWidth - 8);
+      const minLeft = scrollParent.scrollLeft + 8;
+      const maxLeft = scrollParent.scrollLeft + Math.max(8, scrollParent.clientWidth - tooltipWidth - 8);
       const left = Math.min(Math.max(minLeft, baseLeft), maxLeft);
 
       const preferredTop = baseTop - tooltipHeight - TOOLTIP_GUTTER;
       const fallbackTop = baseTop + targetRect.height + TOOLTIP_GUTTER;
-      const tooltipAbove = preferredTop >= editable.scrollTop + 8;
+      const tooltipAbove = preferredTop >= scrollParent.scrollTop + 8;
       const top = tooltipAbove ? preferredTop : fallbackTop;
 
       sharedTooltip.style.left = `${left}px`;
@@ -502,7 +508,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
         return;
       }
 
-      const editableRect = editable.getBoundingClientRect();
+      const spRect = scrollParent.getBoundingClientRect();
       const isInteractive = interactiveRef.current;
 
       const groupedDiags = groupDiagnosticsByRange(currentDiags)
@@ -540,19 +546,19 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
             const underline = document.createElement('div');
             underline.className = DECORATION_CLASS;
             underline.style.position = 'absolute';
-            underline.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
+            underline.style.left = `${rect.left - spRect.left + scrollParent.scrollLeft}px`;
             underline.style.width = `${rect.width}px`;
             underline.style.pointerEvents = 'none';
 
             if (isSTRef || isNote) {
               underline.style.height = '0px';
               underline.style.borderBottom = `2px dotted ${borderColor}`;
-              underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 3}px`;
+              underline.style.top = `${rect.bottom - spRect.top + scrollParent.scrollTop - 3}px`;
               const bg = document.createElement('div');
               bg.className = DECORATION_CLASS;
               bg.style.position = 'absolute';
-              bg.style.top = `${rect.top - editableRect.top + editable.scrollTop}px`;
-              bg.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
+              bg.style.top = `${rect.top - spRect.top + scrollParent.scrollTop}px`;
+              bg.style.left = `${rect.left - spRect.left + scrollParent.scrollLeft}px`;
               bg.style.width = `${rect.width}px`;
               bg.style.height = `${rect.height}px`;
               bg.style.backgroundColor = isNote ? 'rgba(245, 158, 11, 0.08)' : 'rgba(6, 182, 212, 0.08)';
@@ -562,7 +568,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
             } else {
               underline.style.height = '2px';
               underline.style.backgroundColor = borderColor;
-              underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
+              underline.style.top = `${rect.bottom - spRect.top + scrollParent.scrollTop - 2}px`;
             }
             container.insertBefore(underline, sharedTooltip);
           });
@@ -574,8 +580,8 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
           const hitArea = document.createElement('div');
           hitArea.className = `mdx-linter-marker ${DECORATION_CLASS} group pointer-events-auto`;
           hitArea.style.position = 'absolute';
-          hitArea.style.top = `${bbTop - editableRect.top + editable.scrollTop}px`;
-          hitArea.style.left = `${bbLeft - editableRect.left + editable.scrollLeft}px`;
+          hitArea.style.top = `${bbTop - spRect.top + scrollParent.scrollTop}px`;
+          hitArea.style.left = `${bbLeft - spRect.left + scrollParent.scrollLeft}px`;
           hitArea.style.width = `${bbRight - bbLeft}px`;
           hitArea.style.height = `${bbBottom - bbTop}px`;
           hitArea.style.cursor = 'pointer';
