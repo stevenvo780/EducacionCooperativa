@@ -132,6 +132,19 @@ export default function GlobalSemanticBrowser({
 
   const ctx = useMemo(() => workspaceId ? { workspaceId, userId: userId ?? undefined } : null, [workspaceId, userId]);
 
+  const conceptsById = useMemo(
+    () => new Map(state.concepts.map(c => [c.id, c])),
+    [state.concepts]
+  );
+  const fragmentsById = useMemo(
+    () => new Map(state.fragments.map(f => [f.id, f])),
+    [state.fragments]
+  );
+  const relationsById = useMemo(
+    () => new Map(state.relations.map(r => [r.id, r])),
+    [state.relations]
+  );
+
   const persistAndSync = useCallback(async (nextState: SemanticWorkspaceState, affectedDocs: SemanticDocumentRef[]) => {
     if (!ctx) return;
 
@@ -185,55 +198,53 @@ export default function GlobalSemanticBrowser({
 
   const handleDeleteConcept = useCallback((conceptId: string) => {
     if (!ctx) return;
-    const concept = state.concepts.find((item) => item.id === conceptId);
+    const concept = conceptsById.get(conceptId);
     const nextState = deleteConcept(ctx, conceptId);
-    /* Use void + catch to avoid unhandled rejections — the lock inside
-       persistAndSync already blocks reload from overwriting this mutation. */
     void persistAndSync(nextState, concept ? [{ docId: concept.docId, docName: concept.docName }] : [])
       .catch((err) => console.error('[GlobalSemanticBrowser] handleDeleteConcept failed', err));
-  }, [ctx, persistAndSync, state.concepts]);
+  }, [ctx, persistAndSync, conceptsById]);
 
   const handleDeleteFragment = useCallback((fragmentId: string) => {
     if (!ctx) return;
-    const fragment = state.fragments.find((item) => item.id === fragmentId);
+    const fragment = fragmentsById.get(fragmentId);
     if (!fragment) return;
     void deleteReferencedFragment(fragment)
       .catch((err) => console.error('[GlobalSemanticBrowser] handleDeleteFragment failed', err));
-  }, [ctx, deleteReferencedFragment, state.fragments]);
+  }, [ctx, deleteReferencedFragment, fragmentsById]);
 
   const handleDeleteRelation = useCallback((relationId: string) => {
     if (!ctx) return;
-    const relation = state.relations.find((item) => item.id === relationId);
+    const relation = relationsById.get(relationId);
     if (!relation) return;
 
-    const relationFragment = state.fragments.find((item) => item.id === relation.fragmentId);
+    const relationFragment = fragmentsById.get(relation.fragmentId);
     if (relationFragment) {
       void deleteReferencedFragment(relationFragment)
         .catch((err) => console.error('[GlobalSemanticBrowser] handleDeleteRelation(fragment) failed', err));
       return;
     }
 
-    const concept = state.concepts.find((item) => item.id === relation.conceptId);
+    const concept = conceptsById.get(relation.conceptId);
     const nextState = deleteRelation(ctx, relationId);
     void persistAndSync(nextState, concept ? [{ docId: concept.docId, docName: concept.docName }] : [])
       .catch((err) => console.error('[GlobalSemanticBrowser] handleDeleteRelation failed', err));
-  }, [ctx, deleteReferencedFragment, persistAndSync, state.concepts, state.fragments, state.relations]);
+  }, [ctx, deleteReferencedFragment, persistAndSync, conceptsById, fragmentsById, relationsById]);
 
   const handleEditConcept = useCallback((conceptId: string, updates: { title?: string; definition?: string; formula?: string }) => {
     if (!ctx) return;
-    const concept = state.concepts.find((item) => item.id === conceptId);
+    const concept = conceptsById.get(conceptId);
     const nextState = updateConcept(ctx, conceptId, updates);
     void persistAndSync(nextState, concept ? [{ docId: concept.docId, docName: concept.docName }] : [])
       .catch((err) => console.error('[GlobalSemanticBrowser] handleEditConcept failed', err));
-  }, [ctx, persistAndSync, state.concepts]);
+  }, [ctx, persistAndSync, conceptsById]);
 
   const handleEditFragment = useCallback((fragmentId: string, updates: { text?: string; note?: string }) => {
     if (!ctx) return;
-    const fragment = state.fragments.find((item) => item.id === fragmentId);
+    const fragment = fragmentsById.get(fragmentId);
     const nextState = updateFragment(ctx, fragmentId, updates);
     void persistAndSync(nextState, fragment ? [{ docId: fragment.docId, docName: fragment.docName }] : [])
       .catch((err) => console.error('[GlobalSemanticBrowser] handleEditFragment failed', err));
-  }, [ctx, persistAndSync, state.fragments]);
+  }, [ctx, persistAndSync, fragmentsById]);
 
   const initialTab = useMemo<SemanticTab | undefined>(
     () => filterDocName ? 'archivos' : undefined,
@@ -286,7 +297,7 @@ export default function GlobalSemanticBrowser({
 
       if (!conceptId) return;
       const sourceFragment = fragmentId
-        ? state.fragments.find((fragment) => fragment.id === fragmentId)
+        ? fragmentsById.get(fragmentId)
         : state.fragments.find((fragment) => fragment.kind === 'evidence');
       if (!sourceFragment) return;
 
@@ -297,7 +308,7 @@ export default function GlobalSemanticBrowser({
             id: `${sourceFragment.id}:${conceptId}:evidence-for`,
             fragmentId: sourceFragment.id,
             conceptId,
-            conceptTitle: state.concepts.find((concept) => concept.id === conceptId)?.title || targetNode?.label || conceptId,
+            conceptTitle: conceptsById.get(conceptId)?.title || targetNode?.label || conceptId,
             relationType: 'evidence-for' as const,
             createdAt: Date.now(),
             updatedAt: Date.now(),
@@ -316,7 +327,7 @@ export default function GlobalSemanticBrowser({
       void persistAndSync(nextState, [{ docId: sourceFragment.docId, docName: sourceFragment.docName }])
         .catch((err) => console.error('[GlobalSemanticBrowser] handleApplyQuickFix(evidence) failed', err));
     }
-  }, [ctx, persistAndSync, state, theoryGraph.nodes]);
+  }, [ctx, persistAndSync, state, theoryGraph.nodes, conceptsById, fragmentsById]);
 
   return (
     <SemanticBrowser

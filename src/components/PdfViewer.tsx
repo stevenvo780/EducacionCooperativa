@@ -248,7 +248,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
       lastKnownStateRef.current = {
         ...lastKnownStateRef.current,
         top: container.scrollTop,
-        left: container.scrollLeft,
+        left: container.scrollLeft
       };
       saveViewerState(storageKey, lastKnownStateRef.current);
     };
@@ -301,10 +301,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
         lastKnownStateRef.current = {
           ...lastKnownStateRef.current,
           top: container.scrollTop,
-          left: container.scrollLeft,
-          zoomLevel,
-          searchQuery,
-          activeSearchIndex
+          left: container.scrollLeft
         };
         saveViewerState(storageKey, lastKnownStateRef.current);
         updateCurrentPageFromScroll();
@@ -385,7 +382,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
       cancelled = true;
       renderTasks.forEach((task) => task.cancel?.());
     };
-  }, [activeSearchIndex, containerWidth, pageCount, searchQuery, storageKey, updateCurrentPageFromScroll, useIframeFallback, zoomLevel]);
+  }, [containerWidth, pageCount, storageKey, updateCurrentPageFromScroll, useIframeFallback, zoomLevel]);
 
   const activeSearchPage = searchMatches[activeSearchIndex] ?? null;
 

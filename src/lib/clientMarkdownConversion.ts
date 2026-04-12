@@ -61,39 +61,41 @@ async function extractPdfText(file: File, onProgress?: (progress: number) => voi
 
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
   const numPages = pdf.numPages;
-  const textParts: string[] = [];
+  let pagesCompleted = 0;
 
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
+  const textParts = await Promise.all(
+    Array.from({ length: numPages }, async (_, i) => {
+      const pageNum = i + 1;
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
 
-    // Build text from items, preserving some structure
-    let lastY: number | null = null;
-    let pageText = '';
+      let lastY: number | null = null;
+      let pageText = '';
 
-    for (const item of textContent.items) {
-      if ('str' in item) {
-        const textItem = item as PDFTextItem;
-        const currentY = textItem.transform[5];
+      for (const item of textContent.items) {
+        if ('str' in item) {
+          const textItem = item as PDFTextItem;
+          const currentY = textItem.transform[5];
 
-        // Add newline when Y position changes significantly (new line)
-        if (lastY !== null && Math.abs(currentY - lastY) > 5) {
-          pageText += '\n';
-        } else if (lastY !== null && pageText.length > 0 && !pageText.endsWith(' ')) {
-          pageText += ' ';
+          if (lastY !== null && Math.abs(currentY - lastY) > 5) {
+            pageText += '\n';
+          } else if (lastY !== null && pageText.length > 0 && !pageText.endsWith(' ')) {
+            pageText += ' ';
+          }
+
+          pageText += textItem.str;
+          lastY = currentY;
         }
-
-        pageText += textItem.str;
-        lastY = currentY;
       }
-    }
 
-    textParts.push(`\n\n<!-- Page ${pageNum} -->\n\n${pageText.trim()}`);
+      pagesCompleted++;
+      if (onProgress) {
+        onProgress(Math.round((pagesCompleted / numPages) * 100));
+      }
 
-    if (onProgress) {
-      onProgress(Math.round((pageNum / numPages) * 100));
-    }
-  }
+      return `\n\n<!-- Page ${pageNum} -->\n\n${pageText.trim()}`;
+    })
+  );
 
   return textParts.join('\n');
 }
@@ -225,10 +227,13 @@ async function excelToMarkdown(file: File, onProgress?: (progress: number) => vo
     });
 
     // Normalizar: asegurar que todas las filas tengan la misma cantidad de columnas
-    const maxCols = Math.max(...rows.map(r => r.length), 0);
+    let maxCols = 0;
+    for (const row of rows) {
+      if (row.length > maxCols) maxCols = row.length;
+    }
     const normalized = rows.map(row => {
       const padded = row.map(cell => String(cell ?? ''));
-      while (padded.length < maxCols) padded.push('');
+      for (let i = padded.length; i < maxCols; i++) padded.push('');
       return padded;
     });
 
@@ -329,10 +334,13 @@ async function csvToMarkdown(file: File, onProgress?: (progress: number) => void
   const rows = parseCsv(text, delimiter);
 
   // Normalizar columnas
-  const maxCols = Math.max(...rows.map(r => r.length), 0);
+  let maxCols = 0;
+  for (const row of rows) {
+    if (row.length > maxCols) maxCols = row.length;
+  }
   const normalized = rows.map(row => {
     const padded = [...row];
-    while (padded.length < maxCols) padded.push('');
+    for (let i = padded.length; i < maxCols; i++) padded.push('');
     return padded;
   });
 
