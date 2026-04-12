@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import { compareDiagnosticsForSharedRange } from '@/lib/markdown-linter/diagnostic-priority';
 
@@ -8,6 +8,7 @@ const LINTER_OVERLAY_CONTAINER_CLASS = 'mdx-linter-overlay-container';
 const TOOLTIP_CLASS = 'mdx-linter-tooltip';
 const TOOLTIP_GUTTER = 2;
 const TOOLTIP_BRIDGE_CLASS = 'mdx-linter-tooltip-bridge';
+const DECORATION_CLASS = 'mdx-linter-deco';
 
 interface LinterPluginProps {
   diagnostics: LinterDiagnostic[];
@@ -18,10 +19,63 @@ interface LinterPluginProps {
   interactive?: boolean;
 }
 
-/**
- * Finds a Range in the DOM for a diagnostic by searching for its actual text content.
- * This is robust against code blocks, LaTeX, Mermaid, etc. that break line-based mapping.
- */
+// ── DOM text-index helpers ──────────────────────────────────
+
+interface TextNodeSegment {
+  node: Text;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+}
+
+interface DocumentTextIndex {
+  segments: TextNodeSegment[];
+  fullText: string;
+  fullTextLower: string;
+}
+
+function buildDocumentTextIndex(root: HTMLElement): DocumentTextIndex {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const segments: TextNodeSegment[] = [];
+  let currentOffset = 0;
+  let node = walker.nextNode() as Text | null;
+
+  while (node) {
+    const text = node.textContent || '';
+    if (text.length > 0) {
+      segments.push({ node, text, startOffset: currentOffset, endOffset: currentOffset + text.length });
+      currentOffset += text.length;
+    }
+    node = walker.nextNode() as Text | null;
+  }
+
+  const fullText = segments.map(({ text }) => text).join('');
+  return { segments, fullText, fullTextLower: fullText.toLowerCase() };
+}
+
+function resolveTextPosition(segments: TextNodeSegment[], absoluteOffset: number) {
+  if (segments.length === 0) return null;
+  const clampedOffset = Math.max(0, absoluteOffset);
+  for (const segment of segments) {
+    if (clampedOffset < segment.endOffset) {
+      return { node: segment.node, offset: clampedOffset - segment.startOffset };
+    }
+  }
+  const lastSegment = segments[segments.length - 1];
+  return { node: lastSegment.node, offset: lastSegment.text.length };
+}
+
+function isWordBoundaryMatch(text: string, startIdx: number, endIdx: number, targetText: string) {
+  const wordCharRegex = /[\p{L}\p{N}\p{M}]/u;
+  const startsOnWord = wordCharRegex.test(targetText[0] ?? '');
+  const endsOnWord = wordCharRegex.test(targetText[targetText.length - 1] ?? '');
+  const previousChar = startIdx > 0 ? text[startIdx - 1] : '';
+  const nextChar = endIdx < text.length ? text[endIdx] : '';
+  if (startsOnWord && previousChar && wordCharRegex.test(previousChar)) return false;
+  if (endsOnWord && nextChar && wordCharRegex.test(nextChar)) return false;
+  return true;
+}
+
 function findDiagnosticRange(
   textIndex: DocumentTextIndex,
   content: string,
@@ -53,8 +107,8 @@ function findDiagnosticRange(
   while (true) {
     const idx = fullTextLower.indexOf(targetTextLower, searchFrom);
     if (idx === -1) break;
-
     const endIdx = idx + targetText.length;
+
     if (hasWordEdges && !isWordBoundaryMatch(fullText, idx, endIdx, targetText)) {
       searchFrom = idx + 1;
       continue;
@@ -64,7 +118,6 @@ function findDiagnosticRange(
     if (!usedPositions.has(posKey)) {
       const startPosition = resolveTextPosition(segments, idx);
       const endPosition = resolveTextPosition(segments, endIdx);
-
       if (startPosition && endPosition) {
         usedPositions.add(posKey);
         try {
@@ -77,90 +130,9 @@ function findDiagnosticRange(
         }
       }
     }
-
     searchFrom = idx + 1;
   }
-
   return null;
-}
-
-interface TextNodeSegment {
-  node: Text;
-  text: string;
-  startOffset: number;
-  endOffset: number;
-}
-
-interface DocumentTextIndex {
-  segments: TextNodeSegment[];
-  fullText: string;
-  fullTextLower: string;
-}
-
-function buildDocumentTextIndex(root: HTMLElement): DocumentTextIndex {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  const segments: TextNodeSegment[] = [];
-  let currentOffset = 0;
-  let node = walker.nextNode() as Text | null;
-
-  while (node) {
-    const text = node.textContent || '';
-    if (text.length > 0) {
-      segments.push({
-        node,
-        text,
-        startOffset: currentOffset,
-        endOffset: currentOffset + text.length
-      });
-      currentOffset += text.length;
-    }
-    node = walker.nextNode() as Text | null;
-  }
-
-  const fullText = segments.map(({ text }) => text).join('');
-  return {
-    segments,
-    fullText,
-    fullTextLower: fullText.toLowerCase()
-  };
-}
-
-function resolveTextPosition(segments: TextNodeSegment[], absoluteOffset: number) {
-  if (segments.length === 0) return null;
-
-  const clampedOffset = Math.max(0, absoluteOffset);
-  for (const segment of segments) {
-    if (clampedOffset < segment.endOffset) {
-      return {
-        node: segment.node,
-        offset: clampedOffset - segment.startOffset
-      };
-    }
-  }
-
-  const lastSegment = segments[segments.length - 1];
-  return {
-    node: lastSegment.node,
-    offset: lastSegment.text.length
-  };
-}
-
-function isWordBoundaryMatch(text: string, startIdx: number, endIdx: number, targetText: string) {
-  const wordCharRegex = /[\p{L}\p{N}\p{M}]/u;
-  const startsOnWord = wordCharRegex.test(targetText[0] ?? '');
-  const endsOnWord = wordCharRegex.test(targetText[targetText.length - 1] ?? '');
-  const previousChar = startIdx > 0 ? text[startIdx - 1] : '';
-  const nextChar = endIdx < text.length ? text[endIdx] : '';
-
-  if (startsOnWord && previousChar && wordCharRegex.test(previousChar)) {
-    return false;
-  }
-
-  if (endsOnWord && nextChar && wordCharRegex.test(nextChar)) {
-    return false;
-  }
-
-  return true;
 }
 
 // ── SVG icons ───────────────────────────────────────────────
@@ -169,31 +141,12 @@ const svgPen = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" v
 const svgRuler = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-cyan-400"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg>';
 const svgBulb = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-px"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>';
 const svgWrench = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
-const _svgX = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
-
-function dismissAllTooltips(container: HTMLElement) {
-  container.querySelectorAll(`.${TOOLTIP_CLASS}`).forEach(el => {
-    el.classList.add('hidden');
-    el.classList.remove('flex');
-    (el as HTMLDivElement).style.pointerEvents = 'none';
-  });
-}
-
-function showTooltip(tooltip: HTMLDivElement, allowInteraction: boolean) {
-  tooltip.classList.remove('hidden');
-  tooltip.classList.add('flex');
-  tooltip.style.pointerEvents = allowInteraction ? 'auto' : 'none';
-}
-
-function hideTooltip(tooltip: HTMLDivElement) {
-  tooltip.classList.add('hidden');
-  tooltip.classList.remove('flex');
-  tooltip.style.pointerEvents = 'none';
-}
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// ── Component ───────────────────────────────────────────────
 
 export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, onApplyFix, interactive = true }: LinterPluginProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -203,49 +156,41 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   contentRef.current = content;
   const onApplyFixRef = useRef(onApplyFix);
   onApplyFixRef.current = onApplyFix;
+  const interactiveRef = useRef(interactive);
+  interactiveRef.current = interactive;
+
   const rafIdRef = useRef(0);
   const decorateRef = useRef<(() => void) | null>(null);
   const hoverHideTimerRef = useRef(0);
-  const activeHitAreaRef = useRef<HTMLElement | null>(null);
-  const [hasActiveTextSelection, setHasActiveTextSelection] = useState(false);
 
-  useEffect(() => {
-    const updateSelectionState = () => {
-      const shell = editorShellRef.current;
-      if (!shell) {
-        setHasActiveTextSelection(false);
-        return;
-      }
+  // Persistent tooltip refs — survive across decorate() calls
+  const sharedTooltipRef = useRef<HTMLDivElement | null>(null);
+  const tooltipVisibleRef = useRef(false);
 
-      const activeElement = document.activeElement;
-      if (activeElement instanceof HTMLTextAreaElement && shell.contains(activeElement)) {
-        setHasActiveTextSelection((activeElement.selectionStart ?? 0) !== (activeElement.selectionEnd ?? 0));
-        return;
-      }
+  // ── Tooltip helpers (stable — operate on refs only) ──
 
-      const domSelection = window.getSelection();
-      if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
-        setHasActiveTextSelection(false);
-        return;
-      }
+  const hideTooltipFull = () => {
+    const tooltip = sharedTooltipRef.current;
+    if (!tooltip) return;
+    tooltip.classList.add('hidden');
+    tooltip.classList.remove('flex');
+    tooltip.style.pointerEvents = 'none';
+    tooltipVisibleRef.current = false;
+    // Remove bridges
+    containerRef.current?.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
+  };
 
-      const range = domSelection.getRangeAt(0);
-      setHasActiveTextSelection(shell.contains(range.commonAncestorContainer));
-    };
+  const cancelHideTooltip = () => {
+    if (hoverHideTimerRef.current) {
+      window.clearTimeout(hoverHideTimerRef.current);
+      hoverHideTimerRef.current = 0;
+    }
+  };
 
-    updateSelectionState();
-    document.addEventListener('selectionchange', updateSelectionState);
-    window.addEventListener('mouseup', updateSelectionState, true);
-    window.addEventListener('keyup', updateSelectionState, true);
-
-    return () => {
-      document.removeEventListener('selectionchange', updateSelectionState);
-      window.removeEventListener('mouseup', updateSelectionState, true);
-      window.removeEventListener('keyup', updateSelectionState, true);
-    };
-  }, [editorShellRef]);
-
-  const linterInteractive = interactive && !hasActiveTextSelection;
+  const scheduleHideTooltip = () => {
+    cancelHideTooltip();
+    hoverHideTimerRef.current = window.setTimeout(hideTooltipFull, 350);
+  };
 
   // ── Dismiss tooltip on click outside ──
   useEffect(() => {
@@ -254,7 +199,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       if (!container) return;
       const target = e.target as HTMLElement;
       if (target.closest(`.${TOOLTIP_CLASS}`) || target.closest('.mdx-linter-marker')) return;
-      dismissAllTooltips(container);
+      hideTooltipFull();
     };
     document.addEventListener('mousedown', handler, true);
     return () => document.removeEventListener('mousedown', handler, true);
@@ -262,16 +207,17 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
 
   useEffect(() => {
     return () => {
-      if (hoverHideTimerRef.current) {
-        window.clearTimeout(hoverHideTimerRef.current);
-      }
+      if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
     };
   }, []);
 
-  // ── Efecto de SETUP: contenedor, observer, scroll ──
+  // ── Setup effect: container, observers, scroll ──
+  // IMPORTANT: Does NOT depend on `interactive` (read via ref) to avoid
+  // tearing down the entire overlay on every selection change.
   useEffect(() => {
     if (viewMode !== 'edit') {
       if (containerRef.current) containerRef.current.innerHTML = '';
+      sharedTooltipRef.current = null;
       return;
     }
 
@@ -284,6 +230,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const scrollParent = editable.parentElement;
     if (!scrollParent) return;
 
+    // ── Ensure overlay container ──
     if (!containerRef.current) {
       let existing = scrollParent.querySelector(`.${LINTER_OVERLAY_CONTAINER_CLASS}`) as HTMLDivElement | null;
       if (!existing) {
@@ -301,181 +248,18 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       containerRef.current = existing;
     }
 
-    // ── Decoración ──
-    const decorate = () => {
-      const container = containerRef.current;
-      if (!container || viewMode !== 'edit') return;
-      container.innerHTML = '';
+    const container = containerRef.current;
 
-      const currentDiags = diagnosticsRef.current;
-      if (currentDiags.length === 0) return;
+    // ── Create persistent shared tooltip (survives decorate() calls) ──
+    if (!sharedTooltipRef.current || !container.contains(sharedTooltipRef.current)) {
+      const tooltip = document.createElement('div');
+      tooltip.className = `${TOOLTIP_CLASS} absolute hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100100] min-w-[220px] max-w-[380px]`;
+      tooltip.style.pointerEvents = 'none';
 
-      const editableRect = editable.getBoundingClientRect();
-      const sharedTooltip = document.createElement('div');
-      sharedTooltip.className = `${TOOLTIP_CLASS} absolute hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100100] min-w-[220px] max-w-[380px]`;
-      sharedTooltip.style.pointerEvents = 'none';
+      tooltip.addEventListener('mouseenter', () => cancelHideTooltip());
 
-      // Remove any existing bridge element
-      const removeBridge = () => {
-        container.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
-      };
-
-      const scheduleHideTooltip = () => {
-        if (hoverHideTimerRef.current) {
-          window.clearTimeout(hoverHideTimerRef.current);
-        }
-        hoverHideTimerRef.current = window.setTimeout(() => {
-          hideTooltip(sharedTooltip);
-          removeBridge();
-          activeHitAreaRef.current = null;
-        }, 350);
-      };
-
-      const cancelHideTooltip = () => {
-        if (hoverHideTimerRef.current) {
-          window.clearTimeout(hoverHideTimerRef.current);
-          hoverHideTimerRef.current = 0;
-        }
-      };
-
-      const positionTooltip = (targetRect: DOMRect) => {
-        showTooltip(sharedTooltip, sharedTooltip.style.pointerEvents === 'auto');
-        sharedTooltip.style.visibility = 'hidden';
-
-        const baseLeft = targetRect.left - editableRect.left + editable.scrollLeft;
-        const baseTop = targetRect.top - editableRect.top + editable.scrollTop;
-        const tooltipWidth = sharedTooltip.offsetWidth || 320;
-        const tooltipHeight = sharedTooltip.offsetHeight || 180;
-        const minLeft = editable.scrollLeft + 8;
-        const maxLeft = editable.scrollLeft + Math.max(8, scrollParent.clientWidth - tooltipWidth - 8);
-        const left = Math.min(Math.max(minLeft, baseLeft), maxLeft);
-
-        const preferredTop = baseTop - tooltipHeight - TOOLTIP_GUTTER;
-        const fallbackTop = baseTop + targetRect.height + TOOLTIP_GUTTER;
-        const tooltipAbove = preferredTop >= editable.scrollTop + 8;
-        const top = tooltipAbove ? preferredTop : fallbackTop;
-
-        sharedTooltip.style.left = `${left}px`;
-        sharedTooltip.style.top = `${top}px`;
-        sharedTooltip.style.visibility = 'visible';
-
-        // Create an invisible bridge element that covers the gap between
-        // hit area and tooltip so the mouse doesn't lose hover state
-        removeBridge();
-        const bridge = document.createElement('div');
-        bridge.className = TOOLTIP_BRIDGE_CLASS;
-        bridge.style.position = 'absolute';
-        bridge.style.pointerEvents = 'auto';
-        bridge.style.zIndex = '100099';
-
-        if (tooltipAbove) {
-          // Tooltip is above: bridge fills gap below tooltip to hit area
-          bridge.style.left = `${left}px`;
-          bridge.style.top = `${top + tooltipHeight}px`;
-          bridge.style.width = `${tooltipWidth}px`;
-          bridge.style.height = `${Math.max(0, baseTop - (top + tooltipHeight))}px`;
-        } else {
-          // Tooltip is below: bridge fills gap above tooltip to hit area
-          bridge.style.left = `${left}px`;
-          bridge.style.top = `${baseTop + targetRect.height}px`;
-          bridge.style.width = `${tooltipWidth}px`;
-          bridge.style.height = `${Math.max(0, top - (baseTop + targetRect.height))}px`;
-        }
-
-        bridge.addEventListener('mouseenter', cancelHideTooltip);
-        bridge.addEventListener('mouseleave', (e) => {
-          const related = e.relatedTarget as Node | null;
-          if (related && (sharedTooltip.contains(related) || (related as HTMLElement).closest?.('.mdx-linter-marker'))) return;
-          scheduleHideTooltip();
-        });
-        container.appendChild(bridge);
-      };
-
-      const showSharedTooltip = (diag: LinterDiagnostic, targetRect: DOMRect, hasReplacements: boolean) => {
-        if (hoverHideTimerRef.current) {
-          window.clearTimeout(hoverHideTimerRef.current);
-          hoverHideTimerRef.current = 0;
-        }
-
-        sharedTooltip.innerHTML = '';
-
-        const isSTDef = diag.source === 'ST-Definitions';
-        const isNote = diag.severity === 'info' && diag.source === 'Nota';
-        const header = document.createElement('div');
-        header.className = 'flex items-center gap-2 mb-1 pr-5';
-        if (isNote) {
-          header.innerHTML = `
-            ${svgPen}
-            <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400">Nota Semántica</span>
-            <span class="text-[10px] text-slate-500 ml-auto">Workspace</span>
-          `;
-        } else {
-          header.innerHTML = isSTDef ? `
-            ${svgRuler}
-            <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">ST Reference</span>
-            <span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(diag.source)}</span>
-          ` : `
-            <span class="text-[10px] font-bold uppercase tracking-wider ${
-              diag.severity === 'error' ? 'text-red-400' :
-              diag.severity === 'warning' ? 'text-amber-400' :
-              'text-blue-400'
-            }">${escapeHtml(diag.severity)}</span>
-            <span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(diag.source)}</span>
-          `;
-        }
-
-        const msg = document.createElement('div');
-        msg.className = 'text-xs text-slate-200 leading-relaxed';
-        msg.textContent = diag.message;
-
-        sharedTooltip.appendChild(header);
-        sharedTooltip.appendChild(msg);
-
-        if (diag.suggestion) {
-          const sug = document.createElement('div');
-          sug.className = 'mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium';
-          sug.innerHTML = `${svgBulb}<span>${escapeHtml(diag.suggestion)}</span>`;
-          sharedTooltip.appendChild(sug);
-        }
-
-        if (hasReplacements && diag.replacements) {
-          const fixSection = document.createElement('div');
-          fixSection.className = 'mt-2 pt-2 border-t border-slate-700/60 flex flex-col gap-1';
-
-          const fixLabel = document.createElement('div');
-          fixLabel.className = 'text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-0.5 flex items-center gap-1';
-          fixLabel.innerHTML = `${svgWrench} <span>Correcciones rápidas</span>`;
-          fixSection.appendChild(fixLabel);
-
-          for (const replacement of diag.replacements) {
-            const btn = document.createElement('button');
-            btn.className = 'flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs bg-slate-700/50 hover:bg-blue-600/30 text-slate-200 hover:text-blue-300 transition-colors cursor-pointer border border-transparent hover:border-blue-500/30';
-            const displayText = replacement === '' ? '(eliminar)' : replacement;
-            btn.innerHTML = `<span class="text-blue-400 font-mono text-[11px] font-bold shrink-0">→</span> <span class="font-medium truncate">${escapeHtml(displayText)}</span>`;
-            btn.addEventListener('click', (event) => {
-              event.stopPropagation();
-              event.preventDefault();
-              onApplyFixRef.current?.(diag, replacement);
-              hideTooltip(sharedTooltip);
-            });
-            fixSection.appendChild(btn);
-          }
-
-          sharedTooltip.appendChild(fixSection);
-        }
-
-        sharedTooltip.style.pointerEvents = hasReplacements ? 'auto' : 'none';
-        showTooltip(sharedTooltip, hasReplacements);
-        positionTooltip(targetRect);
-      };
-
-      sharedTooltip.addEventListener('mouseenter', () => {
-        cancelHideTooltip();
-      });
-
-      sharedTooltip.addEventListener('mouseleave', (e) => {
-        const related = (e as MouseEvent).relatedTarget as Node | null;
-        // If mouse moves to the bridge or back to a marker, don't hide
+      tooltip.addEventListener('mouseleave', (e: MouseEvent) => {
+        const related = e.relatedTarget as Node | null;
         if (related && (
           (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`) ||
           (related as HTMLElement).closest?.('.mdx-linter-marker')
@@ -483,9 +267,147 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
         scheduleHideTooltip();
       });
 
-      container.appendChild(sharedTooltip);
+      container.appendChild(tooltip);
+      sharedTooltipRef.current = tooltip;
+    }
 
-      // Sort diagnostics by position for consistent text-search matching
+    const sharedTooltip = sharedTooltipRef.current;
+
+    // ── Tooltip presentation helpers ──
+
+    const positionTooltip = (targetRect: DOMRect) => {
+      const editableRect = editable.getBoundingClientRect();
+      sharedTooltip.classList.remove('hidden');
+      sharedTooltip.classList.add('flex');
+      sharedTooltip.style.visibility = 'hidden';
+
+      const baseLeft = targetRect.left - editableRect.left + editable.scrollLeft;
+      const baseTop = targetRect.top - editableRect.top + editable.scrollTop;
+      const tooltipWidth = sharedTooltip.offsetWidth || 320;
+      const tooltipHeight = sharedTooltip.offsetHeight || 180;
+      const minLeft = editable.scrollLeft + 8;
+      const maxLeft = editable.scrollLeft + Math.max(8, scrollParent.clientWidth - tooltipWidth - 8);
+      const left = Math.min(Math.max(minLeft, baseLeft), maxLeft);
+
+      const preferredTop = baseTop - tooltipHeight - TOOLTIP_GUTTER;
+      const fallbackTop = baseTop + targetRect.height + TOOLTIP_GUTTER;
+      const tooltipAbove = preferredTop >= editable.scrollTop + 8;
+      const top = tooltipAbove ? preferredTop : fallbackTop;
+
+      sharedTooltip.style.left = `${left}px`;
+      sharedTooltip.style.top = `${top}px`;
+      sharedTooltip.style.visibility = 'visible';
+      tooltipVisibleRef.current = true;
+
+      // Bridge — covers the gap between hit area and tooltip
+      container.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
+      const bridge = document.createElement('div');
+      bridge.className = TOOLTIP_BRIDGE_CLASS;
+      bridge.style.position = 'absolute';
+      bridge.style.pointerEvents = 'auto';
+      bridge.style.zIndex = '100099';
+
+      if (tooltipAbove) {
+        bridge.style.left = `${left}px`;
+        bridge.style.top = `${top + tooltipHeight}px`;
+        bridge.style.width = `${tooltipWidth}px`;
+        bridge.style.height = `${Math.max(0, baseTop - (top + tooltipHeight))}px`;
+      } else {
+        bridge.style.left = `${left}px`;
+        bridge.style.top = `${baseTop + targetRect.height}px`;
+        bridge.style.width = `${tooltipWidth}px`;
+        bridge.style.height = `${Math.max(0, top - (baseTop + targetRect.height))}px`;
+      }
+
+      bridge.addEventListener('mouseenter', cancelHideTooltip);
+      bridge.addEventListener('mouseleave', (e: MouseEvent) => {
+        const related = e.relatedTarget as Node | null;
+        if (related && (sharedTooltip.contains(related) || (related as HTMLElement).closest?.('.mdx-linter-marker'))) return;
+        scheduleHideTooltip();
+      });
+      container.appendChild(bridge);
+    };
+
+    const showSharedTooltip = (diag: LinterDiagnostic, targetRect: DOMRect, hasReplacements: boolean) => {
+      cancelHideTooltip();
+      sharedTooltip.innerHTML = '';
+
+      const isSTDef = diag.source === 'ST-Definitions';
+      const isNote = diag.severity === 'info' && diag.source === 'Nota';
+      const header = document.createElement('div');
+      header.className = 'flex items-center gap-2 mb-1 pr-5';
+      if (isNote) {
+        header.innerHTML = `${svgPen}<span class="text-[10px] font-bold uppercase tracking-wider text-amber-400">Nota Semántica</span><span class="text-[10px] text-slate-500 ml-auto">Workspace</span>`;
+      } else {
+        header.innerHTML = isSTDef
+          ? `${svgRuler}<span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">ST Reference</span><span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(diag.source)}</span>`
+          : `<span class="text-[10px] font-bold uppercase tracking-wider ${diag.severity === 'error' ? 'text-red-400' : diag.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'}">${escapeHtml(diag.severity)}</span><span class="text-[10px] text-slate-500 ml-auto">${escapeHtml(diag.source)}</span>`;
+      }
+
+      const msg = document.createElement('div');
+      msg.className = 'text-xs text-slate-200 leading-relaxed';
+      msg.textContent = diag.message;
+
+      sharedTooltip.appendChild(header);
+      sharedTooltip.appendChild(msg);
+
+      if (diag.suggestion) {
+        const sug = document.createElement('div');
+        sug.className = 'mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium';
+        sug.innerHTML = `${svgBulb}<span>${escapeHtml(diag.suggestion)}</span>`;
+        sharedTooltip.appendChild(sug);
+      }
+
+      if (hasReplacements && diag.replacements) {
+        const fixSection = document.createElement('div');
+        fixSection.className = 'mt-2 pt-2 border-t border-slate-700/60 flex flex-col gap-1';
+        const fixLabel = document.createElement('div');
+        fixLabel.className = 'text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-0.5 flex items-center gap-1';
+        fixLabel.innerHTML = `${svgWrench} <span>Correcciones rápidas</span>`;
+        fixSection.appendChild(fixLabel);
+
+        for (const replacement of diag.replacements) {
+          const btn = document.createElement('button');
+          btn.className = 'flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs bg-slate-700/50 hover:bg-blue-600/30 text-slate-200 hover:text-blue-300 transition-colors cursor-pointer border border-transparent hover:border-blue-500/30';
+          const displayText = replacement === '' ? '(eliminar)' : replacement;
+          btn.innerHTML = `<span class="text-blue-400 font-mono text-[11px] font-bold shrink-0">→</span> <span class="font-medium truncate">${escapeHtml(displayText)}</span>`;
+          btn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            onApplyFixRef.current?.(diag, replacement);
+            hideTooltipFull();
+          });
+          fixSection.appendChild(btn);
+        }
+        sharedTooltip.appendChild(fixSection);
+      }
+
+      sharedTooltip.style.pointerEvents = hasReplacements ? 'auto' : 'none';
+      positionTooltip(targetRect);
+    };
+
+    // ── Decorate: clears only decorations, preserves tooltip ──
+    const decorate = () => {
+      if (!container || viewMode !== 'edit') return;
+
+      // Remove all decoration children but keep the persistent tooltip
+      const children = Array.from(container.children);
+      for (const child of children) {
+        if (child === sharedTooltip) continue;
+        // Keep bridge only while tooltip is active
+        if (child.classList.contains(TOOLTIP_BRIDGE_CLASS) && tooltipVisibleRef.current) continue;
+        container.removeChild(child);
+      }
+
+      const currentDiags = diagnosticsRef.current;
+      if (currentDiags.length === 0) {
+        if (tooltipVisibleRef.current) hideTooltipFull();
+        return;
+      }
+
+      const editableRect = editable.getBoundingClientRect();
+      const isInteractive = interactiveRef.current;
+
       const sortedDiags = [...currentDiags].sort(compareDiagnosticsForSharedRange);
       const usedPositions = new Set<string>();
       const textIndex = buildDocumentTextIndex(editable);
@@ -504,9 +426,8 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
                              d.severity === 'warning' ? '#f59e0b' :
                              isNote ? '#f59e0b' :
                              isSTRef ? '#06b6d4' : '#3b82f6';
-          const hasReplacements = d.replacements && d.replacements.length > 0 && onApplyFixRef.current;
+          const hasReplacements = Boolean(d.replacements && d.replacements.length > 0 && onApplyFixRef.current);
 
-          // Compute bounding box across all rects for a single unified hit area
           let bbTop = Infinity, bbLeft = Infinity, bbBottom = -Infinity, bbRight = -Infinity;
 
           Array.from(rects).forEach(rect => {
@@ -515,8 +436,8 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
             bbBottom = Math.max(bbBottom, rect.bottom);
             bbRight = Math.max(bbRight, rect.right);
 
-            /* ── Visual underline (per-rect for accurate rendering) ── */
             const underline = document.createElement('div');
+            underline.className = DECORATION_CLASS;
             underline.style.position = 'absolute';
             underline.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
             underline.style.width = `${rect.width}px`;
@@ -527,6 +448,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               underline.style.borderBottom = `2px dotted ${borderColor}`;
               underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 3}px`;
               const bg = document.createElement('div');
+              bg.className = DECORATION_CLASS;
               bg.style.position = 'absolute';
               bg.style.top = `${rect.top - editableRect.top + editable.scrollTop}px`;
               bg.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
@@ -535,42 +457,35 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               bg.style.backgroundColor = isNote ? 'rgba(245, 158, 11, 0.08)' : 'rgba(6, 182, 212, 0.08)';
               bg.style.borderRadius = '2px';
               bg.style.pointerEvents = 'none';
-              container.appendChild(bg);
+              container.insertBefore(bg, sharedTooltip);
             } else {
               underline.style.height = '2px';
               underline.style.backgroundColor = borderColor;
               underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
             }
-            container.appendChild(underline);
+            container.insertBefore(underline, sharedTooltip);
           });
 
-          if (!linterInteractive) {
-            return;
-          }
+          if (!isInteractive) return;
 
-          // Use first rect for tooltip positioning (top-left of the match)
           const firstRect = rects[0];
 
-          /* ── Single unified hit area spanning all rects (prevents flicker) ── */
           const hitArea = document.createElement('div');
-          hitArea.className = 'mdx-linter-marker group pointer-events-auto';
+          hitArea.className = `mdx-linter-marker ${DECORATION_CLASS} group pointer-events-auto`;
           hitArea.style.position = 'absolute';
           hitArea.style.top = `${bbTop - editableRect.top + editable.scrollTop}px`;
           hitArea.style.left = `${bbLeft - editableRect.left + editable.scrollLeft}px`;
           hitArea.style.width = `${bbRight - bbLeft}px`;
           hitArea.style.height = `${bbBottom - bbTop}px`;
-          hitArea.style.transition = 'opacity 0.2s';
           hitArea.style.cursor = hasReplacements ? 'pointer' : 'help';
 
           hitArea.addEventListener('mouseenter', () => {
             cancelHideTooltip();
-            activeHitAreaRef.current = hitArea;
-            showSharedTooltip(d, firstRect, Boolean(hasReplacements));
+            showSharedTooltip(d, firstRect, hasReplacements);
           });
 
-          hitArea.addEventListener('mouseleave', (e) => {
-            const related = (e as MouseEvent).relatedTarget as Node | null;
-            // If mouse moves to the tooltip or the bridge, don't hide
+          hitArea.addEventListener('mouseleave', (e: MouseEvent) => {
+            const related = e.relatedTarget as Node | null;
             if (related && (
               sharedTooltip.contains(related) ||
               (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`)
@@ -579,15 +494,13 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
           });
 
           hitArea.addEventListener('click', (e) => {
-            if (!hasReplacements) {
-              return;
-            }
+            if (!hasReplacements) return;
             e.stopPropagation();
             e.preventDefault();
             showSharedTooltip(d, firstRect, true);
           });
 
-          container.appendChild(hitArea);
+          container.insertBefore(hitArea, sharedTooltip);
         } catch {
           // ignore range errors
         }
@@ -601,23 +514,23 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       rafIdRef.current = requestAnimationFrame(decorate);
     };
 
-    const timer = setTimeout(scheduleDecorate, 300);
+    // Initial decoration with short delay
+    const timer = setTimeout(scheduleDecorate, 150);
 
     let mutationTimer = 0;
     const observer = new MutationObserver(() => {
       clearTimeout(mutationTimer);
-      mutationTimer = window.setTimeout(scheduleDecorate, 150);
+      mutationTimer = window.setTimeout(scheduleDecorate, 200);
     });
     observer.observe(editable, { childList: true, subtree: true, characterData: true });
 
-    const handleScroll = () => scheduleDecorate();
+    // On scroll: hide tooltip (position becomes stale) and redecorate
+    const handleScroll = () => {
+      if (tooltipVisibleRef.current) hideTooltipFull();
+      scheduleDecorate();
+    };
     scrollParent.addEventListener('scroll', handleScroll, { passive: true });
 
-    // Re-decorate when the editor or its ancestors are resized
-    // (e.g. mosaic panel drag, window resize, sidebar toggle).
-    // We observe shell, scrollParent AND editable because during a
-    // splitter drag the contenteditable itself may not resize immediately
-    // while its ancestors do — and the text reflows later.
     let resizeTimer = 0;
     const resizeObserver = new ResizeObserver(() => {
       clearTimeout(resizeTimer);
@@ -643,11 +556,14 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       window.removeEventListener('resize', handleWindowResize);
       scrollParent.removeEventListener('scroll', handleScroll);
       if (containerRef.current) containerRef.current.innerHTML = '';
+      sharedTooltipRef.current = null;
+      tooltipVisibleRef.current = false;
       decorateRef.current = null;
     };
-  }, [editorShellRef, linterInteractive, viewMode]); // NO depende de diagnostics
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorShellRef, viewMode]); // NO depende de interactive ni diagnostics
 
-  // ── Efecto de DECORACIÓN: se ejecuta cuando diagnostics cambian ──
+  // ── Re-decorate when diagnostics change ──
   useEffect(() => {
     if (decorateRef.current) {
       cancelAnimationFrame(rafIdRef.current);
