@@ -16,7 +16,6 @@ export interface EditorProps {
   workspaceId?: string;
   onClose?: () => void;
   embedded?: boolean;
-  forceInline?: boolean;
   viewMode?: ViewMode;
   externalSearchTerm?: string;
   onSearchStateChange?: (state: SearchState) => void;
@@ -32,16 +31,5 @@ export interface EditorProps {
 }
 
 export default function Editor(props: EditorProps) {
-  if (props.embedded && !props.forceInline) {
-    const src = `/editor/${encodeURIComponent(props.roomId)}?embedded=1`;
-    return (
-      <iframe
-        src={src}
-        title={`Editor ${props.roomId}`}
-        className="h-full w-full border-0 bg-slate-950"
-      />
-    );
-  }
-
   return <DocumentSurface {...props} />;
 }

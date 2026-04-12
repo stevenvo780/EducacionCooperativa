@@ -37,7 +37,6 @@ export default function EditorPage() {
         roomId={roomId}
         initialContent=""
         embedded={frameMode}
-        forceInline
         onClose={frameMode ? undefined : () => router.push('/dashboard')}
       />
     </main>

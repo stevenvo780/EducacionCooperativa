@@ -7,103 +7,15 @@ import { authFetch } from '@/services/apiClient';
 import { PdfViewerToolbar } from '@/components/pdf-viewer/PdfViewerToolbar';
 import {
   type PersistedPdfViewerState,
-  PDFJS_CDN,
   clampZoomLevel,
   readViewerState,
   saveViewerState
 } from '@/components/pdf-viewer/pdfStorage';
 import { usePdfGestures } from '@/components/pdf-viewer/usePdfGestures';
-
-interface PDFViewportProxy {
-  width: number;
-  height: number;
-}
-
-interface PDFTextItem {
-  str?: string;
-}
-
-interface PDFTextContent {
-  items: PDFTextItem[];
-}
-
-interface PDFRenderTask {
-  promise: Promise<void>;
-  cancel?: () => void;
-}
-
-interface PDFPageProxy {
-  getViewport(params: { scale: number }): PDFViewportProxy;
-  getTextContent?: (params?: Record<string, unknown>) => Promise<PDFTextContent>;
-  render(params: { canvasContext: CanvasRenderingContext2D; viewport: PDFViewportProxy }): PDFRenderTask;
-  cleanup?: () => void;
-}
-
-interface PDFDocumentProxy {
-  numPages: number;
-  getPage(pageNumber: number): Promise<PDFPageProxy>;
-  destroy?: () => Promise<void> | void;
-}
-
-interface PDFJSLib {
-  getDocument(params: { url: string }): { promise: Promise<PDFDocumentProxy> };
-  GlobalWorkerOptions: { workerSrc: string };
-  version: string;
-  renderTextLayer(params: Record<string, unknown>): PDFRenderTask;
-}
-
-declare global {
-  interface Window {
-    pdfjsLib?: PDFJSLib;
-  }
-}
-
-let pdfJsPromise: Promise<PDFJSLib> | null = null;
-
-async function loadPdfJs(): Promise<PDFJSLib> {
-  if (typeof window === 'undefined') {
-    throw new Error('PDF.js requires a browser environment');
-  }
-
-  if (window.pdfjsLib) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`;
-    return window.pdfjsLib;
-  }
-
-  if (!pdfJsPromise) {
-    pdfJsPromise = new Promise<PDFJSLib>((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>(`script[src="${PDFJS_CDN}/pdf.min.js"]`);
-      if (existing) {
-        existing.addEventListener('load', () => {
-          if (!window.pdfjsLib) {
-            reject(new Error('PDF.js failed to initialize'));
-            return;
-          }
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`;
-          resolve(window.pdfjsLib);
-        }, { once: true });
-        existing.addEventListener('error', () => reject(new Error('Failed to load PDF.js')), { once: true });
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = `${PDFJS_CDN}/pdf.min.js`;
-      script.async = true;
-      script.onload = () => {
-        if (!window.pdfjsLib) {
-          reject(new Error('PDF.js failed to initialize'));
-          return;
-        }
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`;
-        resolve(window.pdfjsLib);
-      };
-      script.onerror = () => reject(new Error('Failed to load PDF.js'));
-      document.head.appendChild(script);
-    });
-  }
-
-  return pdfJsPromise;
-}
+import {
+  loadPdfJs,
+  type PdfJsDocumentProxy as PDFDocumentProxy
+} from '@/lib/pdfjs-loader';
 
 interface PdfViewerProps {
   fileUrl: string;
