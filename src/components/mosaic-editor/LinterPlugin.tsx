@@ -535,8 +535,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
                              isSTRef ? '#06b6d4' : '#3b82f6';
           const hasReplacements = Boolean(d.replacements && d.replacements.length > 0 && onApplyFixRef.current);
 
-          const firstRect = rects[0];
-
           Array.from(rects).forEach(rect => {
             const underline = document.createElement('div');
             underline.className = DECORATION_CLASS;
@@ -585,7 +583,9 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               hoverActiveRef.current = true;
               if (hideCooldownRef.current) return;
               cancelHideTooltip();
-              showSharedTooltip(diagGroup, firstRect, hasReplacements);
+              // Use live bounding rect so tooltip position is correct
+              // after scroll (static DOMRect snapshots go stale).
+              showSharedTooltip(diagGroup, hitArea.getBoundingClientRect(), hasReplacements);
             });
 
             hitArea.addEventListener('mouseleave', (e: MouseEvent) => {
@@ -602,7 +602,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               if (!hasReplacements) return;
               ev.stopPropagation();
               ev.preventDefault();
-              showSharedTooltip(diagGroup, firstRect, true);
+              showSharedTooltip(diagGroup, hitArea.getBoundingClientRect(), true);
             });
 
             container.insertBefore(hitArea, sharedTooltip);
