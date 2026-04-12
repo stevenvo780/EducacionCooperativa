@@ -56,9 +56,9 @@ const PROVIDER_META: Record<AIProvider, { label: string; color: string; defaultM
   ollama: {
     label: 'Ollama',
     color: 'text-sky-400',
-    defaultModel: 'llama3.2',
+    defaultModel: 'qwen3:14b',
     needsKey: false,
-    modelPlaceholder: 'llama3.2, mistral, gemma3…'
+    modelPlaceholder: 'qwen3:14b, qwen3:32b…'
   },
   gemini: {
     label: 'Gemini (Google)',
@@ -174,7 +174,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     msgs: Array<{ role: string; content: string }>,
     signal: AbortSignal
   ): Promise<string> => {
-    const raw = config.endpoint.trim() || 'http://localhost:11434';
+    const raw = config.endpoint.trim() || 'https://ollama.proxy.humanizar-dev.cloud';
     // Normalize: strip trailing slash, append /api/chat only if not already present
     const base = raw.replace(/\/+$/, '');
     const url = base.endsWith('/api/chat') ? base : `${base}/api/chat`;
@@ -362,11 +362,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                 type="text"
                 value={config.endpoint}
                 onChange={e => updateConfig({ endpoint: e.target.value })}
-                placeholder="http://localhost:11434"
+                placeholder="https://ollama.proxy.humanizar-dev.cloud"
                 className="w-full bg-surface-800 border border-surface-600 rounded px-2 py-1.5 text-surface-200 placeholder-surface-600 focus:outline-none focus:border-sky-500 transition font-mono"
               />
-              <p className="text-surface-600 mt-1">Local: <code className="text-sky-400/70">http://localhost:11434</code> · Remoto: <code className="text-sky-400/70">http://tu-ip:11434</code></p>
-              <p className="text-surface-600 mt-0.5">Ollama remoto necesita <code className="text-amber-400/70">OLLAMA_ORIGINS=*</code> para permitir requests del browser</p>
+              <p className="text-surface-600 mt-1">Por defecto: <code className="text-sky-400/70">https://ollama.proxy.humanizar-dev.cloud</code></p>
+              <p className="text-surface-600 mt-0.5">Local: <code className="text-sky-400/70">http://localhost:11434</code> — necesita <code className="text-amber-400/70">OLLAMA_ORIGINS=*</code></p>
             </div>
           )}
 
