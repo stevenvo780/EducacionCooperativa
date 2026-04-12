@@ -5,6 +5,7 @@ import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { fetchDocsApi } from '@/services/dashboardApi';
 import { useSyncEvents } from '@/hooks/useSyncEvents';
 import type { User as FirebaseUser } from 'firebase/auth';
+import type { AgentDocumentsMutatedEventDetail } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
 interface SyncRequestOptions {
@@ -290,6 +291,26 @@ export const useDashboardDocsSync = ({
     window.addEventListener('agora:docs-changed', handler);
     return () => window.removeEventListener('agora:docs-changed', handler);
   }, [requestDocsRefresh]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<AgentDocumentsMutatedEventDetail>).detail;
+      if (!detail?.workspaceId || !currentWorkspace || !user) return;
+
+      const matchesCurrentWorkspace = detail.workspaceId === currentWorkspace.id
+        || (currentWorkspace.id === personalWorkspaceId && detail.workspaceId === PERSONAL_WORKSPACE_ID);
+
+      if (!matchesCurrentWorkspace) return;
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[Sync] agora:documents-mutated event received, refreshing…');
+      }
+      void requestDocsRefresh({ force: true, delayMs: 0 });
+    };
+
+    window.addEventListener('agora:documents-mutated', handler as EventListener);
+    return () => window.removeEventListener('agora:documents-mutated', handler as EventListener);
+  }, [currentWorkspace, personalWorkspaceId, requestDocsRefresh, user]);
 
   return {
     fetchDocs,

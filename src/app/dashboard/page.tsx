@@ -77,6 +77,7 @@ import { useMosaicTabs } from '@/hooks/dashboard/useMosaicTabs';
 import { useDocumentActions } from '@/hooks/dashboard/useDocumentActions';
 import { useWorkspaceActions } from '@/hooks/dashboard/useWorkspaceActions';
 import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
+import type { AgentDocumentTarget, AgentOpenDocumentsEventDetail } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
@@ -665,6 +666,46 @@ function DashboardContent() {
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
     }, [docs]);
+
+    useEffect(() => {
+        const handler = (event: Event) => {
+            const detail = (event as CustomEvent<AgentOpenDocumentsEventDetail>).detail;
+            if (!detail?.workspaceId || !currentWorkspaceId) return;
+            if (detail.workspaceId !== currentWorkspaceId && !(currentWorkspaceId === PERSONAL_WORKSPACE_ID && detail.workspaceId === PERSONAL_WORKSPACE_ID)) {
+                return;
+            }
+
+            const normalizeDoc = (candidate: AgentDocumentTarget): DocItem => ({
+                id: candidate.id,
+                name: candidate.name,
+                type: candidate.type as DocItem['type'],
+                folder: candidate.folder,
+                content: candidate.content,
+                mimeType: candidate.mimeType ?? undefined,
+                workspaceId: candidate.workspaceId || currentWorkspaceId,
+                ownerId: candidate.ownerId || user?.uid,
+                updatedAt: new Date()
+            });
+
+            const openTargets = async () => {
+                if (detail.focusFolder) {
+                    setActiveFolderSafe(detail.focusFolder);
+                }
+
+                for (const candidate of detail.documents) {
+                    const resolved = docs.find(doc => doc.id === candidate.id)
+                        || openTabs.find(doc => doc.id === candidate.id)
+                        || normalizeDoc(candidate);
+                    await openDocumentRef.current(resolved);
+                }
+            };
+
+            void openTargets();
+        };
+
+        window.addEventListener('agora:open-documents', handler as EventListener);
+        return () => window.removeEventListener('agora:open-documents', handler as EventListener);
+    }, [currentWorkspaceId, docs, openTabs, setActiveFolderSafe, user?.uid]);
 
     const sidebarFilteredDocs = useMemo(() => {
         const query = deferredSidebarQuery.trim().toLowerCase();
