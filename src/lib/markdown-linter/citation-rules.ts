@@ -287,7 +287,8 @@ export const doiFormatRule: LinterRule = {
       while ((match = badDoi.exec(line)) !== null) {
         results.push({
           message: `DOI sin formato URL completo: "${match[0]}"`,
-          suggestion: 'APA 7ª ed. requiere: https://doi.org/' + match[1],
+          suggestion: `APA 7ª ed. requiere: https://doi.org/${match[1]}`,
+
           severity: 'warning',
           line: lineIdx + 1,
           column: match.index + 1,
@@ -301,7 +302,8 @@ export const doiFormatRule: LinterRule = {
       while ((match = httpDoi.exec(line)) !== null) {
         results.push({
           message: `DOI con http (inseguro): "${match[0]}"`,
-          suggestion: 'Usa https://doi.org/' + match[1],
+          suggestion: `Usa https://doi.org/${match[1]}`,
+
           severity: 'info',
           line: lineIdx + 1,
           column: match.index + 1,

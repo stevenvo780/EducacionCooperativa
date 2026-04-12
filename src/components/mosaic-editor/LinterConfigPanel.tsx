@@ -44,10 +44,10 @@ export function LinterConfigPanel() {
   const [open, setOpen] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState<Set<RuleCategory>>(new Set());
 
-  const ruleStates  = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const countLabel  = useSyncExternalStore(subscribe, getEnabledCount, getEnabledCount);
+  const ruleStates = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const countLabel = useSyncExternalStore(subscribe, getEnabledCount, getEnabledCount);
   const activeProfile = useSyncExternalStore(subscribe, getActiveProfile, getActiveProfile);
-  const profiles    = MarkdownLinterRegistry.getProfiles();
+  const profiles = MarkdownLinterRegistry.getProfiles();
 
   const toggleCategory = useCallback((cat: RuleCategory) => {
     setCollapsedCats(prev => {

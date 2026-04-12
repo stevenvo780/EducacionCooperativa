@@ -90,7 +90,7 @@ const NOMINALIZATIONS: Array<[string, string]> = [
   ['la validación de', 'validar'],
   ['la selección de', 'seleccionar'],
   ['la clasificación de', 'clasificar'],
-  ['la comparación de', 'comparar'],
+  ['la comparación de', 'comparar']
 ];
 
 export const nominalizationEsRule: LinterRule = {
@@ -195,7 +195,7 @@ const REDUNDANCIES: Array<[string, string]> = [
   ['planificar con antelación', 'planificar'],
   ['erradicar por completo', 'erradicar'],
   ['retroceder hacia atrás', 'retroceder'],
-  ['cita textual literal', 'cita textual'],
+  ['cita textual literal', 'cita textual']
 ];
 
 export const lexicalRedundancyEsRule: LinterRule = {

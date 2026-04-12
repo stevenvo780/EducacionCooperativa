@@ -196,6 +196,7 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       workerRef.current = null;
       workerAvailableRef.current = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const combineAndSet = useCallback((workerDiags: LinterDiagnostic[]) => {
@@ -297,7 +298,8 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
         personalDictionary: getPersonalDictionary()
       });
     }
-  }, [runCustomRules, combineAndSet]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runCustomRules]);
 
   // ── Efectos de re-lint ──────────────────────────────────────
 

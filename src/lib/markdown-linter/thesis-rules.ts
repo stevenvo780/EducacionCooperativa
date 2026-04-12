@@ -175,7 +175,7 @@ const WEAK_ASSERTIONS: Array<[string, string]> = [
   ['es innegable que', 'Sustituye por evidencia verificable.'],
   ['naturalmente', '"Naturalmente" asume consenso no demostrado.'],
   ['por supuesto', '"Por supuesto" asume conocimiento compartido sin evidencia.'],
-  ['lógicamente', '"Lógicamente" como comodín retórico debilita el argumento.'],
+  ['lógicamente', '"Lógicamente" como comodín retórico debilita el argumento.']
 ];
 
 export const thesisWeakAssertionRule: LinterRule = {
