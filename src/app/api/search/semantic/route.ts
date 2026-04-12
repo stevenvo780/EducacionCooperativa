@@ -15,13 +15,6 @@ const NON_SEARCHABLE_DOCUMENT_TYPES = new Set([
   DocumentType.Files,
   DocumentType.Board
 ]);
-// Tipos excluidos directamente en la query para reducir docs transferidos
-const NON_SEARCHABLE_TYPES_ARRAY = [
-  DocumentType.Folder,
-  DocumentType.Terminal,
-  DocumentType.Files,
-  DocumentType.Board
-] as const;
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,8 +46,9 @@ export async function POST(req: NextRequest) {
       queryRef = queryRef.where('ownerId', '==', auth.uid).where('workspaceId', '==', PERSONAL_WORKSPACE_ID);
     }
 
-    // Pre-filtrar tipos no buscables en la query para reducir docs transferidos desde Firestore
-    queryRef = queryRef.where('type', 'not-in', NON_SEARCHABLE_TYPES_ARRAY);
+    // NOTE: non-searchable types are filtered client-side below.
+    // A Firestore `not-in` combined with equality filters on other fields
+    // requires a composite index that is not deployed; doing it here caused 500s.
 
     const snapshot = await queryRef.limit(MAX_SCAN_DOCS).get();
     const rawDocs = snapshot.docs.map(doc => (
