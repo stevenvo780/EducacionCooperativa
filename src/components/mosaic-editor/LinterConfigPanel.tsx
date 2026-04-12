@@ -4,10 +4,11 @@ import React, { useState, useCallback, useSyncExternalStore } from 'react';
 import {
   Settings2, RotateCcw, ChevronDown, ChevronRight, X,
   PenLine, Layers, Link, BookOpen, Accessibility, RefreshCw,
-  AlignJustify, GraduationCap, Ruler, Quote, FileText
+  AlignJustify, GraduationCap, Ruler, Quote, FileText, Loader2
 } from 'lucide-react';
 import { MarkdownLinterRegistry, type RuleState } from '@/lib/markdown-linter/registry';
 import { RULE_CATEGORY_LABELS, type RuleCategory, type ProfileId } from '@/lib/markdown-linter/types';
+import type { LinterStatus } from '@/hooks/useMarkdownLinter';
 
 const RULE_CATEGORY_ICONS: Record<RuleCategory, React.ReactNode> = {
   spelling:      <PenLine className="w-3 h-3" />,
@@ -40,7 +41,11 @@ function getActiveProfile(): ProfileId {
 
 // ── Component ───────────────────────────────────────────────
 
-export function LinterConfigPanel() {
+interface LinterConfigPanelProps {
+  linterStatus?: LinterStatus;
+}
+
+export function LinterConfigPanel({ linterStatus = 'ready' }: LinterConfigPanelProps) {
   const [open, setOpen] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState<Set<RuleCategory>>(new Set());
 
@@ -68,14 +73,31 @@ export function LinterConfigPanel() {
   }, [ruleStates]);
 
   if (!open) {
+    const isLoading = linterStatus === 'initializing';
+    const isLinting = linterStatus === 'linting';
+
     return (
       <button
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-        title="Configurar reglas de linting"
+        title={isLoading ? 'Inicializando linter…' : isLinting ? 'Analizando…' : 'Configurar reglas de linting'}
       >
-        <Settings2 className="w-3.5 h-3.5" />
-        <span>Linter {countLabel}</span>
+        {isLoading ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+        ) : isLinting ? (
+          <Settings2 className="w-3.5 h-3.5 animate-pulse text-blue-400" />
+        ) : (
+          <Settings2 className="w-3.5 h-3.5" />
+        )}
+        <span>
+          {isLoading ? (
+            <span className="text-blue-400">Cargando linter…</span>
+          ) : isLinting ? (
+            <span className="text-blue-400">Analizando…</span>
+          ) : (
+            <>Linter {countLabel}</>
+          )}
+        </span>
       </button>
     );
   }

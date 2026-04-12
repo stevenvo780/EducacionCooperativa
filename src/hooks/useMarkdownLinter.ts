@@ -95,6 +95,9 @@ type WorkerResultMessage =
       documentDiagnostics: LinterDiagnostic[];
     };
 
+/** Lifecycle status exposed to UI for loading indicators */
+export type LinterStatus = 'initializing' | 'linting' | 'ready';
+
 // Cache entry: diagnósticos con líneas relativas al párrafo (1-based)
 type ParagraphCacheEntry = { diagnostics: LinterDiagnostic[] };
 
@@ -108,6 +111,7 @@ type ParagraphCacheEntry = { diagnostics: LinterDiagnostic[] };
  */
 export function useMarkdownLinter(content: string, customRules: LinterRule[] = []) {
   const [diagnostics, setDiagnostics] = useState<LinterDiagnostic[]>([]);
+  const [linterStatus, setLinterStatus] = useState<LinterStatus>('initializing');
   const contentRef = useRef(content);
   contentRef.current = content;
   const workerRef = useRef<Worker | null>(null);
@@ -206,6 +210,7 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       ...workerDiags
     ]);
     setDiagnostics((prev) => diagnosticsEqual(prev, combined) ? prev : combined);
+    setLinterStatus('ready');
   }, []);
 
   // ── Reglas custom (hilo principal) ─────────────────────────
@@ -223,6 +228,9 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   const runLint = useCallback((text: string) => {
     const requestId = latestRequestIdRef.current + 1;
     latestRequestIdRef.current = requestId;
+
+    // Mark as linting (keep 'initializing' until first complete pass)
+    setLinterStatus((prev) => prev === 'initializing' ? 'initializing' : 'linting');
 
     const builtinEnabled = enabledRulesRef.current.filter((r) => BUILTIN_RULE_IDS.has(r.id));
 
@@ -248,11 +256,13 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       const fallback = sortDiagnostics(builtinEnabled.flatMap((r) => r.check(text)));
       const combined = sortDiagnostics([...mainDiags, ...fallback]);
       setDiagnostics((prev) => diagnosticsEqual(prev, combined) ? prev : combined);
+      setLinterStatus('ready');
       return;
     }
 
     if (paragraphRuleIds.length === 0 && documentRuleIds.length === 0) {
       setDiagnostics((prev) => diagnosticsEqual(prev, mainDiags) ? prev : mainDiags);
+      setLinterStatus('ready');
       return;
     }
 
@@ -328,5 +338,5 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     return () => { cancelled = true; };
   }, [runLint]);
 
-  return { diagnostics, runLint };
+  return { diagnostics, runLint, linterStatus };
 }

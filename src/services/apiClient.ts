@@ -1,5 +1,6 @@
 import { auth as getAuth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
+import { toast } from 'sonner';
 
 const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
 
@@ -83,7 +84,23 @@ export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  return fetch(input, { ...init, headers });
+  
+  try {
+    const response = await fetch(input, { ...init, headers });
+    if (!response.ok) {
+      let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        if (errorData?.message) errorMessage = errorData.message;
+      } catch (e) { /* ignore json parse error */ }
+      
+      toast.error('Error en la petición', { description: errorMessage });
+    }
+    return response;
+  } catch (err: any) {
+    toast.error('Fallo de Red', { description: err?.message || 'No se pudo contactar al servidor.' });
+    throw err;
+  }
 };
 
 // Deprecated or Unused. Removed token-in-url logic to enforce safer header-based auth.
