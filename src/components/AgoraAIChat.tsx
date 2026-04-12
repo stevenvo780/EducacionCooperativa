@@ -53,7 +53,7 @@ const PROVIDER_META: Record<AIProvider, { label: string; color: string; defaultM
     modelPlaceholder: 'claude-3-5-haiku-20241022, claude-opus-4-6…'
   },
   ollama: {
-    label: 'Ollama (local)',
+    label: 'Ollama',
     color: 'text-sky-400',
     defaultModel: 'llama3.2',
     needsKey: false,
@@ -154,6 +154,44 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     });
   }, []);
 
+  // Fetch workspace context for direct-call providers (Ollama)
+  const fetchContext = useCallback(async (signal: AbortSignal): Promise<string> => {
+    if (!workspaceId) return '';
+    try {
+      const res = await authFetch(
+        `/api/agora-ai/context?workspaceId=${encodeURIComponent(workspaceId)}`,
+        { signal }
+      );
+      if (!res.ok) return '';
+      const data = await res.json() as { context?: string };
+      return data.context ?? '';
+    } catch {
+      return '';
+    }
+  }, [workspaceId]);
+
+  // Call Ollama directly from the browser (not through server)
+  const callOllamaDirect = useCallback(async (
+    msgs: Array<{ role: string; content: string }>,
+    signal: AbortSignal
+  ): Promise<string> => {
+    const base = config.endpoint.trim() || 'http://localhost:11434';
+    const url = `${base}/api/chat`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        model: config.model || meta.defaultModel,
+        messages: msgs,
+        stream: false
+      })
+    });
+    if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
+    const data = await res.json() as { message?: { content: string } };
+    return data.message?.content ?? '';
+  }, [config.endpoint, config.model, meta.defaultModel]);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -169,29 +207,49 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const res = await authFetch('/api/agora-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messages: history.map(m => ({ role: m.role, content: m.content })),
-          workspaceId,
-          provider: config.provider,
-          apiKey: config.apiKey,
-          model: config.model || meta.defaultModel,
-          endpoint: config.endpoint
-        })
-      });
+      const chatMsgs = history.map(m => ({ role: m.role, content: m.content }));
+      let reply = '';
 
-      const data = await res.json() as { reply?: string; error?: string };
+      if (config.provider === 'ollama') {
+        // Direct browser → Ollama (works with local, LAN, VPN, remote)
+        const context = await fetchContext(controller.signal);
+        const systemMsg = [
+          'Eres un asistente inteligente de Agora, una plataforma educativa colaborativa con lógica formal.',
+          'Responde de forma clara, concisa y útil. Puedes usar Markdown.',
+          context
+        ].filter(Boolean).join('\n\n');
 
-      if (!res.ok || data.error) {
-        setMessages(prev => [...prev, {
-          id: uid(), role: 'assistant', content: data.error ?? 'Error desconocido', error: true
-        }]);
+        const fullMsgs = [
+          { role: 'system', content: systemMsg },
+          ...chatMsgs
+        ];
+        reply = await callOllamaDirect(fullMsgs, controller.signal);
       } else {
-        setMessages(prev => [...prev, { id: uid(), role: 'assistant', content: data.reply ?? '' }]);
+        // Cloud providers go through the server proxy (hides API keys + injects context)
+        const res = await authFetch('/api/agora-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            messages: chatMsgs,
+            workspaceId,
+            provider: config.provider,
+            apiKey: config.apiKey,
+            model: config.model || meta.defaultModel
+          })
+        });
+
+        const data = await res.json() as { reply?: string; error?: string };
+        if (!res.ok || data.error) {
+          setMessages(prev => [...prev, {
+            id: uid(), role: 'assistant', content: data.error ?? 'Error desconocido', error: true
+          }]);
+          return;
+        }
+        reply = data.reply ?? '';
       }
+
+      setMessages(prev => [...prev, { id: uid(), role: 'assistant', content: reply }]);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Error de red';
@@ -201,7 +259,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setLoading(false);
       textareaRef.current?.focus();
     }
-  }, [input, loading, messages, workspaceId, config, meta.defaultModel]);
+  }, [input, loading, messages, workspaceId, config, meta.defaultModel, fetchContext, callOllamaDirect]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -275,7 +333,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                     : 'border-surface-600 bg-surface-800 text-surface-400 hover:border-surface-500 hover:text-surface-300'
                 }`}
               >
-                <div className={`font-medium ${PROVIDER_META[p].color}`}>{p === 'openai' ? 'OpenAI' : p === 'anthropic' ? 'Anthropic' : p === 'ollama' ? 'Ollama' : 'Gemini'}</div>
+                <div className={`font-medium ${PROVIDER_META[p].color}`}>{PROVIDER_META[p].label.split('(')[0]?.trim() || p}</div>
                 <div className="text-[10px] text-surface-500 mt-0.5 truncate">{PROVIDER_META[p].label.split('(')[1]?.replace(')', '') ?? ''}</div>
               </button>
             ))}
@@ -298,14 +356,16 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           {/* Ollama endpoint */}
           {config.provider === 'ollama' && (
             <div>
-              <label className="block text-surface-400 mb-1">Endpoint (opcional)</label>
+              <label className="block text-surface-400 mb-1">URL de Ollama</label>
               <input
                 type="text"
                 value={config.endpoint}
                 onChange={e => updateConfig({ endpoint: e.target.value })}
-                placeholder="http://localhost:11434/api/chat"
+                placeholder="http://localhost:11434"
                 className="w-full bg-surface-800 border border-surface-600 rounded px-2 py-1.5 text-surface-200 placeholder-surface-600 focus:outline-none focus:border-sky-500 transition font-mono"
               />
+              <p className="text-surface-600 mt-1">Local: <code className="text-sky-400/70">http://localhost:11434</code> · Remoto: <code className="text-sky-400/70">http://tu-ip:11434</code></p>
+              <p className="text-surface-600 mt-0.5">Ollama remoto necesita <code className="text-amber-400/70">OLLAMA_ORIGINS=*</code> para permitir requests del browser</p>
             </div>
           )}
 
