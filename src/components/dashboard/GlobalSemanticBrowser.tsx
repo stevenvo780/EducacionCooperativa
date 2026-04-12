@@ -27,6 +27,8 @@ import { syncSTSourceToSemanticWorkspace } from '@/services/semanticSyncService'
 import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
 import { buildTheoryGraphFromSemanticState, type TheoryGraphQuickFix } from '@/lib/semantic/theory-graph';
 import { buildSTFromSemantic } from '@/lib/buildSTFromSemantic';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 interface GlobalSemanticBrowserProps {
   workspaceId?: string;
@@ -41,9 +43,12 @@ export default function GlobalSemanticBrowser({
   filterDocName
 }: GlobalSemanticBrowserProps) {
   const [state, setState] = useState<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
+  const isPageVisible = usePageVisibility();
+  const isOnline = useOnlineStatus();
 
   /* ── Mutation lock: prevents reload from overwriting in-flight changes ── */
   const mutatingRef = useRef(false);
+  const lastReloadAtRef = useRef(0);
 
   const reload = useCallback(() => {
     if (!workspaceId) return;
@@ -66,14 +71,43 @@ export default function GlobalSemanticBrowser({
       });
   }, [workspaceId, userId]);
 
-  useEffect(() => { reload(); }, [reload]);
+  const scheduleReload = useCallback((force = false) => {
+    const now = Date.now();
+    if (!force && now - lastReloadAtRef.current < 500) return;
+    lastReloadAtRef.current = now;
+    reload();
+  }, [reload]);
 
-  /* Reload periodically to pick up changes from editors */
+  useEffect(() => { scheduleReload(true); }, [scheduleReload]);
+
+  useEffect(() => {
+    if (!workspaceId || !isPageVisible || !isOnline) return;
+    const interval = setInterval(() => scheduleReload(), 30000);
+    return () => clearInterval(interval);
+  }, [workspaceId, isOnline, isPageVisible, scheduleReload]);
+
   useEffect(() => {
     if (!workspaceId) return;
-    const interval = setInterval(reload, 3000);
-    return () => clearInterval(interval);
-  }, [workspaceId, reload]);
+
+    const handleWindowSync = () => scheduleReload();
+    const handleVisibilitySync = () => {
+      if (!document.hidden) scheduleReload(true);
+    };
+
+    window.addEventListener('agora:docs-changed', handleWindowSync);
+    window.addEventListener('agora:doc-content-updated', handleWindowSync);
+    window.addEventListener('focus', handleWindowSync);
+    window.addEventListener('online', handleWindowSync);
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
+    return () => {
+      window.removeEventListener('agora:docs-changed', handleWindowSync);
+      window.removeEventListener('agora:doc-content-updated', handleWindowSync);
+      window.removeEventListener('focus', handleWindowSync);
+      window.removeEventListener('online', handleWindowSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+    };
+  }, [workspaceId, scheduleReload]);
 
   /* Round-trip: when a .md.st companion is saved, sync its content back into the semantic workspace */
   useEffect(() => {
@@ -88,13 +122,13 @@ export default function GlobalSemanticBrowser({
         docName: detail.docName,
         source: detail.content,
         persistRemote: false
-      }).then(() => reload()).catch((err) => {
+      }).then(() => scheduleReload(true)).catch((err) => {
         console.error('[GlobalSemanticBrowser] Round-trip sync failed', err);
       });
     };
     window.addEventListener('agora:st-source-saved', handler);
     return () => window.removeEventListener('agora:st-source-saved', handler);
-  }, [workspaceId, userId, reload]);
+  }, [workspaceId, userId, scheduleReload]);
 
   const ctx = useMemo(() => workspaceId ? { workspaceId, userId: userId ?? undefined } : null, [workspaceId, userId]);
 

@@ -2,33 +2,12 @@
  * Client-side conversion of PDF/DOCX files to Markdown.
  * Runs entirely in the browser to bypass server-side size limits.
  *
- * PDF.js is loaded from CDN to avoid build issues with Next.js
+ * PDF.js is loaded lazily from CDN through a shared client loader.
  */
-
-// PDF.js types
-interface PDFDocumentProxy {
-  numPages: number;
-  getPage(pageNumber: number): Promise<PDFPageProxy>;
-}
-
-interface PDFPageProxy {
-  getTextContent(): Promise<PDFTextContent>;
-}
-
-interface PDFTextContent {
-  items: PDFTextItem[];
-}
-
-interface PDFTextItem {
-  str: string;
-  transform: number[];
-}
-
-interface PDFJSLib {
-  getDocument(params: { data: ArrayBuffer }): { promise: Promise<PDFDocumentProxy> };
-  GlobalWorkerOptions: { workerSrc: string };
-  version: string;
-}
+import {
+  loadPdfJs,
+  type PdfJsTextItem as PDFTextItem
+} from '@/lib/pdfjs-loader';
 
 type SpreadsheetSheet = unknown;
 
@@ -50,48 +29,9 @@ interface SpreadsheetModule {
 }
 
 // Dynamic import cache
-let pdfjsLib: PDFJSLib | null = null;
 let mammoth: typeof import('mammoth') | null = null;
 let TurndownService: typeof import('turndown').default | null = null;
 let xlsxLib: SpreadsheetModule | null = null;
-
-/**
- * Load PDF.js from CDN (avoids build issues with Next.js/Terser)
- */
-async function loadPdfJs(): Promise<PDFJSLib> {
-  if (pdfjsLib) return pdfjsLib;
-
-  const PDFJS_VERSION = '3.11.174';
-  const PDFJS_CDN = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
-
-  // Check if already loaded in global scope
-  if (typeof window !== 'undefined' && (window as unknown as { pdfjsLib?: PDFJSLib }).pdfjsLib) {
-    pdfjsLib = (window as unknown as { pdfjsLib: PDFJSLib }).pdfjsLib;
-    return pdfjsLib;
-  }
-
-  // Load the library script
-  await new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `${PDFJS_CDN}/pdf.min.js`;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load PDF.js'));
-    document.head.appendChild(script);
-  });
-
-  // Get the library from global scope
-  const pdfjs = (window as unknown as { pdfjsLib: PDFJSLib }).pdfjsLib;
-  if (!pdfjs) {
-    throw new Error('PDF.js failed to initialize');
-  }
-
-  // Set worker source
-  pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`;
-  pdfjsLib = pdfjs;
-
-  return pdfjs;
-}
 
 /**
  * Lazy load Mammoth library

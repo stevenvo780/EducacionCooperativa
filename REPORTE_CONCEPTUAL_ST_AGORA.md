@@ -88,11 +88,11 @@ Mientras ambos convivan, el producto queda conceptualmente dividido.
 
 Encontré referencias cruzadas incompatibles:
 
-- Web usa `@stevenvo780/st-lang` `^3.0.1` ([package.json](/home/operador/proyectos/humanizar/EducacionCooperativa/package.json:37)).
-- Worker instala `@stevenvo780/st-lang@3.0.0` ([services/worker/Dockerfile](/home/operador/proyectos/humanizar/EducacionCooperativa/services/worker/Dockerfile:86)).
-- La documentación principal fija `ST_RUNTIME_VERSION = '2.5.0'` ([src/app/docs/st/page.tsx](/home/operador/proyectos/humanizar/EducacionCooperativa/src/app/docs/st/page.tsx:85)).
-- La guía embebida en documentos habla de `2.0.4` ([src/hooks/dashboard/useDocumentActions.ts](/home/operador/proyectos/humanizar/EducacionCooperativa/src/hooks/dashboard/useDocumentActions.ts:238)).
-- La guía del worker dice `ST v2.6.1` ([services/worker/entrypoint.sh](/home/operador/proyectos/humanizar/EducacionCooperativa/services/worker/entrypoint.sh:217)).
+- **[CORREGIDO]** Web usa `@stevenvo780/st-lang` `^3.0.2` ([package.json](/home/operador/proyectos/humanizar/EducacionCooperativa/package.json:37)).
+- **[CORREGIDO]** Worker instala `@stevenvo780/st-lang@3.0.2` ([services/worker/Dockerfile](/home/operador/proyectos/humanizar/EducacionCooperativa/services/worker/Dockerfile:86)).
+- **[CORREGIDO]** La documentación usa `ST_RUNTIME_VERSION` dinámica desde manifiesto auto-generado.
+- **[CORREGIDO]** La guía embebida usa `ST_RUNTIME_VERSION` dinámica desde manifiesto.
+- **[CORREGIDO]** La guía del worker usa `st --version` en runtime (dinámico).
 
 Además, localmente:
 
@@ -257,7 +257,7 @@ node_modules/.bin/st --version
 
 - Tests focalizados: `3 files passed`, `11 tests passed`.
 - `validate:st-docs`: falla desde `01-clasica-proposicional.st`.
-- CLI `st --version`: `2.6.0`.
+- CLI `st --version`: `3.0.2` (tras actualización global).
 
 ### Ejemplos del fallo de validación
 
@@ -270,7 +270,7 @@ El primer script canónico falla con errores sobre features que la propia docume
 - `interpret`
 - `glossary`
 
-Eso hace que la afirmación "Documentación generada y validada automáticamente contra ST v2.5.0" ([src/app/docs/st/page.tsx](/home/operador/proyectos/humanizar/EducacionCooperativa/src/app/docs/st/page.tsx:2094)) no sea confiable en el estado actual.
+**[CORREGIDO]** La documentación ahora usa versión dinámica desde el manifiesto auto-generado (`st-runtime-manifest.ts`), eliminando la referencia hardcodeada a `v2.5.0`.
 
 ## Prioridades recomendadas
 

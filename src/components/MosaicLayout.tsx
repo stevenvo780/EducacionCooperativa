@@ -721,7 +721,6 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         roomId={doc.id}
                         workspaceId={doc.workspaceId ?? currentWorkspaceId}
                         embedded
-                        forceInline
                         initialDocument={doc}
                         externalSearchTerm={searchTerm}
                         onSearchStateChange={(state) => handleSearchStateChange(doc.id, state)}
