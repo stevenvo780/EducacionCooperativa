@@ -145,4 +145,6 @@ export interface AgentExecutionContext {
   uid: string;
   email?: string | null;
   origin?: string;
+  llmEndpoint?: string;
+  llmModel?: string;
 }
