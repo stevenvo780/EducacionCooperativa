@@ -344,7 +344,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       window.dispatchEvent(new CustomEvent('agora:documents-mutated', { detail }));
     }
     return result;
-  }, [resolvedWorkspaceId]);
+  }, [resolvedWorkspaceId, config.endpoint, config.model]);
 
   const emitAgentWorkspaceEvents = useCallback((agentRun?: AgentRun) => {
     if (typeof window === 'undefined' || !agentRun) return;

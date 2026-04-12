@@ -359,7 +359,7 @@ async function saveSemanticState(ctx: AgentExecutionContext, state: SemanticWork
     fragments: normalized.fragments,
     relations: normalized.relations,
     updatedAt: normalized.updatedAt,
-    updatedBy: ctx.uid,
+    updatedBy: ctx.uid
   }));
   clean.serverUpdatedAt = FieldValue.serverTimestamp();
   await adminDb.collection('workspaceSemanticStates').doc(storageId).set(clean, { merge: true });
