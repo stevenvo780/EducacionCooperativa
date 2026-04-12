@@ -1321,7 +1321,7 @@ const TERMINOLOGY_PAIRS: Array<[RegExp, RegExp, string, string]> = [
   [/\btab\.\s/gi, /\btabla\s/gi, 'tab.', 'tabla'],
   [/\bec\.\s/gi, /\becuación\s/gi, 'ec.', 'ecuación'],
   [/\bpág\.\s/gi, /\bpágina\s/gi, 'pág.', 'página'],
-  [/\bsec\.\s/gi, /\bsección\s/gi, 'sec.', 'sección'],
+  [/\bsec\.\s/gi, /\bsección\s/gi, 'sec.', 'sección']
 ];
 
 export const inconsistentTerminologyRule: LinterRule = {

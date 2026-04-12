@@ -168,7 +168,8 @@ export function useSTLinterRules() {
       }
       return results;
     }
-  }), [definitions]); // re-computar cuando cambian las definiciones
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []); // conflicts come from registry, not from definitions array directly
 
   return { stUndefinedRefRule, stUnusedTheoremRule, stCrossDocConflictRule };
 }
