@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import {
   compareDiagnosticsByPriority,
@@ -169,6 +169,8 @@ function groupDiagnosticsByRange(diagnostics: LinterDiagnostic[]) {
 // ── Component ───────────────────────────────────────────────
 
 export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, onApplyFix, interactive = true }: LinterPluginProps) {
+  // Flipped when contenteditable appears asynchronously (MDXEditor mounts late)
+  const [editableReady, setEditableReady] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const diagnosticsRef = useRef(diagnostics);
   diagnosticsRef.current = diagnostics;
@@ -187,6 +189,8 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   const sharedTooltipRef = useRef<HTMLDivElement | null>(null);
   const tooltipVisibleRef = useRef(false);
   const pendingDecorateRef = useRef(false);
+  // Cooldown: ignore mouseenter right after hiding tooltip to prevent flicker loop
+  const hideCooldownRef = useRef(false);
 
   // ── Tooltip helpers (stable — operate on refs only) ──
 
@@ -199,12 +203,18 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     tooltipVisibleRef.current = false;
     // Remove bridges
     containerRef.current?.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
-    // Flush deferred decoration
+    // Set cooldown to prevent mouseenter re-trigger on recreated hit areas
+    hideCooldownRef.current = true;
+    window.setTimeout(() => { hideCooldownRef.current = false; }, 120);
+    // Flush deferred decoration after cooldown so new hit areas don't
+    // immediately fire mouseenter while cursor is still in the same spot
     if (pendingDecorateRef.current) {
       pendingDecorateRef.current = false;
       if (decorateRef.current) {
         cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = requestAnimationFrame(() => decorateRef.current?.());
+        window.setTimeout(() => {
+          rafIdRef.current = requestAnimationFrame(() => decorateRef.current?.());
+        }, 150);
       }
     }
   };
@@ -253,8 +263,23 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const shell = editorShellRef.current;
     if (!shell) return;
 
-    const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
-    if (!editable) return;
+    let editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
+
+    // MDXEditor may mount contenteditable asynchronously after this effect
+    // runs. If not found yet, observe the shell until it appears, then
+    // re-run the setup logic by forcing a state-based re-trigger.
+    if (!editable) {
+      const waitObserver = new MutationObserver(() => {
+        const el = shell.querySelector('[contenteditable="true"]');
+        if (el) {
+          waitObserver.disconnect();
+          // Re-trigger this effect by toggling a dummy state
+          setEditableReady(prev => !prev);
+        }
+      });
+      waitObserver.observe(shell, { childList: true, subtree: true });
+      return () => waitObserver.disconnect();
+    }
 
     const scrollParent = editable.parentElement;
     if (!scrollParent) return;
@@ -552,6 +577,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
           hitArea.style.cursor = hasReplacements ? 'pointer' : 'help';
 
           hitArea.addEventListener('mouseenter', () => {
+            if (hideCooldownRef.current) return;
             cancelHideTooltip();
             showSharedTooltip(diagGroup, firstRect, hasReplacements);
           });
@@ -633,7 +659,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       decorateRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorShellRef, viewMode]); // NO depende de interactive ni diagnostics
+  }, [editorShellRef, viewMode, editableReady]); // NO depende de interactive ni diagnostics
 
   // ── Re-decorate when diagnostics change ──
   useEffect(() => {

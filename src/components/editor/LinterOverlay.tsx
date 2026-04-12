@@ -275,8 +275,11 @@ export function LinterOverlay({
                 }
                 setHoverTooltipKey(tooltipKey);
               }}
-              onMouseLeave={() => {
+              onMouseLeave={(e) => {
                 if (!linterInteractive || openTooltipKey) return;
+                // Don't hide if moving into the tooltip (child of this same div)
+                const related = e.relatedTarget as Node | null;
+                if (related && e.currentTarget.contains(related)) return;
                 if (hoverCloseTimerRef.current !== null) {
                   window.clearTimeout(hoverCloseTimerRef.current);
                 }
@@ -306,8 +309,11 @@ export function LinterOverlay({
                   hoverCloseTimerRef.current = null;
                 }
               }}
-              onMouseLeave={() => {
+              onMouseLeave={(e) => {
                 if (openTooltipKey === tooltipKey) return;
+                // Don't hide if moving back to the hit area parent
+                const related = e.relatedTarget as Node | null;
+                if (related && e.currentTarget.parentElement?.contains(related)) return;
                 hoverCloseTimerRef.current = window.setTimeout(() => {
                   setHoverTooltipKey((current) => current === tooltipKey ? null : current);
                 }, 350);
