@@ -166,7 +166,7 @@ describe('spellingRule', () => {
   it('tiene metadatos correctos', () => {
     expect(spellingRule.id).toBe('spelling_typos');
     expect(spellingRule.category).toBe('spelling');
-    expect(spellingRule.defaultEnabled).toBe(true);
+    expect(spellingRule.defaultEnabled).toBe(false);
   });
 
   it('detecta "entonses"', () => {
@@ -1207,11 +1207,11 @@ describe('MarkdownLinterRegistry', () => {
     });
 
     it('resetToDefaults actualiza localStorage', () => {
-      MarkdownLinterRegistry.setEnabled('spelling_typos', false);
+      MarkdownLinterRegistry.setEnabled('spelling_typos', true);
       MarkdownLinterRegistry.resetToDefaults();
       const raw = localStorage.getItem('agora:linter-config');
       const parsed = JSON.parse(raw!);
-      expect(parsed['spelling_typos']).toBe(true);
+      expect(parsed['spelling_typos']).toBe(false);
     });
 
     it('sobrevive a localStorage corrupto al construir nueva instancia', () => {
@@ -1219,13 +1219,13 @@ describe('MarkdownLinterRegistry', () => {
       // Crear nueva instancia — debe cargar defaults sin explotar
       const fresh = new _MarkdownLinterRegistryClass();
       expect(fresh.getTotalCount()).toBe(ALL_BUILTIN_RULES.length);
-      expect(fresh.isEnabled('spelling_typos')).toBe(true);
+      expect(fresh.isEnabled('spelling_typos')).toBe(false);
     });
 
     it('carga preferencias guardadas al construir nueva instancia', () => {
-      localStorage.setItem('agora:linter-config', JSON.stringify({ spelling_typos: false }));
+      localStorage.setItem('agora:linter-config', JSON.stringify({ spelling_typos: true }));
       const fresh = new _MarkdownLinterRegistryClass();
-      expect(fresh.isEnabled('spelling_typos')).toBe(false);
+      expect(fresh.isEnabled('spelling_typos')).toBe(true);
       // Las demás mantienen sus defaults
       expect(fresh.isEnabled('structure_heading_space')).toBe(true);
     });

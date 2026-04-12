@@ -166,6 +166,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   // Persistent tooltip refs — survive across decorate() calls
   const sharedTooltipRef = useRef<HTMLDivElement | null>(null);
   const tooltipVisibleRef = useRef(false);
+  const pendingDecorateRef = useRef(false);
 
   // ── Tooltip helpers (stable — operate on refs only) ──
 
@@ -178,6 +179,14 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     tooltipVisibleRef.current = false;
     // Remove bridges
     containerRef.current?.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
+    // Flush deferred decoration
+    if (pendingDecorateRef.current) {
+      pendingDecorateRef.current = false;
+      if (decorateRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = requestAnimationFrame(() => decorateRef.current?.());
+      }
+    }
   };
 
   const cancelHideTooltip = () => {
@@ -389,6 +398,13 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     // ── Decorate: clears only decorations, preserves tooltip ──
     const decorate = () => {
       if (!container || viewMode !== 'edit') return;
+
+      // Defer full rebuild while tooltip is visible to prevent flickering
+      if (tooltipVisibleRef.current) {
+        pendingDecorateRef.current = true;
+        return;
+      }
+      pendingDecorateRef.current = false;
 
       // Remove all decoration children but keep the persistent tooltip
       const children = Array.from(container.children);
