@@ -90,7 +90,7 @@ export const spellingRule: LinterRule = {
   name: 'Errores ortográficos',
   description: 'Detecta errores ortográficos usando el diccionario Hunspell en memoria.',
   category: 'spelling',
-  defaultEnabled: true,
+  defaultEnabled: false,
   supportsIncremental: true,
   check: (text: string): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
@@ -303,7 +303,7 @@ export const accentPatternRule: LinterRule = {
   name: 'Tildes faltantes (patrones)',
   description: 'Detecta palabras que necesitan tilde usando patrones morfológicos del español (-ción, -sión, esdrújulas, etc.)',
   category: 'spelling',
-  defaultEnabled: true,
+  defaultEnabled: false,
   check: (text: string): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
@@ -369,7 +369,7 @@ export const suspiciousPatternsRule: LinterRule = {
   name: 'Secuencias de caracteres sospechosas',
   description: 'Detecta combinaciones de letras imposibles o muy raras en español (consonantes dobles inválidas, triples letras, inicios imposibles).',
   category: 'spelling',
-  defaultEnabled: true,
+  defaultEnabled: false,
   check: (text: string): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');

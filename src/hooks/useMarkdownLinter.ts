@@ -114,6 +114,7 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   const latestRequestIdRef = useRef(0);
   const latestMainThreadDiagnosticsRef = useRef<LinterDiagnostic[]>([]);
   const workerAvailableRef = useRef(false);
+  const hasLintedOnceRef = useRef(false);
 
   // Caché incremental: contentHash(párrafo) → diagnósticos con líneas relativas
   const paragraphCacheRef = useRef<Map<string, ParagraphCacheEntry>>(new Map());
@@ -236,6 +237,12 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     const mainDiags = runCustomRules(text);
     latestMainThreadDiagnosticsRef.current = mainDiags;
 
+    // Emit main-thread results immediately so user sees fast feedback
+    // Worker results will merge in asynchronously via combineAndSet
+    if (mainDiags.length > 0) {
+      setDiagnostics((prev) => diagnosticsEqual(prev, mainDiags) ? prev : mainDiags);
+    }
+
     // Fallback sin worker
     if (!workerAvailableRef.current || !workerRef.current) {
       const fallback = sortDiagnostics(builtinEnabled.flatMap((r) => r.check(text)));
@@ -304,7 +311,11 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   // ── Efectos de re-lint ──────────────────────────────────────
 
   useEffect(() => {
-    const timer = setTimeout(() => { runLint(content); }, 300);
+    const delay = hasLintedOnceRef.current ? 300 : 50;
+    const timer = setTimeout(() => {
+      hasLintedOnceRef.current = true;
+      runLint(content);
+    }, delay);
     return () => clearTimeout(timer);
   }, [content, runLint, enabledRules, customRules]);
 
