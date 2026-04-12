@@ -1097,15 +1097,9 @@ export const mosaicEditorStyles = `
           color: #e2e8f0;
         }
 
-        .mdx-linter-marker {
-          transition: all 0.2s;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-        .mdx-linter-marker:hover {
-          filter: brightness(1.2);
-          height: 3px !important;
-          margin-top: -1px;
-        }
+        /* Hit areas are full bounding-box rectangles; hover effects
+           are handled via JS mouseenter/mouseleave, not CSS :hover,
+           to avoid geometry changes that cause cursor oscillation. */
 
         /* ─── ASCII-art diagram blocks (preview) ─── */
         .markdown-preview-container .ascii-diagram-block {
