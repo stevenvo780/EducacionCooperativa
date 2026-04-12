@@ -51,6 +51,15 @@ const config: Config = {
         "gradient-surface": "linear-gradient(180deg, #16161f 0%, #12121a 100%)",
         "gradient-glow": "radial-gradient(ellipse at center, rgba(233,69,96,0.15) 0%, transparent 70%)",
       },
+      keyframes: {
+        slideRight: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(200%)' },
+        },
+      },
+      animation: {
+        slideRight: 'slideRight 1.2s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

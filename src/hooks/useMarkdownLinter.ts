@@ -98,6 +98,9 @@ type WorkerResultMessage =
 /** Lifecycle status exposed to UI for loading indicators */
 export type LinterStatus = 'initializing' | 'linting' | 'ready';
 
+/** Minimum time (ms) the 'initializing' status stays visible so users can see it */
+const MIN_INITIALIZING_DISPLAY_MS = 800;
+
 // Cache entry: diagnósticos con líneas relativas al párrafo (1-based)
 type ParagraphCacheEntry = { diagnostics: LinterDiagnostic[] };
 
@@ -119,6 +122,10 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   const latestMainThreadDiagnosticsRef = useRef<LinterDiagnostic[]>([]);
   const workerAvailableRef = useRef(false);
   const hasLintedOnceRef = useRef(false);
+
+  // Track when 'initializing' started for minimum display time
+  const initStartRef = useRef<number>(Date.now());
+  const pendingReadyRef = useRef(false);
 
   // Caché incremental: contentHash(párrafo) → diagnósticos con líneas relativas
   const paragraphCacheRef = useRef<Map<string, ParagraphCacheEntry>>(new Map());
@@ -210,7 +217,22 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       ...workerDiags
     ]);
     setDiagnostics((prev) => diagnosticsEqual(prev, combined) ? prev : combined);
-    setLinterStatus('ready');
+
+    // Respect minimum display time for 'initializing' so users can see it
+    setLinterStatus((prev) => {
+      if (prev !== 'initializing') return 'ready';
+      const elapsed = Date.now() - initStartRef.current;
+      if (elapsed >= MIN_INITIALIZING_DISPLAY_MS) return 'ready';
+      // Schedule deferred transition to 'ready'
+      if (!pendingReadyRef.current) {
+        pendingReadyRef.current = true;
+        setTimeout(() => {
+          pendingReadyRef.current = false;
+          setLinterStatus((s) => s === 'initializing' ? 'ready' : s);
+        }, MIN_INITIALIZING_DISPLAY_MS - elapsed);
+      }
+      return prev;
+    });
   }, []);
 
   // ── Reglas custom (hilo principal) ─────────────────────────

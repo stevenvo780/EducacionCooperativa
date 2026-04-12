@@ -3,8 +3,11 @@ import type { LinterSeverity } from '@/lib/markdown-linter/types';
 type PrioritizedDiagnostic = {
   line?: number;
   column?: number;
+  endLine?: number;
+  endColumn?: number;
   severity?: LinterSeverity | string;
   source?: string | null;
+  text?: string;
 };
 
 function getSeverityWeight(severity: PrioritizedDiagnostic['severity']) {
@@ -62,4 +65,21 @@ export function compareDiagnosticsForOverlay(
   if (leftColumn !== rightColumn) return leftColumn - rightColumn;
 
   return getDiagnosticPriority(left) - getDiagnosticPriority(right);
+}
+
+export function compareDiagnosticsByPriority(
+  left: PrioritizedDiagnostic,
+  right: PrioritizedDiagnostic
+) {
+  return getDiagnosticPriority(right) - getDiagnosticPriority(left);
+}
+
+export function getDiagnosticRangeKey(diagnostic: PrioritizedDiagnostic) {
+  const line = diagnostic.line ?? 1;
+  const column = diagnostic.column ?? 1;
+  const endLine = diagnostic.endLine ?? line;
+  const endColumn = diagnostic.endColumn ?? column;
+  const text = diagnostic.text ?? '';
+
+  return `${line}:${column}:${endLine}:${endColumn}:${text}`;
 }

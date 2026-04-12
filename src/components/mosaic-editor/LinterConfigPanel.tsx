@@ -79,9 +79,21 @@ export function LinterConfigPanel({ linterStatus = 'ready' }: LinterConfigPanelP
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+        className={`relative flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] transition-colors overflow-hidden ${
+          isLoading
+            ? 'bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+            : isLinting
+              ? 'text-blue-400 hover:bg-slate-800'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+        }`}
         title={isLoading ? 'Inicializando linter…' : isLinting ? 'Analizando…' : 'Configurar reglas de linting'}
       >
+        {/* Progress bar for initializing state */}
+        {isLoading && (
+          <span className="absolute bottom-0 left-0 h-[2px] w-full">
+            <span className="block h-full w-1/2 bg-blue-400/70 rounded-full animate-slideRight" />
+          </span>
+        )}
         {isLoading ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
         ) : isLinting ? (
@@ -91,7 +103,7 @@ export function LinterConfigPanel({ linterStatus = 'ready' }: LinterConfigPanelP
         )}
         <span>
           {isLoading ? (
-            <span className="text-blue-400">Cargando linter…</span>
+            <span className="text-blue-300 font-medium">Cargando linter…</span>
           ) : isLinting ? (
             <span className="text-blue-400">Analizando…</span>
           ) : (

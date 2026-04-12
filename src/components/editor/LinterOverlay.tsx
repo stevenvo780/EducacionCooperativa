@@ -4,9 +4,29 @@ import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, AlertTriangle, Info, Lightbulb, Ruler, Wrench, PenLine } from 'lucide-react';
 import type { LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 import type { Diagnostic as STDiagnostic } from '@stevenvo780/st-lang/api';
-import { compareDiagnosticsForOverlay } from '@/lib/markdown-linter/diagnostic-priority';
+import {
+  compareDiagnosticsByPriority,
+  compareDiagnosticsForOverlay,
+  getDiagnosticRangeKey
+} from '@/lib/markdown-linter/diagnostic-priority';
 
 type GenericDiagnostic = LinterDiagnostic | STDiagnostic;
+
+function groupDiagnosticsByRange(diagnostics: GenericDiagnostic[]) {
+  const groups = new Map<string, GenericDiagnostic[]>();
+
+  for (const diagnostic of diagnostics) {
+    const key = getDiagnosticRangeKey(diagnostic);
+    const group = groups.get(key);
+    if (group) {
+      group.push(diagnostic);
+    } else {
+      groups.set(key, [diagnostic]);
+    }
+  }
+
+  return Array.from(groups.values()).map((group) => group.sort(compareDiagnosticsByPriority));
+}
 
 // ── Quick-fix definitions ───────────────────────────────────
 
@@ -98,8 +118,8 @@ export function LinterOverlay({
   interactive = true
 }: LinterOverlayProps) {
   const _lines = useMemo(() => content.split('\n'), [content]);
-  const orderedDiagnostics = useMemo(
-    () => [...diagnostics].sort(compareDiagnosticsForOverlay),
+  const orderedDiagnosticGroups = useMemo(
+    () => groupDiagnosticsByRange(diagnostics).sort((left, right) => compareDiagnosticsForOverlay(left[0], right[0])),
     [diagnostics]
   );
   const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);
@@ -175,8 +195,11 @@ export function LinterOverlay({
 
   return (
     <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-[100050]">
-      {orderedDiagnostics.map((d, i) => {
-        const tooltipKey = `${d.line ?? 1}:${d.column ?? 1}:${d.message}:${i}`;
+      {orderedDiagnosticGroups.map((diagnosticGroup, i) => {
+        const [d, ...secondaryDiagnostics] = diagnosticGroup;
+        if (!d) return null;
+
+        const tooltipKey = `${getDiagnosticRangeKey(d)}:${i}`;
         const quickFixes = generateQuickFixes(d, content);
         const supportsPinnedTooltip = quickFixes.length > 0 && Boolean(onApplyFix);
         const isTooltipOpen = linterInteractive && (openTooltipKey === tooltipKey || (hoverTooltipKey === tooltipKey && openTooltipKey === null));
@@ -315,6 +338,35 @@ export function LinterOverlay({
                 <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium">
                   <Lightbulb className="w-3 h-3 shrink-0 mt-px" />
                   <span>{d.suggestion}</span>
+                </div>
+              )}
+              {secondaryDiagnostics.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-700/50 space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Diagnósticos prioritarios relacionados
+                  </div>
+                  {secondaryDiagnostics.slice(0, 2).map((secondaryDiagnostic, secondaryIndex) => (
+                    <div
+                      key={secondaryIndex}
+                      className="rounded-md border border-slate-700/60 bg-slate-900/60 px-2 py-1.5"
+                    >
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${
+                        secondaryDiagnostic.severity === 'error' ? 'text-red-400' :
+                        secondaryDiagnostic.severity === 'warning' ? 'text-amber-400' :
+                        'text-blue-400'
+                      }`}>
+                        {secondaryDiagnostic.severity}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-slate-300 leading-relaxed">
+                        {secondaryDiagnostic.message}
+                      </div>
+                    </div>
+                  ))}
+                  {secondaryDiagnostics.length > 2 && (
+                    <div className="text-[10px] text-slate-500">
+                      +{secondaryDiagnostics.length - 2} diagnóstico(s) adicional(es)
+                    </div>
+                  )}
                 </div>
               )}
 
