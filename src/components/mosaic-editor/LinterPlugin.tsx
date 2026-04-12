@@ -535,14 +535,9 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
                              isSTRef ? '#06b6d4' : '#3b82f6';
           const hasReplacements = Boolean(d.replacements && d.replacements.length > 0 && onApplyFixRef.current);
 
-          let bbTop = Infinity, bbLeft = Infinity, bbBottom = -Infinity, bbRight = -Infinity;
+          const firstRect = rects[0];
 
           Array.from(rects).forEach(rect => {
-            bbTop = Math.min(bbTop, rect.top);
-            bbLeft = Math.min(bbLeft, rect.left);
-            bbBottom = Math.max(bbBottom, rect.bottom);
-            bbRight = Math.max(bbRight, rect.right);
-
             const underline = document.createElement('div');
             underline.className = DECORATION_CLASS;
             underline.style.position = 'absolute';
@@ -571,46 +566,47 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               underline.style.top = `${rect.bottom - spRect.top + scrollParent.scrollTop - 2}px`;
             }
             container.insertBefore(underline, sharedTooltip);
+
+            // Per-line hit area: each client rect gets its own hit area
+            // to avoid a single bounding-box rectangle that bleeds into
+            // adjacent content on multi-line diagnostics.
+            if (!isInteractive) return;
+
+            const hitArea = document.createElement('div');
+            hitArea.className = `mdx-linter-marker ${DECORATION_CLASS} group pointer-events-auto`;
+            hitArea.style.position = 'absolute';
+            hitArea.style.top = `${rect.top - spRect.top + scrollParent.scrollTop}px`;
+            hitArea.style.left = `${rect.left - spRect.left + scrollParent.scrollLeft}px`;
+            hitArea.style.width = `${rect.width}px`;
+            hitArea.style.height = `${rect.height}px`;
+            hitArea.style.cursor = 'pointer';
+
+            hitArea.addEventListener('mouseenter', () => {
+              hoverActiveRef.current = true;
+              if (hideCooldownRef.current) return;
+              cancelHideTooltip();
+              showSharedTooltip(diagGroup, firstRect, hasReplacements);
+            });
+
+            hitArea.addEventListener('mouseleave', (e: MouseEvent) => {
+              const related = e.relatedTarget as Node | null;
+              if (related && (
+                sharedTooltip.contains(related) ||
+                (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`)
+              )) return;
+              hoverActiveRef.current = false;
+              scheduleHideTooltip();
+            });
+
+            hitArea.addEventListener('click', (ev) => {
+              if (!hasReplacements) return;
+              ev.stopPropagation();
+              ev.preventDefault();
+              showSharedTooltip(diagGroup, firstRect, true);
+            });
+
+            container.insertBefore(hitArea, sharedTooltip);
           });
-
-          if (!isInteractive) return;
-
-          const firstRect = rects[0];
-
-          const hitArea = document.createElement('div');
-          hitArea.className = `mdx-linter-marker ${DECORATION_CLASS} group pointer-events-auto`;
-          hitArea.style.position = 'absolute';
-          hitArea.style.top = `${bbTop - spRect.top + scrollParent.scrollTop}px`;
-          hitArea.style.left = `${bbLeft - spRect.left + scrollParent.scrollLeft}px`;
-          hitArea.style.width = `${bbRight - bbLeft}px`;
-          hitArea.style.height = `${bbBottom - bbTop}px`;
-          hitArea.style.cursor = 'pointer';
-
-          hitArea.addEventListener('mouseenter', () => {
-            hoverActiveRef.current = true;
-            if (hideCooldownRef.current) return;
-            cancelHideTooltip();
-            showSharedTooltip(diagGroup, firstRect, hasReplacements);
-          });
-
-          hitArea.addEventListener('mouseleave', (e: MouseEvent) => {
-            const related = e.relatedTarget as Node | null;
-            if (related && (
-              sharedTooltip.contains(related) ||
-              (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`)
-            )) return;
-            hoverActiveRef.current = false;
-            scheduleHideTooltip();
-          });
-
-          hitArea.addEventListener('click', (e) => {
-            if (!hasReplacements) return;
-            e.stopPropagation();
-            e.preventDefault();
-            showSharedTooltip(diagGroup, firstRect, true);
-          });
-
-          container.insertBefore(hitArea, sharedTooltip);
         } catch {
           // ignore range errors
         }
