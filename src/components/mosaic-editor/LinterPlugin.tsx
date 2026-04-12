@@ -265,7 +265,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const shell = editorShellRef.current;
     if (!shell) return;
 
-    let editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
+    const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
 
     // MDXEditor may mount contenteditable asynchronously after this effect
     // runs. If not found yet, observe the shell until it appears, then
