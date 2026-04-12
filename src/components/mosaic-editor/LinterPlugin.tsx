@@ -191,6 +191,8 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   const pendingDecorateRef = useRef(false);
   // Cooldown: ignore mouseenter right after hiding tooltip to prevent flicker loop
   const hideCooldownRef = useRef(false);
+  // True while mouse hovers any marker — prevents decorate() from destroying hit areas
+  const hoverActiveRef = useRef(false);
 
   // ── Tooltip helpers (stable — operate on refs only) ──
 
@@ -201,6 +203,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     tooltip.classList.remove('flex');
     tooltip.style.pointerEvents = 'none';
     tooltipVisibleRef.current = false;
+    hoverActiveRef.current = false;
     // Remove bridges
     containerRef.current?.querySelectorAll(`.${TOOLTIP_BRIDGE_CLASS}`).forEach(el => el.remove());
     // Set cooldown to prevent mouseenter re-trigger on recreated hit areas
@@ -476,8 +479,9 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const decorate = () => {
       if (!container || viewMode !== 'edit') return;
 
-      // Defer full rebuild while tooltip is visible to prevent flickering
-      if (tooltipVisibleRef.current) {
+      // Defer full rebuild while tooltip is visible or mouse hovers a marker
+      // to prevent cursor flickering from hit-area destruction/recreation
+      if (tooltipVisibleRef.current || hoverActiveRef.current) {
         pendingDecorateRef.current = true;
         return;
       }
@@ -574,10 +578,11 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
           hitArea.style.left = `${bbLeft - editableRect.left + editable.scrollLeft}px`;
           hitArea.style.width = `${bbRight - bbLeft}px`;
           hitArea.style.height = `${bbBottom - bbTop}px`;
-          hitArea.style.cursor = hasReplacements ? 'pointer' : 'help';
+          hitArea.style.cursor = 'pointer';
 
           hitArea.addEventListener('mouseenter', () => {
             if (hideCooldownRef.current) return;
+            hoverActiveRef.current = true;
             cancelHideTooltip();
             showSharedTooltip(diagGroup, firstRect, hasReplacements);
           });
@@ -588,6 +593,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               sharedTooltip.contains(related) ||
               (related as HTMLElement).closest?.(`.${TOOLTIP_BRIDGE_CLASS}`)
             )) return;
+            hoverActiveRef.current = false;
             scheduleHideTooltip();
           });
 
