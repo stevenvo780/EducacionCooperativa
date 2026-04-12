@@ -42,7 +42,7 @@ describe('agora ai tools', () => {
   it('expone un catálogo de tools único y completo', () => {
     const uniqueNames = new Set(AGORA_AGENT_TOOL_NAMES);
     expect(uniqueNames.size).toBe(AGORA_AGENT_TOOL_NAMES.length);
-    expect(AGORA_AGENT_TOOLS.length).toBeGreaterThanOrEqual(15);
+    expect(AGORA_AGENT_TOOLS.length).toBeGreaterThanOrEqual(30);
     expect(AGORA_AGENT_TOOL_NAMES).toEqual(expect.arrayContaining([
       'list_documents',
       'read_document',
@@ -52,7 +52,12 @@ describe('agora ai tools', () => {
       'delete_document',
       'search_documents',
       'create_snippet',
-      'formalize_text'
+      'formalize_text',
+      'get_board',
+      'create_board_card',
+      'run_st_program',
+      'list_concepts',
+      'summarize_document'
     ]));
   });
 

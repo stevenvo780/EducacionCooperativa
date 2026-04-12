@@ -57,6 +57,27 @@ export interface AgentRun {
   rollback?: AgentRollbackAction[];
 }
 
+export interface AgentStoredChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  error?: boolean;
+  agentRun?: AgentRun;
+  pendingConfirmation?: AgentPendingConfirmation;
+}
+
+export interface AgentChatSession {
+  id: string;
+  title: string;
+  workspaceId: string;
+  provider: AIProvider;
+  mode: AgentMode;
+  messages: AgentStoredChatMessage[];
+  rollbackQueue: AgentRollbackAction[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AgentDocumentTarget {
   id: string;
   name: string;
