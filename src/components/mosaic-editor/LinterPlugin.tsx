@@ -2,7 +2,11 @@
 
 import React, { useEffect, useRef } from 'react';
 import { type LinterDiagnostic } from '@/hooks/useMarkdownLinter';
-import { compareDiagnosticsForSharedRange } from '@/lib/markdown-linter/diagnostic-priority';
+import {
+  compareDiagnosticsByPriority,
+  compareDiagnosticsForSharedRange,
+  getDiagnosticRangeKey
+} from '@/lib/markdown-linter/diagnostic-priority';
 
 const LINTER_OVERLAY_CONTAINER_CLASS = 'mdx-linter-overlay-container';
 const TOOLTIP_CLASS = 'mdx-linter-tooltip';
@@ -144,6 +148,22 @@ const svgWrench = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function groupDiagnosticsByRange(diagnostics: LinterDiagnostic[]) {
+  const groups = new Map<string, LinterDiagnostic[]>();
+
+  for (const diagnostic of diagnostics) {
+    const key = getDiagnosticRangeKey(diagnostic);
+    const group = groups.get(key);
+    if (group) {
+      group.push(diagnostic);
+    } else {
+      groups.set(key, [diagnostic]);
+    }
+  }
+
+  return Array.from(groups.values()).map((group) => group.sort(compareDiagnosticsByPriority));
 }
 
 // ── Component ───────────────────────────────────────────────
@@ -337,9 +357,12 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       container.appendChild(bridge);
     };
 
-    const showSharedTooltip = (diag: LinterDiagnostic, targetRect: DOMRect, hasReplacements: boolean) => {
+    const showSharedTooltip = (diagGroup: LinterDiagnostic[], targetRect: DOMRect, hasReplacements: boolean) => {
       cancelHideTooltip();
       sharedTooltip.innerHTML = '';
+
+      const [diag, ...secondaryDiagnostics] = diagGroup;
+      if (!diag) return;
 
       const isSTDef = diag.source === 'ST-Definitions';
       const isNote = diag.severity === 'info' && diag.source === 'Nota';
@@ -365,6 +388,35 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
         sug.className = 'mt-1.5 flex items-start gap-1.5 text-[11px] text-cyan-400 font-medium';
         sug.innerHTML = `${svgBulb}<span>${escapeHtml(diag.suggestion)}</span>`;
         sharedTooltip.appendChild(sug);
+      }
+
+      if (secondaryDiagnostics.length > 0) {
+        const extraSection = document.createElement('div');
+        extraSection.className = 'mt-2 pt-2 border-t border-slate-700/60 flex flex-col gap-1';
+
+        const extraLabel = document.createElement('div');
+        extraLabel.className = 'text-[10px] text-slate-500 uppercase tracking-wider font-bold';
+        extraLabel.textContent = 'Diagnósticos prioritarios relacionados';
+        extraSection.appendChild(extraLabel);
+
+        for (const extraDiagnostic of secondaryDiagnostics.slice(0, 2)) {
+          const extraItem = document.createElement('div');
+          extraItem.className = 'rounded-md border border-slate-700/60 bg-slate-900/60 px-2 py-1.5';
+          extraItem.innerHTML = `
+            <div class="text-[10px] font-bold uppercase tracking-wider ${extraDiagnostic.severity === 'error' ? 'text-red-400' : extraDiagnostic.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'}">${escapeHtml(extraDiagnostic.severity)}</div>
+            <div class="mt-0.5 text-[11px] text-slate-300 leading-relaxed">${escapeHtml(extraDiagnostic.message)}</div>
+          `;
+          extraSection.appendChild(extraItem);
+        }
+
+        if (secondaryDiagnostics.length > 2) {
+          const extraCount = document.createElement('div');
+          extraCount.className = 'text-[10px] text-slate-500';
+          extraCount.textContent = `+${secondaryDiagnostics.length - 2} diagnóstico(s) adicional(es)`;
+          extraSection.appendChild(extraCount);
+        }
+
+        sharedTooltip.appendChild(extraSection);
       }
 
       if (hasReplacements && diag.replacements) {
@@ -424,11 +476,15 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       const editableRect = editable.getBoundingClientRect();
       const isInteractive = interactiveRef.current;
 
-      const sortedDiags = [...currentDiags].sort(compareDiagnosticsForSharedRange);
+      const groupedDiags = groupDiagnosticsByRange(currentDiags)
+        .sort((left, right) => compareDiagnosticsForSharedRange(left[0], right[0]));
       const usedPositions = new Set<string>();
       const textIndex = buildDocumentTextIndex(editable);
 
-      sortedDiags.forEach((d) => {
+      groupedDiags.forEach((diagGroup) => {
+        const [d] = diagGroup;
+        if (!d) return;
+
         const range = findDiagnosticRange(textIndex, contentRef.current, d, usedPositions);
         if (!range) return;
 
@@ -497,7 +553,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
 
           hitArea.addEventListener('mouseenter', () => {
             cancelHideTooltip();
-            showSharedTooltip(d, firstRect, hasReplacements);
+            showSharedTooltip(diagGroup, firstRect, hasReplacements);
           });
 
           hitArea.addEventListener('mouseleave', (e: MouseEvent) => {
@@ -513,7 +569,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
             if (!hasReplacements) return;
             e.stopPropagation();
             e.preventDefault();
-            showSharedTooltip(d, firstRect, true);
+            showSharedTooltip(diagGroup, firstRect, true);
           });
 
           container.insertBefore(hitArea, sharedTooltip);
