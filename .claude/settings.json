@@ -14,7 +14,8 @@
       "Read(//tmp/**)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(grep -r \"export.*Agora\\\\|component.*Agora\\\\|interface.*Agora\" /home/operador/proyectos/humanizar/EducacionCooperativa/src --include=*.ts --include=*.tsx)",
-      "Bash(grep -rn \"className=.*h-screen\\\\|className=.*w-screen\" /home/operador/proyectos/humanizar/EducacionCooperativa/src/components/*.tsx)"
+      "Bash(grep -rn \"className=.*h-screen\\\\|className=.*w-screen\" /home/operador/proyectos/humanizar/EducacionCooperativa/src/components/*.tsx)",
+      "Bash(grep -rn process.env. /home/operador/proyectos/humanizar/EducacionCooperativa/src/ --include=*.ts --include=*.tsx)"
     ]
   }
 }
