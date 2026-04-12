@@ -118,6 +118,8 @@ export async function POST(request: NextRequest) {
     language?: 'es' | 'en';
     snapshot?: Record<string, unknown>;
     snippetId?: string;
+    llmEndpoint?: string;
+    llmModel?: string;
   };
 
   const { action, workspaceId = '' } = body;
@@ -140,7 +142,9 @@ export async function POST(request: NextRequest) {
       workspaceId,
       uid: auth.uid,
       email: auth.email,
-      origin: request.nextUrl.origin
+      origin: request.nextUrl.origin,
+      llmEndpoint: typeof body.llmEndpoint === 'string' ? body.llmEndpoint : undefined,
+      llmModel: typeof body.llmModel === 'string' ? body.llmModel : undefined
     });
 
     const status = result.ok ? 200 : 500;

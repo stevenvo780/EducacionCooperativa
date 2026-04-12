@@ -15,14 +15,9 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
   ];
 
   if (mode === 'agent') {
-    // REGLA CRÍTICA primero — los modelos pequeños priorizan lo del inicio
-    base.push(
-      'REGLA OBLIGATORIA: Si el usuario pregunta algo de lógica (validez, implicación, silogismo, tautología, contradicción, deducción, inferencia), SIEMPRE llama a `run_st_program` con un programa ST antes de responder. NUNCA respondas preguntas de lógica solo con texto.',
-      'ST usa saltos de línea, NO punto y coma. La primera línea es siempre el perfil: `logic classical.propositional`. Ejemplo de check: `logic classical.propositional\\ncheck valid (P -> P)`. Ejemplo de prueba: `logic classical.propositional\\nPROP p, q\\nAXIOM a1: p -> q\\nAXIOM a2: p\\nTHEOREM t1: q BY MP(a1, a2)`.'
-    );
-
     base.push(
       'Estás en MODO AGENTE. Puedes planificar, usar herramientas, observar resultados y decidir el siguiente paso.',
+      'REGLA CLAVE: Si el usuario pregunta algo de lógica, validez, contradicción o silogismo, llama a `check_logic` con el texto del usuario. Esta herramienta formaliza y ejecuta automáticamente.',
       'Antes de actuar, escribe un plan breve dentro de etiquetas <thinking>...</thinking>.',
       'Nunca elimines documentos sin confirmación explícita del usuario.',
       'No inventes que una herramienta hizo algo si no tienes el resultado real.',
@@ -47,7 +42,9 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
       '## Documentos',
       'Usa `list_documents` para explorar el workspace. Usa `read_document` para leer un documento por ID o título.',
       'Usa `create_document` para crear documentos nuevos con `title` y opcionalmente `content`.',
-      'Usa `search_documents` para buscar texto dentro de documentos.'
+      'Usa `search_documents` para buscar texto dentro de documentos.',
+      'IMPORTANTE sobre `documentId`: Puedes pasar el nombre del documento o su ID. Si el usuario dice el nombre del documento, pásalo directamente como `documentId`. El sistema resuelve nombres automáticamente.',
+      'REGLA CRÍTICA DE HERRAMIENTAS: Cuando llames a una herramienta, SIEMPRE incluye TODOS los parámetros requeridos. NUNCA llames a una herramienta con parámetros vacíos o faltantes. Si no tienes un valor, dedúcelo del contexto del usuario o pregunta al usuario primero.'
     );
 
     // Snippet tools guidance
@@ -59,12 +56,13 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
 
     // ST / Logic tools guidance
     base.push(
-      '## ST / Lógica Formal — Referencia de herramientas',
-      '`validate_st_syntax`: verifica sintaxis de un programa ST.',
-      '`run_st_program`: ejecuta un programa ST y devuelve el resultado. Usa esta para responder preguntas de lógica.',
-      '`formalize_text`: convierte texto natural a notación lógica formal.',
-      '`list_st_profiles`: lista perfiles lógicos disponibles (classical.propositional, classical.fol, modal.K, etc.).',
-      '`render_st_glossary`: genera un glosario a partir de un programa ST.'
+      '## Lógica formal (ST)',
+      '`check_logic`: recibe texto natural y evalúa su validez lógica formalmente (formaliza + ejecuta). Úsala siempre para preguntas de lógica.',
+      '`formalize_text`: solo formaliza texto a ST sin ejecutar.',
+      '`run_st_program`: ejecuta código ST ya escrito.',
+      '`validate_st_syntax`: valida sintaxis ST.',
+      '`list_st_profiles`: lista perfiles lógicos.',
+      '`explain_formalization`: formaliza y explica pedagógicamente.'
     );
 
   } else {

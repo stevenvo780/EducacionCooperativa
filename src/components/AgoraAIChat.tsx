@@ -58,7 +58,7 @@ interface AgoraAIChatProps {
 interface OllamaToolCallPayload {
   function?: {
     name?: string;
-    arguments?: Record<string, unknown>;
+    arguments?: Record<string, unknown> | string;
   };
 }
 
@@ -320,6 +320,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       body: JSON.stringify({
         action,
         workspaceId: resolvedWorkspaceId,
+        llmEndpoint: config.endpoint || undefined,
+        llmModel: config.model || undefined,
         ...args
       })
     });
@@ -555,10 +557,18 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         .map((call, index): AgentToolCall | null => {
           const name = call.function?.name?.trim();
           if (!name) return null;
+          // Defensive: Ollama may return arguments as a JSON string instead of object
+          let parsedArgs: Record<string, unknown> = {};
+          const rawArgs = call.function?.arguments;
+          if (rawArgs && typeof rawArgs === 'object') {
+            parsedArgs = rawArgs;
+          } else if (typeof rawArgs === 'string') {
+            try { parsedArgs = JSON.parse(rawArgs); } catch { parsedArgs = {}; }
+          }
           return {
             id: `ollama-${iteration}-${index + 1}`,
             name,
-            args: call.function?.arguments ?? {}
+            args: parsedArgs
           };
         })
         .filter((call): call is AgentToolCall => Boolean(call));

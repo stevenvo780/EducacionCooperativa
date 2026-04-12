@@ -1,5 +1,6 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { check as checkST, createInterpreter, evaluate as evaluateST, listProfiles } from '@stevenvo780/st-lang/api';
+import { formalize as formalizeNLP, type LogicProfile } from '@stevenvo780/autologic';
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import {
   analyzeMarkdown,
@@ -350,7 +351,8 @@ async function saveSemanticState(ctx: AgentExecutionContext, state: SemanticWork
     ...state,
     updatedAt: Date.now()
   });
-  await adminDb.collection('workspaceSemanticStates').doc(storageId).set({
+  // Strip undefined values that Firestore rejects
+  const clean = JSON.parse(JSON.stringify({
     workspaceId: ctx.workspaceId,
     storageId,
     concepts: normalized.concepts,
@@ -358,8 +360,9 @@ async function saveSemanticState(ctx: AgentExecutionContext, state: SemanticWork
     relations: normalized.relations,
     updatedAt: normalized.updatedAt,
     updatedBy: ctx.uid,
-    serverUpdatedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
+  }));
+  clean.serverUpdatedAt = FieldValue.serverTimestamp();
+  await adminDb.collection('workspaceSemanticStates').doc(storageId).set(clean, { merge: true });
   return normalized;
 }
 
@@ -826,7 +829,7 @@ async function listSnippets(call: AgentToolCall, ctx: AgentExecutionContext) {
   if (isPersonalWorkspaceId(ctx.workspaceId)) {
     query = query.where('ownerId', '==', ctx.uid);
   }
-  const snap = await query.orderBy('order', 'asc').limit(100).get();
+  const snap = await query.limit(100).get();
 
   const snippets = snap.docs.map(doc => {
     const data = doc.data() as Record<string, unknown>;
@@ -883,32 +886,91 @@ async function deleteSnippet(call: AgentToolCall, ctx: AgentExecutionContext) {
   }]);
 }
 
-async function formalizeText(call: AgentToolCall, ctx: AgentExecutionContext) {
+async function formalizeText(call: AgentToolCall, _ctx: AgentExecutionContext) {
   const text = String(call.args.text || '').trim();
   if (!text) throw new Error('text es requerido');
-  if (!ctx.origin) throw new Error('No se pudo resolver el origen del request para formalizar');
 
-  const res = await fetch(`${ctx.origin}/api/formalize-llm`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      profile: typeof call.args.profile === 'string' ? call.args.profile : 'classical.propositional',
-      language: call.args.language === 'en' ? 'en' : 'es'
-    })
-  });
+  const profileRaw = typeof call.args.profile === 'string' ? call.args.profile : 'classical.propositional';
+  const language = call.args.language === 'en' ? 'en' : 'es';
 
-  const data = await res.json() as Record<string, unknown>;
-  if (!res.ok || data.ok === false) {
-    throw new Error(String(data.error || data.message || 'No se pudo formalizar el texto'));
+  try {
+    const r = formalizeNLP(text, {
+      profile: profileRaw as LogicProfile,
+      language: language as 'es' | 'en',
+      atomStyle: 'keywords',
+      includeComments: true
+    });
+
+    const confidence = r.ok ? 0.85 : 0.25;
+    return ok(call, 'Texto formalizado correctamente.', {
+      result: {
+        stCode: r.stCode || '',
+        confidence,
+        diagnostics: r.diagnostics || [],
+        patterns: r.analysis?.detectedPatterns || [],
+        atomCount: r.atoms?.size || 0,
+        formulaCount: r.formulas?.length || 0
+      }
+    });
+  } catch (err) {
+    throw new Error(`Error al formalizar: ${getErrorMessage(err)}`);
+  }
+}
+
+// Compound tool: formalize natural text → run ST → return unified result
+async function checkLogic(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const text = String(call.args.text || '').trim();
+  if (!text) throw new Error('text es requerido');
+
+  // Step 1: Formalize
+  const formalizeResult = await formalizeText({
+    ...call,
+    id: `${call.id}-formalize`,
+    name: 'formalize_text'
+  }, ctx);
+
+  const stCode = String((formalizeResult.data?.result as Record<string, unknown>)?.stCode || '').trim();
+  const confidence = (formalizeResult.data?.result as Record<string, unknown>)?.confidence;
+  const formalizeDiags = ((formalizeResult.data?.result as Record<string, unknown>)?.diagnostics || []) as unknown[];
+
+  if (!stCode) {
+    return ok(call, 'No se pudo formalizar el texto. El motor no produjo código ST.', {
+      formalization: { ok: false, stCode: '', confidence: null, diagnostics: formalizeDiags },
+      execution: null
+    });
   }
 
-  return ok(call, 'Texto formalizado correctamente.', {
-    result: {
-      stCode: String(data.stCode || ''),
-      confidence: typeof data.confidence === 'number' ? data.confidence : null,
-      diagnostics: Array.isArray(data.diagnostics) ? data.diagnostics : []
-    }
+  // Step 2: Execute the generated ST code
+  let execution: Record<string, unknown>;
+  try {
+    const execResult = evaluateST(stCode);
+    execution = {
+      ok: execResult.ok,
+      stdout: execResult.stdout || '',
+      stderr: execResult.stderr || '',
+      diagnostics: Array.isArray(execResult.diagnostics) ? execResult.diagnostics : []
+    };
+  } catch (err) {
+    execution = {
+      ok: false,
+      stdout: '',
+      stderr: getErrorMessage(err),
+      diagnostics: []
+    };
+  }
+
+  const summary = [
+    `**Texto original:** ${text}`,
+    `**Código ST generado:**\n\`\`\`\n${stCode}\n\`\`\``,
+    `**Confianza de formalización:** ${typeof confidence === 'number' ? `${(confidence * 100).toFixed(0)}%` : 'no reportada'}`,
+    execution.ok
+      ? `**Resultado:** ${String(execution.stdout || 'Ejecución exitosa sin salida.')}`
+      : `**Error de ejecución:** ${String(execution.stderr || 'Error desconocido.')}`
+  ].join('\n\n');
+
+  return ok(call, summary, {
+    formalization: { ok: true, stCode, confidence, diagnostics: formalizeDiags },
+    execution
   });
 }
 
@@ -1247,8 +1309,8 @@ async function listStProfilesTool(call: AgentToolCall) {
 }
 
 async function validateStSyntax(call: AgentToolCall) {
-  const program = String(call.args.program || '').trim();
-  if (!program) throw new Error('program es requerido');
+  const program = String(call.args.program || call.args.code || '').trim();
+  if (!program) throw new Error('program (o code) es requerido');
   const result = checkST(program);
   const diagnostics = Array.isArray(result.diagnostics) ? result.diagnostics : [];
   const errors = diagnostics.filter((item) => item.severity === 'error').length;
@@ -1260,8 +1322,8 @@ async function validateStSyntax(call: AgentToolCall) {
 }
 
 async function runStProgram(call: AgentToolCall) {
-  const program = String(call.args.program || '').trim();
-  if (!program) throw new Error('program es requerido');
+  const program = String(call.args.program || call.args.code || '').trim();
+  if (!program) throw new Error('program (o code) es requerido');
   const result = evaluateST(program);
   return ok(call, result.ok ? 'Programa ST ejecutado correctamente.' : 'La ejecución ST produjo errores.', {
     result: {
@@ -1274,8 +1336,8 @@ async function runStProgram(call: AgentToolCall) {
 }
 
 async function renderStGlossary(call: AgentToolCall) {
-  const program = String(call.args.program || '').trim();
-  if (!program) throw new Error('program es requerido');
+  const program = String(call.args.program || call.args.code || '').trim();
+  if (!program) throw new Error('program (o code) es requerido');
   const format = call.args.format === 'markdown' ? 'markdown' : 'plain';
   const interpreter = createInterpreter();
   const bootstrap = interpreter.exec(program);
@@ -1459,10 +1521,11 @@ async function createRelation(call: AgentToolCall, ctx: AgentExecutionContext) {
     docId: source.docId || target.docId || null,
     origin: 'llm',
     scope: 'workspace',
-    logicProfile: source.logicProfile || target.logicProfile,
+    logicProfile: source.logicProfile || target.logicProfile || undefined,
     status: 'draft',
     sourceEntityId: source.id,
     targetEntityId: target.id,
+    selectionHash: `${source.id}:${target.id}:${relationType}`,
     sourceRefs: [{ docId: source.docId || null, docName: source.docName || null, excerpt: `${source.title} → ${target.title}` }]
   };
   state.relations.unshift(relation);
@@ -1654,6 +1717,9 @@ export async function executeAgentTool(call: AgentToolCall, ctx: AgentExecutionC
         break;
       case 'delete_board_card':
         result = await deleteBoardCard(call, ctx);
+        break;
+      case 'check_logic':
+        result = await checkLogic(call, ctx);
         break;
       case 'formalize_text':
         result = await formalizeText(call, ctx);

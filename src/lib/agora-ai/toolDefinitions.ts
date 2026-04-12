@@ -17,11 +17,11 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
   },
   {
     name: 'read_document',
-    description: 'Lee el contenido completo y metadatos básicos de un documento.',
+    description: 'Lee y devuelve el contenido completo de un documento específico.',
     parameters: {
       type: 'object',
       properties: {
-        documentId: { type: 'string', description: 'ID del documento a leer.' }
+        documentId: { type: 'string', description: 'Nombre o ID del documento a leer.' }
       },
       required: ['documentId'],
       additionalProperties: false
@@ -44,13 +44,13 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
   },
   {
     name: 'update_document',
-    description: 'Actualiza el contenido o el título de un documento existente.',
+    description: 'Actualiza el contenido de un documento existente. Puede cambiar su título y/o contenido.',
     parameters: {
       type: 'object',
       properties: {
-        documentId: { type: 'string', description: 'ID del documento.' },
-        content: { type: 'string', description: 'Nuevo contenido completo del documento.' },
-        title: { type: 'string', description: 'Nuevo título. Opcional.' }
+        documentId: { type: 'string', description: 'Nombre o ID del documento a actualizar.' },
+        content: { type: 'string', description: 'Nuevo contenido en markdown.' },
+        title: { type: 'string', description: 'Nuevo título (opcional).' }
       },
       required: ['documentId'],
       additionalProperties: false
@@ -58,12 +58,12 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
   },
   {
     name: 'rename_document',
-    description: 'Renombra un documento existente sin cambiar su contenido.',
+    description: 'Renombra un documento existente sin cambiar su contenido. Parámetros obligatorios: documentId y newTitle.',
     parameters: {
       type: 'object',
       properties: {
-        documentId: { type: 'string', description: 'ID del documento.' },
-        newTitle: { type: 'string', description: 'Nuevo título.' }
+        documentId: { type: 'string', description: 'Nombre actual o ID del documento a renombrar.' },
+        newTitle: { type: 'string', description: 'Nuevo nombre/título para el documento.' }
       },
       required: ['documentId', 'newTitle'],
       additionalProperties: false
@@ -75,8 +75,8 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
-        documentId: { type: 'string', description: 'ID del documento.' },
-        targetFolder: { type: 'string', description: 'Carpeta destino.' }
+        documentId: { type: 'string', description: 'Nombre o ID del documento a mover.' },
+        targetFolder: { type: 'string', description: 'Nombre de la carpeta destino.' }
       },
       required: ['documentId', 'targetFolder'],
       additionalProperties: false
@@ -88,7 +88,7 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
-        documentId: { type: 'string', description: 'ID del documento a eliminar.' },
+        documentId: { type: 'string', description: 'Nombre o ID del documento a eliminar.' },
         confirmed: { type: 'boolean', description: 'Solo true si el usuario confirmó la eliminación.' }
       },
       required: ['documentId'],
@@ -336,8 +336,22 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
     }
   },
   {
+    name: 'check_logic',
+    description: 'Evalúa si una expresión o argumento lógico es válido. Recibe texto en lenguaje natural, lo formaliza automáticamente a código ST y lo ejecuta. Usa esta herramienta SIEMPRE que el usuario pregunte sobre validez, contradicciones, tautologías, silogismos o cualquier cuestión de lógica formal.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'La expresión, argumento o pregunta lógica en lenguaje natural.' },
+        profile: { type: 'string', description: 'Perfil lógico opcional (classical.propositional, classical.fol, modal.K, etc.).' },
+        language: { type: 'string', enum: ['es', 'en'], description: 'Idioma del texto.' }
+      },
+      required: ['text'],
+      additionalProperties: false
+    }
+  },
+  {
     name: 'formalize_text',
-    description: 'Formaliza texto natural a lógica usando el motor de formalización disponible.',
+    description: 'Formaliza texto natural a lógica usando el motor de formalización. Solo formaliza, no ejecuta. Si necesitas también ejecutar, usa check_logic.',
     parameters: {
       type: 'object',
       properties: {
