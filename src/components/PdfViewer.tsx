@@ -148,18 +148,19 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
     const pdfDocument = pdfDocumentRef.current;
 
     const loadPageTexts = async () => {
-      const nextTexts: string[] = [];
-      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-        if (cancelled) return;
-        const page = await pdfDocument.getPage(pageNumber);
-        const textContent = await page.getTextContent?.();
-        nextTexts[pageNumber - 1] = Array.isArray(textContent?.items)
-          ? textContent.items.map((item) => item.str ?? '').join(' ')
-          : '';
-        page.cleanup?.();
-      }
+      const pageNumbers = Array.from({ length: pageCount }, (_, i) => i + 1);
+      const results = await Promise.all(
+        pageNumbers.map(async (pageNumber) => {
+          const page = await pdfDocument.getPage(pageNumber);
+          const textContent = await page.getTextContent?.();
+          page.cleanup?.();
+          return Array.isArray(textContent?.items)
+            ? textContent.items.map((item) => item.str ?? '').join(' ')
+            : '';
+        })
+      );
       if (!cancelled) {
-        setPageTexts(nextTexts);
+        setPageTexts(results);
       }
     };
 
@@ -195,16 +196,6 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
     setActiveSearchIndex((current) => Math.min(current, searchMatches.length - 1));
   }, [searchMatches]);
 
-  const saveCurrentViewerState = useCallback(() => {
-    lastKnownStateRef.current = {
-      ...lastKnownStateRef.current,
-      zoomLevel,
-      searchQuery,
-      activeSearchIndex
-    };
-    saveViewerState(storageKey, lastKnownStateRef.current);
-  }, [activeSearchIndex, searchQuery, storageKey, zoomLevel]);
-
   // Actualización síncrona del ref antes de cualquier cleanup (desmontaje de tile)
   useLayoutEffect(() => {
     lastKnownStateRef.current = {
@@ -215,11 +206,6 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
     };
     saveViewerState(storageKey, lastKnownStateRef.current);
   }, [activeSearchIndex, searchQuery, storageKey, zoomLevel]);
-
-  useEffect(() => {
-    if (useIframeFallback) return;
-    saveCurrentViewerState();
-  }, [activeSearchIndex, saveCurrentViewerState, searchQuery, useIframeFallback, zoomLevel]);
 
   const updateCurrentPageFromScroll = useCallback(() => {
     const container = containerRef.current;
@@ -263,9 +249,6 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
         ...lastKnownStateRef.current,
         top: container.scrollTop,
         left: container.scrollLeft,
-        zoomLevel,
-        searchQuery,
-        activeSearchIndex
       };
       saveViewerState(storageKey, lastKnownStateRef.current);
     };
@@ -274,7 +257,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
     return () => {
       container.removeEventListener('scroll', handleScroll);
     };
-  }, [activeSearchIndex, searchQuery, storageKey, updateCurrentPageFromScroll, useIframeFallback, zoomLevel]);
+  }, [storageKey, updateCurrentPageFromScroll, useIframeFallback]);
 
   const scrollToPage = useCallback((pageNumber: number, behavior: ScrollBehavior = 'smooth') => {
     const container = containerRef.current;

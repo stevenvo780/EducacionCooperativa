@@ -557,18 +557,34 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const handleScroll = () => scheduleDecorate();
     scrollParent.addEventListener('scroll', handleScroll, { passive: true });
 
-    // Re-decorate when the editor is resized (e.g. mosaic panel drag)
+    // Re-decorate when the editor or its ancestors are resized
+    // (e.g. mosaic panel drag, window resize, sidebar toggle).
+    // We observe shell, scrollParent AND editable because during a
+    // splitter drag the contenteditable itself may not resize immediately
+    // while its ancestors do — and the text reflows later.
+    let resizeTimer = 0;
     const resizeObserver = new ResizeObserver(() => {
-      scheduleDecorate();
+      clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(scheduleDecorate, 60);
     });
     resizeObserver.observe(editable);
+    resizeObserver.observe(scrollParent);
+    resizeObserver.observe(shell);
+
+    const handleWindowResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(scheduleDecorate, 100);
+    };
+    window.addEventListener('resize', handleWindowResize, { passive: true });
 
     return () => {
       clearTimeout(timer);
       clearTimeout(mutationTimer);
+      clearTimeout(resizeTimer);
       cancelAnimationFrame(rafIdRef.current);
       observer.disconnect();
       resizeObserver.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
       scrollParent.removeEventListener('scroll', handleScroll);
       if (containerRef.current) containerRef.current.innerHTML = '';
       decorateRef.current = null;
