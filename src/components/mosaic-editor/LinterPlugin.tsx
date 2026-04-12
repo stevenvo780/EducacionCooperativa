@@ -445,15 +445,24 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
           const rects = range.getClientRects();
           if (rects.length === 0) return;
 
-          Array.from(rects).forEach(rect => {
-            const isSTRef = d.source === 'ST-Definitions';
-            const isNote = d.severity === 'info' && d.source === 'Nota';
-            const borderColor = d.severity === 'error' ? '#ef4444' :
-                               d.severity === 'warning' ? '#f59e0b' :
-                               isNote ? '#f59e0b' :
-                               isSTRef ? '#06b6d4' : '#3b82f6';
+          const isSTRef = d.source === 'ST-Definitions';
+          const isNote = d.severity === 'info' && d.source === 'Nota';
+          const borderColor = d.severity === 'error' ? '#ef4444' :
+                             d.severity === 'warning' ? '#f59e0b' :
+                             isNote ? '#f59e0b' :
+                             isSTRef ? '#06b6d4' : '#3b82f6';
+          const hasReplacements = d.replacements && d.replacements.length > 0 && onApplyFixRef.current;
 
-            /* ── Visual underline ── */
+          // Compute bounding box across all rects for a single unified hit area
+          let bbTop = Infinity, bbLeft = Infinity, bbBottom = -Infinity, bbRight = -Infinity;
+
+          Array.from(rects).forEach(rect => {
+            bbTop = Math.min(bbTop, rect.top);
+            bbLeft = Math.min(bbLeft, rect.left);
+            bbBottom = Math.max(bbBottom, rect.bottom);
+            bbRight = Math.max(bbRight, rect.right);
+
+            /* ── Visual underline (per-rect for accurate rendering) ── */
             const underline = document.createElement('div');
             underline.style.position = 'absolute';
             underline.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
@@ -480,48 +489,49 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
               underline.style.top = `${rect.bottom - editableRect.top + editable.scrollTop - 2}px`;
             }
             container.appendChild(underline);
+          });
 
-            if (!linterInteractive) {
+          if (!linterInteractive) {
+            return;
+          }
+
+          // Use first rect for tooltip positioning (top-left of the match)
+          const firstRect = rects[0];
+
+          /* ── Single unified hit area spanning all rects (prevents flicker) ── */
+          const hitArea = document.createElement('div');
+          hitArea.className = 'mdx-linter-marker group pointer-events-auto';
+          hitArea.style.position = 'absolute';
+          hitArea.style.top = `${bbTop - editableRect.top + editable.scrollTop}px`;
+          hitArea.style.left = `${bbLeft - editableRect.left + editable.scrollLeft}px`;
+          hitArea.style.width = `${bbRight - bbLeft}px`;
+          hitArea.style.height = `${bbBottom - bbTop}px`;
+          hitArea.style.transition = 'opacity 0.2s';
+          hitArea.style.cursor = hasReplacements ? 'pointer' : 'help';
+
+          hitArea.addEventListener('mouseenter', () => {
+            if (hoverHideTimerRef.current) {
+              window.clearTimeout(hoverHideTimerRef.current);
+              hoverHideTimerRef.current = 0;
+            }
+            dismissAllTooltips(container);
+            showSharedTooltip(d, firstRect, Boolean(hasReplacements));
+          });
+
+          hitArea.addEventListener('mouseleave', () => {
+            scheduleHideTooltip();
+          });
+
+          hitArea.addEventListener('click', (e) => {
+            if (!hasReplacements) {
               return;
             }
-
-            /* ── Hit area ── */
-            const hitArea = document.createElement('div');
-            hitArea.className = 'mdx-linter-marker group pointer-events-auto';
-            hitArea.style.position = 'absolute';
-            hitArea.style.top = `${rect.top - editableRect.top + editable.scrollTop}px`;
-            hitArea.style.left = `${rect.left - editableRect.left + editable.scrollLeft}px`;
-            hitArea.style.width = `${rect.width}px`;
-            hitArea.style.height = `${rect.height}px`;
-            hitArea.style.transition = 'opacity 0.2s';
-
-            const hasReplacements = d.replacements && d.replacements.length > 0 && onApplyFixRef.current;
-            hitArea.style.cursor = hasReplacements ? 'pointer' : 'help';
-
-            hitArea.addEventListener('mouseenter', () => {
-              if (hoverHideTimerRef.current) {
-                window.clearTimeout(hoverHideTimerRef.current);
-                hoverHideTimerRef.current = 0;
-              }
-              dismissAllTooltips(container);
-              showSharedTooltip(d, rect, Boolean(hasReplacements));
-            });
-
-            hitArea.addEventListener('mouseleave', () => {
-              scheduleHideTooltip();
-            });
-
-            hitArea.addEventListener('click', (e) => {
-              if (!hasReplacements) {
-                return;
-              }
-              e.stopPropagation();
-              e.preventDefault();
-              showSharedTooltip(d, rect, true);
-            });
-
-            container.appendChild(hitArea);
+            e.stopPropagation();
+            e.preventDefault();
+            showSharedTooltip(d, firstRect, true);
           });
+
+          container.appendChild(hitArea);
         } catch {
           // ignore range errors
         }
