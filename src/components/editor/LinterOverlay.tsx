@@ -265,7 +265,7 @@ export function LinterOverlay({
                 left,
                 width: Math.max(width, 4),
                 height: lineHeight,
-                cursor: linterInteractive ? (supportsPinnedTooltip ? 'pointer' : 'help') : 'default'
+                cursor: linterInteractive ? 'pointer' : 'default'
               }}
               onMouseEnter={() => {
                 if (!linterInteractive || openTooltipKey) return;
