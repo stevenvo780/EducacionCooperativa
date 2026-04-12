@@ -63,6 +63,9 @@ export function useSTDefinitionsLinter() {
   const definedNamesMap = useMemo(() => {
     const map = new Map<string, STDefinition>();
     for (const def of definitions) {
+      // Interpretations are matched via naturalPhrases below; skip here to avoid
+      // overlapping diagnostics that cause tooltip flickering.
+      if (def.kind === 'interpretation') continue;
       // Solo si el nombre tiene al menos 2 chars para evitar falsos positivos
       if (def.name.length >= 2) {
         map.set(def.name, def);
