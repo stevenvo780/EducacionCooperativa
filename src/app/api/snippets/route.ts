@@ -22,12 +22,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const snap = await adminDb
+    let query: FirebaseFirestore.Query = adminDb
       .collection('snippets')
-      .where('workspaceId', '==', workspaceId)
-      .orderBy('order', 'asc')
-      .limit(500)
-      .get();
+      .where('workspaceId', '==', workspaceId);
+
+    if (isPersonalWorkspaceId(workspaceId)) {
+      query = query.where('ownerId', '==', auth.uid);
+    }
+
+    const snap = await query.orderBy('order', 'asc').limit(500).get();
 
     const items = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     return NextResponse.json(items);

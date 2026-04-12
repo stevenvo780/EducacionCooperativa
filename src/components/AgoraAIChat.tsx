@@ -7,9 +7,17 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
   Bot, Send, Settings, X, ChevronDown, ChevronUp,
-  Loader2, Trash2, Copy, Check, AlertCircle, Sparkles, Undo2
+  Loader2, Trash2, Copy, Check, AlertCircle, Sparkles, Undo2,
+  History, MessageSquarePlus, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { authFetch, getAuthToken } from '@/services/apiClient';
+import {
+  createEmptyChatSession,
+  deriveChatSessionTitle,
+  loadChatSessions,
+  saveChatSessions,
+  upsertChatSession
+} from '@/lib/agora-ai/chatHistory';
 import { loadClientConfig, saveClientConfig } from '@/lib/clientConfigStorage';
 import { AgentThinkingBlock } from '@/components/chat/AgentThinkingBlock';
 import { ToolCallBlock } from '@/components/chat/ToolCallBlock';
@@ -18,12 +26,14 @@ import { buildAgoraSystemPrompt, extractThinkingSegments } from '@/lib/agora-ai/
 import { toOllamaTools } from '@/lib/agora-ai/toolDefinitions';
 import { collectAgentWorkspaceEffects } from '@/lib/agora-ai/uiEvents';
 import type {
+  AgentChatSession,
   AgentDocumentsMutatedEventDetail,
   AgentMode,
   AgentPendingConfirmation,
   AgentResponseBody,
   AgentRollbackAction,
   AgentRun,
+  AgentStoredChatMessage,
   AgentStreamEvent,
   AgentToolCall,
   AgentToolExecutionResult,
@@ -39,14 +49,7 @@ interface AIProviderConfig {
   endpoint: string;
 }
 
-interface UIChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  error?: boolean;
-  agentRun?: AgentRun;
-  pendingConfirmation?: AgentPendingConfirmation;
-}
+type UIChatMessage = AgentStoredChatMessage;
 
 interface AgoraAIChatProps {
   workspaceId?: string;
@@ -138,6 +141,19 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+function formatSessionTimestamp(timestamp: number) {
+  try {
+    return new Intl.DateTimeFormat('es-ES', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(timestamp);
+  } catch {
+    return '';
+  }
+}
+
 function createStep(step: Omit<AgentTraceStep, 'startedAt'>): AgentTraceStep {
   return {
     ...step,
@@ -172,11 +188,11 @@ const markdownComponents = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   a: (props: any) => <a {...props} className="text-sky-400 underline hover:text-sky-300" target="_blank" rel="noopener noreferrer" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ul: (props: any) => <ul {...props} className="list-disc pl-4 my-1 space-y-0.5" />,
+  ul: (props: any) => <ul {...props} className="list-disc pl-4 my-0.5 space-y-0" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ol: (props: any) => <ol {...props} className="list-decimal pl-4 my-1 space-y-0.5" />,
+  ol: (props: any) => <ol {...props} className="list-decimal pl-4 my-0.5 space-y-0" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  p: (props: any) => <p {...props} className="my-1" />,
+  p: (props: any) => <p {...props} className="my-0.5 leading-snug" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   blockquote: (props: any) => <blockquote {...props} className="border-l-2 border-surface-600 pl-3 my-2 text-surface-400 italic" />
 } as const;
@@ -185,6 +201,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [config, setConfig] = useState<AIProviderConfig>(loadConfig);
   const [mode, setMode] = useState<AgentMode>(loadMode);
   const [showConfig, setShowConfig] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
+  const [sessions, setSessions] = useState<AgentChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UIChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -195,10 +214,17 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const historyHydratedRef = useRef(false);
+  const sessionDefaultsRef = useRef({ provider: config.provider, mode });
 
   const meta = PROVIDER_META[config.provider];
   const resolvedWorkspaceId = workspaceId || PERSONAL_WORKSPACE_ID;
   const canSend = !loading && (!meta.needsKey || Boolean(config.apiKey));
+  const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+
+  useEffect(() => {
+    sessionDefaultsRef.current = { provider: config.provider, mode };
+  }, [config.provider, mode]);
 
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
@@ -207,6 +233,53 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  useEffect(() => {
+    const loaded = loadChatSessions(resolvedWorkspaceId);
+    if (loaded.length > 0) {
+      const [firstSession] = loaded;
+      setSessions(loaded);
+      setActiveSessionId(firstSession.id);
+      setMessages(firstSession.messages);
+      setRollbackQueue(firstSession.rollbackQueue || []);
+      if (firstSession.mode !== sessionDefaultsRef.current.mode) {
+        setMode(firstSession.mode);
+        saveMode(firstSession.mode);
+      }
+    } else {
+      const fresh = createEmptyChatSession({
+        workspaceId: resolvedWorkspaceId,
+        provider: sessionDefaultsRef.current.provider,
+        mode: sessionDefaultsRef.current.mode
+      });
+      const saved = saveChatSessions(resolvedWorkspaceId, [fresh]);
+      setSessions(saved);
+      setActiveSessionId(fresh.id);
+      setMessages([]);
+      setRollbackQueue([]);
+    }
+    setInput('');
+    historyHydratedRef.current = true;
+  }, [resolvedWorkspaceId]);
+
+  useEffect(() => {
+    if (!historyHydratedRef.current || !activeSessionId) return;
+    setSessions(prev => {
+      const current = prev.find((session) => session.id === activeSessionId);
+      const nextSession: AgentChatSession = {
+        id: activeSessionId,
+        title: deriveChatSessionTitle(messages),
+        workspaceId: resolvedWorkspaceId,
+        provider: current?.provider || config.provider,
+        mode,
+        messages,
+        rollbackQueue,
+        createdAt: current?.createdAt || Date.now(),
+        updatedAt: Date.now()
+      };
+      return saveChatSessions(resolvedWorkspaceId, upsertChatSession(prev, nextSession));
+    });
+  }, [activeSessionId, config.provider, messages, mode, resolvedWorkspaceId, rollbackQueue]);
 
   const updateConfig = useCallback((partial: Partial<AIProviderConfig>) => {
     setConfig(prev => {
@@ -585,10 +658,62 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     setTimeout(() => setCopiedId(null), 1500);
   }, []);
 
-  const clearChat = useCallback(() => {
+  const activateSession = useCallback((sessionId: string) => {
+    const target = sessions.find((session) => session.id === sessionId);
+    if (!target) return;
+    setActiveSessionId(target.id);
+    setMessages(target.messages);
+    setRollbackQueue(target.rollbackQueue || []);
+    setInput('');
+    if (target.mode !== mode) {
+      updateMode(target.mode);
+    }
+  }, [mode, sessions, updateMode]);
+
+  const startNewChat = useCallback(() => {
+    const fresh = createEmptyChatSession({
+      workspaceId: resolvedWorkspaceId,
+      provider: config.provider,
+      mode
+    });
+    const next = saveChatSessions(resolvedWorkspaceId, upsertChatSession(sessions, fresh));
+    setSessions(next);
+    setActiveSessionId(fresh.id);
     setMessages([]);
     setRollbackQueue([]);
-  }, []);
+    setInput('');
+    textareaRef.current?.focus();
+  }, [config.provider, mode, resolvedWorkspaceId, sessions]);
+
+  const deleteActiveChat = useCallback(() => {
+    if (!activeSessionId) return;
+    const remaining = sessions.filter((session) => session.id !== activeSessionId);
+    if (remaining.length === 0) {
+      const fresh = createEmptyChatSession({
+        workspaceId: resolvedWorkspaceId,
+        provider: config.provider,
+        mode
+      });
+      const saved = saveChatSessions(resolvedWorkspaceId, [fresh]);
+      setSessions(saved);
+      setActiveSessionId(fresh.id);
+      setMessages([]);
+      setRollbackQueue([]);
+      setInput('');
+      return;
+    }
+
+    const saved = saveChatSessions(resolvedWorkspaceId, remaining);
+    const [nextActive] = saved;
+    setSessions(saved);
+    setActiveSessionId(nextActive.id);
+    setMessages(nextActive.messages);
+    setRollbackQueue(nextActive.rollbackQueue || []);
+    setInput('');
+    if (nextActive.mode !== mode) {
+      updateMode(nextActive.mode);
+    }
+  }, [activeSessionId, config.provider, mode, resolvedWorkspaceId, sessions, updateMode]);
 
   const clearPendingConfirmation = useCallback((messageId: string) => {
     setMessages(prev => prev.map(msg => (
@@ -776,9 +901,64 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   }, [messages, clearPendingConfirmation, executeAgoraTool, config.provider, emitAgentWorkspaceEvents]);
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 text-surface-200 overflow-hidden">
+    <div className="flex h-full bg-surface-900 text-surface-200 overflow-hidden">
+      <aside className={`${showHistory ? 'w-60 border-r border-surface-700' : 'w-0 border-r-0'} bg-surface-950/70 transition-all duration-200 overflow-hidden flex-shrink-0`}>
+        <div className="h-full flex flex-col">
+          <div className="px-3 py-2 border-b border-surface-800 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-surface-200">
+                <History className="w-4 h-4 text-sky-400" />
+                <span className="text-sm font-medium">Historial local</span>
+              </div>
+              <p className="text-[10px] text-surface-500 mt-0.5">Privado en tu navegador · sin Firebase</p>
+            </div>
+            <button
+              type="button"
+              onClick={startNewChat}
+              className="p-1 rounded text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition"
+              title="Nuevo chat"
+            >
+              <MessageSquarePlus className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {sessions.map((session) => {
+              const isActive = session.id === activeSessionId;
+              return (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => activateSession(session.id)}
+                  className={`w-full text-left rounded-lg border px-2.5 py-2 transition ${
+                    isActive
+                      ? 'border-sky-500/40 bg-sky-500/10 text-surface-100'
+                      : 'border-surface-800 bg-surface-900/60 text-surface-300 hover:border-surface-700 hover:bg-surface-900'
+                  }`}
+                >
+                  <div className="text-xs font-medium truncate">{session.title || 'Nuevo chat'}</div>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-surface-500">
+                    <span className="truncate">{session.messages.length} msg</span>
+                    <span>{formatSessionTimestamp(session.updatedAt)}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </aside>
+
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-surface-700 bg-surface-900 flex-shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setShowHistory(value => !value)}
+            className="p-1 rounded text-surface-500 hover:text-surface-200 hover:bg-surface-800 transition"
+            title={showHistory ? 'Ocultar historial local' : 'Mostrar historial local'}
+          >
+            {showHistory ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          </button>
           <Bot className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <span className="text-sm font-medium text-surface-100 truncate">Agora AI</span>
           <span className={`text-xs ${meta.color} bg-surface-800 px-1.5 py-0.5 rounded whitespace-nowrap`}>
@@ -816,11 +996,19 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               <Undo2 className="w-3.5 h-3.5" />
             </button>
           )}
-          {messages.length > 0 && (
+          <button
+            type="button"
+            onClick={startNewChat}
+            className="p-1 rounded text-surface-500 hover:text-surface-200 hover:bg-surface-700 transition"
+            title="Nuevo chat"
+          >
+            <MessageSquarePlus className="w-3.5 h-3.5" />
+          </button>
+          {(messages.length > 0 || activeSession) && (
             <button
-              onClick={clearChat}
+              onClick={deleteActiveChat}
               className="p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
-              title="Limpiar chat"
+              title="Eliminar conversación actual"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -929,7 +1117,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               <p className="text-sm text-surface-400">{mode === 'agent' ? 'Dale una tarea al agente' : `Pregúntale a ${meta.label}`}</p>
               <p className="text-xs mt-1 max-w-md">
                 {mode === 'agent'
-                  ? 'El agente puede leer, crear, editar, mover, buscar y borrar documentos; además usa snippets, estado semántico y formalización.'
+                  ? 'El agente puede trabajar con documentos, snippets, glosario semántico, tablero Kanban, formalización y ejecución ST, además de resumir y comparar contenido.'
                   : 'En modo chat responderá con contexto del workspace, sin ejecutar acciones de escritura.'}
               </p>
               {!meta.needsKey || config.apiKey ? null : (
@@ -959,7 +1147,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                     Error
                   </div>
                 )}
-                <div className="whitespace-pre-wrap break-words max-w-none">
+                <div className="break-words max-w-none">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}
@@ -977,9 +1165,17 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                       }
                       if (step.type === 'plan' && step.content) {
                         return (
-                          <div key={step.id} className="mt-1.5 rounded-md border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5 text-xs text-sky-100 whitespace-pre-wrap">
+                          <div key={step.id} className="mt-1.5 rounded-md border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5 text-xs text-sky-100">
                             <div className="font-medium text-sky-300 mb-1">{step.title}</div>
-                            {step.content}
+                            <div className="break-words leading-snug">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm, remarkMath]}
+                                rehypePlugins={[rehypeKatex]}
+                                components={markdownComponents}
+                              >
+                                {step.content || ''}
+                              </ReactMarkdown>
+                            </div>
                           </div>
                         );
                       }
@@ -1072,6 +1268,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             <span>Enter · enviar</span>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -152,6 +152,30 @@ export function restoreOpenTabs(
         sessionId: persistedTab.sessionId
       });
     }
+
+    if (persistedTab.type === 'st-runner') {
+      restoredTabs.push({
+        id: persistedTab.id,
+        name: persistedTab.name || 'ST Runner',
+        type: 'st-runner'
+      });
+    }
+
+    if (persistedTab.type === 'semantic-browser') {
+      restoredTabs.push({
+        id: persistedTab.id,
+        name: persistedTab.name || 'Mesa Semántica',
+        type: 'semantic-browser'
+      });
+    }
+
+    if (persistedTab.type === 'agora-ai') {
+      restoredTabs.push({
+        id: persistedTab.id,
+        name: persistedTab.name || 'Agora AI',
+        type: 'agora-ai'
+      });
+    }
   }
 
   return restoredTabs;
@@ -229,7 +253,15 @@ export function validateMosaicNode(
   if (!node) return null;
 
   if (typeof node === 'string') {
-    if (node === 'files' || node.startsWith('terminal-') || node.startsWith('formalizer-') || openTabIds.has(node)) {
+    const isSpecialTab =
+      node === 'files' ||
+      node.startsWith('terminal-') ||
+      node.startsWith('formalizer-') ||
+      node.startsWith('st-runner-') ||
+      node.startsWith('semantic-browser-') ||
+      node.startsWith('agora-ai-') ||
+      node.startsWith('board-');
+    if (isSpecialTab || openTabIds.has(node)) {
       return node;
     }
     return null;

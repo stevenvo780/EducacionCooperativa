@@ -217,6 +217,10 @@ export async function POST(req: NextRequest) {
           columnId,
           order: typeof body.order === 'number' ? body.order : Date.now(),
           ownerId: auth.uid,
+          sourceDocId: typeof body.sourceDocId === 'string' ? body.sourceDocId : null,
+          sourceDocName: typeof body.sourceDocName === 'string' ? body.sourceDocName : null,
+          sourceFragment: typeof body.sourceFragment === 'string' ? body.sourceFragment : null,
+          sourcePath: typeof body.sourcePath === 'string' ? body.sourcePath : null,
           createdAt: Date.now(),
           updatedAt: Date.now()
         };
@@ -258,6 +262,10 @@ export async function POST(req: NextRequest) {
         columnId,
         order: typeof body.order === 'number' ? body.order : Date.now(),
         ownerId: auth.uid,
+        sourceDocId: typeof body.sourceDocId === 'string' ? body.sourceDocId : null,
+        sourceDocName: typeof body.sourceDocName === 'string' ? body.sourceDocName : null,
+        sourceFragment: typeof body.sourceFragment === 'string' ? body.sourceFragment : null,
+        sourcePath: typeof body.sourcePath === 'string' ? body.sourcePath : null,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
       };
@@ -318,6 +326,10 @@ export async function PATCH(req: NextRequest) {
         if (typeof data?.description === 'string') card.description = data.description;
         if (typeof data?.columnId === 'string') card.columnId = data.columnId.trim();
         if (typeof data?.order === 'number') card.order = data.order;
+        if (typeof data?.sourceDocId === 'string') card.sourceDocId = data.sourceDocId;
+        if (typeof data?.sourceDocName === 'string') card.sourceDocName = data.sourceDocName;
+        if (typeof data?.sourceFragment === 'string') card.sourceFragment = data.sourceFragment;
+        if (typeof data?.sourcePath === 'string') card.sourcePath = data.sourcePath;
         card.updatedAt = Date.now();
         return NextResponse.json({ status: 'updated' });
       }
@@ -346,6 +358,10 @@ export async function PATCH(req: NextRequest) {
       if (typeof data?.description === 'string') updateData.description = data.description;
       if (typeof data?.columnId === 'string') updateData.columnId = data.columnId.trim();
       if (typeof data?.order === 'number') updateData.order = data.order;
+      if (typeof data?.sourceDocId === 'string') updateData.sourceDocId = data.sourceDocId;
+      if (typeof data?.sourceDocName === 'string') updateData.sourceDocName = data.sourceDocName;
+      if (typeof data?.sourceFragment === 'string') updateData.sourceFragment = data.sourceFragment;
+      if (typeof data?.sourcePath === 'string') updateData.sourcePath = data.sourcePath;
       if (Object.keys(updateData).length === 0) {
         return NextResponse.json({ error: 'No data to update' }, { status: 400 });
       }

@@ -5,7 +5,7 @@
  */
 
 export const ST_RUNTIME_MANIFEST = {
-  "generatedAt": "2026-04-12T17:24:10.119Z",
+  "generatedAt": "2026-04-12T19:07:06.429Z",
   "canonicalVersion": "3.0.2",
   "packageVersion": "3.0.2",
   "cliVersion": "2.6.0",
