@@ -557,11 +557,18 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     const handleScroll = () => scheduleDecorate();
     scrollParent.addEventListener('scroll', handleScroll, { passive: true });
 
+    // Re-decorate when the editor is resized (e.g. mosaic panel drag)
+    const resizeObserver = new ResizeObserver(() => {
+      scheduleDecorate();
+    });
+    resizeObserver.observe(editable);
+
     return () => {
       clearTimeout(timer);
       clearTimeout(mutationTimer);
       cancelAnimationFrame(rafIdRef.current);
       observer.disconnect();
+      resizeObserver.disconnect();
       scrollParent.removeEventListener('scroll', handleScroll);
       if (containerRef.current) containerRef.current.innerHTML = '';
       decorateRef.current = null;
