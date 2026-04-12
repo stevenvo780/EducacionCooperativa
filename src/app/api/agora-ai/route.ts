@@ -26,7 +26,6 @@ interface RequestBody {
   provider: AIProvider;
   apiKey?: string;
   model?: string;
-  endpoint?: string;
 }
 
 // ── Context builder ────────────────────────────────────────────────────────
@@ -125,18 +124,6 @@ async function callAnthropic(messages: ChatMessage[], apiKey: string, model: str
   return data.content[0]?.text ?? '';
 }
 
-async function callOllama(messages: ChatMessage[], endpoint: string, model: string): Promise<string> {
-  const url = endpoint.trim() || 'http://localhost:11434/api/chat';
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages, stream: false })
-  });
-  if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
-  const data = await res.json() as { message?: { content: string } };
-  return data.message?.content ?? '';
-}
-
 async function callGemini(messages: ChatMessage[], apiKey: string, model: string): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const system = messages.find(m => m.role === 'system')?.content;
@@ -168,13 +155,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json() as RequestBody;
-    const { messages, workspaceId, provider, apiKey = '', model = '', endpoint = '' } = body;
+    const { messages, workspaceId, provider, apiKey = '', model = '' } = body;
 
     if (!messages?.length) {
       return NextResponse.json({ error: 'messages is required' }, { status: 400 });
     }
     if (!provider) {
       return NextResponse.json({ error: 'provider is required' }, { status: 400 });
+    }
+    if (provider === 'ollama') {
+      return NextResponse.json({ error: 'Ollama se conecta directamente desde el navegador, no a través del servidor' }, { status: 400 });
     }
 
     // Verify workspace membership when requesting context
@@ -208,9 +198,6 @@ export async function POST(request: NextRequest) {
       case 'anthropic':
         if (!apiKey) return NextResponse.json({ error: 'API key requerida para Anthropic' }, { status: 400 });
         reply = await callAnthropic(fullMessages, apiKey, model || 'claude-3-5-haiku-20241022');
-        break;
-      case 'ollama':
-        reply = await callOllama(fullMessages, endpoint, model || 'llama3.2');
         break;
       case 'gemini':
         if (!apiKey) return NextResponse.json({ error: 'API key requerida para Gemini' }, { status: 400 });
