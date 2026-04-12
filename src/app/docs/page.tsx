@@ -7,7 +7,8 @@ import {
   ExternalLink, PenTool, Layout, LayoutGrid, WifiOff, FileSpreadsheet,
   KanbanSquare, Sparkles, Network, Quote, BookmarkPlus, Briefcase,
   Zap, FlaskConical, Monitor, Key, Crown,
-  FolderPlus, Globe, Lock, Layers
+  FolderPlus, Globe, Lock, Layers,
+  Bot, FileWarning, Wand2, GitMerge, FileText, AlertCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { ST_RUNTIME_VERSION } from '@/lib/st-runtime-manifest';
@@ -87,6 +88,11 @@ export default function DocsPage() {
     { id: 'terminal', label: 'Terminal Multi-sesión' },
     { id: 'kanban', label: 'Tableros Kanban' },
     { id: 'spreadsheet', label: 'Hojas de Cálculo' },
+    { id: 'file-viewers', label: 'Visores de Archivos' },
+    { id: 'agora-ai', label: 'Agora AI Chat' },
+    { id: 'linter', label: 'Linter Académico' },
+    { id: 'formalizador', label: 'Formalizador LLM' },
+    { id: 'semantic', label: 'Navegador Semántico' },
     { id: 'st-lang', label: 'Centro ST' },
     { id: 'ui-layout', label: 'Productividad (Layout)' },
     { id: 'offline', label: 'PWA & Offline' },
@@ -362,6 +368,229 @@ export default function DocsPage() {
             </div>
           </Section>
 
+          <Section id="file-viewers" icon={FileText} title="Visores de Archivos">
+            <div className="space-y-4">
+              <p className="text-surface-400">Abre documentos directamente en la plataforma sin descargarlos ni instalar aplicaciones externas.</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                  <h5 className="font-bold text-mandy-400 text-xs uppercase mb-3">Formatos soportados</h5>
+                  <ul className="space-y-2 text-[11px] text-surface-400">
+                    <li className="flex items-center gap-2"><Check className="w-3 h-3 text-emerald-400 shrink-0" /><strong className="text-surface-200">PDF</strong> — Renderizado nativo con pdf.js. Navega páginas, zoom y scroll fluido.</li>
+                    <li className="flex items-center gap-2"><Check className="w-3 h-3 text-emerald-400 shrink-0" /><strong className="text-surface-200">PowerPoint (.pptx)</strong> — Visualización de slides sin Microsoft Office.</li>
+                    <li className="flex items-center gap-2"><Check className="w-3 h-3 text-emerald-400 shrink-0" /><strong className="text-surface-200">Hojas de cálculo (.xlsx/.csv)</strong> — Con paginación y búsqueda (sección anterior).</li>
+                    <li className="flex items-center gap-2"><Check className="w-3 h-3 text-emerald-400 shrink-0" /><strong className="text-surface-200">Imágenes / Video / Audio</strong> — Reproducción directa en el panel.</li>
+                  </ul>
+                </div>
+                <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                  <h5 className="font-bold text-blue-400 text-xs uppercase mb-3">Cómo usarlo</h5>
+                  <ul className="list-disc list-inside space-y-2 text-[11px] text-surface-400">
+                    <li>Haz click en cualquier archivo en el explorador para abrirlo en el panel principal.</li>
+                    <li>Puedes abrirlo en un panel del mosaico y seguir editando otro documento a la vez.</li>
+                    <li>Los archivos se cargan desde Firebase Storage con URLs firmadas de corta duración para mayor seguridad.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          <Section id="agora-ai" icon={Bot} title="Agora AI Chat — Asistente Multi-Proveedor">
+            <div className="space-y-5">
+              <p className="text-surface-400">
+                Agora integra un chat de inteligencia artificial directamente en tu workspace, con soporte para los principales modelos del mercado y acceso al contexto de tus propios documentos.
+              </p>
+
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                <h5 className="font-bold text-white text-sm mb-3">Proveedores de IA soportados</h5>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700/30">
+                    <p className="text-emerald-400 font-bold text-xs mb-1">OpenAI (ChatGPT)</p>
+                    <p className="text-[11px] text-surface-500">Modelo por defecto: <code className="text-surface-300">gpt-4o-mini</code>. Requiere tu propia API key.</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700/30">
+                    <p className="text-mandy-400 font-bold text-xs mb-1">Anthropic (Claude)</p>
+                    <p className="text-[11px] text-surface-500">Modelo por defecto: <code className="text-surface-300">claude-3-5-haiku</code>. Requiere tu propia API key.</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700/30">
+                    <p className="text-blue-400 font-bold text-xs mb-1">Google Gemini</p>
+                    <p className="text-[11px] text-surface-500">Modelo por defecto: <code className="text-surface-300">gemini-2.0-flash</code>. Requiere tu propia API key.</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700/30">
+                    <p className="text-amber-400 font-bold text-xs mb-1">Ollama (local)</p>
+                    <p className="text-[11px] text-surface-500">Conexión directa desde el navegador a tu instancia local. Sin API key ni servidor intermediario.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 border-l-4 border-l-violet-500">
+                <h5 className="font-bold text-white text-sm mb-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-violet-400" /> Contexto automático del workspace</h5>
+                <p className="text-xs text-surface-400 leading-relaxed">
+                  Cuando chateas dentro de un workspace, el asistente recibe automáticamente el contenido de tus documentos, los conceptos semánticos definidos y los fragmentos marcados. El modelo &quot;sabe&quot; de qué trata tu proyecto sin que tengas que copiar y pegar nada.
+                </p>
+              </div>
+
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                <h5 className="font-bold text-amber-400 text-xs uppercase mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Privacidad de las API keys</h5>
+                <p className="text-xs text-surface-400 leading-relaxed">
+                  Las claves de IA se guardan en el <code className="text-surface-300">localStorage</code> de tu navegador y se envían directamente desde el cliente. <strong className="text-white">Nunca se almacenan en los servidores de Agora.</strong>
+                </p>
+              </div>
+            </div>
+          </Section>
+
+          <Section id="linter" icon={FileWarning} title="Linter Académico en Tiempo Real">
+            <div className="space-y-5">
+              <p className="text-surface-400">
+                El editor analiza tu documento mientras escribes y señala problemas de estilo, ortografía, estructura académica y citas bibliográficas. Piensa en él como un corrector gramatical especializado en escritura académica en español.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                  <h5 className="font-bold text-emerald-400 text-xs uppercase mb-3">Reglas de estructura</h5>
+                  <ul className="space-y-1.5 text-[11px] text-surface-400">
+                    <li><span className="text-surface-200 font-semibold">Encabezados:</span> jerarquía, H1 único, espacios correctos</li>
+                    <li><span className="text-surface-200 font-semibold">Links:</span> URLs desnudas, links vacíos, espacios</li>
+                    <li><span className="text-surface-200 font-semibold">Párrafos:</span> longitud excesiva, oraciones muy largas</li>
+                    <li><span className="text-surface-200 font-semibold">Tablas:</span> formato GFM, columnas desalineadas</li>
+                    <li><span className="text-surface-200 font-semibold">Código:</span> bloques sin lenguaje, fences sin cerrar</li>
+                    <li><span className="text-surface-200 font-semibold">Imágenes:</span> texto alternativo faltante</li>
+                    <li><span className="text-surface-200 font-semibold">Notas al pie:</span> referencias huérfanas</li>
+                    <li><span className="text-surface-200 font-semibold">Frontmatter:</span> YAML malformado</li>
+                  </ul>
+                </div>
+                <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                  <h5 className="font-bold text-mandy-400 text-xs uppercase mb-3">Reglas académicas</h5>
+                  <ul className="space-y-1.5 text-[11px] text-surface-400">
+                    <li><span className="text-surface-200 font-semibold">Ortografía ES:</span> errores tipográficos, palabras duplicadas, acentuación</li>
+                    <li><span className="text-surface-200 font-semibold">Estilo:</span> voz pasiva excesiva, nominalizaciones</li>
+                    <li><span className="text-surface-200 font-semibold">Precisión:</span> cuantificadores vagos (varios, algunos, muchos)</li>
+                    <li><span className="text-surface-200 font-semibold">Redundancia:</span> léxico repetitivo en el mismo párrafo</li>
+                  </ul>
+                  <h5 className="font-bold text-blue-400 text-xs uppercase mb-3 mt-4">Reglas de citas APA</h5>
+                  <ul className="space-y-1.5 text-[11px] text-surface-400">
+                    <li><span className="text-surface-200 font-semibold">Formato:</span> APA malformado, DOI incorrecto</li>
+                    <li><span className="text-surface-200 font-semibold">Bibliografía:</span> sección faltante, citas huérfanas</li>
+                    <li><span className="text-surface-200 font-semibold">Arcaísmos:</span> ibid. / op.cit. en lugar de referencias completas</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-surface-950/50 border border-surface-700/30 rounded-xl p-4">
+                <p className="text-[11px] text-surface-500 flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  Los subrayados de error aparecen directamente en el texto. Pasa el cursor sobre ellos para ver la descripción del problema y la sugerencia de corrección.
+                </p>
+              </div>
+            </div>
+          </Section>
+
+          <Section id="formalizador" icon={Wand2} title="Formalizador LLM — Texto a Lógica Formal">
+            <div className="space-y-5">
+              <p className="text-surface-400">
+                Convierte texto en lenguaje natural a código ST (lógica formal) usando inteligencia artificial. Útil para formalizar argumentos filosóficos, científicos o jurídicos.
+              </p>
+
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                <h5 className="font-bold text-white text-sm mb-3">Cómo funciona</h5>
+                <ol className="list-decimal list-inside space-y-2 text-xs text-surface-400">
+                  <li>Escribe o pega un texto en lenguaje natural (argumento, definición, hipótesis).</li>
+                  <li>Selecciona el <strong className="text-surface-200">perfil lógico</strong> (clásica proposicional, primer orden, modal, intuicionista, etc.).</li>
+                  <li>El formalizador envía el texto a un LLM y recibe código ST estructurado.</li>
+                  <li>El resultado pasa por el <strong className="text-surface-200">linter ST</strong> automáticamente para validar la sintaxis.</li>
+                  <li>Puedes insertar el código resultante directamente en tu documento ST.</li>
+                </ol>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                  <h5 className="font-bold text-violet-400 text-xs uppercase mb-3">Resultado del análisis</h5>
+                  <ul className="space-y-1.5 text-[11px] text-surface-400">
+                    <li><span className="text-surface-200 font-semibold">Código ST:</span> fórmulas generadas por el modelo</li>
+                    <li><span className="text-surface-200 font-semibold">Confianza:</span> porcentaje calculado según errores y advertencias</li>
+                    <li><span className="text-surface-200 font-semibold">Átomos / Fórmulas:</span> conteo de elementos extraídos</li>
+                    <li><span className="text-surface-200 font-semibold">Diagnósticos:</span> errores y advertencias del linter ST</li>
+                    <li><span className="text-surface-200 font-semibold">Trazabilidad:</span> indica si fue inferido por LLM o por reglas</li>
+                  </ul>
+                </div>
+                <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                  <h5 className="font-bold text-amber-400 text-xs uppercase mb-3">Modelos compatibles</h5>
+                  <ul className="space-y-1.5 text-[11px] text-surface-400">
+                    <li>Cualquier modelo compatible con la API de <strong className="text-surface-200">Ollama</strong></li>
+                    <li><strong className="text-surface-200">Open WebUI</strong> (compatible con OpenAI)</li>
+                    <li>Modelo recomendado: <code className="text-surface-300">autologic-formalizer</code> (fine-tuned para ST)</li>
+                  </ul>
+                  <p className="text-[11px] text-surface-500 mt-3 italic">El servidor también puede usar un endpoint centralizado configurado por el administrador.</p>
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          <Section id="semantic" icon={GitMerge} title="Navegador Semántico — Mapa de Conocimiento">
+            <div className="space-y-5">
+              <p className="text-surface-400">
+                El Navegador Semántico es una capa de gestión de conocimiento que vive encima de tus documentos. Te permite extraer conceptos, marcar evidencias, definir relaciones y construir un grafo del conocimiento de tu workspace.
+              </p>
+
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                <h5 className="font-bold text-white text-sm mb-3">Entidades que puedes crear</h5>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30 text-center">
+                    <p className="text-blue-400 font-bold text-[10px] uppercase mb-1">Concepto</p>
+                    <p className="text-[10px] text-surface-500">Término clave con definición propia</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30 text-center">
+                    <p className="text-emerald-400 font-bold text-[10px] uppercase mb-1">Evidencia</p>
+                    <p className="text-[10px] text-surface-500">Fragmento que respalda una afirmación</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30 text-center">
+                    <p className="text-amber-400 font-bold text-[10px] uppercase mb-1">Afirmación (Claim)</p>
+                    <p className="text-[10px] text-surface-500">Tesis o proposición a demostrar</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30 text-center">
+                    <p className="text-violet-400 font-bold text-[10px] uppercase mb-1">Definición</p>
+                    <p className="text-[10px] text-surface-500">Enunciado formal de un término</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30 text-center">
+                    <p className="text-mandy-400 font-bold text-[10px] uppercase mb-1">Fuente</p>
+                    <p className="text-[10px] text-surface-500">Referencia bibliográfica ligada a un fragmento</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30 text-center">
+                    <p className="text-slate-400 font-bold text-[10px] uppercase mb-1">Pasaje</p>
+                    <p className="text-[10px] text-surface-500">Fragmento de texto destacado para análisis</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                <h5 className="font-bold text-white text-xs uppercase mb-3 flex items-center gap-2"><Network className="w-4 h-4 text-blue-400" /> Relaciones entre entidades</h5>
+                <div className="flex flex-wrap gap-2">
+                  {['soporta', 'contradice', 'implica', 'depende-de', 'define', 'ejemplo-de', 'evidencia-para', 'evidencia-contra', 'reformula', 'cuestiona', 'relacionado-con'].map(r => (
+                    <span key={r} className="px-2 py-1 rounded bg-surface-900/60 border border-surface-700/40 text-[10px] text-surface-400 font-mono">{r}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
+                <h5 className="font-bold text-white text-xs uppercase mb-3">Modos de experiencia</h5>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30">
+                    <p className="text-emerald-400 font-bold text-[10px] uppercase mb-1">Asistido</p>
+                    <p className="text-[10px] text-surface-500">La IA sugiere conceptos y relaciones automáticamente mientras editas.</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30">
+                    <p className="text-amber-400 font-bold text-[10px] uppercase mb-1">Híbrido</p>
+                    <p className="text-[10px] text-surface-500">Combina sugerencias automáticas con marcado manual.</p>
+                  </div>
+                  <div className="p-3 bg-surface-900/50 rounded border border-surface-700/30">
+                    <p className="text-mandy-400 font-bold text-[10px] uppercase mb-1">Experto</p>
+                    <p className="text-[10px] text-surface-500">Control total manual. Ideal para investigadores avanzados.</p>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-surface-500">El estado semántico de cada workspace se sincroniza en la nube y es accesible por todos los miembros con los permisos correspondientes.</p>
+            </div>
+          </Section>
+
           <Section id="st-lang" icon={FlaskConical} title="Lenguaje ST (Lógica Formal)">
             <div className="space-y-5">
               <p className="text-surface-400 text-base">
@@ -463,9 +692,23 @@ export default function DocsPage() {
                 <p className="text-xs text-surface-400 leading-relaxed mb-3">
                   Controla tu consumo desde el menú de usuario. El sistema rastrea el tamaño de tus archivos en <strong className="text-white">Firebase Storage</strong> y te muestra una barra de progreso con tu límite actual.
                 </p>
-                <div className="p-3 bg-surface-950/50 rounded border border-surface-700/30 flex items-center justify-between">
-                  <span className="text-[10px] text-surface-500 font-bold uppercase">Plan Gratuito</span>
-                  <span className="text-[10px] text-surface-300 font-mono">Límite: 100 MB</span>
+                <div className="space-y-2">
+                  <div className="p-3 bg-surface-950/50 rounded border border-surface-700/30 flex items-center justify-between">
+                    <span className="text-[10px] text-surface-500 font-bold uppercase">Gratuito</span>
+                    <span className="text-[10px] text-surface-300 font-mono">50 MB · Sin terminales</span>
+                  </div>
+                  <div className="p-3 bg-surface-950/50 rounded border border-blue-500/20 flex items-center justify-between">
+                    <span className="text-[10px] text-blue-400 font-bold uppercase">Básico · $30.000/mes</span>
+                    <span className="text-[10px] text-surface-300 font-mono">1 GB · Kanban · Workspaces colaborativos</span>
+                  </div>
+                  <div className="p-3 bg-surface-950/50 rounded border border-mandy-500/20 flex items-center justify-between">
+                    <span className="text-[10px] text-mandy-400 font-bold uppercase">Pro · $80.000/mes</span>
+                    <span className="text-[10px] text-surface-300 font-mono">1 GB · Terminales ilimitadas · Worker completo</span>
+                  </div>
+                  <div className="p-3 bg-surface-950/50 rounded border border-amber-500/20 flex items-center justify-between">
+                    <span className="text-[10px] text-amber-400 font-bold uppercase flex items-center gap-1"><Crown className="w-3 h-3" /> Enterprise · $240.000/mes</span>
+                    <span className="text-[10px] text-surface-300 font-mono">10 GB · Máquina dedicada · Soporte personalizado</span>
+                  </div>
                 </div>
               </div>
 
