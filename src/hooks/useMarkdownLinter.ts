@@ -338,5 +338,14 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     return () => { cancelled = true; };
   }, [runLint]);
 
+  // ── Safety timeout: force 'ready' if stuck in 'initializing' ───
+  useEffect(() => {
+    if (linterStatus !== 'initializing') return;
+    const timeout = setTimeout(() => {
+      setLinterStatus((prev) => prev === 'initializing' ? 'ready' : prev);
+    }, 10_000);
+    return () => clearTimeout(timeout);
+  }, [linterStatus]);
+
   return { diagnostics, runLint, linterStatus };
 }
