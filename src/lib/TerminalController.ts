@@ -320,7 +320,7 @@ export class TerminalController {
     });
 
     this.socket.on('connect_error', (err) => {
-      console.error('[TerminalController] Connection error:', err.message);
+      this.debugLog('[TerminalController] Connection error:', err.message);
       onStatusChange?.(TerminalConnectionStatus.Error);
     });
 

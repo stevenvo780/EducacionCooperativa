@@ -85,8 +85,59 @@ async function fetchWorkspaceDoc(workspaceId: string, uid: string) {
   return { id: snap.id, ...snap.data() } as Record<string, unknown>;
 }
 
+/**
+ * Resolve a documentId that might be a Firebase ID or a document title/name.
+ * If it looks like a valid Firestore document ID, return it directly.
+ * Otherwise, search by name among the user's documents.
+ */
+async function resolveDocumentId(rawId: string, ctx: AgentExecutionContext): Promise<string> {
+  // Try direct Firestore lookup first (valid IDs are typically 20-char alphanumeric)
+  const directSnap = await adminDb.collection('documents').doc(rawId).get();
+  if (directSnap.exists) {
+    return rawId;
+  }
+
+  // Not found by ID — search by name (case-insensitive match)
+  const nameNorm = rawId.trim().toLowerCase();
+  const docsRef = adminDb.collection('documents');
+
+  // Try personal workspace
+  let query = isPersonalWorkspaceId(ctx.workspaceId)
+    ? docsRef.where('ownerId', '==', ctx.uid).limit(MAX_DOC_SCAN)
+    : docsRef.where('workspaceId', '==', ctx.workspaceId).limit(MAX_DOC_SCAN);
+
+  const snap = await query.get();
+  const matches = snap.docs.filter(d => {
+    const name = (d.data().name || '').trim().toLowerCase();
+    return name === nameNorm;
+  });
+
+  if (matches.length === 1) return matches[0].id;
+
+  // Try partial / includes match if exact match failed
+  if (matches.length === 0) {
+    const partial = snap.docs.filter(d => {
+      const name = (d.data().name || '').trim().toLowerCase();
+      return name.includes(nameNorm) || nameNorm.includes(name);
+    });
+    if (partial.length === 1) return partial[0].id;
+    if (partial.length > 1) {
+      const names = partial.slice(0, 5).map(d => `"${d.data().name}" (${d.id})`).join(', ');
+      throw new Error(`Múltiples documentos coinciden con "${rawId}": ${names}. Usa el ID exacto.`);
+    }
+  }
+
+  if (matches.length > 1) {
+    const names = matches.slice(0, 5).map(d => `"${d.data().name}" (${d.id})`).join(', ');
+    throw new Error(`Múltiples documentos con nombre "${rawId}": ${names}. Usa el ID exacto.`);
+  }
+
+  throw new Error(`Documento no encontrado: "${rawId}". Usa list_documents para ver los documentos disponibles.`);
+}
+
 async function fetchDocumentForUser(documentId: string, ctx: AgentExecutionContext): Promise<StoredDocument> {
-  const snap = await adminDb.collection('documents').doc(documentId).get();
+  const resolvedId = await resolveDocumentId(documentId, ctx);
+  const snap = await adminDb.collection('documents').doc(resolvedId).get();
   if (!snap.exists) {
     throw new Error('Documento no encontrado');
   }
@@ -372,16 +423,16 @@ async function updateDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
   if (storagePath) {
     updateData.storagePath = storagePath;
   }
-  await adminDb.collection('documents').doc(documentId).update(updateData);
+  await adminDb.collection('documents').doc(doc.id).update(updateData);
 
   return ok(call, `Actualicé "${title}".`, {
     document: {
-      id: documentId,
+      id: doc.id,
       name: title,
       previousPreview: excerpt(previousSnapshot.content),
       preview: excerpt(content)
     }
-  }, [{ action: 'restore_document', args: { documentId, snapshot: previousSnapshot } }]);
+  }, [{ action: 'restore_document', args: { documentId: doc.id, snapshot: previousSnapshot } }]);
 }
 
 async function renameDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
@@ -389,15 +440,15 @@ async function renameDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
   const newTitle = String(call.args.newTitle || '').trim();
   if (!documentId || !newTitle) throw new Error('documentId y newTitle son requeridos');
   const doc = await fetchDocumentForUser(documentId, ctx);
-  await adminDb.collection('documents').doc(documentId).update({
+  await adminDb.collection('documents').doc(doc.id).update({
     name: newTitle,
     updatedAt: FieldValue.serverTimestamp(),
     lastUpdatedBy: ctx.uid
   });
 
   return ok(call, `Renombré "${doc.name || 'Sin título'}" a "${newTitle}".`, {
-    document: { id: documentId, previousName: doc.name || 'Sin título', name: newTitle }
-  }, [{ action: 'rename_document', args: { documentId, newTitle: doc.name || 'Sin título' } }]);
+    document: { id: doc.id, previousName: doc.name || 'Sin título', name: newTitle }
+  }, [{ action: 'rename_document', args: { documentId: doc.id, newTitle: doc.name || 'Sin título' } }]);
 }
 
 async function moveDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
@@ -406,19 +457,19 @@ async function moveDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
   if (!documentId) throw new Error('documentId es requerido');
   const doc = await fetchDocumentForUser(documentId, ctx);
   const previousFolder = normalizeFolderPath(doc.folder);
-  await adminDb.collection('documents').doc(documentId).update({
+  await adminDb.collection('documents').doc(doc.id).update({
     folder: targetFolder,
     updatedAt: FieldValue.serverTimestamp(),
     lastUpdatedBy: ctx.uid
   });
   return ok(call, `Moví "${doc.name || 'Sin título'}" a "${targetFolder}".`, {
     document: {
-      id: documentId,
+      id: doc.id,
       name: doc.name || 'Sin título',
       previousFolder,
       folder: targetFolder
     }
-  }, [{ action: 'move_document', args: { documentId, targetFolder: previousFolder } }]);
+  }, [{ action: 'move_document', args: { documentId: doc.id, targetFolder: previousFolder } }]);
 }
 
 async function deleteDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
@@ -447,7 +498,7 @@ async function deleteDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
     url: doc.url || null
   };
 
-  await adminDb.collection('documents').doc(documentId).delete();
+  await adminDb.collection('documents').doc(doc.id).delete();
   await maybeDeleteStorageObject(doc.storagePath, doc.id);
 
   return ok(call, `Eliminé "${doc.name || 'Sin título'}".`, {
