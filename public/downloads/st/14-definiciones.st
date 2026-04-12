@@ -31,7 +31,7 @@ define ImplicacionBase = P -> Q
 define Implica(x, y) := x -> y
 description "Implicación material parametrizada"
 
-define Nand(x, y) := !(x & y)
+define NandDef(x, y) := !(x & y)
 description "Negación conjuntiva (NAND) parametrizada"
 
 define Equivale(x, y) := (x -> y) & (y -> x)
@@ -70,7 +70,8 @@ check satisfiable Explosion
 unfold Tautologia
 unfold Implica(P, Q)
 unfold Compuesta
-desplegar Nand(P, Q)
+// La build canónica actual valida `unfold` aquí de forma estable.
+unfold NandDef(P, Q)
 
 // ── 6. FOLD — CONTRAER FÓRMULA A DEFINICIÓN ─────────────────
 // Busca si la fórmula coincide con alguna definición registrada

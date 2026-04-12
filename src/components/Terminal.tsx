@@ -5,6 +5,13 @@ import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { getErrorMessage } from '@/lib/error-utils';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import {
+  buildWorkerQuickInstallCommand,
+  buildWorkerRegistrationCommand,
+  resolveWorkerDisplayName,
+  resolveWorkerDownloadUrl,
+  resolveWorkerHubDisplayUrl
+} from '@/lib/terminal-runtime';
 import { TerminalConnectionStatus, WorkerStatusValue } from '@/types/terminal';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { CheckCircle, AlertCircle, Loader2, Terminal as TerminalIcon, Copy, Key, Monitor, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
@@ -69,6 +76,17 @@ const Terminal: React.FC<TerminalProps> = ({
 
   const isPersonalWorkspace = workspaceType === WorkspaceType.Personal || workspaceId === WorkspaceType.Personal || !workspaceId;
   const workerToken = user ? getWorkerToken(workspaceType, workspaceId, user.uid) : '';
+  const workerDisplayName = resolveWorkerDisplayName({
+    isPersonalWorkspace,
+    workspaceName,
+    userEmail: user?.email
+  });
+  const workerRegistrationCommand = buildWorkerRegistrationCommand({
+    isPersonalWorkspace,
+    workspaceId,
+    userId: user?.uid,
+    displayName: workerDisplayName
+  });
 
   const workspaceWorkerStatus = getWorkerStatusForWorkspace?.(workerToken) || status;
 
@@ -133,8 +151,12 @@ const Terminal: React.FC<TerminalProps> = ({
       createSession(workerToken, workspaceType, workspaceName);
   };
 
-  const downloadPath = '/downloads/edu-worker_1.0.10_amd64.deb';
-  const downloadUrl = typeof window !== 'undefined' ? `${window.location.origin}${downloadPath}` : downloadPath;
+  const downloadUrl = resolveWorkerDownloadUrl(typeof window !== 'undefined' ? window.location.origin : undefined);
+  const quickInstallCommand = buildWorkerQuickInstallCommand({
+    downloadUrl,
+    registrationCommand: workerRegistrationCommand
+  });
+  const hubDisplayUrl = resolveWorkerHubDisplayUrl(nexusUrl);
 
   if (!user) return <div className="h-full flex items-center justify-center text-slate-500">Log in required</div>;
 
@@ -279,9 +301,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
                                     <p className="text-slate-500 mb-1"># 2. Agregar worker para este workspace</p>
                                     <p className="text-emerald-400 whitespace-pre-wrap">
-{isPersonalWorkspace
-    ? `$ sudo edu-worker-manager add ${user?.uid || '<userId>'} --type personal --name "${user?.email || 'Mi Espacio'}"`
-    : `$ sudo edu-worker-manager add ${workspaceId} --name "${workspaceName || 'Workspace'}"`}
+{`$ ${workerRegistrationCommand}`}
                                     </p>
 
                                     <p className="text-slate-500 mt-3 mb-1"># Comandos útiles</p>
@@ -292,7 +312,7 @@ const Terminal: React.FC<TerminalProps> = ({
                                 </div>
 
                                 <p className="text-[10px] text-slate-600 text-center">
-                                    El worker se conectará a: <code className="text-slate-500">{nexusUrl || 'http://148.230.88.162:3010'}</code>
+                                    El worker se conectará a: <code className="text-slate-500">{hubDisplayUrl}</code>
                                 </p>
                             </div>
                         )}
@@ -347,13 +367,11 @@ const Terminal: React.FC<TerminalProps> = ({
                                 <div className="relative">
                                     <pre className="bg-black p-3 rounded border border-slate-800 text-xs overflow-x-auto">
                                         <code className="text-emerald-400 whitespace-pre-wrap break-all">
-{`curl -fsSL ${downloadUrl} -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb && sudo edu-worker-manager add ${workerToken}${isPersonalWorkspace ? ' --type personal' : ''} --name "${workspaceName || (isPersonalWorkspace ? user?.email || 'Mi Espacio' : 'Workspace')}"`}
+{quickInstallCommand}
                                         </code>
                                     </pre>
                                     <button
-                                        onClick={() => navigator.clipboard.writeText(
-                                            `curl -fsSL ${downloadUrl} -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb && sudo edu-worker-manager add ${workerToken}${isPersonalWorkspace ? ' --type personal' : ''} --name "${workspaceName || (isPersonalWorkspace ? user?.email || 'Mi Espacio' : 'Workspace')}"`
-                                        )}
+                                        onClick={() => navigator.clipboard.writeText(quickInstallCommand)}
                                         className="absolute top-2 right-2 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-[10px] rounded flex items-center gap-1 transition-colors"
                                     >
                                         <Copy className="w-3 h-3" /> Copiar
@@ -386,9 +404,7 @@ const Terminal: React.FC<TerminalProps> = ({
                                         <p className="text-slate-500 mb-1 font-medium">Paso 3: Agregar worker para este workspace</p>
                                         <div className="bg-black p-2 rounded border border-slate-800 overflow-x-auto">
                                             <code className="text-blue-400 whitespace-pre">
-{isPersonalWorkspace
-    ? `sudo edu-worker-manager add ${user?.uid || '<userId>'} --type personal --name "${user?.email || 'Mi Espacio'}"`
-    : `sudo edu-worker-manager add ${workspaceId} --name "${workspaceName || 'Workspace'}"`}
+{workerRegistrationCommand}
                                             </code>
                                         </div>
                                     </div>
@@ -407,7 +423,7 @@ const Terminal: React.FC<TerminalProps> = ({
                             </div>
 
                             <p className="text-[10px] text-slate-600 text-center pt-2">
-                                El worker se conectará a: <code className="text-slate-500">{nexusUrl || 'http://148.230.88.162:3001'}</code>
+                                El worker se conectará a: <code className="text-slate-500">{hubDisplayUrl}</code>
                             </p>
                         </>
                     )}

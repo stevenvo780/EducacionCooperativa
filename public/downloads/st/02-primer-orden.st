@@ -20,7 +20,7 @@ check equivalent !(forall x P(x)), exists x !P(x)
 check satisfiable (exists x P(x))
 check satisfiable (exists x P(x) & exists x !P(x))
 check satisfiable ((forall x (P(x) -> Q(x))) & P(a))
-check satisfiable (forall x exists y R(x, y))
+check satisfiable (forall x R(x, x))
 
 // === DERIVACIÓN Y PRUEBA ===
 set verbose = on
