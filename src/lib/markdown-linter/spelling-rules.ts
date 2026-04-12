@@ -91,6 +91,7 @@ export const spellingRule: LinterRule = {
   description: 'Detecta errores ortográficos usando el diccionario Hunspell en memoria.',
   category: 'spelling',
   defaultEnabled: true,
+  supportsIncremental: true,
   check: (text: string): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
@@ -141,6 +142,7 @@ export const doubledWordsRule: LinterRule = {
   description: 'Detecta palabras repetidas consecutivamente (ej: "el el", "de de").',
   category: 'spelling',
   defaultEnabled: true,
+  supportsIncremental: true,
   check: (text: string): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
     const lines = text.split('\n');
@@ -228,6 +230,71 @@ const ACCENT_SUFFIX_RULES: Array<{
     pattern: /\b([a-záéíóúñü]+)metrico(s|a|as)?\b/gi,
     fix: (m) => m.replace(/metrico/i, 'métrico'),
     msg: 'Falta tilde: "-métrico" es esdrújula.'
+  },
+  {
+    pattern: /\b([a-záéíóúñü]+)fonico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/fonico/i, 'fónico'),
+    msg: 'Falta tilde: "-fónico" es esdrújula.'
+  },
+  {
+    pattern: /\b([a-záéíóúñü]+)sofico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/sofico/i, 'sófico'),
+    msg: 'Falta tilde: "-sófico" es esdrújula.'
+  },
+  {
+    pattern: /\b([a-záéíóúñü]+)gogico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/gogico/i, 'gógico'),
+    msg: 'Falta tilde: "-gógico" es esdrújula.'
+  },
+  {
+    pattern: /\btambien\b/gi,
+    fix: () => 'también',
+    msg: 'Falta tilde: "también" es aguda terminada en "n".'
+  },
+  {
+    pattern: /\bademas\b/gi,
+    fix: () => 'además',
+    msg: 'Falta tilde: "además" es aguda terminada en "s".'
+  },
+  {
+    pattern: /\btodavia\b/gi,
+    fix: () => 'todavía',
+    msg: 'Falta tilde: "todavía" lleva acento por hiato.'
+  },
+  {
+    pattern: /\bdespues\b/gi,
+    fix: () => 'después',
+    msg: 'Falta tilde: "después" es aguda terminada en "s".'
+  },
+  {
+    pattern: /\btraves\b/gi,
+    fix: () => 'través',
+    msg: 'Falta tilde: "través" es aguda terminada en "s".'
+  },
+  {
+    pattern: /\bmetodo(s)?\b/gi,
+    fix: (m) => m.replace(/metodo/i, 'método'),
+    msg: 'Falta tilde: "método" es esdrújula.'
+  },
+  {
+    pattern: /\bnumero(s)?\b/gi,
+    fix: (m) => m.replace(/numero/i, 'número'),
+    msg: 'Falta tilde: "número" es esdrújula.'
+  },
+  {
+    pattern: /\bultimo(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/ultimo/i, 'último'),
+    msg: 'Falta tilde: "último" es esdrújula.'
+  },
+  {
+    pattern: /\bpublico(s|a|as)?\b/gi,
+    fix: (m) => m.replace(/publico/i, 'público'),
+    msg: 'Falta tilde: "público" es esdrújula.'
+  },
+  {
+    pattern: /\bproposito(s)?\b/gi,
+    fix: (m) => m.replace(/proposito/i, 'propósito'),
+    msg: 'Falta tilde: "propósito" es esdrújula.'
   }
 ];
 
@@ -284,7 +351,17 @@ const WORD_START_IMPOSSIBLE = /\b([nm][bcdfgjklmnpqrstvwxyz](?=[a-záéíóúñ�
 const SUSPICIOUS_WHITELIST = new Set([
   'innato', 'innata', 'innovar', 'innovación', 'innovador', 'innecesario',
   'innoble', 'innombrable', 'perenne', 'biennal', 'connotar', 'connotación',
-  'ennegrecer', 'cannabis', 'connectar'
+  'ennegrecer', 'cannabis', 'connectar', 'connivencia', 'connatural',
+  'innegable', 'innocuo', 'innocua', 'innumerable', 'innumerables',
+  'ennegrecer', 'ennoblecimiento', 'ennoblecer', 'innominado',
+  'sinnúmero', 'sinrazón', 'perruno', 'perrito', 'perrita',
+  'carretera', 'carretilla', 'arrojar', 'arroyo', 'arroz',
+  'corredor', 'correlación', 'corresponder', 'corriente',
+  'narración', 'narrativa', 'narrador', 'erróneo', 'error',
+  'terror', 'terrible', 'llevar', 'llegar', 'llave', 'lluvia',
+  'llamar', 'llamada', 'lleno', 'llenado', 'llanura', 'lloriquear',
+  'acceso', 'acción', 'accidente', 'occidental', 'occiput',
+  'acceder', 'accesible', 'accesibilidad', 'accionar', 'accidentado'
 ]);
 
 export const suspiciousPatternsRule: LinterRule = {
