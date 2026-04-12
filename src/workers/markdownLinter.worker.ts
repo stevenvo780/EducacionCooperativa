@@ -2,6 +2,10 @@ import { BUILTIN_RULES_BY_ID } from '@/lib/markdown-linter/rules';
 import type { LinterDiagnostic } from '@/lib/markdown-linter/types';
 import { initSpellEngine, syncPersonalDictionary } from '@/lib/markdown-linter/spell-engine';
 
+// Preload spell engine immediately — dictionaries (~850KB) start downloading
+// as soon as the worker is created instead of waiting for the first lint request.
+initSpellEngine().catch(() => { /* fail-open: dictionaries will retry on demand */ });
+
 // ── Tipos de mensajes ────────────────────────────────────────
 
 type LintRequestMessage = {
