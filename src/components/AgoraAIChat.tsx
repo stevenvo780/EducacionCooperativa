@@ -174,8 +174,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     msgs: Array<{ role: string; content: string }>,
     signal: AbortSignal
   ): Promise<string> => {
-    const base = config.endpoint.trim() || 'http://localhost:11434';
-    const url = `${base}/api/chat`;
+    const raw = config.endpoint.trim() || 'http://localhost:11434';
+    // Normalize: strip trailing slash, append /api/chat only if not already present
+    const base = raw.replace(/\/+$/, '');
+    const url = base.endsWith('/api/chat') ? base : `${base}/api/chat`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
