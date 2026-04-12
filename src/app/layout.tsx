@@ -3,6 +3,9 @@ import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
 import StoreProvider from '@/components/StoreProvider';
 import PWAUpdater from '@/components/PWAUpdater';
+import { Toaster } from '@/components/ui/Toaster';
+import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
+import GlobalErrorCatcher from '@/components/GlobalErrorCatcher';
 
 export const viewport: Viewport = {
   themeColor: '#000000',
@@ -36,12 +39,16 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="" suppressHydrationWarning>
-        <StoreProvider>
-          <AuthProvider>
-            {children}
-            <PWAUpdater />
-          </AuthProvider>
-        </StoreProvider>
+        <GlobalErrorCatcher />
+        <Toaster position="top-right" richColors />
+        <GlobalErrorBoundary>
+          <StoreProvider>
+            <AuthProvider>
+              {children}
+              <PWAUpdater />
+            </AuthProvider>
+          </StoreProvider>
+        </GlobalErrorBoundary>
       </body>
     </html>
   );
