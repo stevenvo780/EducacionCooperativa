@@ -102,7 +102,7 @@ async function resolveDocumentId(rawId: string, ctx: AgentExecutionContext): Pro
   const docsRef = adminDb.collection('documents');
 
   // Try personal workspace
-  let query = isPersonalWorkspaceId(ctx.workspaceId)
+  const query = isPersonalWorkspaceId(ctx.workspaceId)
     ? docsRef.where('ownerId', '==', ctx.uid).limit(MAX_DOC_SCAN)
     : docsRef.where('workspaceId', '==', ctx.workspaceId).limit(MAX_DOC_SCAN);
 
