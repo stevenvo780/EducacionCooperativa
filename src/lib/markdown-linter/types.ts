@@ -23,6 +23,8 @@ export interface LinterDiagnostic {
   text?: string;
   /** Replacement text(s) for quick-fix. Each entry is a clickable option. */
   replacements?: string[];
+  /** Rule ID that generated this diagnostic (injected at aggregation level) */
+  ruleId?: string;
 }
 
 // ── Categorías de regla ─────────────────────────────────────

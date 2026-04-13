@@ -65,7 +65,11 @@ function runRulesOnText(text: string, ruleIds: string[]): LinterDiagnostic[] {
   const diagnostics: LinterDiagnostic[] = [];
   for (const ruleId of ruleIds) {
     const rule = BUILTIN_RULES_BY_ID.get(ruleId);
-    if (rule) diagnostics.push(...rule.check(text));
+    if (rule) {
+      for (const d of rule.check(text)) {
+        diagnostics.push({ ...d, ruleId });
+      }
+    }
   }
   return diagnostics;
 }

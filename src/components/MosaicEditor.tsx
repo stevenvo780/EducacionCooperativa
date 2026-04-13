@@ -65,6 +65,8 @@ import { useMarkdownLinter, type LinterDiagnostic } from '@/hooks/useMarkdownLin
 import { useSTDefinitionsLinter } from '@/hooks/useSTDefinitionsLinter';
 import { useSTLinterRules } from '@/hooks/useSTLinterRules';
 import { addToPersonalDictionary, getPersonalDictionary } from '@/lib/markdown-linter/spell-engine';
+import { addSuppression } from '@/lib/markdown-linter/suppressions';
+import { MarkdownLinterRegistry } from '@/lib/markdown-linter/registry';
 import { normalizePath } from '@/lib/folder-utils';
 import { buildSTFromSemantic, companionSTName, formalizeText } from '@/lib/buildSTFromSemantic';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
@@ -75,6 +77,7 @@ import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import { EditorUtilityMenu } from '@/components/editor/EditorUtilityMenu';
 import { LinterOverlay } from '@/components/editor/LinterOverlay';
 import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
+import { LinterConfirmModal, type LinterActionRequest } from '@/components/mosaic-editor/LinterConfirmModal';
 import { LinterConfigPanel } from '@/components/mosaic-editor/LinterConfigPanel';
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
@@ -131,6 +134,7 @@ export default function MosaicEditor({
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
   const [companionStDocId, setCompanionStDocId] = useState<string | null>(null);
   const [editorUtilityMenu, setEditorUtilityMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [linterAction, setLinterAction] = useState<LinterActionRequest | null>(null);
 
   const renderToolbarContentsRef = useRef<(() => React.ReactNode) | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
@@ -1146,6 +1150,48 @@ export default function MosaicEditor({
     clearSemanticSelection();
   }, [clearSemanticSelection, dictionaryCandidate, runLint]);
 
+  // ── Linter tooltip actions (open confirm modal) ───────────
+
+  const handleLinterAddToDictionary = useCallback((word: string) => {
+    setLinterAction({ type: 'dictionary', word });
+  }, []);
+
+  const handleLinterIgnoreRule = useCallback((ruleId: string, ruleName: string) => {
+    setLinterAction({ type: 'ignoreRule', ruleId, ruleName });
+  }, []);
+
+  const handleLinterIgnoreDiagnostic = useCallback((ruleId: string, text: string, ruleName: string) => {
+    setLinterAction({ type: 'ignoreDiag', ruleId, word: text, ruleName });
+  }, []);
+
+  const handleLinterActionConfirm = useCallback(() => {
+    if (!linterAction) return;
+    switch (linterAction.type) {
+      case 'dictionary':
+        if (linterAction.word) {
+          addToPersonalDictionary(linterAction.word);
+          runLint(contentRef.current);
+        }
+        break;
+      case 'ignoreRule':
+        if (linterAction.ruleId) {
+          MarkdownLinterRegistry.setEnabled(linterAction.ruleId, false);
+        }
+        break;
+      case 'ignoreDiag':
+        if (linterAction.ruleId && linterAction.word) {
+          addSuppression(linterAction.ruleId, linterAction.word);
+          runLint(contentRef.current);
+        }
+        break;
+    }
+    setLinterAction(null);
+  }, [linterAction, runLint]);
+
+  const handleLinterActionCancel = useCallback(() => {
+    setLinterAction(null);
+  }, []);
+
   const closeEditorUtilityMenu = useCallback(() => {
     setEditorUtilityMenu(null);
   }, []);
@@ -1864,6 +1910,9 @@ export default function MosaicEditor({
                 viewMode="edit"
                 content={statsContent}
                 onApplyFix={handleLinterFix}
+                onAddToDictionary={handleLinterAddToDictionary}
+                onIgnoreRule={handleLinterIgnoreRule}
+                onIgnoreDiagnostic={handleLinterIgnoreDiagnostic}
                 interactive={!semanticSelection && !editorUtilityMenu}
               />
             </div>
@@ -2157,6 +2206,14 @@ export default function MosaicEditor({
           initial={{ markdown: snippetDraft.markdown }}
           onSave={(data) => { void handleConfirmSnippetSave(data); }}
           onCancel={() => setSnippetDraft(null)}
+        />
+      )}
+
+      {linterAction && (
+        <LinterConfirmModal
+          action={linterAction}
+          onConfirm={handleLinterActionConfirm}
+          onCancel={handleLinterActionCancel}
         />
       )}
 
