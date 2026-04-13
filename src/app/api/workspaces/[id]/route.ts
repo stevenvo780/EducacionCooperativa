@@ -2,8 +2,9 @@ import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import { FieldValue, type CollectionReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
-import { isAdminUser, requireAuth } from '@/lib/server-auth';
+import { isAdminUser, requireAuth, invalidateMembershipCache } from '@/lib/server-auth';
 import { WorkspaceType } from '@/types/workspace';
+import { syncWorkspaceClaims } from '@/lib/workspace-claims';
 
 const deleteCollectionInBatches = async (collectionRef: CollectionReference, batchLimit = 400) => {
   let lastDoc: QueryDocumentSnapshot | null = null;
@@ -73,6 +74,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       }
       const normalizedEmail = email.toLowerCase().trim();
       await wsRef.update({ pendingInvites: FieldValue.arrayUnion(normalizedEmail) });
+      invalidateMembershipCache(id);
       return NextResponse.json({ status: 'invited' });
     }
 
@@ -90,6 +92,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         members: FieldValue.arrayUnion(auth.uid),
         pendingInvites: FieldValue.arrayRemove(normalizedEmail)
       });
+      invalidateMembershipCache(id);
+      // Sync custom claims so security rules work without get()/exists()
+      syncWorkspaceClaims(auth.uid).catch(() => {});
       return NextResponse.json({ status: 'accepted' });
     }
 
@@ -107,6 +112,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         await wsRef.update({
             members: FieldValue.arrayRemove(userId)
         });
+        invalidateMembershipCache(id);
+        // Sync custom claims to revoke workspace access in rules
+        syncWorkspaceClaims(userId).catch(() => {});
         return NextResponse.json({ status: 'removed' });
     }
 

@@ -44,14 +44,51 @@ export const requireAuth = async (req: NextRequest): Promise<AuthContext | null>
   }
 };
 
+// In-memory cache for workspace membership — avoids 1 Firestore read per API request
+const _membershipCache = new Map<string, { result: boolean; ts: number }>();
+const MEMBERSHIP_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+
 export const isWorkspaceMember = async (workspaceId: string, uid: string): Promise<boolean> => {
   if (isPersonalWorkspaceId(workspaceId)) return false;
   if (allowInsecureAuth) return true;
+
+  const cacheKey = `${workspaceId}::${uid}`;
+  const cached = _membershipCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < MEMBERSHIP_CACHE_TTL_MS) {
+    return cached.result;
+  }
+
   const snap = await adminDb.collection('workspaces').doc(workspaceId).get();
-  if (!snap.exists) return false;
+  if (!snap.exists) {
+    _membershipCache.set(cacheKey, { result: false, ts: Date.now() });
+    return false;
+  }
   const data = snap.data() as { members?: string[] } | undefined;
   const members = Array.isArray(data?.members) ? data?.members : [];
-  return members.includes(uid);
+  const result = members.includes(uid);
+  _membershipCache.set(cacheKey, { result, ts: Date.now() });
+
+  // Evict stale entries periodically
+  if (_membershipCache.size > 200) {
+    const now = Date.now();
+    for (const [k, v] of _membershipCache) {
+      if (now - v.ts > MEMBERSHIP_CACHE_TTL_MS) _membershipCache.delete(k);
+    }
+  }
+
+  return result;
+};
+
+/** Force-clear membership cache (e.g. after invite/accept/remove). */
+export const invalidateMembershipCache = (workspaceId: string) => {
+  for (const key of _membershipCache.keys()) {
+    if (key.startsWith(`${workspaceId}::`)) _membershipCache.delete(key);
+  }
+};
+
+/** Clear entire membership cache — for tests only. */
+export const _clearMembershipCacheForTesting = () => {
+  _membershipCache.clear();
 };
 
 export const getUserRole = async (uid: string): Promise<string | null> => {

@@ -5,6 +5,7 @@ import { verifyPassword } from '@/lib/crypto';
 import { ensureFirebaseAuthUser, findUserByEmail, normalizeEmailAddress } from '@/lib/custom-auth';
 import { getErrorMessage } from '@/lib/error-utils';
 import { createLocalDevAuthToken, shouldUseLocalDevAuthFallback } from '@/lib/local-dev-auth';
+import { syncWorkspaceClaims } from '@/lib/workspace-claims';
 
 // In-memory rate limiter
 const rateLimit = new Map<string, { count: number; expires: number }>();
@@ -91,6 +92,8 @@ export async function POST(req: NextRequest) {
             customToken = await adminAuth.createCustomToken(userLookup.id, {
                 userEmail: userData.email || userLookup.normalizedEmail
             });
+            // Sync workspace membership into custom claims (non-blocking)
+            syncWorkspaceClaims(userLookup.id).catch(() => {});
         } catch (tokenError: unknown) {
             if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
                 console.warn('Firebase Admin token creation failed (insecure mode, continuing):', getErrorMessage(tokenError));

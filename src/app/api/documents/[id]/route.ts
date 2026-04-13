@@ -8,6 +8,7 @@ import { buildStoragePath, buildStoragePrefix, ensureTextFileName, sanitizeFileN
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 import { mockGetDoc, mockUpdateDoc, mockDeleteDoc } from '@/lib/insecure-mock-store';
+import { invalidateStorageUsageCache } from '@/lib/storage-usage';
 
 const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 
@@ -309,6 +310,8 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
         }
 
         await docRef.delete();
+        // Invalidate cached storage usage so next check reflects the deletion
+        invalidateStorageUsageCache(auth.uid);
         return NextResponse.json({ status: 'deleted' });
     } catch (error: unknown) {
         console.error('Error deleting document:', getErrorMessage(error));

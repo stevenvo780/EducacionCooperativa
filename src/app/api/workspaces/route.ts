@@ -4,6 +4,7 @@ import { getErrorMessage } from '@/lib/error-utils';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 import { WorkspaceType } from '@/types/workspace';
+import { syncWorkspaceClaims } from '@/lib/workspace-claims';
 
 export async function GET(req: NextRequest) {
   try {
@@ -61,6 +62,9 @@ export async function POST(req: NextRequest) {
     };
 
     const docRef = await adminDb.collection('workspaces').add(workspaceData);
+
+    // Sync custom claims so security rules work without get()/exists()
+    syncWorkspaceClaims(auth.uid).catch(() => {});
 
     return NextResponse.json({
       id: docRef.id,

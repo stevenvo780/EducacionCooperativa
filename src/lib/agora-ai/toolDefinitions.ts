@@ -110,7 +110,7 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
   },
   {
     name: 'list_folders',
-    description: 'Lista carpetas conocidas del workspace.',
+    description: 'Lista las CARPETAS del workspace. PRIMER PASO para preguntas sobre clases, lecciones o contenido académico. Las carpetas representan la estructura del curso (ej: Clase 1, Clase 2, etc.).',
     parameters: {
       type: 'object',
       properties: {},
@@ -228,7 +228,7 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
   },
   {
     name: 'get_board',
-    description: 'Recupera el tablero Kanban actual con sus columnas y tarjetas.',
+    description: 'Recupera el tablero Kanban con columnas y tarjetas de TAREAS/PENDIENTES. NO contiene contenido de clases. Para contenido académico usa list_folders + list_documents.',
     parameters: {
       type: 'object',
       properties: {},
@@ -425,7 +425,7 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
   },
   {
     name: 'list_concepts',
-    description: 'Lista conceptos del estado semántico del workspace.',
+    description: 'Lista CONCEPTOS del glosario semántico (definiciones teóricas, no carpetas de archivos).',
     parameters: {
       type: 'object',
       properties: {
@@ -579,5 +579,48 @@ export const toGeminiTools = () => [{
   }))
 }];
 
-// Ollama uses the same OpenAI-compatible format: {type:"function", function:{…}}
-export const toOllamaTools = () => toOpenAITools();
+/**
+ * Core tools subset for smaller models (e.g. Ollama / qwen3:14b).
+ * 42 tools overwhelms the context window; we expose ~18 essential ones.
+ * The server-side executor still supports ALL tools, so if a smarter model
+ * is configured the full set can be sent.
+ */
+const OLLAMA_CORE_TOOL_NAMES = new Set([
+  // Documents — most common operations
+  'list_documents',
+  'read_document',
+  'create_document',
+  'update_document',
+  'search_documents',
+  'list_folders',
+  // Kanban
+  'get_board',
+  'create_board_card',
+  'move_board_card',
+  // Snippets
+  'list_snippets',
+  'create_snippet',
+  'search_snippets',
+  // Logic / ST
+  'check_logic',
+  'formalize_text',
+  // Semantic
+  'list_concepts',
+  'define_concept',
+  // Doc intelligence
+  'summarize_document',
+  'get_workspace_info'
+]);
+
+// Ollama uses OpenAI-compatible format but with a reduced tool set
+export const toOllamaTools = () =>
+  AGORA_AGENT_TOOLS
+    .filter(tool => OLLAMA_CORE_TOOL_NAMES.has(tool.name))
+    .map(tool => ({
+      type: 'function' as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters
+      }
+    }));
