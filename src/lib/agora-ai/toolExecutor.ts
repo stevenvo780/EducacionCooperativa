@@ -438,6 +438,21 @@ async function writeAuditLog(ctx: AgentExecutionContext, call: AgentToolCall, re
   }
 }
 
+// ── Timestamp helpers ──────────────────────────────────────────────
+function toEpoch(v: unknown): number {
+  if (!v) return 0;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'object' && v !== null && 'seconds' in v) return (v as { seconds: number }).seconds * 1000;
+  if (typeof v === 'string') { const d = Date.parse(v); return Number.isNaN(d) ? 0 : d; }
+  return 0;
+}
+
+function formatTimestamp(v: unknown): string | null {
+  const ms = toEpoch(v);
+  if (!ms) return null;
+  try { return new Date(ms).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }); } catch { return null; }
+}
+
 const ok = (
   call: AgentToolCall,
   summary: string,
@@ -499,19 +514,53 @@ async function listDocuments(call: AgentToolCall, ctx: AgentExecutionContext) {
   }
 
   const snap = await query.limit(limit * 3).get();
-  const documents = snap.docs
-    .map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredDocument))
-    .filter(doc => !folder || normalizeFolderPath(doc.folder) === folder)
+  const allDocs = snap.docs
+    .map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredDocument));
+
+  // Try exact folder match first; if 0 results, fall back to fuzzy match
+  // (case-insensitive, whitespace-stripped) to handle agent typos like "Clase 3" vs "Clase3"
+  const fuzzyFolder = (v: string) => v.toLowerCase().replace(/\s+/g, '');
+  let filtered = folder
+    ? allDocs.filter(doc => {
+      const docFolder = normalizeFolderPath(doc.folder);
+      // Exact match OR document is inside a subfolder (startsWith + '/')
+      return docFolder === folder || docFolder.startsWith(`${folder}/`);
+    })
+    : allDocs;
+  if (folder && filtered.length === 0) {
+    const target = fuzzyFolder(folder);
+    filtered = allDocs.filter(doc => {
+      const f = fuzzyFolder(normalizeFolderPath(doc.folder));
+      return f === target || f.startsWith(`${target}/`) || f.startsWith(target);
+    });
+  }
+  // Also try contains if still no results (e.g. "Clase3" matches "filosofiaDeLaCiudad/Clase3")
+  if (folder && filtered.length === 0) {
+    const target = fuzzyFolder(folder);
+    filtered = allDocs.filter(doc => {
+      const f = fuzzyFolder(normalizeFolderPath(doc.folder));
+      return f.includes(target) || target.includes(f);
+    });
+  }
+
+  // Sort by updatedAt descending so most recent docs appear first
+  const sorted = filtered.sort((a, b) => {
+    const aTime = toEpoch(a['updatedAt']);
+    const bTime = toEpoch(b['updatedAt']);
+    return bTime - aTime;
+  });
+
+  const documents = sorted
     .slice(0, limit)
     .map(doc => ({
       id: doc.id,
       name: doc.name || 'Sin título',
       type: doc.type || DocumentType.Text,
       folder: normalizeFolderPath(doc.folder),
-      updatedAt: doc['updatedAt'] ?? null
+      updatedAt: formatTimestamp(doc['updatedAt'])
     }));
 
-  return ok(call, `Encontré ${documents.length} documento(s).`, { documents });
+  return ok(call, `Encontré ${documents.length} documento(s)${folder ? ` en "${folder}" (incluye subcarpetas)` : ''}.`, { documents });
 }
 
 async function readDocument(call: AgentToolCall, ctx: AgentExecutionContext) {
@@ -749,11 +798,17 @@ async function searchDocuments(call: AgentToolCall, ctx: AgentExecutionContext) 
   }
 
   const snap = await query.limit(MAX_DOC_SCAN).get();
+
+  // Tokenize query: each word must appear somewhere in the document (AND logic)
+  const queryTokens = queryText.split(/\s+/).filter(t => t.length >= 2);
+  if (queryTokens.length === 0) throw new Error('query demasiado corta');
+
   const results = snap.docs
     .map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredDocument))
     .filter(doc => {
       const haystack = [doc.name, doc.folder, doc.content].map(part => String(part || '').toLowerCase()).join('\n');
-      return haystack.includes(queryText);
+      // Each token must appear in the haystack (AND match)
+      return queryTokens.every(token => haystack.includes(token));
     })
     .slice(0, limit)
     .map(doc => ({
@@ -763,6 +818,28 @@ async function searchDocuments(call: AgentToolCall, ctx: AgentExecutionContext) 
       type: doc.type || DocumentType.Text,
       preview: excerpt(doc.content || '', 180)
     }));
+
+  // If AND match found nothing, try OR match (any token)
+  if (results.length === 0) {
+    const orResults = snap.docs
+      .map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredDocument))
+      .map(doc => {
+        const haystack = [doc.name, doc.folder, doc.content].map(part => String(part || '').toLowerCase()).join('\n');
+        const matchCount = queryTokens.filter(token => haystack.includes(token)).length;
+        return { doc, matchCount };
+      })
+      .filter(({ matchCount }) => matchCount > 0)
+      .sort((a, b) => b.matchCount - a.matchCount)
+      .slice(0, limit)
+      .map(({ doc }) => ({
+        id: doc.id,
+        name: doc.name || 'Sin título',
+        folder: normalizeFolderPath(doc.folder),
+        type: doc.type || DocumentType.Text,
+        preview: excerpt(doc.content || '', 180)
+      }));
+    return ok(call, `La búsqueda devolvió ${orResults.length} resultado(s) (coincidencia parcial).`, { results: orResults });
+  }
 
   return ok(call, `La búsqueda devolvió ${results.length} resultado(s).`, { results });
 }

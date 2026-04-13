@@ -85,6 +85,7 @@ export const TABLE_MAX_ROWS = 8;
 export const TABLE_MAX_COLS = 8;
 
 // Timing constants
-export const SAVE_DEBOUNCE_MS = 700;
+// 2500ms balances responsiveness vs Firestore write costs (~3.5x fewer writes)
+export const SAVE_DEBOUNCE_MS = 2500;
 export const ST_DEBOUNCE_MS = 500;
 export const SEMANTIC_NOTICE_TIMEOUT_MS = 3_200;

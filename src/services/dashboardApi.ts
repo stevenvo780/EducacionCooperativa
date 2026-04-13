@@ -16,8 +16,8 @@ import {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-// Debounce document updates to avoid sending a request per keystroke
-const UPDATE_DEBOUNCE_MS = 500;
+// Debounce document updates — longer window reduces Firestore writes/costs
+const UPDATE_DEBOUNCE_MS = 1500;
 type PendingUpdate = {
   payload: Record<string, unknown>;
   timer: ReturnType<typeof setTimeout>;

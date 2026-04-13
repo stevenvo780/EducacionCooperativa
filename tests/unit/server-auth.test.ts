@@ -35,7 +35,8 @@ import {
   getUserRole,
   isAdminUser,
   isWorkspaceMember,
-  requireAuth
+  requireAuth,
+  _clearMembershipCacheForTesting
 } from '@/lib/server-auth';
 import { createLocalDevAuthToken } from '@/lib/local-dev-auth';
 
@@ -45,6 +46,7 @@ describe('server auth helpers', () => {
     getMock.mockReset();
     docMock.mockClear();
     collectionMock.mockClear();
+    _clearMembershipCacheForTesting();
   });
 
   it('extracts and verifies bearer tokens', async () => {
@@ -109,18 +111,22 @@ describe('server auth helpers', () => {
     getMock.mockResolvedValueOnce({ exists: false });
     await expect(isWorkspaceMember('ws-1', 'u1')).resolves.toBe(false);
 
+    // Clear cache so same key can be re-evaluated with different mock data
+    _clearMembershipCacheForTesting();
     getMock.mockResolvedValueOnce({
       exists: true,
       data: () => ({ members: ['u1', 'u2'] })
     });
     await expect(isWorkspaceMember('ws-1', 'u1')).resolves.toBe(true);
 
+    _clearMembershipCacheForTesting();
     getMock.mockResolvedValueOnce({
       exists: true,
       data: () => ({ members: ['u2'] })
     });
     await expect(isWorkspaceMember('ws-1', 'u1')).resolves.toBe(false);
 
+    _clearMembershipCacheForTesting();
     getMock.mockResolvedValueOnce({
       exists: true,
       data: () => ({ members: 'u1' })

@@ -14,15 +14,34 @@ export async function buildAgoraWorkspaceContext(workspaceId: string): Promise<s
       type FireDoc = { id: string } & Record<string, unknown>;
       const textDocs = docsSnap.docs
         .map(d => ({ id: d.id, ...d.data() }) as FireDoc)
-        .filter(d => d.type === 'text' && d.content);
+        .filter(d => d.type === 'text');
+
+      // Extract folder names from documents
+      const folderNames = new Set<string>();
+      docsSnap.docs.forEach(d => {
+        const data = d.data() as Record<string, unknown>;
+        if (typeof data.folder === 'string' && data.folder) folderNames.add(data.folder);
+        if (data.type === 'folder' && typeof data.name === 'string') folderNames.add(data.name);
+      });
+
+      if (folderNames.size > 0) {
+        parts.push('## Carpetas del workspace');
+        for (const folder of Array.from(folderNames).sort()) {
+          parts.push(`- ${folder}`);
+        }
+        parts.push('');
+      }
 
       if (textDocs.length > 0) {
-        parts.push('## Documentos del workspace\n');
-        for (const doc of textDocs.slice(0, 10)) {
-          const raw = String(doc.content ?? '');
-          const excerpt = raw.length > 1200 ? `${raw.slice(0, 1200)}…` : raw;
-          parts.push(`### ${String(doc.name || 'Sin título')}\n${excerpt}\n`);
+        // Only include document titles (not content) to keep prompt short
+        // and force the agent to use read_document for actual content
+        parts.push('## Documentos disponibles en el workspace');
+        parts.push('(Usa `read_document` para leer el contenido de cualquiera de estos documentos)\n');
+        for (const doc of textDocs) {
+          const folder = doc.folder ? ` [carpeta: ${String(doc.folder)}]` : '';
+          parts.push(`- ${String(doc.name || 'Sin título')} (ID: ${doc.id})${folder}`);
         }
+        parts.push('');
       }
     }
   } catch {

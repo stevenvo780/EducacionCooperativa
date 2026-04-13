@@ -5,7 +5,7 @@ import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
-import { calculateOwnedStorageUsageBytes } from '@/lib/storage-usage';
+import { calculateOwnedStorageUsageBytes, invalidateStorageUsageCache } from '@/lib/storage-usage';
 import { formatStorageSize, getStorageLimitMB } from '@/types/subscription';
 import { getActivePlanId } from '@/app/api/payments/helpers';
 
@@ -103,6 +103,9 @@ export async function POST(req: NextRequest) {
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
         });
+
+        // Invalidate cached storage usage so next check reflects the new file
+        invalidateStorageUsageCache(auth.uid);
 
         return NextResponse.json({
             id: docRef.id,

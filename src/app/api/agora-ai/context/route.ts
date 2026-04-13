@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { requireAuth, isWorkspaceMember } from '@/lib/server-auth';
 import { isPersonalWorkspaceId } from '@/types/workspace';
+import { normalizeFolderPath } from '@/lib/folder-utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,15 +43,49 @@ export async function GET(request: NextRequest) {
         type FireDoc = { id: string } & Record<string, unknown>;
         const textDocs = docsSnap.docs
           .map(d => ({ id: d.id, ...d.data() }) as FireDoc)
-          .filter(d => d['type'] === 'text' && d['content']);
+          .filter(d => d['type'] === 'text');
+
+        // Extract folder names from documents (normalized for consistency)
+        const folderNames = new Set<string>();
+        docsSnap.docs.forEach(d => {
+          const data = d.data() as Record<string, unknown>;
+          if (typeof data['folder'] === 'string' && data['folder']) folderNames.add(normalizeFolderPath(data['folder']));
+          if (data['type'] === 'folder' && typeof data['name'] === 'string') folderNames.add(normalizeFolderPath(data['name']));
+        });
+
+        if (folderNames.size > 0) {
+          // Detect class-like folders and annotate the latest one
+          const sortedFolders = Array.from(folderNames).sort();
+          const classPattern = /clase\s*(\d+)/i;
+          let latestClassFolder = '';
+          let latestClassNum = -1;
+          for (const f of sortedFolders) {
+            const m = f.match(classPattern);
+            if (m && parseInt(m[1]) > latestClassNum) {
+              latestClassNum = parseInt(m[1]);
+              latestClassFolder = f;
+            }
+          }
+
+          parts.push('## Carpetas del workspace');
+          parts.push('(Estas carpetas representan la estructura del curso. Usa `list_documents` con el nombre de carpeta para ver su contenido.)\n');
+          for (const folder of sortedFolders) {
+            const isLatest = latestClassFolder && folder.includes(latestClassFolder.split('/').pop()!);
+            parts.push(`- ${folder}${isLatest ? ' ← ÚLTIMA CLASE (la más reciente)' : ''}`);
+          }
+          parts.push('');
+        }
 
         if (textDocs.length > 0) {
-          parts.push('## Documentos del workspace\n');
-          for (const doc of textDocs.slice(0, 10)) {
-            const raw = String(doc['content'] ?? '');
-            const excerpt = raw.length > 1200 ? `${raw.slice(0, 1200)}…` : raw;
-            parts.push(`### ${String(doc['name'] || 'Sin título')}\n${excerpt}\n`);
+          // Only include document titles (not content) to keep prompt short
+          // and force the agent to use read_document for actual content
+          parts.push('## Documentos disponibles en el workspace');
+          parts.push('(Usa `read_document` para leer el contenido de cualquiera de estos documentos)\n');
+          for (const doc of textDocs) {
+            const folder = doc['folder'] ? ` [carpeta: ${normalizeFolderPath(String(doc['folder']))}]` : '';
+            parts.push(`- ${String(doc['name'] || 'Sin título')} (ID: ${doc.id})${folder}`);
           }
+          parts.push('');
         }
       }
     } catch {

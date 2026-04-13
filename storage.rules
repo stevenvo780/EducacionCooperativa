@@ -2,8 +2,12 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Helper functions
+
+    // ── Cost-optimized rules ──
+    // Replaced firestore.exists()+firestore.get() with custom claims.
+    // Each firestore call in storage rules was a billed Firestore read.
+    // Custom claim: request.auth.token.workspaces = ["wsId1", "wsId2", ...]
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -16,14 +20,15 @@ service firebase.storage {
       return isAuthenticated() && (request.auth.uid == userId || isSyncAgentFor(userId));
     }
 
-    function isWorkspaceMember(workspaceId) {
+    // Zero-cost membership check via custom claims (no Firestore reads)
+    function isMemberViaClaim(workspaceId) {
       return isAuthenticated() &&
-             firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)) &&
-             request.auth.uid in firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data.members;
+             request.auth.token.workspaces != null &&
+             workspaceId in request.auth.token.workspaces;
     }
 
-    function isWorkspaceMemberOrAgent(workspaceId) {
-      return isWorkspaceMember(workspaceId) || isSyncAgentFor(workspaceId);
+    function isMemberOrAgent(workspaceId) {
+      return isMemberViaClaim(workspaceId) || isSyncAgentFor(workspaceId);
     }
 
     function isAllowedTextContentType() {
@@ -41,22 +46,21 @@ service firebase.storage {
     function isAllowedTextFile(path) {
       return isAllowedTextContentType() && !isBlockedScriptExtension(path);
     }
-    
+
     // Personal user storage: users/{userId}/...
     match /users/{userId}/{filePath=**} {
-      // User can access their own files
       allow read: if isUserOrAgent(userId);
       allow create, update: if isUserOrAgent(userId) && isAllowedTextFile(filePath)
                                && request.resource.size < 50 * 1024 * 1024;
       allow delete: if isUserOrAgent(userId);
     }
-    
+
     // Shared workspace storage: workspaces/{workspaceId}/...
     match /workspaces/{workspaceId}/{filePath=**} {
-      allow read: if isWorkspaceMemberOrAgent(workspaceId);
-      allow create, update: if isWorkspaceMemberOrAgent(workspaceId) && isAllowedTextContentType()
+      allow read: if isMemberOrAgent(workspaceId);
+      allow create, update: if isMemberOrAgent(workspaceId) && isAllowedTextContentType()
                                && request.resource.size < 50 * 1024 * 1024;
-      allow delete: if isWorkspaceMemberOrAgent(workspaceId);
+      allow delete: if isMemberOrAgent(workspaceId);
     }
   }
 }

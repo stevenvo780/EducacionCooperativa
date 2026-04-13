@@ -1,4 +1,5 @@
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
+import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest } from 'next/server';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { DocumentType } from '@/types/documents';
@@ -116,8 +117,17 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
             send({ type: 'connected' });
 
-            const docRef = adminDb.collection('documents').doc(id);
-            const unsubscribe = docRef.onSnapshot(async (snap) => {
+            // Throttle snapshot emissions to reduce billed reads during rapid editing.
+            // onSnapshot fires on every write; we coalesce events within a 2s window.
+            const SNAPSHOT_THROTTLE_MS = 2000;
+            let pendingSnap: DocumentSnapshot | null = null;
+            let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+
+            const flushSnapshot = async () => {
+                throttleTimer = null;
+                const snap = pendingSnap;
+                pendingSnap = null;
+                if (!snap) return;
                 if (!snap.exists) {
                     send({ type: 'deleted' });
                     return;
@@ -126,12 +136,29 @@ export async function GET(req: NextRequest, context: RouteContext) {
                 const freshUrl = await maybeFreshUrl(id, snapData);
                 if (freshUrl) snapData.url = freshUrl;
                 send({ type: 'snapshot', data: snapData });
+            };
+
+            const docRef = adminDb.collection('documents').doc(id);
+            let isFirst = true;
+            const unsubscribe = docRef.onSnapshot((snap) => {
+                // Always send the first snapshot immediately so the client loads fast
+                if (isFirst) {
+                    isFirst = false;
+                    pendingSnap = snap;
+                    flushSnapshot();
+                    return;
+                }
+                pendingSnap = snap;
+                if (!throttleTimer) {
+                    throttleTimer = setTimeout(flushSnapshot, SNAPSHOT_THROTTLE_MS);
+                }
             }, (error) => {
                 send({ type: 'error', error: error.message });
             });
 
             const close = () => {
                 clearInterval(keepAlive);
+                if (throttleTimer) clearTimeout(throttleTimer);
                 unsubscribe();
                 controller.close();
             };

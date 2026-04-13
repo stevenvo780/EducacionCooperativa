@@ -497,6 +497,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     };
     if (useTools) {
       payload.tools = toOllamaTools();
+      // Disable extended thinking when tools are available — qwen3 often
+      // wastes the thinking budget concluding "I don't have access" instead
+      // of invoking the tools.  Disabling think forces tool-first behaviour.
+      payload.think = false;
     }
     const res = await fetch(url, {
       method: 'POST',
