@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from '
 import { MarkdownLinterRegistry } from '@/lib/markdown-linter/registry';
 import { BUILTIN_RULE_IDS } from '@/lib/markdown-linter/rules';
 import { getPersonalDictionary, initSpellEngine, isSpellEngineReady } from '@/lib/markdown-linter/spell-engine';
+import { isSuppressed } from '@/lib/markdown-linter/suppressions';
 import type { LinterDiagnostic, LinterRule } from '@/lib/markdown-linter/types';
 
 // Re-export types for backward compatibility
@@ -215,7 +216,7 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     const combined = sortDiagnostics([
       ...latestMainThreadDiagnosticsRef.current,
       ...workerDiags
-    ]);
+    ]).filter(d => !isSuppressed(d.ruleId, d.text));
     setDiagnostics((prev) => diagnosticsEqual(prev, combined) ? prev : combined);
 
     // Respect minimum display time for 'initializing' so users can see it
@@ -242,7 +243,9 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       ...enabledRulesRef.current.filter((r) => !BUILTIN_RULE_IDS.has(r.id)),
       ...customRulesRef.current
     ];
-    return sortDiagnostics(rules.flatMap((r) => r.check(text)));
+    return sortDiagnostics(rules.flatMap((r) =>
+      r.check(text).map(d => ({ ...d, ruleId: d.ruleId ?? r.id }))
+    ));
   }, []);
 
   // ── runLint principal ───────────────────────────────────────
