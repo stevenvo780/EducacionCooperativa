@@ -1,5 +1,7 @@
 'use client';
 
+import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
+
 import {
   Suspense,
   useCallback,
@@ -1329,6 +1331,7 @@ function DashboardContent() {
     }, [folders, activeFolder, folderChildrenMap, setActiveFolderSafe]);
 
     const handleDocDragStart = (e: ReactDragEvent, docItem: DocItem) => {
+        markInternalDragStart();
         e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc');
         e.dataTransfer.setData('application/x-doc-id', docItem.id);
         e.dataTransfer.setData('text/plain', docItem.id);
@@ -1336,6 +1339,7 @@ function DashboardContent() {
     };
 
     const handleDocDragEnd = () => {
+        markInternalDragEnd();
         setFolderDragOver(null);
         setDropPosition(null);
     };

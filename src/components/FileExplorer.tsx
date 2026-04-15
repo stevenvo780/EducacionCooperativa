@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import {
   Folder,
@@ -712,6 +713,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   draggable
                   onDragStart={(e) => {
                     e.stopPropagation();
+                    markInternalDragStart();
                     e.dataTransfer.setData('application/x-dashboard-internal-drag', 'folder-reorder');
                     e.dataTransfer.setData(FOLDER_REORDER_TYPE, folder.path);
                     e.dataTransfer.setData('text/plain', folder.path);
@@ -719,6 +721,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   }}
                   onDragEnd={(e) => {
                     e.stopPropagation();
+                    markInternalDragEnd();
                     setDragOverKey(null);
                     setDragOverPosition(null);
                   }}
@@ -894,6 +897,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 draggable
                 onDragStart={(e) => {
                   e.stopPropagation();
+                  markInternalDragStart();
                   e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc-reorder');
                   e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
                   e.dataTransfer.setData('text/plain', doc.id);
@@ -901,6 +905,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 }}
                 onDragEnd={(e) => {
                   e.stopPropagation();
+                  markInternalDragEnd();
                   setDragOverKey(null);
                   setDragOverPosition(null);
                 }}
