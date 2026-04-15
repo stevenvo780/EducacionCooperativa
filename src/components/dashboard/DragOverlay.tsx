@@ -1,15 +1,16 @@
 'use client';
 
 import { DEFAULT_FOLDER_NAME } from '@/lib/folder-utils';
-import { Folder } from 'lucide-react';
+import { Folder, X } from 'lucide-react';
 
 interface DragOverlayProps {
   isDragActive: boolean;
   workspaceName?: string | null;
   activeFolder?: string;
+  onDismiss?: () => void;
 }
 
-const DragOverlay = ({ isDragActive, workspaceName, activeFolder }: DragOverlayProps) => {
+const DragOverlay = ({ isDragActive, workspaceName, activeFolder, onDismiss }: DragOverlayProps) => {
   if (!isDragActive) return null;
 
   const folderLabel = activeFolder || DEFAULT_FOLDER_NAME;
@@ -17,6 +18,15 @@ const DragOverlay = ({ isDragActive, workspaceName, activeFolder }: DragOverlayP
   return (
     <div className="absolute inset-0 z-50 pointer-events-none">
       <div className="absolute inset-0 bg-surface-900/70 border-2 border-dashed border-mandy-500/70" />
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          className="absolute top-3 right-3 z-[51] pointer-events-auto p-1.5 rounded-lg bg-surface-700/90 border border-surface-500/50 text-surface-300 hover:text-white hover:bg-surface-600 transition shadow-lg"
+          title="Cerrar overlay"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="bg-surface-800/80 border border-mandy-500/40 rounded-xl px-6 py-4 text-center shadow-xl shadow-black/40">
           <div className="text-sm font-semibold text-white">Suelta para subir</div>

@@ -921,6 +921,7 @@ function DashboardContent() {
     const {
         uploadStatus,
         isDragActive,
+        dismissDragOverlay,
         setUploadTargetFolder,
         handleFileUpload,
         handleFolderUpload,
@@ -1524,7 +1525,7 @@ function DashboardContent() {
                     modalPop={modalPop}
                 />
 
-                <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} activeFolder={activeFolder} />
+                <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} activeFolder={activeFolder} onDismiss={dismissDragOverlay} />
                 <StatusToasts uploadStatus={uploadStatus} deleteStatus={deleteStatus} />
                 <DialogModal
                     dialogConfig={dialogConfig}
