@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { Mosaic, MosaicNode, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
-import { Columns, Pencil, X, Search, ChevronUp, ChevronDown, Check, XCircle, Maximize2, Minimize2 } from 'lucide-react';
+import { Columns, Pencil, X, Search, ChevronUp, ChevronDown, Check, XCircle, Maximize2, Minimize2, GripVertical, ArrowLeftRight, RotateCcw } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -22,6 +22,24 @@ const GlobalSemanticBrowser = dynamic(() => import('@/components/dashboard/Globa
 const FormalizerPlayground = dynamic(() => import('@/components/FormalizerPlayground'), { ssr: false });
 const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
 const AgoraAIChat = dynamic(() => import('@/components/AgoraAIChat'), { ssr: false });
+
+// -- Helpers for programmatic panel rearrangement (tablet support) --
+type MosaicBranch = { first: MosaicNode<string>; second: MosaicNode<string>; direction: 'row' | 'column'; splitPercentage?: number };
+
+function isBranch(node: MosaicNode<string> | null): node is MosaicBranch {
+  return node !== null && typeof node === 'object' && 'first' in node;
+}
+
+function cloneTree(node: MosaicNode<string>): MosaicNode<string> {
+  if (typeof node === 'string') return node;
+  return { ...node, first: cloneTree(node.first), second: cloneTree(node.second) };
+}
+
+function findParent(tree: MosaicNode<string>, targetId: string): MosaicBranch | null {
+  if (!isBranch(tree)) return null;
+  if (tree.first === targetId || tree.second === targetId) return tree;
+  return findParent(tree.first, targetId) ?? findParent(tree.second, targetId);
+}
 
 function isStFileDoc(doc: { name: string }): boolean {
   const lower = doc.name.toLowerCase();
@@ -174,6 +192,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
   const [fullscreenDocId, setFullscreenDocId] = useState<string | null>(null);
+  const [positionMenuDocId, setPositionMenuDocId] = useState<string | null>(null);
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
   const mosaicContainerRef = useRef<HTMLDivElement | null>(null);
@@ -212,6 +231,43 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       }
     }
   }, []);
+
+  // Programmatic panel move for tablets
+  const swapPanel = useCallback((docId: string) => {
+    if (!value || !isBranch(value)) return;
+    const tree = cloneTree(value);
+    const parent = findParent(tree, docId);
+    if (!parent) return;
+    const tmp = parent.first;
+    parent.first = parent.second;
+    parent.second = tmp;
+    onChange(tree);
+    setPositionMenuDocId(null);
+  }, [value, onChange]);
+
+  const rotateSplit = useCallback((docId: string) => {
+    if (!value || !isBranch(value)) return;
+    const tree = cloneTree(value);
+    const parent = findParent(tree, docId);
+    if (!parent) return;
+    parent.direction = parent.direction === 'row' ? 'column' : 'row';
+    onChange(tree);
+    setPositionMenuDocId(null);
+  }, [value, onChange]);
+
+  const hasMultiplePanels = isBranch(value);
+
+  // Close position menu on outside click
+  useEffect(() => {
+    if (!positionMenuDocId) return;
+    const handler = () => setPositionMenuDocId(null);
+    // Delay to avoid closing immediately on the same click that opened it
+    const timer = setTimeout(() => document.addEventListener('pointerdown', handler), 50);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', handler);
+    };
+  }, [positionMenuDocId]);
 
   // Detect global drag of documents to show overlay over iframes
   useEffect(() => {
@@ -417,6 +473,41 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             <span className="w-px h-4 bg-surface-600 mx-1" />
           </>
         )}
+        {hasMultiplePanels && (
+          <div className="relative" onPointerDown={(e) => e.stopPropagation()}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPositionMenuDocId(prev => prev === doc.id ? null : doc.id);
+              }}
+              className={`p-1 rounded transition ${positionMenuDocId === doc.id ? 'bg-sky-500/20 text-sky-300' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
+              title="Mover panel"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </button>
+            {positionMenuDocId === doc.id && (
+              <div
+                className="absolute right-0 top-full mt-1 z-[60] min-w-[160px] rounded-lg border border-surface-600/60 bg-surface-800 shadow-xl shadow-black/40 p-1"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => swapPanel(doc.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 hover:text-white rounded transition"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                  Intercambiar posición
+                </button>
+                <button
+                  onClick={() => rotateSplit(doc.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-300 hover:bg-surface-700 hover:text-white rounded transition"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Rotar división
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <button
           onClick={() => toggleFullscreen(doc.id)}
           className="p-1 rounded text-surface-400 hover:bg-surface-700 hover:text-white transition"
@@ -433,7 +524,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         </button>
       </div>
     );
-  }, [onCloseTab, docSearchTerms, docSearchStates, handleSearchChange, toggleFullscreen, fullscreenDocId]);
+  }, [onCloseTab, docSearchTerms, docSearchStates, handleSearchChange, toggleFullscreen, fullscreenDocId, hasMultiplePanels, positionMenuDocId, swapPanel, rotateSplit]);
 
   const closeOtherTabs = useCallback((keepDocId: string) => {
     const otherIds = openTabs.filter(t => t.id !== keepDocId).map(t => t.id);
