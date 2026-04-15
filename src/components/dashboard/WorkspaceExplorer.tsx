@@ -312,6 +312,7 @@ const WorkspaceExplorer = ({
           onClick={() => onOpenDocument(doc)}
           {...getContextTriggerProps({ type: 'doc', id: doc.id, doc })}
           draggable
+          data-drag-doc-id={doc.id}
           onDragStart={(e) => {
             onDocDragStart(e, doc);
           }}

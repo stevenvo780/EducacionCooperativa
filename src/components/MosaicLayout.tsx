@@ -270,6 +270,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [positionMenuDocId]);
 
   // Detect global drag of documents to show overlay over iframes
+  // Handles both native HTML5 drag events AND custom touch-drag events
   useEffect(() => {
     const handleGlobalDragStart = (e: DragEvent) => {
       const types = Array.from(e.dataTransfer?.types ?? []);
@@ -279,15 +280,52 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     };
     const handleGlobalDragEnd = () => setIsDraggingDoc(false);
     const handleGlobalDrop = () => setIsDraggingDoc(false);
+
+    // Touch drag polyfill events
+    const handleTouchDragStart = () => setIsDraggingDoc(true);
+    const handleTouchDragOver = (e: Event) => {
+      const { tileId, position } = (e as CustomEvent).detail;
+      setDragOverInfo((prev) => {
+        if (prev && prev.tileId === tileId && prev.position === position) return prev;
+        return { tileId, position };
+      });
+    };
+    const handleTouchDragLeave = () => setDragOverInfo(null);
+    const handleTouchDrop = (e: Event) => {
+      const { docId, tileId, position } = (e as CustomEvent).detail;
+      setDragOverInfo(null);
+      setIsDraggingDoc(false);
+      if (tileId === '__empty__') {
+        onDropDocOnEmpty?.(docId);
+      } else if (docId && tileId && docId !== tileId) {
+        onDropDocOnTile?.(docId, tileId, position);
+      }
+    };
+    const handleTouchDragEnd = () => {
+      setDragOverInfo(null);
+      setDragOverEmpty(false);
+      setIsDraggingDoc(false);
+    };
+
     document.addEventListener('dragstart', handleGlobalDragStart);
     document.addEventListener('dragend', handleGlobalDragEnd);
     document.addEventListener('drop', handleGlobalDrop);
+    window.addEventListener('agora:touch-drag-start', handleTouchDragStart);
+    window.addEventListener('agora:touch-drag-over', handleTouchDragOver);
+    window.addEventListener('agora:touch-drag-leave', handleTouchDragLeave);
+    window.addEventListener('agora:touch-drop', handleTouchDrop);
+    window.addEventListener('agora:touch-drag-end', handleTouchDragEnd);
     return () => {
       document.removeEventListener('dragstart', handleGlobalDragStart);
       document.removeEventListener('dragend', handleGlobalDragEnd);
       document.removeEventListener('drop', handleGlobalDrop);
+      window.removeEventListener('agora:touch-drag-start', handleTouchDragStart);
+      window.removeEventListener('agora:touch-drag-over', handleTouchDragOver);
+      window.removeEventListener('agora:touch-drag-leave', handleTouchDragLeave);
+      window.removeEventListener('agora:touch-drop', handleTouchDrop);
+      window.removeEventListener('agora:touch-drag-end', handleTouchDragEnd);
     };
-  }, []);
+  }, [onDropDocOnTile, onDropDocOnEmpty]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent | TouchEvent) => {
@@ -714,6 +752,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
         >
             <div
                 ref={(el) => { tileRefs.current[doc.id] = el; }}
+                data-drop-zone={doc.id}
                 className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
                 onMouseDownCapture={() => {
                   onActivateTab?.(doc.id);
@@ -834,6 +873,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
 
   const emptyZeroState = useMemo(() => (
     <div
+      data-drop-zone="__empty__"
       className={`h-full w-full flex flex-col items-center justify-center text-surface-400 p-8 text-center transition-colors duration-150 ${dragOverEmpty ? 'bg-sky-500/10 ring-2 ring-inset ring-sky-500' : ''}`}
       onDragOver={handleEmptyDragOver}
       onDragLeave={() => setDragOverEmpty(false)}

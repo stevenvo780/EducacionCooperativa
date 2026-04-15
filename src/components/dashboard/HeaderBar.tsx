@@ -550,11 +550,14 @@ const HeaderBar = ({
             <div key={sess.id} className="relative flex items-center gap-0.5 shrink-0">
               <button
                 draggable
+                data-drag-doc-id={terminalDocId}
                 onDragStart={(e) => {
+                  markInternalDragStart();
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('application/x-doc-id', terminalDocId);
                   e.dataTransfer.setData('text/plain', terminalDocId);
                 }}
+                onDragEnd={() => markInternalDragEnd()}
                 onClick={() => {
                   selectSession(sess.id);
                   openTerminal({ id: sess.id, name: sess.name || 'Terminal' });
@@ -727,6 +730,7 @@ const HeaderBar = ({
                     <button
                       key={tool.id}
                       draggable={Boolean(tool.dragId)}
+                      data-drag-doc-id={tool.dragId || undefined}
                       onDragStart={(event) => handleHeaderDragStart(event, tool.dragId)}
                       onDragEnd={() => markInternalDragEnd()}
                       onClick={() => {
