@@ -373,7 +373,7 @@ const Sidebar = ({
             onDragStart={(e) => handleDocDragStart(e, item.doc)}
             onDragEnd={handleDocDragEnd}
             {...getDocContextMenuProps(item.doc)}
-            className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${
+            className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition touch-none ${
               (selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'bg-surface-700 text-white font-medium ring-1 ring-inset ring-surface-500/50' : 'text-surface-300 hover:bg-surface-700/50'
             }`}
           >
@@ -449,7 +449,7 @@ const Sidebar = ({
           onDragStart={(e) => handleDocDragStart(e, item.doc)}
           onDragEnd={handleDocDragEnd}
           {...getDocContextMenuProps(item.doc)}
-          className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
+          className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition touch-none ${
             (selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'bg-surface-700 text-white font-medium ring-1 ring-inset ring-surface-500/50' : 'text-surface-400 hover:bg-surface-700/40'
           }`}
           style={{ paddingLeft }}

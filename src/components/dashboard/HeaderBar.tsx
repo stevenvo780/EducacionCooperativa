@@ -563,7 +563,7 @@ const HeaderBar = ({
                   selectSession(sess.id);
                   openTerminal({ id: sess.id, name: sess.name || 'Terminal' });
                 }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs whitespace-nowrap transition-colors touch-none ${
                   isActive
                     ? 'bg-mandy-500/20 text-mandy-300 font-medium border border-mandy-500/30'
                     : 'text-surface-400 hover:bg-surface-700/60 hover:text-surface-200 border border-transparent'
@@ -743,7 +743,7 @@ const HeaderBar = ({
                         tool.active
                           ? tool.activeClasses
                           : 'border-surface-700/80 bg-surface-900/40 text-surface-300 hover:border-surface-500/50 hover:bg-surface-700/70'
-                      } ${tool.dragId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                      } ${tool.dragId ? 'cursor-grab active:cursor-grabbing touch-none' : ''}`}
                       title={`${tool.label}${tool.dragId ? ' (arrastrar al grid)' : ''}`}
                       aria-label={tool.label}
                     >

@@ -287,12 +287,21 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const handleTouchDragStart = () => setIsDraggingDoc(true);
     const handleTouchDragOver = (e: Event) => {
       const { tileId, position } = (e as CustomEvent).detail;
-      setDragOverInfo((prev) => {
-        if (prev && prev.tileId === tileId && prev.position === position) return prev;
-        return { tileId, position };
-      });
+      if (tileId === '__empty__') {
+        setDragOverEmpty(true);
+        setDragOverInfo(null);
+      } else {
+        setDragOverEmpty(false);
+        setDragOverInfo((prev) => {
+          if (prev && prev.tileId === tileId && prev.position === position) return prev;
+          return { tileId, position };
+        });
+      }
     };
-    const handleTouchDragLeave = () => setDragOverInfo(null);
+    const handleTouchDragLeave = () => {
+      setDragOverInfo(null);
+      setDragOverEmpty(false);
+    };
     const handleTouchDrop = (e: Event) => {
       const { docId, tileId, position } = (e as CustomEvent).detail;
       setDragOverInfo(null);
