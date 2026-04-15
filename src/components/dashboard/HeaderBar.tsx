@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
 import {
   AlertCircle,
   BookMarked,
@@ -201,7 +202,9 @@ const HeaderBar = ({
 
   const handleHeaderDragStart = useCallback((event: React.DragEvent<HTMLElement>, docId: string) => {
     if (!docId) return;
+    markInternalDragStart();
     event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-dashboard-internal-drag', 'tool');
     event.dataTransfer.setData('application/x-doc-id', docId);
     event.dataTransfer.setData('text/plain', docId);
   }, []);
@@ -725,6 +728,7 @@ const HeaderBar = ({
                       key={tool.id}
                       draggable={Boolean(tool.dragId)}
                       onDragStart={(event) => handleHeaderDragStart(event, tool.dragId)}
+                      onDragEnd={() => markInternalDragEnd()}
                       onClick={() => {
                         tool.onClick();
                         setShowToolsMenu(false);

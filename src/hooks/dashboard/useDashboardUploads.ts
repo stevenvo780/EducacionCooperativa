@@ -9,6 +9,7 @@ import {
   type DragEvent,
   type RefObject
 } from 'react';
+import { isInternalDragActive as isInternalDragActiveCheck, markInternalDragEnd } from '@/lib/internal-drag-flag';
 import { DialogKind, UploadPhase, type DocItem, type DialogConfig, type DialogResult, type UploadStatus, type Workspace } from '@/components/dashboard/types';
 import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
@@ -362,7 +363,23 @@ export const useDashboardUploads = ({
     setIsDragActive(false);
   }, [clearDragSafety]);
 
+  // Safety: always clear the internal drag flag when ANY drag ends globally.
+  // This prevents the flag from getting stuck if a dragEnd is missed.
+  useEffect(() => {
+    const clearOnDragEnd = () => markInternalDragEnd();
+    document.addEventListener('dragend', clearOnDragEnd);
+    return () => document.removeEventListener('dragend', clearOnDragEnd);
+  }, []);
+
   const isFileDrag = useCallback((e: DragEvent) => {
+    // Application-level flag: the most reliable check on all devices.
+    // On tablets, dataTransfer.types/items are restricted during
+    // dragenter/dragover, so we cannot trust them to distinguish
+    // internal drags from real file drags.
+    if (isInternalDragActiveCheck()) {
+      return false;
+    }
+
     const types = Array.from(e.dataTransfer?.types ?? []);
     const isInternalDashboardDrag = types.includes('application/x-dashboard-internal-drag')
       || types.includes('application/x-doc-id')
@@ -373,15 +390,8 @@ export const useDashboardUploads = ({
       return false;
     }
 
-    // On tablets, internal drags can spuriously include 'Files' in types.
-    // Verify there are actual file items before treating it as a file drag.
-    const items = Array.from(e.dataTransfer?.items ?? []);
-    if (items.length > 0) {
-      return items.some(item => item.kind === 'file');
-    }
-
-    // Fallback: if items API is not available, trust 'Files' type
-    return types.includes('Files');
+    if (types.includes('Files')) return true;
+    return Array.from(e.dataTransfer?.items ?? []).some(item => item.kind === 'file');
   }, []);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
