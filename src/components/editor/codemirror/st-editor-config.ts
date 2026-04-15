@@ -16,6 +16,9 @@ import { stLintExtensions } from './st-lint';
 import { stHoverTooltip } from './st-hover';
 import { stRainbowParens } from './st-rainbow-parens';
 import { stTheme, stLightTheme } from './st-theme';
+import { isTouchDeviceProfile } from '@/lib/device-input';
+
+export { isTouchDeviceProfile };
 
 // ── Feature keys ────────────────────────────────────────────
 
@@ -88,32 +91,6 @@ export const ST_NATIVE_INPUT_ATTRIBUTES: Readonly<Record<string, string>> = {
   'data-enable-grammarly': 'false',
   'data-gramm': 'false'
 };
-
-function matchesMediaQuery(query: string): boolean {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia(query).matches;
-}
-
-export function isTouchDeviceProfile(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  const primaryCoarsePointer = matchesMediaQuery('(pointer: coarse)');
-  const anyCoarsePointer = matchesMediaQuery('(any-pointer: coarse)');
-  const primaryFinePointer = matchesMediaQuery('(pointer: fine)');
-  const hoverCapable = matchesMediaQuery('(hover: hover)') || matchesMediaQuery('(any-hover: hover)');
-  const noHover = matchesMediaQuery('(hover: none)') || matchesMediaQuery('(any-hover: none)');
-  const hasTouchPoints = typeof navigator !== 'undefined'
-    && typeof navigator.maxTouchPoints === 'number'
-    && navigator.maxTouchPoints > 0;
-  const touchOnlyDevice = (primaryCoarsePointer || (hasTouchPoints && !primaryFinePointer)) && !hoverCapable;
-  const compactTouchViewport = typeof window.innerWidth === 'number'
-    && window.innerWidth <= 1180
-    && (primaryCoarsePointer || anyCoarsePointer || hasTouchPoints)
-    && noHover;
-
-  return touchOnlyDevice || compactTouchViewport;
-}
 
 export function getDefaultConfig(): EditorConfig {
   return isTouchDeviceProfile() ? TOUCH_DEVICE_CONFIG : DEFAULT_CONFIG;

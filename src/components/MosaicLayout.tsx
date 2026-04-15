@@ -11,6 +11,7 @@ import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import type { WorkspaceTypeId } from '@/types/workspace';
 import { isMarkdownDocument } from '@/lib/document-format';
 import { CompatMosaicWindow } from '@/components/mosaic/CompatMosaicWindow';
+import { useIsTouchDeviceProfile } from '@/lib/device-input';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -181,6 +182,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   currentUserId,
   nexusUrl
 }) => {
+  const isTouchDevice = useIsTouchDeviceProfile();
   const [docSearchTerms, setDocSearchTerms] = useState<Record<string, string>>({});
   const [docSearchStates, setDocSearchStates] = useState<Record<string, SearchState>>({});
   const [dragOverInfo, setDragOverInfo] = useState<{ tileId: string; position: 'left' | 'right' | 'top' | 'bottom' | 'replace' } | null>(null);
@@ -518,7 +520,10 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                 e.stopPropagation();
                 setPositionMenuDocId(prev => prev === doc.id ? null : doc.id);
               }}
-              className={`p-1 rounded transition ${positionMenuDocId === doc.id ? 'bg-sky-500/20 text-sky-300' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
+              data-drag-doc-id={doc.id}
+              data-drag-label={doc.name}
+              data-disable-context-menu-trigger="true"
+              className={`touch-none p-1 rounded transition ${positionMenuDocId === doc.id ? 'bg-sky-500/20 text-sky-300' : 'text-surface-400 hover:bg-surface-700 hover:text-white'}`}
               title="Mover panel"
             >
               <GripVertical className="w-3.5 h-3.5" />
@@ -748,7 +753,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
             title={doc.name}
             className="bg-surface-900 mosaic-window-compact"
             toolbarControls={renderToolbarControls(doc, mode)}
-          renderToolbar={() => renderWindowToolbar(doc, mode)}
+            renderToolbar={() => renderWindowToolbar(doc, mode)}
+            draggable={!isTouchDevice}
         >
             <div
                 ref={(el) => { tileRefs.current[doc.id] = el; }}
@@ -862,7 +868,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     );
   }, [
     tabById, docById, docModes, nexusUrl, renderToolbarControls, renderWindowToolbar, docSearchTerms, dragOverInfo, isDraggingDoc,
-    currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders,
+    currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders, isTouchDevice,
     onSelectDoc, onActivateTab, onCreateFile, onCreateStFile, onCreateFolder, onUploadFile, onUploadFolder,
     handleTileDragOver, handleTileDragLeave, handleTileDrop,
     onDeleteDoc, onDeleteFolder, onDeleteItems, onDuplicateDoc, onMoveDoc, onRenameDoc, onDownloadDoc, favoriteDocIds, onToggleFavorite, onDownloadFolder,

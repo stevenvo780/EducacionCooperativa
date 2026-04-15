@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type MouseEvent, type TouchEvent } from 
 
 const LONG_PRESS_MS = 500;
 const DRAG_THRESHOLD_PX = 8;
+const DISABLE_CONTEXT_MENU_SELECTOR = '[data-disable-context-menu-trigger="true"]';
 
 interface MenuState<T> {
   x: number;
@@ -21,16 +22,22 @@ export function useContextMenu<T>() {
 
   const close = useCallback(() => setMenu(null), []);
 
+  const shouldIgnoreTarget = useCallback((target: EventTarget | null) => {
+    return target instanceof Element && Boolean(target.closest(DISABLE_CONTEXT_MENU_SELECTOR));
+  }, []);
+
   // Retorna los event handlers para adjuntar al elemento objetivo.
   // Cubre: right-click en desktop y long press en touch.
   // Cancela el long press si hay movimiento (drag).
   const getTriggerProps = useCallback((data: T) => ({
     onContextMenu: (e: MouseEvent) => {
+      if (shouldIgnoreTarget(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
       setMenu({ x: e.clientX, y: e.clientY, data });
     },
     onTouchStart: (e: TouchEvent) => {
+      if (shouldIgnoreTarget(e.target) || e.touches.length !== 1) return;
       const touch = e.touches[0];
       touchStartPos.current = { x: touch.clientX, y: touch.clientY };
       isDragging.current = false;
@@ -59,8 +66,15 @@ export function useContextMenu<T>() {
         longPressTimer.current = null;
       }
       touchStartPos.current = null;
+    },
+    onTouchCancel: () => {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+      touchStartPos.current = null;
     }
-  }), []);
+  }), [shouldIgnoreTarget]);
 
   return { menu, open, close, getTriggerProps };
 }

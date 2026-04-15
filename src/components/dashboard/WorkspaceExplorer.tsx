@@ -8,6 +8,8 @@ import { isDocUploaded } from '@/services/dashboardDocUtils';
 import { WorkspaceType } from '@/types/workspace';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { ContextMenu } from '@/components/ui/ContextMenu';
+import { markInternalDragEnd, markInternalDragStart } from '@/lib/internal-drag-flag';
+import { useIsTouchDeviceProfile } from '@/lib/device-input';
 
 const DOC_REORDER_TYPE = 'application/x-doc-reorder';
 const FOLDER_REORDER_TYPE = 'application/x-folder-reorder';
@@ -159,6 +161,7 @@ const WorkspaceExplorer = ({
   rootFolderPath,
   defaultFolderName
 }: WorkspaceExplorerProps) => {
+  const isTouchDevice = useIsTouchDeviceProfile();
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | null>(null);
   const [contentListRef, contentListSize] = useElementSize<HTMLDivElement>();
@@ -171,6 +174,7 @@ const WorkspaceExplorer = ({
   }>();
   const canReorderDocs = !!onReorderDocs;
   const canReorderFolders = !!onReorderFolders && activeChildFolders.every(folder => !!folder.docId);
+  const touchHandleVisibilityClass = isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
 
   const contentItems = useMemo<ContentItem[]>(() => {
     const items: ContentItem[] = [];
@@ -278,8 +282,11 @@ const WorkspaceExplorer = ({
             {canReorderFolders && folder.docId && (
               <button
                 draggable
+                data-drag-label={`Reordenar carpeta ${folder.name}`}
+                data-disable-context-menu-trigger="true"
                 onDragStart={(e) => {
                   e.stopPropagation();
+                  markInternalDragStart();
                   e.dataTransfer.setData('application/x-dashboard-internal-drag', 'folder-reorder');
                   e.dataTransfer.setData(FOLDER_REORDER_TYPE, folder.path);
                   e.dataTransfer.setData('text/plain', folder.path);
@@ -287,10 +294,11 @@ const WorkspaceExplorer = ({
                 }}
                 onDragEnd={(e) => {
                   e.stopPropagation();
+                  markInternalDragEnd();
                   updateDragOver(null, null);
                 }}
                 onClick={(e) => e.stopPropagation()}
-                className="p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+                className={`touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition ${touchHandleVisibilityClass} cursor-grab active:cursor-grabbing`}
                 title="Reordenar carpeta"
               >
                 <GripVertical className="w-3.5 h-3.5" />
@@ -313,6 +321,7 @@ const WorkspaceExplorer = ({
           {...getContextTriggerProps({ type: 'doc', id: doc.id, doc })}
           draggable
           data-drag-doc-id={doc.id}
+          data-drag-label={doc.name}
           onDragStart={(e) => {
             onDocDragStart(e, doc);
           }}
@@ -375,8 +384,11 @@ const WorkspaceExplorer = ({
           {canReorderDocs && (
             <button
               draggable
+              data-drag-label={`Reordenar ${doc.name}`}
+              data-disable-context-menu-trigger="true"
               onDragStart={(e) => {
                 e.stopPropagation();
+                markInternalDragStart();
                 e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc-reorder');
                 e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
                 e.dataTransfer.setData('text/plain', doc.id);
@@ -384,11 +396,12 @@ const WorkspaceExplorer = ({
               }}
               onDragEnd={(e) => {
                 e.stopPropagation();
+                markInternalDragEnd();
                 updateDragOver(null, null);
                 onDocDragEnd();
               }}
               onClick={(e) => e.stopPropagation()}
-              className="p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+              className={`touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition ${touchHandleVisibilityClass} cursor-grab active:cursor-grabbing`}
               title="Reordenar archivo"
             >
               <GripVertical className="w-3.5 h-3.5" />
