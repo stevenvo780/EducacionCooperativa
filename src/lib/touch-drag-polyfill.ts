@@ -264,17 +264,21 @@ function onTouchEnd(e: TouchEvent): void {
     }
     : _lastResolvedDropTarget;
 
-  if (elUnder) {
+  // When the CustomEvent canal (agora:touch-drop) is active, skip the
+  // synthetic DOM `drop` event — otherwise both fire the same handler in
+  // MosaicLayout and the document opens twice.
+  const willEmitCustomDrop = !!(_dragDocId && dropTarget?.tileId && dropTarget.element);
+
+  if (elUnder && !willEmitCustomDrop) {
     dispatchSyntheticDragEvent('drop', elUnder, touch);
   }
 
-  if (_dragDocId && dropTarget?.tileId && dropTarget.element) {
-
+  if (willEmitCustomDrop) {
     window.dispatchEvent(new CustomEvent('agora:touch-drop', {
       detail: {
         docId: _dragDocId,
-        tileId: dropTarget.tileId,
-        position: dropTarget.position
+        tileId: dropTarget!.tileId,
+        position: dropTarget!.position
       }
     }));
   }
