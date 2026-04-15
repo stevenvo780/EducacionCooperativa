@@ -5,7 +5,8 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCorners,
   useSensor,
   useSensors,
@@ -221,7 +222,8 @@ const SortableCard = ({
           ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
-          className="mt-0.5 text-surface-500 hover:text-surface-300"
+          data-disable-context-menu-trigger="true"
+          className="touch-none mt-0.5 text-surface-500 hover:text-surface-300"
           title="Arrastrar tarjeta"
         >
           <GripVertical className="w-3 h-3" />
@@ -382,7 +384,8 @@ const SortableColumn = ({
             ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
-            className="mt-1 text-surface-500 hover:text-surface-300"
+            data-disable-context-menu-trigger="true"
+            className="touch-none mt-1 text-surface-500 hover:text-surface-300"
             title="Arrastrar columna"
           >
             <GripVertical className="w-3.5 h-3.5" />
@@ -474,7 +477,8 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
   }, [cards, columnsOrdered]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 

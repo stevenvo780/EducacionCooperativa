@@ -551,6 +551,7 @@ const HeaderBar = ({
               <button
                 draggable
                 data-drag-doc-id={terminalDocId}
+                data-drag-label={sess.name || 'Terminal'}
                 onDragStart={(e) => {
                   markInternalDragStart();
                   e.dataTransfer.effectAllowed = 'move';
@@ -731,6 +732,7 @@ const HeaderBar = ({
                       key={tool.id}
                       draggable={Boolean(tool.dragId)}
                       data-drag-doc-id={tool.dragId || undefined}
+                      data-drag-label={tool.label}
                       onDragStart={(event) => handleHeaderDragStart(event, tool.dragId)}
                       onDragEnd={() => markInternalDragEnd()}
                       onClick={() => {

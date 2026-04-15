@@ -369,6 +369,7 @@ const Sidebar = ({
             onClick={(e) => handleDocClick(e, index, item.doc)}
             draggable
             data-drag-doc-id={item.doc.id}
+            data-drag-label={item.doc.name}
             onDragStart={(e) => handleDocDragStart(e, item.doc)}
             onDragEnd={handleDocDragEnd}
             {...getDocContextMenuProps(item.doc)}
@@ -444,6 +445,7 @@ const Sidebar = ({
           onClick={(e) => handleDocClick(e, index, item.doc)}
           draggable
           data-drag-doc-id={item.doc.id}
+          data-drag-label={item.doc.name}
           onDragStart={(e) => handleDocDragStart(e, item.doc)}
           onDragEnd={handleDocDragEnd}
           {...getDocContextMenuProps(item.doc)}

@@ -39,6 +39,7 @@ import { FileExplorerContextMenu } from '@/components/file-explorer/FileExplorer
 import { useFileExplorerDND, DOC_REORDER_TYPE, FOLDER_REORDER_TYPE } from '@/components/file-explorer/useFileExplorerDND';
 import type { DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { useIsTouchDeviceProfile } from '@/lib/device-input';
 
 export interface DocItem {
   id: string;
@@ -159,6 +160,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   activeFolder: activeFolderProp,
   onActiveFolderChange
 }) => {
+  const isTouchDevice = useIsTouchDeviceProfile();
   const favoriteDocIdSet = useMemo(() => new Set(favoriteDocIds), [favoriteDocIds]);
 
   const resolveActiveFolder = (value?: string) => {
@@ -217,6 +219,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   // Auto-collapse sidebar when panel is narrow
   const isCompact = containerWidth < 550;
   const isUltraCompact = containerWidth < 380;
+  const touchHandleVisibilityClass = isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
 
   // Auto-collapse sidebar when embedded in Mosaic and compact
   useEffect(() => {
@@ -711,6 +714,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               {canReorderFolders && folder.docId && !isUltraCompact && (
                 <button
                   draggable
+                  data-drag-label={`Reordenar carpeta ${folder.name}`}
+                  data-disable-context-menu-trigger="true"
                   onDragStart={(e) => {
                     e.stopPropagation();
                     markInternalDragStart();
@@ -726,7 +731,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     setDragOverPosition(null);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+                  className={`touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition ${touchHandleVisibilityClass} cursor-grab active:cursor-grabbing`}
                   title="Reordenar carpeta"
                 >
                   <GripVertical className="w-3.5 h-3.5" />
@@ -873,6 +878,32 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           {/* Actions: responsive overflow menu for compact, inline for wide */}
           {isCompact ? (
             <div className="ml-auto relative flex items-center gap-1">
+              {canReorderDocs && (
+                <button
+                  draggable
+                  data-drag-label={`Reordenar ${doc.name}`}
+                  data-disable-context-menu-trigger="true"
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    markInternalDragStart();
+                    e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc-reorder');
+                    e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
+                    e.dataTransfer.setData('text/plain', doc.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragEnd={(e) => {
+                    e.stopPropagation();
+                    markInternalDragEnd();
+                    setDragOverKey(null);
+                    setDragOverPosition(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition cursor-grab active:cursor-grabbing"
+                  title="Reordenar archivo"
+                >
+                  <GripVertical className="w-3.5 h-3.5" />
+                </button>
+              )}
               {onDownloadDoc && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDownloadDoc(doc); }}
@@ -895,6 +926,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             {canReorderDocs && (
               <button
                 draggable
+                data-drag-label={`Reordenar ${doc.name}`}
+                data-disable-context-menu-trigger="true"
                 onDragStart={(e) => {
                   e.stopPropagation();
                   markInternalDragStart();
@@ -910,7 +943,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   setDragOverPosition(null);
                 }}
                 onClick={(e) => e.stopPropagation()}
-                className="p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+                className={`touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition ${touchHandleVisibilityClass} cursor-grab active:cursor-grabbing`}
                 title="Reordenar archivo"
               >
                 <GripVertical className="w-3.5 h-3.5" />
