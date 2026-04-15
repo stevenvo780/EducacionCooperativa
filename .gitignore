@@ -100,3 +100,4 @@ public/workbox-*.js
 public/worker-*.js
 
 scripts
+.env*.local

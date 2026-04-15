@@ -5,6 +5,21 @@
  * on touch devices. This module translates touch events into a custom drag
  * system that coordinates with existing drop zones.
  *
+ * CRITICAL: The polyfill MUST call `preventDefault()` on touchmove events
+ * early enough to prevent the browser from hijacking the touch stream for
+ * scroll/pan gestures. Once the browser enters a scroll gesture it stops
+ * dispatching touch events to JavaScript, killing the drag silently.
+ *
+ * Strategy:
+ *   1. On `touchstart` — record the drag source but do NOT preventDefault
+ *      (so quick taps still fire native click).
+ *   2. On `touchmove` — as soon as the long-press timer has elapsed OR the
+ *      finger has moved past MOVE_THRESHOLD, call `preventDefault()` to
+ *      claim the touch stream. We also call it while waiting if the source
+ *      element has CSS `touch-action: none` (explicit drag handles).
+ *   3. On `touchend` — if drag was never confirmed (quick tap), fire a
+ *      synthetic `click` on the source element to restore tap behaviour.
+ *
  * Touch drag sources can be either:
  *   - elements with `draggable="true"` that already use native HTML5 DnD
  *   - elements with `data-drag-doc-id="<id>"` for touch-only layout moves
@@ -27,7 +42,7 @@ import { markInternalDragStart, markInternalDragEnd } from './internal-drag-flag
 
 // ── Configuration ───────────────────────────────────────────────
 const MOVE_THRESHOLD = 10; // px before drag is confirmed
-const LONG_PRESS_DELAY = 200; // ms hold before drag activates (vs tap)
+const LONG_PRESS_DELAY = 180; // ms hold before drag activates (vs tap)
 
 // ── State ───────────────────────────────────────────────────────
 let _initialized = false;
@@ -48,6 +63,7 @@ let _longPressReady = false;
 let _dragConfirmed = false;
 let _sourceEl: HTMLElement | null = null;
 let _dataTransfer: DataTransfer | null = null;
+let _sourceTouchActionNone = false; // true when source element has touch-action:none
 
 // ── Public API ──────────────────────────────────────────────────
 
@@ -79,6 +95,14 @@ export function destroyTouchDragPolyfill(): void {
 
 // ── Touch handlers ──────────────────────────────────────────────
 
+function hasTouchActionNone(el: HTMLElement): boolean {
+  // Fast path: check for Tailwind `touch-none` class
+  if (el.classList.contains('touch-none')) return true;
+  // Also check inline or computed CSS
+  const ta = el.style.touchAction || window.getComputedStyle(el).touchAction;
+  return ta === 'none';
+}
+
 function onTouchStart(e: TouchEvent): void {
   if (e.touches.length !== 1) return;
 
@@ -97,16 +121,36 @@ function onTouchStart(e: TouchEvent): void {
   _dragConfirmed = false;
   _longPressReady = false;
 
-  // Start a long-press timer — drag only activates if held long enough
-  // OR if the finger moves beyond the threshold
-  _longPressTimer = setTimeout(() => {
-    _longPressTimer = null;
+  // Elements with explicit `touch-action: none` (drag handles) can start
+  // immediately — the browser won't scroll anyway, so claim the touch now.
+  _sourceTouchActionNone = hasTouchActionNone(draggable)
+    || (!!target.closest<HTMLElement>('.touch-none'));
+
+  if (_sourceTouchActionNone) {
+    // Prevent default right away to ensure we receive all future touch events.
+    e.preventDefault();
     _longPressReady = true;
-  }, LONG_PRESS_DELAY);
+    _longPressTimer = null;
+  } else {
+    // Start a long-press timer — drag only activates if held long enough
+    _longPressTimer = setTimeout(() => {
+      _longPressTimer = null;
+      _longPressReady = true;
+    }, LONG_PRESS_DELAY);
+  }
 }
 
 function onTouchMove(e: TouchEvent): void {
   if (!_sourceEl || e.touches.length !== 1) return;
+
+  // ── CRITICAL: Prevent browser from hijacking the touch stream ────────
+  // Once the long-press timer has elapsed (or the source has touch-action:none),
+  // we MUST call preventDefault() on EVERY touchmove, including the very first
+  // one, BEFORE any threshold checks. Otherwise the browser starts a scroll/pan
+  // gesture and stops dispatching touch events to JavaScript entirely.
+  if (_longPressReady || _dragConfirmed) {
+    e.preventDefault();
+  }
 
   const touch = e.touches[0];
   const dx = touch.clientX - _startX;
@@ -114,8 +158,12 @@ function onTouchMove(e: TouchEvent): void {
   const dist = Math.sqrt(dx * dx + dy * dy);
 
   if (!_dragConfirmed) {
-    // Start the drag after a deliberate move or after a short long-press hold.
+    // Need either long-press OR threshold to start drag
     if (!_longPressReady && dist < MOVE_THRESHOLD) return;
+
+    // If long-press ready but barely moved, still wait for small movement
+    // so taps after long-press don't accidentally start a drag
+    if (_longPressReady && dist < 3) return;
 
     _dragConfirmed = true;
     _dragging = true;
@@ -124,9 +172,6 @@ function onTouchMove(e: TouchEvent): void {
       'application/x-doc-id': _dragDocId,
       'text/plain': _dragDocId
     } : undefined);
-
-    // Prevent scrolling once drag is confirmed
-    e.preventDefault();
 
     markInternalDragStart();
     createShield();
@@ -141,7 +186,6 @@ function onTouchMove(e: TouchEvent): void {
   }
 
   // Drag is active — move ghost and check drop zones
-  e.preventDefault();
   moveGhost(touch.clientX, touch.clientY);
   const elUnder = getElementUnderPoint(touch.clientX, touch.clientY);
   const dropZone = getDropZoneAtPoint(touch.clientX, touch.clientY)
@@ -182,10 +226,27 @@ function onTouchEnd(e: TouchEvent): void {
   _longPressReady = false;
 
   if (!_dragging || !_sourceEl) {
-    // Not dragging — let native click/tap through
+    // Not dragging — this was a tap or cancelled gesture.
+    // If we prevented default on touchstart (touch-action:none elements),
+    // the native click won't fire. Dispatch a synthetic click to restore
+    // tap behaviour for buttons and links.
+    const el = _sourceEl;
+    if (el && _sourceTouchActionNone) {
+      const touch = e.changedTouches[0];
+      const dx = touch ? touch.clientX - _startX : 0;
+      const dy = touch ? touch.clientY - _startY : 0;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      // Only fire click if finger didn't move significantly (real tap)
+      if (dist < MOVE_THRESHOLD) {
+        requestAnimationFrame(() => {
+          el.click();
+        });
+      }
+    }
     _dragDocId = null;
     _sourceEl = null;
     _dataTransfer = null;
+    _sourceTouchActionNone = false;
     return;
   }
 
@@ -474,4 +535,5 @@ function cleanup(): void {
   _sourceEl = null;
   _dataTransfer = null;
   _longPressReady = false;
+  _sourceTouchActionNone = false;
 }
