@@ -1,6 +1,7 @@
 'use client';
 
 import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
+import { initTouchDragPolyfill } from '@/lib/touch-drag-polyfill';
 
 import {
   Suspense,
@@ -124,6 +125,9 @@ function DashboardContent() {
     }), [reduceMotion]);
     const isPageVisible = usePageVisibility();
     const { isOnline, syncNow, pendingCount } = useOfflineSync();
+
+    // Initialize touch drag polyfill for tablet/mobile support
+    useEffect(() => { initTouchDragPolyfill(); }, []);
 
     useEffect(() => {
         if (!user) return;
