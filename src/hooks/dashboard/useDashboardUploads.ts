@@ -338,6 +338,30 @@ export const useDashboardUploads = ({
     if (folderInputRef.current) folderInputRef.current.value = '';
   }, [uploadTargetFolder, activeFolder, rootFolderPath, uploadFiles, folderInputRef]);
 
+  const dragSafetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearDragSafety = useCallback(() => {
+    if (dragSafetyTimer.current) {
+      clearTimeout(dragSafetyTimer.current);
+      dragSafetyTimer.current = null;
+    }
+  }, []);
+
+  const startDragSafety = useCallback(() => {
+    clearDragSafety();
+    dragSafetyTimer.current = setTimeout(() => {
+      // Safety: auto-dismiss overlay if drag gets stuck (e.g. tablet bugs)
+      dragCounter.current = 0;
+      setIsDragActive(false);
+    }, 8000);
+  }, [clearDragSafety]);
+
+  const dismissDragOverlay = useCallback(() => {
+    clearDragSafety();
+    dragCounter.current = 0;
+    setIsDragActive(false);
+  }, [clearDragSafety]);
+
   const isFileDrag = useCallback((e: DragEvent) => {
     const types = Array.from(e.dataTransfer?.types ?? []);
     const isInternalDashboardDrag = types.includes('application/x-dashboard-internal-drag')
@@ -349,8 +373,15 @@ export const useDashboardUploads = ({
       return false;
     }
 
-    if (types.includes('Files')) return true;
-    return Array.from(e.dataTransfer?.items ?? []).some(item => item.kind === 'file');
+    // On tablets, internal drags can spuriously include 'Files' in types.
+    // Verify there are actual file items before treating it as a file drag.
+    const items = Array.from(e.dataTransfer?.items ?? []);
+    if (items.length > 0) {
+      return items.some(item => item.kind === 'file');
+    }
+
+    // Fallback: if items API is not available, trust 'Files' type
+    return types.includes('Files');
   }, []);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
@@ -359,7 +390,8 @@ export const useDashboardUploads = ({
     e.stopPropagation();
     dragCounter.current += 1;
     setIsDragActive(true);
-  }, [isFileDrag]);
+    startDragSafety();
+  }, [isFileDrag, startDragSafety]);
 
   const handleDragLeave = useCallback((e: DragEvent) => {
     if (!isDragActive) return;
@@ -369,8 +401,9 @@ export const useDashboardUploads = ({
     if (dragCounter.current <= 0) {
       dragCounter.current = 0;
       setIsDragActive(false);
+      clearDragSafety();
     }
-  }, [isDragActive]);
+  }, [isDragActive, clearDragSafety]);
 
   const handleDragOver = useCallback((e: DragEvent) => {
     if (!isFileDrag(e)) return;
@@ -385,11 +418,12 @@ export const useDashboardUploads = ({
     e.stopPropagation();
     dragCounter.current = 0;
     setIsDragActive(false);
+    clearDragSafety();
     const { files, preservePaths } = await collectDroppedFiles(e);
     if (files.length === 0) return;
     const targetFolder = activeFolder || DEFAULT_FOLDER_NAME;
     await uploadFiles(files, targetFolder, { preservePaths });
-  }, [collectDroppedFiles, isFileDrag, uploadFiles, activeFolder]);
+  }, [collectDroppedFiles, isFileDrag, uploadFiles, activeFolder, clearDragSafety]);
 
   const uploadDroppedFilesToFolder = useCallback(async (e: DragEvent, targetFolder: string) => {
     const { files, preservePaths } = await collectDroppedFiles(e);
@@ -400,9 +434,13 @@ export const useDashboardUploads = ({
     return true;
   }, [collectDroppedFiles, uploadFiles]);
 
+  // Cleanup safety timer on unmount
+  useEffect(() => () => { clearDragSafety(); }, [clearDragSafety]);
+
   return {
     uploadStatus,
     isDragActive,
+    dismissDragOverlay,
     setUploadTargetFolder,
     handleFileUpload,
     handleFolderUpload,
