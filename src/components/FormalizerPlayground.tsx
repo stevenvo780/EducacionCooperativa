@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Zap, Play, Check, X, Copy, BarChart2, Brain, Cpu, Loader2, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import { formalize, type LogicProfile } from '@stevenvo780/autologic';
-import { evaluate, type STEvalResult } from '@stevenvo780/st-lang/api';
+import { evaluate, type STEvalResult } from '@/lib/st-api';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 import SnippetGallery from '@/components/SnippetGallery';
 import type { Snippet } from '@/services/snippetApi';

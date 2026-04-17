@@ -85,9 +85,9 @@ const PROVIDER_META: Record<AIProvider, { label: string; color: string; defaultM
   anthropic: {
     label: 'Claude (Anthropic)',
     color: 'text-amber-400',
-    defaultModel: 'claude-3-5-haiku-20241022',
+    defaultModel: 'claude-haiku-4-5-20251001',
     needsKey: true,
-    modelPlaceholder: 'claude-3-5-haiku-20241022, claude-opus-4-6…'
+    modelPlaceholder: 'claude-haiku-4-5-20251001, claude-sonnet-4-6, claude-opus-4-6…'
   },
   ollama: {
     label: 'Ollama',
@@ -598,8 +598,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
       loopMessages.push({
         role: 'assistant',
-        content: rawContent,
+        content: rawContent || null,
         tool_calls: toolCalls.map(toolCall => ({
+          id: toolCall.id,
+          type: 'function',
           function: {
             name: toolCall.name,
             arguments: toolCall.args
@@ -607,6 +609,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         }))
       });
 
+      // Emit tool_call steps before parallel execution
       for (const toolCall of toolCalls) {
         steps.push(createStep({
           id: `call-${toolCall.id}`,
@@ -614,10 +617,32 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           title: `Ejecutando ${toolCall.name}`,
           call: toolCall
         }));
-        const result = await executeAgoraTool(toolCall.name, toolCall.args, signal);
-        if (result.rollback?.length) {
-          rollback.push(...result.rollback);
-        }
+      }
+
+      // Execute all tools concurrently
+      const settled = await Promise.allSettled(
+        toolCalls.map(async (toolCall) => ({
+          toolCall,
+          result: await executeAgoraTool(toolCall.name, toolCall.args, signal)
+        }))
+      );
+      const toolResults = settled.map((item, i) => {
+        if (item.status === 'fulfilled') return item.value;
+        const toolCall = toolCalls[i];
+        return {
+          toolCall,
+          result: {
+            ok: false,
+            name: toolCall.name,
+            callId: toolCall.id,
+            summary: `Error inesperado: ${String(item.reason)}`,
+            error: String(item.reason)
+          } as AgentToolExecutionResult
+        };
+      });
+
+      for (const { toolCall, result } of toolResults) {
+        if (result.rollback?.length) rollback.push(...result.rollback);
         steps.push(createStep({
           id: `result-${toolCall.id}`,
           type: result.ok ? 'tool_result' : 'error',
@@ -631,19 +656,22 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           tool_call_id: toolCall.id,
           content: JSON.stringify(result)
         });
-        if (result.requiresConfirmation && result.pendingConfirmation) {
+        if (result.requiresConfirmation && result.pendingConfirmation && !pendingConfirmation) {
           pendingConfirmation = result.pendingConfirmation;
-          finalReply = visible || result.summary;
-          return {
-            mode,
-            provider: 'ollama',
-            iterations: iteration,
-            steps,
-            finalReply,
-            pendingConfirmation,
-            rollback
-          };
         }
+      }
+
+      if (pendingConfirmation) {
+        finalReply = visible || toolResults[0].result.summary;
+        return {
+          mode,
+          provider: 'ollama',
+          iterations: iteration,
+          steps,
+          finalReply,
+          pendingConfirmation,
+          rollback
+        };
       }
     }
 

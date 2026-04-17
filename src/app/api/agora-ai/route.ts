@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const contextPrompt = workspaceId ? await buildAgoraWorkspaceContext(workspaceId) : '';
     const defaults: Record<'openai' | 'anthropic' | 'gemini', string> = {
       openai: 'gpt-4o-mini',
-      anthropic: 'claude-3-5-haiku-20241022',
+      anthropic: 'claude-haiku-4-5-20251001',
       gemini: 'gemini-2.0-flash'
     };
 

@@ -8,6 +8,7 @@ import type {
   AgentRollbackAction,
   AgentToolCall,
   AgentTraceStep,
+  AgentToolExecutionResult,
   AIProvider,
   ChatMessage
 } from '@/lib/agora-ai/types';
@@ -40,6 +41,7 @@ type OpenAIToolCall = {
 
 type AnthropicBlock =
   | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; tool_use_id: string; content: string };
 
@@ -69,6 +71,24 @@ const safeJsonParse = (value: string | undefined): Record<string, unknown> => {
 
 const stringifyToolResult = (result: unknown) => JSON.stringify(result, null, 2);
 
+/**
+ * Parse structured error bodies from AI provider APIs and return a
+ * user-friendly Spanish message that includes rate-limit / quota hints.
+ */
+async function parseProviderError(provider: string, status: number, body: string): Promise<string> {
+  const hint =
+    status === 401 ? ' — API key inválida o expirada.' :
+    status === 429 ? ' — límite de peticiones alcanzado, espera unos segundos.' :
+    status === 402 || status === 403 ? ' — cuota agotada o sin créditos.' :
+    '';
+  try {
+    const data = JSON.parse(body) as Record<string, unknown>;
+    const err = data.error as Record<string, string> | undefined;
+    if (err?.message) return `${provider} ${status}: ${err.message}${hint}`;
+  } catch { /* not JSON */ }
+  return `${provider} ${status}: ${body.slice(0, 300)}${hint}`;
+}
+
 function createEmitters(steps: AgentTraceStep[], callbacks?: ProviderRunCallbacks) {
   return {
     emitStatus: async (status: string) => {
@@ -81,7 +101,10 @@ function createEmitters(steps: AgentTraceStep[], callbacks?: ProviderRunCallback
   };
 }
 
-async function collectTextAndThinking(rawContent: string, emitStep: (step: AgentTraceStep) => Promise<void>) {
+async function collectTextAndThinking(
+  rawContent: string,
+  emitStep: (step: AgentTraceStep) => Promise<void>
+) {
   const { thinking, visible } = extractThinkingSegments(rawContent || '');
   if (thinking) {
     await emitStep(createStep({
@@ -102,6 +125,35 @@ async function collectTextAndThinking(rawContent: string, emitStep: (step: Agent
   return visible;
 }
 
+/**
+ * Execute all tool calls concurrently and return results in the original order.
+ * Using Promise.allSettled so an individual tool failure never blocks the others.
+ */
+async function executeToolsParallel(
+  toolCalls: AgentToolCall[],
+  executionContext: AgentExecutionContext
+): Promise<Array<{ toolCall: AgentToolCall; result: AgentToolExecutionResult }>> {
+  const settled = await Promise.allSettled(
+    toolCalls.map(tc => executeAgentTool(tc, executionContext))
+  );
+  return settled.map((item, i) => {
+    const toolCall = toolCalls[i];
+    if (item.status === 'fulfilled') return { toolCall, result: item.value };
+    return {
+      toolCall,
+      result: {
+        ok: false,
+        name: toolCall.name,
+        callId: toolCall.id,
+        summary: `Error inesperado ejecutando ${toolCall.name}: ${String(item.reason)}`,
+        error: String(item.reason)
+      } as AgentToolExecutionResult
+    };
+  });
+}
+
+// ── OpenAI ──────────────────────────────────────────────────────────────────
+
 async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
   const steps: AgentTraceStep[] = [];
   const rollback: AgentRollbackAction[] = [];
@@ -114,10 +166,9 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
 
   const messages: Array<Record<string, unknown>> = [
     { role: 'system', content: systemPrompt },
-    ...options.messages.filter(message => message.role !== 'system').map(message => ({
-      role: message.role,
-      content: message.content
-    }))
+    ...options.messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role, content: m.content }))
   ];
 
   let finalReply = '';
@@ -126,7 +177,8 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
 
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -135,27 +187,26 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
       body: JSON.stringify({
         model: options.model,
         messages,
-        max_tokens: 2048,
+        max_tokens: 8192,
         ...(options.mode === 'agent'
           ? { tools: toOpenAITools(), tool_choice: 'auto' }
           : {})
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI ${response.status}: ${await response.text()}`);
+    if (!res.ok) {
+      throw new Error(await parseProviderError('OpenAI', res.status, await res.text()));
     }
 
-    const data = await response.json() as {
+    const data = await res.json() as {
       choices?: Array<{
-        message?: {
-          content?: string | null;
-          tool_calls?: OpenAIToolCall[];
-        };
+        message?: { content?: string | null; tool_calls?: OpenAIToolCall[] };
+        finish_reason?: string;
       }>;
     };
 
-    const message = data.choices?.[0]?.message;
+    const choice = data.choices?.[0];
+    const message = choice?.message;
     const rawContent = message?.content ?? '';
     const visibleContent = await collectTextAndThinking(rawContent, emitStep);
     const toolCalls = (message?.tool_calls ?? []).map((call): AgentToolCall => ({
@@ -164,36 +215,43 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
       args: safeJsonParse(call.function?.arguments)
     }));
 
+    if (choice?.finish_reason === 'length') {
+      finalReply = visibleContent || 'La respuesta fue cortada por el límite de tokens. Simplifica tu solicitud.';
+      break;
+    }
     if (!toolCalls.length || options.mode !== 'agent') {
       finalReply = visibleContent || finalReply || 'Listo.';
       break;
     }
 
+    // Push assistant turn (before executing tools)
     messages.push({
       role: 'assistant',
-      content: rawContent,
+      content: rawContent || null,
       tool_calls: toolCalls.map(call => ({
         id: call.id,
         type: 'function',
-        function: {
-          name: call.name,
-          arguments: JSON.stringify(call.args)
-        }
+        function: { name: call.name, arguments: JSON.stringify(call.args) }
       }))
     });
 
-    for (const toolCall of toolCalls) {
-      await emitStatus(`Ejecutando ${toolCall.name}…`);
+    // Announce & execute all tools concurrently
+    await emitStatus(
+      toolCalls.length > 1
+        ? `Ejecutando ${toolCalls.length} herramientas en paralelo…`
+        : `Ejecutando ${toolCalls[0].name}…`
+    );
+    for (const tc of toolCalls) {
       await emitStep(createStep({
-        id: `call-${toolCall.id}`,
-        type: 'tool_call',
-        title: `Ejecutando ${toolCall.name}`,
-        call: toolCall
+        id: `call-${tc.id}`, type: 'tool_call',
+        title: `Ejecutando ${tc.name}`, call: tc
       }));
-      const result = await executeAgentTool(toolCall, options.executionContext);
-      if (result.rollback?.length) {
-        rollback.push(...result.rollback);
-      }
+    }
+
+    const toolResults = await executeToolsParallel(toolCalls, options.executionContext);
+
+    for (const { toolCall, result } of toolResults) {
+      if (result.rollback?.length) rollback.push(...result.rollback);
       await emitStep(createStep({
         id: `result-${toolCall.id}`,
         type: result.ok ? 'tool_result' : 'error',
@@ -206,42 +264,38 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
         tool_call_id: toolCall.id,
         content: stringifyToolResult(result)
       });
-      if (result.requiresConfirmation && result.pendingConfirmation) {
+      if (result.requiresConfirmation && result.pendingConfirmation && !pendingConfirmation) {
         pendingConfirmation = result.pendingConfirmation;
-        finalReply = visibleContent || result.summary;
-        return {
-          mode: options.mode,
-          provider: options.provider,
-          iterations,
-          steps,
-          finalReply,
-          pendingConfirmation,
-          rollback
-        };
       }
+    }
+
+    if (pendingConfirmation) {
+      finalReply = visibleContent || toolResults[0].result.summary;
+      return {
+        mode: options.mode, provider: options.provider,
+        iterations, steps, finalReply, pendingConfirmation, rollback
+      };
     }
   }
 
-  if (!finalReply) {
-    finalReply = 'Se completó la ejecución del agente.';
-  }
+  if (!finalReply) finalReply = 'Se completó la ejecución del agente.';
 
   await emitStep(createStep({
     id: `final-${steps.length + 1}`,
-    type: 'final',
-    title: 'Respuesta final',
-    content: finalReply
+    type: 'final', title: 'Respuesta final', content: finalReply
   }));
 
-  return {
-    mode: options.mode,
-    provider: options.provider,
-    iterations,
-    steps,
-    finalReply,
-    rollback
-  };
+  return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
 }
+
+// ── Anthropic ───────────────────────────────────────────────────────────────
+
+/**
+ * Models that support native extended thinking (interleaved with tool calls).
+ * Haiku models currently do NOT support it.
+ */
+const supportsNativeThinking = (model: string) =>
+  model.includes('sonnet') || model.includes('opus');
 
 async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
   const steps: AgentTraceStep[] = [];
@@ -253,9 +307,14 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
     workspaceId: options.executionContext.workspaceId
   });
 
-  const messages: Array<{ role: 'user' | 'assistant'; content: string | AnthropicBlock[] }> = options.messages
-    .filter(message => message.role !== 'system')
-    .map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content }));
+  const useNativeThinking = supportsNativeThinking(options.model) && options.mode === 'agent';
+  // Sonnet/Opus support up to 64K output; cap at 16K (thinking budget + visible headroom).
+  const maxTokens = useNativeThinking ? 16000 : 8192;
+
+  const messages: Array<{ role: 'user' | 'assistant'; content: string | AnthropicBlock[] }> =
+    options.messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
 
   let finalReply = '';
   let iterations = 0;
@@ -263,58 +322,109 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
 
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': options.apiKey,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        ...(useNativeThinking ? { 'anthropic-beta': 'interleaved-thinking-2025-05-14' } : {})
       },
       body: JSON.stringify({
         model: options.model,
-        max_tokens: 2048,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages,
-        ...(options.mode === 'agent' ? { tools: toAnthropicTools() } : {})
+        ...(options.mode === 'agent' ? { tools: toAnthropicTools() } : {}),
+        ...(useNativeThinking
+          ? { thinking: { type: 'enabled', budget_tokens: 10000 } }
+          : {})
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`Anthropic ${response.status}: ${await response.text()}`);
+    if (!res.ok) {
+      throw new Error(await parseProviderError('Anthropic', res.status, await res.text()));
     }
 
-    const data = await response.json() as { content?: AnthropicBlock[] };
+    const data = await res.json() as { content?: AnthropicBlock[]; stop_reason?: string };
     const blocks = data.content ?? [];
-    const text = blocks
-      .filter((block): block is Extract<AnthropicBlock, { type: 'text' }> => block.type === 'text')
-      .map(block => block.text)
-      .join('\n')
-      .trim();
-    const visibleContent = await collectTextAndThinking(text, emitStep);
+
+    // ── Extract thinking and text ─────────────────────────────────────────
+    let visibleContent: string;
+
+    if (useNativeThinking) {
+      // Native thinking blocks — emit directly without XML tag parsing
+      const nativeThinking = blocks
+        .filter((b): b is Extract<AnthropicBlock, { type: 'thinking' }> => b.type === 'thinking')
+        .map(b => b.thinking)
+        .join('\n')
+        .trim();
+      const text = blocks
+        .filter((b): b is Extract<AnthropicBlock, { type: 'text' }> => b.type === 'text')
+        .map(b => b.text)
+        .join('\n')
+        .trim();
+
+      if (nativeThinking) {
+        await emitStep(createStep({
+          id: `thinking-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'thinking', title: 'Razonamiento del agente', content: nativeThinking
+        }));
+      }
+      visibleContent = text;
+      if (visibleContent) {
+        await emitStep(createStep({
+          id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'plan', title: 'Plan / respuesta intermedia', content: visibleContent
+        }));
+      }
+    } else {
+      // Fallback: parse <thinking>...</thinking> tags from text content
+      const text = blocks
+        .filter((b): b is Extract<AnthropicBlock, { type: 'text' }> => b.type === 'text')
+        .map(b => b.text)
+        .join('\n')
+        .trim();
+      visibleContent = await collectTextAndThinking(text, emitStep);
+    }
+
+    if (data.stop_reason === 'max_tokens') {
+      finalReply = visibleContent || 'La respuesta fue cortada por el límite de tokens. Simplifica tu solicitud.';
+      break;
+    }
+
     const toolCalls = blocks
-      .filter((block): block is Extract<AnthropicBlock, { type: 'tool_use' }> => block.type === 'tool_use')
-      .map(block => ({ id: block.id, name: block.name, args: block.input }));
+      .filter((b): b is Extract<AnthropicBlock, { type: 'tool_use' }> => b.type === 'tool_use')
+      .map(b => ({ id: b.id, name: b.name, args: b.input }));
 
     if (!toolCalls.length || options.mode !== 'agent') {
       finalReply = visibleContent || finalReply || 'Listo.';
       break;
     }
 
+    // Push full assistant turn — MUST include thinking blocks verbatim for
+    // the model to maintain reasoning continuity across turns.
     messages.push({ role: 'assistant', content: blocks });
-    const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
 
-    for (const toolCall of toolCalls) {
-      await emitStatus(`Ejecutando ${toolCall.name}…`);
+    // Announce & execute all tools concurrently
+    await emitStatus(
+      toolCalls.length > 1
+        ? `Ejecutando ${toolCalls.length} herramientas en paralelo…`
+        : `Ejecutando ${toolCalls[0].name}…`
+    );
+    for (const tc of toolCalls) {
       await emitStep(createStep({
-        id: `call-${toolCall.id}`,
-        type: 'tool_call',
-        title: `Ejecutando ${toolCall.name}`,
-        call: toolCall
+        id: `call-${tc.id}`, type: 'tool_call',
+        title: `Ejecutando ${tc.name}`, call: tc
       }));
-      const result = await executeAgentTool(toolCall, options.executionContext);
-      if (result.rollback?.length) {
-        rollback.push(...result.rollback);
-      }
+    }
+
+    const toolResults = await executeToolsParallel(toolCalls, options.executionContext);
+    const toolResultBlocks: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
+
+    for (const { toolCall, result } of toolResults) {
+      if (result.rollback?.length) rollback.push(...result.rollback);
       await emitStep(createStep({
         id: `result-${toolCall.id}`,
         type: result.ok ? 'tool_result' : 'error',
@@ -322,49 +432,38 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
         result,
         content: result.summary
       }));
-      toolResults.push({
+      toolResultBlocks.push({
         type: 'tool_result',
         tool_use_id: toolCall.id,
         content: stringifyToolResult(result)
       });
-      if (result.requiresConfirmation && result.pendingConfirmation) {
+      if (result.requiresConfirmation && result.pendingConfirmation && !pendingConfirmation) {
         pendingConfirmation = result.pendingConfirmation;
-        finalReply = visibleContent || result.summary;
-        return {
-          mode: options.mode,
-          provider: options.provider,
-          iterations,
-          steps,
-          finalReply,
-          pendingConfirmation,
-          rollback
-        };
       }
     }
 
-    messages.push({ role: 'user', content: toolResults });
+    messages.push({ role: 'user', content: toolResultBlocks });
+
+    if (pendingConfirmation) {
+      finalReply = visibleContent || toolResults[0].result.summary;
+      return {
+        mode: options.mode, provider: options.provider,
+        iterations, steps, finalReply, pendingConfirmation, rollback
+      };
+    }
   }
 
-  if (!finalReply) {
-    finalReply = 'Se completó la ejecución del agente.';
-  }
+  if (!finalReply) finalReply = 'Se completó la ejecución del agente.';
 
   await emitStep(createStep({
     id: `final-${steps.length + 1}`,
-    type: 'final',
-    title: 'Respuesta final',
-    content: finalReply
+    type: 'final', title: 'Respuesta final', content: finalReply
   }));
 
-  return {
-    mode: options.mode,
-    provider: options.provider,
-    iterations,
-    steps,
-    finalReply,
-    rollback
-  };
+  return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
 }
+
+// ── Gemini ──────────────────────────────────────────────────────────────────
 
 async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
   const steps: AgentTraceStep[] = [];
@@ -376,12 +475,13 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
     workspaceId: options.executionContext.workspaceId
   });
 
-  const contents: Array<{ role: 'user' | 'model'; parts: Array<Record<string, unknown>> }> = options.messages
-    .filter(message => message.role !== 'system')
-    .map(message => ({
-      role: message.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: message.content }]
-    }));
+  const contents: Array<{ role: 'user' | 'model'; parts: Array<Record<string, unknown>> }> =
+    options.messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+      }));
 
   let finalReply = '';
   let iterations = 0;
@@ -389,7 +489,8 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
 
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
-    const response = await fetch(
+
+    const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${options.model}:generateContent?key=${options.apiKey}`,
       {
         method: 'POST',
@@ -397,32 +498,40 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents,
+          generationConfig: { maxOutputTokens: 8192 },
           ...(options.mode === 'agent' ? { tools: toGeminiTools() } : {})
         })
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Gemini ${response.status}: ${await response.text()}`);
+    if (!res.ok) {
+      throw new Error(await parseProviderError('Gemini', res.status, await res.text()));
     }
 
-    const data = await response.json() as {
+    const data = await res.json() as {
       candidates?: Array<{
-        content?: {
-          parts?: GeminiPart[];
-        };
+        content?: { parts?: GeminiPart[] };
+        finishReason?: string;
       }>;
     };
 
-    const parts = data.candidates?.[0]?.content?.parts ?? [];
-    const text = parts.map(part => part.text || '').join('\n').trim();
+    const candidate = data.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    if (finishReason === 'SAFETY' || finishReason === 'RECITATION') {
+      finalReply = finalReply || 'Respuesta bloqueada por las políticas de seguridad de Gemini.';
+      break;
+    }
+
+    const parts = candidate?.content?.parts ?? [];
+    const text = parts.map(p => p.text || '').join('\n').trim();
     const visibleContent = await collectTextAndThinking(text, emitStep);
+
     const toolCalls = parts
-      .filter(part => part.functionCall?.name)
-      .map((part, index): AgentToolCall => ({
+      .filter(p => p.functionCall?.name)
+      .map((p, index): AgentToolCall => ({
         id: `gemini-call-${iterations}-${index + 1}`,
-        name: part.functionCall?.name || 'unknown_tool',
-        args: part.functionCall?.args || {}
+        name: p.functionCall?.name || 'unknown_tool',
+        args: p.functionCall?.args || {}
       }));
 
     if (!toolCalls.length || options.mode !== 'agent') {
@@ -430,21 +539,27 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
       break;
     }
 
+    // Push model turn (includes function call parts)
     contents.push({ role: 'model', parts: parts as Array<Record<string, unknown>> });
+
+    // Announce & execute all tools concurrently
+    await emitStatus(
+      toolCalls.length > 1
+        ? `Ejecutando ${toolCalls.length} herramientas en paralelo…`
+        : `Ejecutando ${toolCalls[0].name}…`
+    );
+    for (const tc of toolCalls) {
+      await emitStep(createStep({
+        id: `call-${tc.id}`, type: 'tool_call',
+        title: `Ejecutando ${tc.name}`, call: tc
+      }));
+    }
+
+    const toolResults = await executeToolsParallel(toolCalls, options.executionContext);
     const functionResponses: Array<Record<string, unknown>> = [];
 
-    for (const toolCall of toolCalls) {
-      await emitStatus(`Ejecutando ${toolCall.name}…`);
-      await emitStep(createStep({
-        id: `call-${toolCall.id}`,
-        type: 'tool_call',
-        title: `Ejecutando ${toolCall.name}`,
-        call: toolCall
-      }));
-      const result = await executeAgentTool(toolCall, options.executionContext);
-      if (result.rollback?.length) {
-        rollback.push(...result.rollback);
-      }
+    for (const { toolCall, result } of toolResults) {
+      if (result.rollback?.length) rollback.push(...result.rollback);
       await emitStep(createStep({
         id: `result-${toolCall.id}`,
         type: result.ok ? 'tool_result' : 'error',
@@ -453,58 +568,41 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
         content: result.summary
       }));
       functionResponses.push({
-        functionResponse: {
-          name: toolCall.name,
-          response: result
-        }
+        functionResponse: { name: toolCall.name, response: result }
       });
-      if (result.requiresConfirmation && result.pendingConfirmation) {
+      if (result.requiresConfirmation && result.pendingConfirmation && !pendingConfirmation) {
         pendingConfirmation = result.pendingConfirmation;
-        finalReply = visibleContent || result.summary;
-        return {
-          mode: options.mode,
-          provider: options.provider,
-          iterations,
-          steps,
-          finalReply,
-          pendingConfirmation,
-          rollback
-        };
       }
     }
 
     contents.push({ role: 'user', parts: functionResponses });
+
+    if (pendingConfirmation) {
+      finalReply = visibleContent || toolResults[0].result.summary;
+      return {
+        mode: options.mode, provider: options.provider,
+        iterations, steps, finalReply, pendingConfirmation, rollback
+      };
+    }
   }
 
-  if (!finalReply) {
-    finalReply = 'Se completó la ejecución del agente.';
-  }
+  if (!finalReply) finalReply = 'Se completó la ejecución del agente.';
 
   await emitStep(createStep({
     id: `final-${steps.length + 1}`,
-    type: 'final',
-    title: 'Respuesta final',
-    content: finalReply
+    type: 'final', title: 'Respuesta final', content: finalReply
   }));
 
-  return {
-    mode: options.mode,
-    provider: options.provider,
-    iterations,
-    steps,
-    finalReply,
-    rollback
-  };
+  return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
 }
+
+// ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export async function runProviderConversation(options: ProviderRunOptions): Promise<AgentRun> {
   switch (options.provider) {
-    case 'openai':
-      return runOpenAI(options);
-    case 'anthropic':
-      return runAnthropic(options);
-    case 'gemini':
-      return runGemini(options);
+    case 'openai':    return runOpenAI(options);
+    case 'anthropic': return runAnthropic(options);
+    case 'gemini':    return runGemini(options);
     default:
       throw new Error(`Proveedor no soportado por el servidor: ${options.provider}`);
   }

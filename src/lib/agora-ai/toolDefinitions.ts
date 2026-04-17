@@ -571,11 +571,29 @@ export const toAnthropicTools = () => AGORA_AGENT_TOOLS.map(tool => ({
   input_schema: tool.parameters
 }));
 
+/**
+ * Gemini does not support `additionalProperties` in function parameter schemas.
+ * Strip it recursively to avoid 400 errors from the API.
+ */
+function stripAdditionalProperties(schema: Record<string, unknown>): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { additionalProperties: _ap, ...rest } = schema;
+  if (rest.properties && typeof rest.properties === 'object') {
+    rest.properties = Object.fromEntries(
+      Object.entries(rest.properties as Record<string, Record<string, unknown>>).map(([k, v]) => [
+        k,
+        stripAdditionalProperties(v)
+      ])
+    );
+  }
+  return rest;
+}
+
 export const toGeminiTools = () => [{
   functionDeclarations: AGORA_AGENT_TOOLS.map(tool => ({
     name: tool.name,
     description: tool.description,
-    parameters: tool.parameters
+    parameters: stripAdditionalProperties(tool.parameters as unknown as Record<string, unknown>)
   }))
 }];
 

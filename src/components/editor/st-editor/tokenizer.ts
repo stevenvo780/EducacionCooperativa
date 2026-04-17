@@ -1,3 +1,4 @@
+import { ST_COMPAT_KEYWORDS } from '@/lib/st-api';
 import { ST_RUNTIME_KEYWORDS, ST_RUNTIME_PROFILE_IDS } from '@/lib/st-runtime-manifest';
 
 /**
@@ -30,7 +31,7 @@ export interface HighlightToken {
 
 // ── Conjuntos léxicos ───────────────────────────────────────
 
-export const KEYWORDS = new Set(ST_RUNTIME_KEYWORDS);
+export const KEYWORDS = new Set([...ST_RUNTIME_KEYWORDS, ...ST_COMPAT_KEYWORDS]);
 
 export const BUILTINS = new Set([
   'valid', 'invalid', 'satisfiable', 'unsatisfiable', 'equivalent', 'claims',
@@ -174,7 +175,22 @@ export function tokenizeLine(
       i += 2;
       continue;
     }
-    if ('~&|!=+-*/%^<>'.includes(line[i]) || line[i] === '≤' || line[i] === '≥' || line[i] === '⊕' || line[i] === '↑' || line[i] === '↓') {
+    if (
+      '~&|!=+-*/%^<>'.includes(line[i])
+      || line[i] === '≤'
+      || line[i] === '≥'
+      || line[i] === '⊕'
+      || line[i] === '↑'
+      || line[i] === '↓'
+      || line[i] === '¬'
+      || line[i] === '∧'
+      || line[i] === '∨'
+      || line[i] === '→'
+      || line[i] === '↔'
+      || line[i] === '⊢'
+      || line[i] === '⊥'
+      || line[i] === '⊤'
+    ) {
       tokens.push({ text: line[i], category: 'operator' });
       i++;
       continue;

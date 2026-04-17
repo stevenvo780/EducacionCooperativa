@@ -67,7 +67,7 @@ function makeKeywordCompletions(): Completion[] {
 const staticCompletions = makeKeywordCompletions();
 
 function makeOperatorCompletions(): Completion[] {
-  const operators = ['->', '<->', '&', '|', '^', '⊕', '!&', '↑', '!|', '↓', '!', '[]', '<>', '+', '-', '*', '/', '%', '<', '>', '<=', '>=', '≤', '≥'];
+  const operators = ['->', '→', '<->', '↔', '&', '∧', '|', '∨', '^', '⊕', '!&', '↑', '!|', '↓', '!', '¬', '[]', '<>', '⊢', '|-', '⊥', '⊤', '+', '-', '*', '/', '%', '<', '>', '<=', '>=', '≤', '≥'];
   return operators.map((operator) => ({
     label: operator,
     type: 'operator',
@@ -93,6 +93,18 @@ function makeSnippetCompletions(): Completion[] {
       label: 'proof',
       type: 'text',
       detail: 'Prueba estructurada con assume/show/qed',
+      boost: 2
+    }),
+    snippetCompletion('premise ${name} : ${premise}\npremise ${name2} : ${premise2}\nconclusion ${goal}', {
+      label: 'premise/conclusion',
+      type: 'text',
+      detail: 'Prueba tipo clase con premisas y conclusion',
+      boost: 2
+    }),
+    snippetCompletion('{${premises}} ⊢ ${goal}', {
+      label: 'sequent',
+      type: 'text',
+      detail: 'Secuente con turnstile',
       boost: 2
     }),
     snippetCompletion('check valid ${formula}', {

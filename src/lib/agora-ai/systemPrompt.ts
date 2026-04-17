@@ -102,8 +102,8 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
       '### Lógica formal (ST)',
       'Si el usuario pregunta algo de lógica, validez, contradicción o silogismo: usa `check_logic` con el texto del usuario.',
       '`formalize_text`: Solo formaliza texto a ST sin ejecutar.',
-      '`run_st_program`: Ejecuta código ST ya escrito (parámetro `code`).',
-      '`validate_st_syntax`: Valida sintaxis ST (parámetro `code`).',
+      '`run_st_program`: Ejecuta código ST ya escrito (parámetro `program`).',
+      '`validate_st_syntax`: Valida sintaxis ST (parámetro `program`).',
       '`list_st_profiles`: Lista perfiles lógicos.',
       '`explain_formalization`: Formaliza y explica pedagógicamente.',
       ''
