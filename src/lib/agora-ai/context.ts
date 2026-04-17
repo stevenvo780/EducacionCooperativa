@@ -3,14 +3,15 @@ import { adminDb } from '@/lib/firebase-admin';
 export async function buildAgoraWorkspaceContext(workspaceId: string): Promise<string> {
   const parts: string[] = [];
 
-  try {
-    const docsSnap = await adminDb
-      .collection('documents')
-      .where('workspaceId', '==', workspaceId)
-      .limit(30)
-      .get();
+  // Run both Firestore queries in parallel to halve latency
+  const [docsResult, semResult] = await Promise.allSettled([
+    adminDb.collection('documents').where('workspaceId', '==', workspaceId).limit(30).get(),
+    adminDb.collection('workspaceSemanticStates').doc(workspaceId).get()
+  ]);
 
-    if (!docsSnap.empty) {
+  try {
+    const docsSnap = docsResult.status === 'fulfilled' ? docsResult.value : null;
+    if (docsSnap && !docsSnap.empty) {
       type FireDoc = { id: string } & Record<string, unknown>;
       const textDocs = docsSnap.docs
         .map(d => ({ id: d.id, ...d.data() }) as FireDoc)
@@ -49,12 +50,8 @@ export async function buildAgoraWorkspaceContext(workspaceId: string): Promise<s
   }
 
   try {
-    const semSnap = await adminDb
-      .collection('workspaceSemanticStates')
-      .doc(workspaceId)
-      .get();
-
-    if (semSnap.exists) {
+    const semSnap = semResult.status === 'fulfilled' ? semResult.value : null;
+    if (semSnap?.exists) {
       const sem = semSnap.data() as Record<string, unknown>;
       const concepts = (sem.concepts as Array<Record<string, unknown>> | undefined) ?? [];
       const fragments = (sem.fragments as Array<Record<string, unknown>> | undefined) ?? [];

@@ -221,7 +221,7 @@ render all
 ## API programática
 
 \\\`\\\`\\\`javascript
-const { evaluate, createInterpreter, listProfiles } = require('@stevenvo780/st-lang/api');
+const { evaluate, createInterpreter, listProfiles } = require('@/lib/st-api');
 
 const result = evaluate('logic classical.propositional\\ncheck valid (P | !P)');
 console.log(result.ok);

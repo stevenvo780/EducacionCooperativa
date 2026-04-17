@@ -7,7 +7,7 @@ import {
   type HoverInfo as STHoverInfo,
   type SourceLocation,
   type SymbolInfo
-} from '@stevenvo780/st-lang/api';
+} from '@/lib/st-api';
 
 let cachedSymbolSource: string | null = null;
 let cachedSymbols: SymbolInfo[] = [];

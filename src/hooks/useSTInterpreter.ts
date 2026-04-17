@@ -13,7 +13,7 @@ import {
   type TheorySummary,
   type SymbolInfo,
   type Diagnostic
-} from '@stevenvo780/st-lang/api';
+} from '@/lib/st-api';
 
 // ── Tipos del hook ──────────────────────────────────────────
 

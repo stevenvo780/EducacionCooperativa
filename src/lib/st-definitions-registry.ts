@@ -1,4 +1,4 @@
-import { parse, type Program, type Statement } from '@stevenvo780/st-lang/api';
+import { parse, type Program, type Statement } from '@/lib/st-api';
 import { formulaToString } from '@stevenvo780/st-lang';
 
 export interface STDefinition {

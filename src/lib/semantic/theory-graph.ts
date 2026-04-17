@@ -5,7 +5,7 @@ import {
   type Formula,
   type Program,
   type Statement
-} from '@stevenvo780/st-lang/api';
+} from '@/lib/st-api';
 import { formulaToString } from '@stevenvo780/st-lang';
 import {
   mergeSemanticWorkspaceStates,

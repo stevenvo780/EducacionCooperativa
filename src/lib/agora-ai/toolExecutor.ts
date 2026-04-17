@@ -1,5 +1,5 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
-import { check as checkST, createInterpreter, evaluate as evaluateST, listProfiles } from '@stevenvo780/st-lang/api';
+import { check as checkST, createInterpreter, evaluate as evaluateST, listProfiles } from '@/lib/st-api';
 import { formalize as formalizeNLP, type LogicProfile } from '@stevenvo780/autologic';
 import { adminDb, adminStorage } from '@/lib/firebase-admin';
 import {

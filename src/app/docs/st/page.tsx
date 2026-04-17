@@ -383,7 +383,7 @@ render claims
 ## API programática (TypeScript/JavaScript)
 
 \`\`\`typescript
-import { evaluate, createInterpreter } from '@stevenvo780/st-lang/api';
+import { evaluate, createInterpreter } from '@/lib/st-api';
 
 // Stateless: corre un script completo de una vez
 const result = evaluate(\\\`

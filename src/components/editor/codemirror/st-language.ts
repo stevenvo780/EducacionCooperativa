@@ -131,7 +131,7 @@ const stStreamParser = {
       stream.next();
       return 'operator';
     }
-    if (ch === '≤' || ch === '≥' || ch === '⊕' || ch === '↑' || ch === '↓') {
+    if (ch === '≤' || ch === '≥' || ch === '⊕' || ch === '↑' || ch === '↓' || ch === '¬' || ch === '∧' || ch === '∨' || ch === '→' || ch === '↔' || ch === '⊢' || ch === '⊥' || ch === '⊤') {
       stream.next();
       return 'operator';
     }
