@@ -10,16 +10,7 @@ import {
   quickEval as rawQuickEval,
   symbols as rawSymbols,
   type CompletionItem,
-  type Diagnostic,
-  type Formula,
-  type HoverInfo,
-  type Program,
-  type SourceLocation,
-  type Statement,
-  type STInterpreter,
-  type STEvalResult,
-  type SymbolInfo,
-  type TheorySummary
+  type STInterpreter
 } from '@stevenvo780/st-lang/api';
 
 export type {
