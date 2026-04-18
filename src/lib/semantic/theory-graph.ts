@@ -7,6 +7,7 @@ import {
   type Statement
 } from '@/lib/st-api';
 import { formulaToString } from '@stevenvo780/st-lang';
+import { canonicalizeSTFormula } from '@/lib/st-formula';
 import {
   mergeSemanticWorkspaceStates,
   normalizeSemanticWorkspaceState,
@@ -456,6 +457,12 @@ interface WalkContext {
   theoryNodeId?: string;
 }
 
+interface FormulaBinding {
+  formula?: string;
+  sourceNodeId?: string;
+  letType: 'formula' | 'formalize';
+}
+
 const qualifySymbol = (name: string, context: WalkContext) => (
   context.theoryPrefix ? `${context.theoryPrefix}.${name}` : name
 );
@@ -486,6 +493,17 @@ const buildOutlineFromProgram = (program: Program | null): TheoryGraphOutlineIte
             column: statement.source.column
           });
           visitStatements(statement.members.map((member) => member.statement), label);
+          break;
+        }
+        case 'let_decl': {
+          const rawLabel = statement.name;
+          outline.push({
+            id: createStableSemanticId('outline', prefix || '', statement.kind, rawLabel),
+            label: prefix ? `${prefix}.${rawLabel}` : rawLabel,
+            kind: statement.letType === 'passage' ? 'passage' : 'definition',
+            line: statement.source.line,
+            column: statement.source.column
+          });
           break;
         }
         case 'define_decl':
@@ -546,6 +564,7 @@ export const buildTheoryGraphFromSTSource = (
   const diagnostics: TheoryGraphDiagnostic[] = [];
   const symbolIndex = new Map<string, string>();
   const claimIds = new Map<string, string>();
+  const formulaBindings = new Map<string, FormulaBinding>();
 
   const baseGraph = createEmptyGraph({
     sourceDocument: {
@@ -564,6 +583,13 @@ export const buildTheoryGraphFromSTSource = (
 
   const applyStatements = (statements: Statement[], context: WalkContext = {}) => {
     let currentProfile = context.currentProfile;
+    const setFormulaBinding = (name: string, binding: FormulaBinding) => {
+      formulaBindings.set(name, binding);
+      const simple = name.split('.').pop();
+      if (simple && !formulaBindings.has(simple)) {
+        formulaBindings.set(simple, binding);
+      }
+    };
 
     statements.forEach((statement) => {
       if (statement.kind === 'logic_decl') {
@@ -635,10 +661,65 @@ export const buildTheoryGraphFromSTSource = (
         return;
       }
 
+      if (statement.kind === 'let_decl') {
+        const label = qualifySymbol(statement.name, context);
+
+        if (statement.letType === 'passage') {
+          const nodeId = createStableSemanticId('st-passage', label, options?.docId || options?.docName);
+          upsertNode(nodes, {
+            id: nodeId,
+            kind: 'passage',
+            label,
+            origin: 'st-source',
+            scope: 'theory-file',
+            logicProfile: currentProfile,
+            sourceRefs: statementSourceRefs(statement),
+            updatedAt: Date.now(),
+            status: 'validated',
+            docId: options?.docId ?? null,
+            docName: options?.docName ?? options?.sourceFileName ?? null,
+            text: statement.anchorPath,
+            metadata: {
+              anchorPath: statement.anchorPath,
+              letType: statement.letType
+            }
+          });
+          registerAlias(symbolIndex, label, nodeId);
+          return;
+        }
+
+        if (statement.letType === 'formalize') {
+          const passageLookupName = qualifySymbol(statement.passageName, context);
+          const sourceNodeId = symbolIndex.get(passageLookupName) || symbolIndex.get(statement.passageName);
+          setFormulaBinding(label, {
+            formula: safeFormulaToString(statement.formula),
+            sourceNodeId,
+            letType: statement.letType
+          });
+          return;
+        }
+
+        if (statement.letType === 'formula') {
+          setFormulaBinding(label, {
+            formula: safeFormulaToString(statement.formula),
+            letType: statement.letType
+          });
+        }
+        return;
+      }
+
       if (statement.kind === 'claim_decl' || statement.kind === 'axiom_decl' || statement.kind === 'theorem_decl') {
         const rawName = statement.name;
         const label = qualifySymbol(rawName, context);
-        const formula = 'formula' in statement ? safeFormulaToString(statement.formula) : undefined;
+        const formalizationRef = 'formalization' in statement && typeof statement.formalization === 'string'
+          ? statement.formalization
+          : undefined;
+        const resolvedBinding = formalizationRef
+          ? formulaBindings.get(qualifySymbol(formalizationRef, context)) || formulaBindings.get(formalizationRef)
+          : undefined;
+        const formula = 'formula' in statement && statement.formula
+          ? safeFormulaToString(statement.formula)
+          : resolvedBinding?.formula;
         const nodeId = createStableSemanticId('st-claim', label, options?.docId || options?.docName);
         upsertNode(nodes, {
           id: nodeId,
@@ -655,7 +736,9 @@ export const buildTheoryGraphFromSTSource = (
           formula,
           text: statement.kind === 'claim_decl' ? statement.value : undefined,
           metadata: {
-            statementKind: statement.kind
+            statementKind: statement.kind,
+            ...(formalizationRef ? { formalizationRef } : {}),
+            ...(resolvedBinding?.letType ? { letType: resolvedBinding.letType } : {})
           }
         });
         registerAlias(symbolIndex, label, nodeId);
@@ -690,6 +773,7 @@ export const buildTheoryGraphFromSTSource = (
 
       if (statement.kind === 'interpret_cmd') {
         const label = statement.text;
+        const alias = safeFormulaToString(statement.formula);
         const nodeId = createStableSemanticId('st-passage', label, options?.docId || options?.docName);
         upsertNode(nodes, {
           id: nodeId,
@@ -706,10 +790,12 @@ export const buildTheoryGraphFromSTSource = (
           text: statement.text,
           formula: safeFormulaToString(statement.formula),
           metadata: {
-            passageRef: statement.passageRef
+            passageRef: statement.passageRef,
+            ...(alias ? { alias } : {})
           }
         });
         registerAlias(symbolIndex, label, nodeId);
+        if (alias) registerAlias(symbolIndex, alias, nodeId);
         return;
       }
 
@@ -944,11 +1030,15 @@ export const verifyTheoryGraph = (graph: TheoryGraph): TheoryGraphDiagnostic[] =
   const formulaClaims = claimNodes.filter((node) => node.formula && node.logicProfile);
   for (let index = 0; index < formulaClaims.length; index += 1) {
     const left = formulaClaims[index];
-    for (let next = index + 1; next < Math.min(formulaClaims.length, 12); next += 1) {
+    for (let next = index + 1; next < formulaClaims.length; next += 1) {
       const right = formulaClaims[next];
       if (!left.logicProfile || left.logicProfile !== right.logicProfile || !left.formula || !right.formula) continue;
       try {
-        const result = evaluate(`logic ${left.logicProfile}\ncheck satisfiable ((${left.formula}) & (${right.formula}))`);
+        const leftFormula = canonicalizeSTFormula(left.formula, left.logicProfile);
+        const rightFormula = canonicalizeSTFormula(right.formula, right.logicProfile);
+        const result = evaluate(
+          `logic ${left.logicProfile}\ncheck satisfiable ((${leftFormula}) & (${rightFormula}))`
+        );
         if (result.results[0]?.status === 'unsatisfiable') {
           diagnostics.push({
             id: createDiagnosticId('contradiction', [left.id, right.id, left.logicProfile]),

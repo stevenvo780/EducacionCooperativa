@@ -11,6 +11,7 @@ import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import SnippetGallery from '@/components/SnippetGallery';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { collectSTDiagnostics, hasSTExecutionErrors } from '@/lib/st-execution';
 
 // ── Constantes ──────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ function HistoryPanel({ entries, viewMode }: { entries: STHistoryEntry[]; viewMo
               {entry.input.split('\n')[0]}
               {entry.input.includes('\n') ? ' ...' : ''}
             </code>
-            <StatusBadge ok={entry.result.ok} />
+            <StatusBadge ok={entry.result.ok && !hasSTExecutionErrors(entry.result)} />
           </div>
           <div className="p-3 bg-slate-900/50 text-sm">
             <OutputViewer result={entry.result} mode={viewMode} />
@@ -333,8 +334,9 @@ export default function STRunner({
   // ── Ejecutar script completo ──
   const handleRun = useCallback(() => {
     const result = run(code);
+    const diagnostics = collectSTDiagnostics(result);
     setCurrentSymbols(getSymbols(code));
-    if (result.diagnostics && result.diagnostics.length > 0) {
+    if (diagnostics.length > 0) {
       setActiveTab('problems');
     } else {
       setActiveTab('output');

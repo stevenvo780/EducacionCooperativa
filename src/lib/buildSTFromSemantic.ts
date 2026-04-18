@@ -11,6 +11,7 @@ import type { SemanticWorkspaceState } from '@/services/editorSemanticStore';
 import { buildTheoryGraphFromSemanticState } from '@/lib/semantic/theory-graph';
 import { ST_RUNTIME_PROFILE_IDS } from '@/lib/st-runtime-manifest';
 import { createStableSemanticId } from '@/lib/semantic/ids';
+import { canonicalizeSTFormula, toClaimExpression } from '@/lib/st-formula';
 
 const VALID_PROFILES = new Set(ST_RUNTIME_PROFILE_IDS);
 
@@ -98,6 +99,13 @@ interface ConceptProjection {
   sourceConceptId: string;
 }
 
+interface SupportSourceProjection {
+  stableId: string;
+  sourceName: string;
+  command: string[];
+  claimNames: string[];
+}
+
 const buildConceptProjection = (
   concept: SemanticWorkspaceState['concepts'][number],
   fragments: SemanticWorkspaceState['fragments'],
@@ -135,6 +143,8 @@ const buildConceptProjection = (
   if (!formula) {
     formula = conceptName;
   }
+
+  formula = canonicalizeSTFormula(formula, profile);
 
   return {
     stableId,
@@ -201,7 +211,7 @@ const buildClaimsSection = (projections: ConceptProjection[]) => {
   const lines = ['// [claims]'];
   projections.forEach((projection) => {
     lines.push(makeManagedComment('claim', projection.stableId));
-    lines.push(`claim ${projection.claimName} = ${projection.formula}`);
+    lines.push(`claim ${projection.claimName} = ${toClaimExpression(projection.formula)}`);
     if (projection.confidence !== undefined) {
       lines.push(`confidence ${projection.claimName} = ${projection.confidence.toFixed(2)}`);
     }
@@ -213,32 +223,82 @@ const buildClaimsSection = (projections: ConceptProjection[]) => {
 
 const buildEvidenceSection = (
   fragments: SemanticWorkspaceState['fragments'],
+  relations: SemanticWorkspaceState['relations'],
   projectionsByConceptId: Map<string, ConceptProjection>
 ) => {
-  const evidence = fragments.filter((fragment) => fragment.kind === 'evidence');
-  if (evidence.length === 0) {
+  const supportLikeRelations = relations.filter((relation) => (
+    relation.relationType === 'supports'
+    || relation.relationType === 'evidence-for'
+    || relation.relationType === 'restates'
+  ));
+  const claimNamesByFragmentId = new Map<string, string[]>();
+
+  supportLikeRelations.forEach((relation) => {
+    const projection = projectionsByConceptId.get(relation.conceptId);
+    if (!projection) return;
+    const current = claimNamesByFragmentId.get(relation.fragmentId) ?? [];
+    if (!current.includes(projection.claimName)) current.push(projection.claimName);
+    claimNamesByFragmentId.set(relation.fragmentId, current);
+  });
+
+  const supportSources: SupportSourceProjection[] = fragments
+    .filter((fragment) => fragment.kind === 'evidence' || fragment.kind === 'passage' || fragment.kind === 'source')
+    .map((fragment, index) => {
+      const claimNames = [
+        ...(fragment.conceptId && projectionsByConceptId.has(fragment.conceptId)
+          ? [projectionsByConceptId.get(fragment.conceptId)!.claimName]
+          : []),
+        ...(claimNamesByFragmentId.get(fragment.id) ?? [])
+      ].filter((claimName, claimIndex, list) => list.indexOf(claimName) === claimIndex);
+
+      const stableId = createStableSemanticId(
+        'companion-evidence',
+        fragment.id,
+        fragment.docId || fragment.docName,
+        fragment.selectionHash
+      );
+      const stableToken = stableId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase() || String(index + 1);
+      const sourceName = fragment.kind === 'passage'
+        ? `PSG_${stableToken}`
+        : fragment.kind === 'source'
+          ? `SRC_${stableToken}`
+          : `EV_${stableToken}`;
+      const anchorPath = typeof fragment.metadata?.anchorPath === 'string' && fragment.metadata.anchorPath.trim()
+        ? fragment.metadata.anchorPath.trim()
+        : null;
+
+      let command: string[] = [];
+      if (fragment.kind === 'passage' && anchorPath) {
+        command = [`let ${sourceName} = passage([[${anchorPath}]])`];
+      } else if (fragment.linkedDocName) {
+        command = [
+          `source ${sourceName} {`,
+          `  work "${escapeSTString(fragment.linkedDocName)}"`,
+          '}'
+        ];
+      } else {
+        command = [`interpret "${escapeSTString(fragment.excerpt || fragment.text)}" as ${sourceName}`];
+      }
+
+      return {
+        stableId,
+        sourceName,
+        command,
+        claimNames
+      };
+    });
+
+  if (supportSources.length === 0) {
     return '// [evidence]\n// Sin evidencias gestionadas.\n';
   }
 
   const lines = ['// [evidence]'];
-  evidence.forEach((fragment, index) => {
-    const stableId = createStableSemanticId('companion-evidence', fragment.id, fragment.docId || fragment.docName, fragment.selectionHash);
-    const evidenceName = `EV_${index + 1}`;
-    lines.push(makeManagedComment('evidence', stableId));
-    if (fragment.linkedDocName) {
-      const sourceName = toSTIdentifier(fragment.linkedDocName, `SRC_${index + 1}`);
-      lines.push(`source ${sourceName} {`);
-      lines.push(`  work "${escapeSTString(fragment.linkedDocName)}"`);
-      lines.push('}');
-      if (fragment.conceptId && projectionsByConceptId.has(fragment.conceptId)) {
-        lines.push(`support ${projectionsByConceptId.get(fragment.conceptId)!.claimName} <- ${sourceName}`);
-      }
-    } else {
-      lines.push(`interpret "${escapeSTString(fragment.excerpt || fragment.text)}" as ${evidenceName}`);
-      if (fragment.conceptId && projectionsByConceptId.has(fragment.conceptId)) {
-        lines.push(`support ${projectionsByConceptId.get(fragment.conceptId)!.claimName} <- ${evidenceName}`);
-      }
-    }
+  supportSources.forEach((source) => {
+    lines.push(makeManagedComment('evidence', source.stableId));
+    lines.push(...source.command);
+    source.claimNames.forEach((claimName) => {
+      lines.push(`support ${claimName} <- ${source.sourceName}`);
+    });
     lines.push('');
   });
 
@@ -284,14 +344,14 @@ const buildChecksSection = (projections: ConceptProjection[]) => {
   ];
 
   projections.slice(0, 8).forEach((projection) => {
-    lines.push(`check satisfiable (${projection.formula})`);
+    lines.push(`check satisfiable ${toClaimExpression(projection.formula)}`);
   });
 
   for (let index = 0; index < Math.min(projections.length, 5); index += 1) {
     const current = projections[index];
     const next = projections[index + 1];
     if (!next) break;
-    lines.push(`check satisfiable ((${current.formula}) & (${next.formula}))`);
+    lines.push(`check satisfiable ${toClaimExpression(`(${current.formula}) & (${next.formula})`)}`);
   }
 
   lines.push('');
@@ -313,20 +373,42 @@ export function buildSTFromSemantic(
   docName: string,
   options?: { existingContent?: string | null }
 ): string {
-  const dominantProfile = chooseDominantProfile(state);
   const projections = state.concepts.map((concept, index) => buildConceptProjection(concept, state.fragments, index));
   const projectionsByConceptId = new Map(projections.map((projection) => [projection.sourceConceptId, projection]));
+  const profileIds = Array.from(new Set([
+    ...projections.map((projection) => projection.profile),
+    ...state.fragments.map((fragment) => fragment.logicProfile).filter((profile): profile is string => !!profile),
+    chooseDominantProfile(state)
+  ]));
 
   const managedSections = [
     buildHeader(docName, state),
     COMPANION_MANAGED_START,
-    buildProfileSection(dominantProfile),
     buildImportsSection(),
-    buildDefinitionsSection(projections),
-    buildClaimsSection(projections),
-    buildEvidenceSection(state.fragments, projectionsByConceptId),
-    buildRelationsSection(state.relations, state.fragments, projectionsByConceptId),
-    buildChecksSection(projections),
+    ...profileIds.flatMap((profile, index) => {
+      const scopedProjections = projections.filter((projection) => projection.profile === profile);
+      const scopedConceptIds = new Set(scopedProjections.map((projection) => projection.sourceConceptId));
+      const scopedRelations = state.relations.filter((relation) => (
+        scopedConceptIds.has(relation.conceptId)
+        || (!relation.conceptId && index === 0)
+      ));
+      const scopedFragmentIds = new Set(scopedRelations.map((relation) => relation.fragmentId));
+      const scopedFragments = state.fragments.filter((fragment) => {
+        if (fragment.conceptId && scopedConceptIds.has(fragment.conceptId)) return true;
+        if (scopedFragmentIds.has(fragment.id)) return true;
+        if (index === 0 && !fragment.conceptId && !fragment.logicProfile) return true;
+        return fragment.logicProfile === profile && !fragment.conceptId;
+      });
+
+      return [
+        buildProfileSection(profile),
+        buildDefinitionsSection(scopedProjections),
+        buildClaimsSection(scopedProjections),
+        buildEvidenceSection(scopedFragments, scopedRelations, projectionsByConceptId),
+        buildRelationsSection(scopedRelations, scopedFragments, projectionsByConceptId),
+        buildChecksSection(scopedProjections)
+      ];
+    }),
     COMPANION_MANAGED_END,
     ''
   ];

@@ -385,14 +385,14 @@ function makeSnippetCompletions(): Completion[] {
       info: buildInfoText('support', 'keyword'),
       boost: 2
     }),
-    snippetCompletion('confidence ${claim} : ${value}', {
+    snippetCompletion('confidence ${claim} = ${value}', {
       label: 'confidence',
       type: 'text',
       detail: 'Asignar nivel de confianza [0..1] a un claim',
       info: buildInfoText('confidence', 'keyword'),
       boost: 2
     }),
-    snippetCompletion('context ${claim} : "${description}"', {
+    snippetCompletion('context ${claim} = "${description}"', {
       label: 'context',
       type: 'text',
       detail: 'Asignar contexto semántico a un claim',

@@ -14,6 +14,7 @@ import {
   type SymbolInfo,
   type Diagnostic
 } from '@/lib/st-api';
+import { collectSTDiagnostics } from '@/lib/st-execution';
 
 // ── Tipos del hook ──────────────────────────────────────────
 
@@ -89,7 +90,7 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     };
     setHistory(prev => [...prev, entry]);
     setLastResult(result);
-    setLastDiagnostics(result.diagnostics || []);
+    setLastDiagnostics(collectSTDiagnostics(result));
     return result;
   }, []);
 
@@ -112,7 +113,7 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
 
     try {
       const result = evaluate(code);
-      const diagnostics = result.diagnostics || [];
+      const diagnostics = collectSTDiagnostics(result);
       setLastDiagnostics(diagnostics);
       return diagnostics;
     } catch {
