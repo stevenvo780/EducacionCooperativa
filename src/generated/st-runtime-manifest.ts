@@ -5,9 +5,9 @@
  */
 
 export const ST_RUNTIME_MANIFEST = {
-  "generatedAt": "2026-04-15T14:02:29.265Z",
-  "canonicalVersion": "3.1.0",
-  "packageVersion": "3.1.0",
+  "generatedAt": "2026-04-18T00:12:43.174Z",
+  "canonicalVersion": "3.1.1",
+  "packageVersion": "3.1.1",
   "cliVersion": "2.6.0",
   "versionMismatch": true,
   "profiles": [
@@ -236,6 +236,7 @@ export const ST_RUNTIME_MANIFEST = {
     "check satisfiable",
     "check valid",
     "claim",
+    "conclusion",
     "confidence",
     "context",
     "contramodelo",
@@ -275,10 +276,14 @@ export const ST_RUNTIME_MANIFEST = {
     "nand",
     "next",
     "nor",
+    "numbered proof",
     "para",
     "paratodo",
     "passage",
     "plegar",
+    "por_tanto",
+    "premisa",
+    "premise",
     "print",
     "privado",
     "private",
@@ -304,6 +309,7 @@ export const ST_RUNTIME_MANIFEST = {
     "theorem",
     "theory",
     "theory extends",
+    "therefore",
     "truth_table",
     "unfold",
     "until",
@@ -313,7 +319,7 @@ export const ST_RUNTIME_MANIFEST = {
     "xor",
     "|"
   ],
-  "completionCount": 123,
+  "completionCount": 129,
   "supportedFeatures": [
     {
       "id": "text-layer",
