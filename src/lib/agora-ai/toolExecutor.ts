@@ -10,6 +10,7 @@ import {
 } from '@/lib/agora-ai/documentIntelligence';
 import { getErrorMessage } from '@/lib/error-utils';
 import { normalizeFolderPath } from '@/lib/folder-utils';
+import { collectSTDiagnostics, hasSTExecutionErrors } from '@/lib/st-execution';
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
   normalizeSemanticWorkspaceState,
@@ -1021,11 +1022,17 @@ async function checkLogic(call: AgentToolCall, ctx: AgentExecutionContext) {
   let execution: Record<string, unknown>;
   try {
     const execResult = evaluateST(stCode);
+    const executionOk = execResult.ok && !hasSTExecutionErrors(execResult);
+    const executionDiagnostics = collectSTDiagnostics(execResult);
+    const executionErrors = executionDiagnostics
+      .filter((diagnostic) => diagnostic.severity === 'error')
+      .map((diagnostic) => diagnostic.message)
+      .filter((message) => message.trim().length > 0);
     execution = {
-      ok: execResult.ok,
+      ok: executionOk,
       stdout: execResult.stdout || '',
-      stderr: execResult.stderr || '',
-      diagnostics: Array.isArray(execResult.diagnostics) ? execResult.diagnostics : []
+      stderr: executionOk ? (execResult.stderr || '') : executionErrors.join('\n') || execResult.stderr || '',
+      diagnostics: executionDiagnostics
     };
   } catch (err) {
     execution = {

@@ -141,17 +141,19 @@ const extractFromAst = (program: Program, fileId: string): STDefinition[] => {
           column
         });
         break;
-      case 'interpret_cmd':
+      case 'interpret_cmd': {
+        const alias = safeFormulaToString(statement.formula);
         definitions.push({
-          name: qualifyName(statement.text.slice(0, 64), qualifiedNamePrefix),
+          name: qualifyName(alias || statement.text.slice(0, 64), qualifiedNamePrefix),
           kind: 'interpretation',
-          detail: safeFormulaToString(statement.formula),
+          detail: alias || statement.text,
           naturalName: statement.text,
           file: fileId,
           line,
           column
         });
         break;
+      }
       default:
         break;
     }
@@ -244,10 +246,10 @@ class STDefinitionsRegistryClass {
         return extractFromAst(parsed.program, fileId);
       }
     } catch {
-      // Fallback below.
+      return extractWithRegexFallback(code, fileId);
     }
 
-    return extractWithRegexFallback(code, fileId);
+    return [];
   }
 
   private _notify(): void {
