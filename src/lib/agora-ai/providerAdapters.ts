@@ -600,9 +600,9 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
 
 export async function runProviderConversation(options: ProviderRunOptions): Promise<AgentRun> {
   switch (options.provider) {
-    case 'openai':    return runOpenAI(options);
+    case 'openai': return runOpenAI(options);
     case 'anthropic': return runAnthropic(options);
-    case 'gemini':    return runGemini(options);
+    case 'gemini': return runGemini(options);
     default:
       throw new Error(`Proveedor no soportado por el servidor: ${options.provider}`);
   }
