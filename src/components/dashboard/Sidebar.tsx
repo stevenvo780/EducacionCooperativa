@@ -2,12 +2,13 @@
 
 import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, Info, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
+import { useIsTouchDeviceProfile } from '@/lib/device-input';
 
 const ROW_HEIGHT = 28;
 
@@ -140,6 +141,7 @@ const Sidebar = ({
   onRenameFolder,
   onDeleteFolder
 }: SidebarProps) => {
+  const isTouchDevice = useIsTouchDeviceProfile();
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [selectedDocsIds, setSelectedDocsIds] = useState<Set<string>>(new Set());
@@ -156,11 +158,43 @@ const Sidebar = ({
   const isCollapsedView = isCollapsed && !showMobileSidebar;
   const effectiveWidth = isCollapsedView ? 0 : sidebarWidth;
   const favoriteDocIdSet = useMemo(() => new Set(favoriteDocIds), [favoriteDocIds]);
+  const touchHandleVisibilityClass = isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
 
   useEffect(() => {
     setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
     setCollapsedByUser(new Set());
   }, [currentWorkspace?.id]);
+
+  const expandFolderPath = (path: string) => {
+    const normalized = normalizeFolderPath(path);
+    const segments = normalized.split('/').filter(Boolean);
+    if (segments.length === 0) return;
+
+    const paths: string[] = [];
+    let current = '';
+    segments.forEach(segment => {
+      current = current ? `${current}/${segment}` : segment;
+      paths.push(current);
+    });
+
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      paths.forEach(item => next.add(item));
+      return next;
+    });
+
+    setCollapsedByUser(prev => {
+      if (!paths.includes(DEFAULT_FOLDER_NAME) && prev.size === 0) return prev;
+      const next = new Set(prev);
+      paths.forEach(item => next.delete(item));
+      return next;
+    });
+  };
+
+  const collapseAllFolders = () => {
+    setExpandedFolders(new Set());
+    setCollapsedByUser(new Set([DEFAULT_FOLDER_NAME]));
+  };
 
   const effectiveFolders = useMemo<FolderItem[]>(() => {
     const byPath = new Map<string, FolderItem>();
@@ -265,6 +299,11 @@ const Sidebar = ({
 
   const isSearchMode = sidebarSearchQuery.trim().length > 0;
 
+  useEffect(() => {
+    if (isSearchMode) return;
+    expandFolderPath(activeFolder);
+  }, [activeFolder, isSearchMode]);
+
   // Filtrar docs localmente para evitar desfase con useDeferredValue
   const actualFilteredDocs = useMemo(() => {
     const query = sidebarSearchQuery.trim().toLowerCase();
@@ -353,6 +392,28 @@ const Sidebar = ({
     };
   };
 
+  const renderDocDragHandle = (doc: DocItem) => (
+    <button
+      draggable
+      data-drag-doc-id={doc.id}
+      data-drag-label={doc.name}
+      data-disable-context-menu-trigger="true"
+      onDragStart={(e) => {
+        e.stopPropagation();
+        handleDocDragStart(e, doc);
+      }}
+      onDragEnd={(e) => {
+        e.stopPropagation();
+        handleDocDragEnd();
+      }}
+      onClick={(e) => e.stopPropagation()}
+      className={`touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition ${touchHandleVisibilityClass} cursor-grab active:cursor-grabbing`}
+      title="Arrastrar archivo"
+    >
+      <GripVertical className="w-3 h-3" />
+    </button>
+  );
+
   const renderSidebarRow = ({ index, style, ariaAttributes }: RowComponentProps) => {
 
     const item = listItems[index];
@@ -367,13 +428,15 @@ const Sidebar = ({
         >
           <div
             onClick={(e) => handleDocClick(e, index, item.doc)}
-            draggable
-            data-drag-doc-id={item.doc.id}
-            data-drag-label={item.doc.name}
-            onDragStart={(e) => handleDocDragStart(e, item.doc)}
-            onDragEnd={handleDocDragEnd}
+            draggable={!isTouchDevice}
+            {...(!isTouchDevice ? {
+              'data-drag-doc-id': item.doc.id,
+              'data-drag-label': item.doc.name
+            } : {})}
+            onDragStart={!isTouchDevice ? ((e) => handleDocDragStart(e, item.doc)) : undefined}
+            onDragEnd={!isTouchDevice ? handleDocDragEnd : undefined}
             {...getDocContextMenuProps(item.doc)}
-            className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition touch-none ${
+            className={`group flex items-center gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer select-none transition ${
               (selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'bg-surface-700 text-white font-medium ring-1 ring-inset ring-surface-500/50' : 'text-surface-300 hover:bg-surface-700/50'
             }`}
           >
@@ -385,6 +448,7 @@ const Sidebar = ({
             {isFavorite && (
               <Star className="w-3 h-3 text-amber-300 fill-current shrink-0" />
             )}
+            {renderDocDragHandle(item.doc)}
           </div>
         </div>
       );
@@ -443,13 +507,15 @@ const Sidebar = ({
       <div style={style} {...ariaAttributes}>
         <div
           onClick={(e) => handleDocClick(e, index, item.doc)}
-          draggable
-          data-drag-doc-id={item.doc.id}
-          data-drag-label={item.doc.name}
-          onDragStart={(e) => handleDocDragStart(e, item.doc)}
-          onDragEnd={handleDocDragEnd}
+          draggable={!isTouchDevice}
+          {...(!isTouchDevice ? {
+            'data-drag-doc-id': item.doc.id,
+            'data-drag-label': item.doc.name
+          } : {})}
+          onDragStart={!isTouchDevice ? ((e) => handleDocDragStart(e, item.doc)) : undefined}
+          onDragEnd={!isTouchDevice ? handleDocDragEnd : undefined}
           {...getDocContextMenuProps(item.doc)}
-          className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition touch-none ${
+          className={`group flex items-center gap-2 py-1 px-2 text-xs rounded cursor-pointer select-none transition ${
             (selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)) ? 'bg-surface-700 text-white font-medium ring-1 ring-inset ring-surface-500/50' : 'text-surface-400 hover:bg-surface-700/40'
           }`}
           style={{ paddingLeft }}
@@ -461,6 +527,7 @@ const Sidebar = ({
           {isFavorite && (
             <Star className="w-3 h-3 text-amber-300 fill-current shrink-0" />
           )}
+          {renderDocDragHandle(item.doc)}
         </div>
       </div>
     );
@@ -492,6 +559,14 @@ const Sidebar = ({
                 ARCHIVOS: {currentWorkspace?.name}
                 {loadingDocs && <Loader2 className="w-3 h-3 animate-spin text-surface-500" />}
               </span>
+              <button
+                type="button"
+                onClick={collapseAllFolders}
+                className="rounded-md px-2 py-1 text-[10px] font-medium text-surface-500 transition hover:bg-surface-700/70 hover:text-surface-200"
+                title="Contraer toda la jerarquia"
+              >
+                Contraer todo
+              </button>
             </div>
 
             {/* File action buttons */}

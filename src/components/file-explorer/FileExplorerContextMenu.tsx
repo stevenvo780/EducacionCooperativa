@@ -1,6 +1,6 @@
 import React from 'react';
 import { ContextMenu } from '@/components/ui/ContextMenu';
-import { Copy, Download, Star, Pencil, FolderInput, Trash2 } from 'lucide-react';
+import { Copy, Download, FolderOpen, Star, Pencil, FolderInput, Trash2 } from 'lucide-react';
 import type { DocItem, FolderItem } from '../FileExplorer';
 
 export interface FileExplorerContextMenuProps {
@@ -16,6 +16,7 @@ export interface FileExplorerContextMenuProps {
   };
   docMap: Map<string, DocItem>;
   favoriteDocIdSet: Set<string>;
+  onOpenDoc?: (doc: DocItem) => void;
   onDuplicateDoc?: (doc: DocItem) => void;
   onDownloadDoc?: (doc: DocItem) => void;
   onToggleFavorite?: (doc: DocItem) => void;
@@ -33,6 +34,7 @@ export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = (
   data,
   docMap,
   favoriteDocIdSet,
+  onOpenDoc,
   onDuplicateDoc,
   onDownloadDoc,
   onToggleFavorite,
@@ -50,6 +52,11 @@ export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = (
       sections={data.type === 'doc' ? [
         {
           actions: [
+            ...(onOpenDoc ? [{
+              label: 'Abrir',
+              icon: <FolderOpen className="w-4 h-4" />,
+              onClick: () => { const doc = data.doc || (data.id ? docMap.get(data.id) : null); if (doc) onOpenDoc(doc); }
+            }] : []),
             ...(onDuplicateDoc ? [{
               label: 'Duplicar',
               icon: <Copy className="w-4 h-4" />,

@@ -115,6 +115,57 @@ export const deleteWorkspaceApi = async (params: { workspaceId: string; ownerId:
   assertOk(res, 'Failed to delete workspace');
 };
 
+export const renameWorkspaceApi = async (params: { workspaceId: string; name: string }) => {
+  const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      action: 'rename',
+      name: params.name
+    })
+  });
+  assertOk(res, 'Failed to rename workspace');
+  return (await res.json()) as { status: 'renamed'; id: string; name: string };
+};
+
+export const duplicateWorkspaceApi = async (params: { workspaceId: string; name: string }) => {
+  const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      action: 'duplicate',
+      name: params.name
+    })
+  });
+  assertOk(res, 'Failed to duplicate workspace');
+  return (await res.json()) as {
+    status: 'duplicated';
+    workspace: Workspace;
+    documentsCreated: number;
+    boardColumnsCreated: number;
+    boardCardsCreated: number;
+  };
+};
+
+export const mergeWorkspaceApi = async (params: { targetWorkspaceId: string; sourceWorkspaceId: string }) => {
+  const res = await authFetch(`/api/workspaces/${params.targetWorkspaceId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      action: 'merge',
+      sourceWorkspaceId: params.sourceWorkspaceId
+    })
+  });
+  assertOk(res, 'Failed to merge workspace');
+  return (await res.json()) as {
+    status: 'merged';
+    documentsCreated: number;
+    skippedFolders: number;
+    boardColumnsCreated: number;
+    boardCardsCreated: number;
+  };
+};
+
 export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; view?: string }): Promise<DocItem[]> => {
   const search = new URLSearchParams();
   search.set('workspaceId', params.workspaceId);

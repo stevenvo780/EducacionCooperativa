@@ -6,7 +6,10 @@ import type { MosaicNode } from 'react-mosaic-component';
 import {
     createWorkspaceApi,
     deleteWorkspaceApi,
+    duplicateWorkspaceApi,
     inviteMemberApi,
+    mergeWorkspaceApi,
+    renameWorkspaceApi,
     removeMemberApi
 } from '@/services/dashboardApi';
 import { clearDashboardState } from '@/services/dashboardPersistence';
@@ -34,6 +37,7 @@ interface UseWorkspaceActionsOptions {
     setSelectedDocId: (id: string | null) => void;
     setActiveFolderSafe: (path: string) => void;
     setClosedFilesTabByWorkspace: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+    requestDocsRefresh: (options?: { force?: boolean; delayMs?: number; showLoading?: boolean }) => Promise<void>;
     showDialog: (config: DialogConfig) => Promise<DialogResult>;
     inviteEmail: string;
     setInviteEmail: (email: string) => void;
@@ -41,6 +45,9 @@ interface UseWorkspaceActionsOptions {
 
 interface UseWorkspaceActionsResult {
     createWorkspace: () => Promise<void>;
+    renameWorkspace: (workspace: Workspace) => Promise<void>;
+    duplicateWorkspace: (workspace: Workspace) => Promise<void>;
+    mergeWorkspaceIntoCurrent: (sourceWorkspace: Workspace) => Promise<void>;
     deleteWorkspace: (workspace: Workspace) => Promise<void>;
     inviteMember: () => Promise<void>;
     removeMember: (userId: string) => Promise<void>;
@@ -65,6 +72,7 @@ export function useWorkspaceActions({
     setSelectedDocId,
     setActiveFolderSafe,
     setClosedFilesTabByWorkspace,
+    requestDocsRefresh,
     showDialog,
     inviteEmail,
     setInviteEmail
@@ -86,6 +94,145 @@ export function useWorkspaceActions({
             });
         } catch (e) {
             console.error('Error creating workspace', e);
+        }
+    };
+
+    const renameWorkspace = async (workspace: Workspace) => {
+        if (!user) return;
+        if (workspace.id === PERSONAL_WORKSPACE_ID || workspace.type === WorkspaceType.Personal) {
+            await showDialog({ type: DialogKind.Info, title: 'No se puede renombrar', message: 'El espacio personal no se puede renombrar.' });
+            return;
+        }
+
+        const isOwner = !workspace.ownerId || workspace.ownerId === user.uid;
+        if (!isOwner && !isAdmin) {
+            await showDialog({ type: DialogKind.Error, title: 'Sin permisos', message: 'Solo el administrador o el propietario pueden renombrar este espacio.' });
+            return;
+        }
+
+        setShowWorkspaceMenu(false);
+
+        const result = await showDialog({
+            type: DialogKind.Input,
+            title: 'Renombrar espacio',
+            message: 'Ingresa el nuevo nombre del espacio.',
+            defaultValue: workspace.name,
+            placeholder: 'Nombre del espacio'
+        });
+
+        if (!result.confirmed) return;
+        const nextName = (result.value ?? '').trim();
+        if (!nextName || nextName === workspace.name.trim()) return;
+
+        try {
+            await renameWorkspaceApi({ workspaceId: workspace.id, name: nextName });
+            if (currentWorkspace?.id === workspace.id) {
+                selectWorkspace({ ...workspace, name: nextName });
+            }
+            await fetchWorkspaces();
+            await showDialog({ type: DialogKind.Info, title: 'Espacio renombrado', message: nextName });
+        } catch (error) {
+            console.error('Error renaming workspace', error);
+            await showDialog({ type: DialogKind.Error, title: 'Error al renombrar', message: workspace.name });
+        }
+    };
+
+    const duplicateWorkspace = async (workspace: Workspace) => {
+        if (!user) return;
+        if (workspace.id === PERSONAL_WORKSPACE_ID || workspace.type === WorkspaceType.Personal) {
+            await showDialog({ type: DialogKind.Info, title: 'No disponible', message: 'El espacio personal no se puede duplicar desde este menú.' });
+            return;
+        }
+
+        const isOwner = !workspace.ownerId || workspace.ownerId === user.uid;
+        if (!isOwner && !isAdmin) {
+            await showDialog({ type: DialogKind.Error, title: 'Sin permisos', message: 'Solo el administrador o el propietario pueden duplicar este espacio.' });
+            return;
+        }
+
+        setShowWorkspaceMenu(false);
+
+        const result = await showDialog({
+            type: DialogKind.Input,
+            title: 'Duplicar espacio',
+            message: 'Ingresa el nombre del nuevo espacio duplicado.',
+            defaultValue: `${workspace.name} (copia)`,
+            placeholder: 'Nombre del nuevo espacio'
+        });
+
+        if (!result.confirmed) return;
+        const nextName = (result.value ?? '').trim();
+        if (!nextName) return;
+
+        try {
+            const duplicated = await duplicateWorkspaceApi({ workspaceId: workspace.id, name: nextName });
+            await fetchWorkspaces();
+            selectWorkspace(duplicated.workspace);
+            setShowWorkspaceMenu(false);
+            await showDialog({
+                type: DialogKind.Info,
+                title: 'Espacio duplicado',
+                message: `${duplicated.workspace.name} | Documentos: ${duplicated.documentsCreated}`
+            });
+        } catch (error) {
+            console.error('Error duplicating workspace', error);
+            await showDialog({ type: DialogKind.Error, title: 'Error al duplicar', message: workspace.name });
+        }
+    };
+
+    const mergeWorkspaceIntoCurrent = async (sourceWorkspace: Workspace) => {
+        if (!user || !currentWorkspace) return;
+        if (currentWorkspace.id === PERSONAL_WORKSPACE_ID || currentWorkspace.type === WorkspaceType.Personal) {
+            await showDialog({ type: DialogKind.Info, title: 'Destino no valido', message: 'Selecciona primero un workspace colaborativo como destino.' });
+            return;
+        }
+        if (sourceWorkspace.id === currentWorkspace.id) {
+            await showDialog({ type: DialogKind.Info, title: 'No se puede fusionar', message: 'El origen y el destino son el mismo espacio.' });
+            return;
+        }
+
+        const canManageSource = (!sourceWorkspace.ownerId || sourceWorkspace.ownerId === user.uid) || isAdmin;
+        const canManageCurrent = (!currentWorkspace.ownerId || currentWorkspace.ownerId === user.uid) || isAdmin;
+
+        if (!canManageSource || !canManageCurrent) {
+            await showDialog({
+                type: DialogKind.Error,
+                title: 'Sin permisos',
+                message: 'Necesitas permisos sobre el workspace origen y el destino para fusionarlos.'
+            });
+            return;
+        }
+
+        setShowWorkspaceMenu(false);
+
+        const confirmResult = await showDialog({
+            type: DialogKind.Confirm,
+            title: 'Fusionar workspaces',
+            message: `Se copiara el contenido de "${sourceWorkspace.name}" dentro de "${currentWorkspace.name}". Los nombres repetidos se ajustaran automaticamente.`,
+            confirmLabel: 'Fusionar',
+            cancelLabel: 'Cancelar'
+        });
+        if (!confirmResult.confirmed) return;
+
+        try {
+            const merged = await mergeWorkspaceApi({
+                targetWorkspaceId: currentWorkspace.id,
+                sourceWorkspaceId: sourceWorkspace.id
+            });
+            await requestDocsRefresh({ force: true, showLoading: true, delayMs: 0 });
+            await showDialog({
+                type: DialogKind.Info,
+                title: 'Workspaces fusionados',
+                message: [
+                    `Documentos copiados: ${merged.documentsCreated}`,
+                    `Carpetas existentes omitidas: ${merged.skippedFolders}`,
+                    `Columnas del tablero: ${merged.boardColumnsCreated}`,
+                    `Tarjetas del tablero: ${merged.boardCardsCreated}`
+                ].join(' | ')
+            });
+        } catch (error) {
+            console.error('Error merging workspace', error);
+            await showDialog({ type: DialogKind.Error, title: 'Error al fusionar', message: sourceWorkspace.name });
         }
     };
 
@@ -202,6 +349,9 @@ export function useWorkspaceActions({
 
     return {
         createWorkspace,
+        renameWorkspace,
+        duplicateWorkspace,
+        mergeWorkspaceIntoCurrent,
         deleteWorkspace,
         inviteMember,
         removeMember

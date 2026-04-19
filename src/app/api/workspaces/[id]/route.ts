@@ -5,6 +5,10 @@ import { getErrorMessage } from '@/lib/error-utils';
 import { isAdminUser, requireAuth, invalidateMembershipCache } from '@/lib/server-auth';
 import { WorkspaceType } from '@/types/workspace';
 import { syncWorkspaceClaims } from '@/lib/workspace-claims';
+import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
+import { buildStoragePath, ensureTextFileName, sanitizeFileName } from '@/lib/storage-path';
+import { DocumentType } from '@/types/documents';
+import { invalidateStorageUsageCache } from '@/lib/storage-usage';
 
 const deleteCollectionInBatches = async (collectionRef: CollectionReference, batchLimit = 400) => {
   let lastDoc: QueryDocumentSnapshot | null = null;
@@ -41,6 +45,426 @@ const deleteBoardData = async (workspaceId: string) => {
   return true;
 };
 
+type WorkspaceRecord = {
+  ownerId?: string;
+  type?: string;
+  name?: string;
+  members?: string[];
+  pendingInvites?: string[];
+};
+
+type StoredDocumentRecord = Record<string, unknown>;
+type StoredWorkspaceDocument = { id: string } & StoredDocumentRecord;
+
+const canManageWorkspace = async (workspace: WorkspaceRecord | undefined, uid: string) => {
+  if (!workspace || workspace.type === WorkspaceType.Personal) return false;
+  if (workspace.ownerId === uid) return true;
+  return isAdminUser(uid);
+};
+
+const ensureBoardExists = async (workspaceId: string) => {
+  const boardRef = adminDb.collection('boards').doc(workspaceId);
+  const snap = await boardRef.get();
+  if (!snap.exists) {
+    await boardRef.set({
+      workspaceId,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  }
+  return boardRef;
+};
+
+const createSignedReadUrl = async (storagePath: string) => {
+  const bucket = adminStorage.bucket();
+  if (!bucket?.name) return undefined;
+  const [url] = await bucket.file(storagePath).getSignedUrl({
+    action: 'read' as const,
+    expires: Date.now() + 60 * 60 * 1000
+  });
+  return url;
+};
+
+const cloneStorageObject = async (params: {
+  sourcePath: string;
+  targetWorkspaceId: string;
+  ownerId: string;
+  folder: string;
+  fileName: string;
+}) => {
+  const bucket = adminStorage.bucket();
+  if (!bucket?.name) {
+    return null;
+  }
+
+  const sourceRef = bucket.file(params.sourcePath);
+  const [exists] = await sourceRef.exists();
+  if (!exists) {
+    return null;
+  }
+
+  const targetPath = buildStoragePath({
+    workspaceId: params.targetWorkspaceId,
+    ownerId: params.ownerId,
+    folder: params.folder,
+    fileName: params.fileName
+  });
+
+  if (targetPath !== params.sourcePath) {
+    await sourceRef.copy(bucket.file(targetPath));
+  }
+
+  const [metadata] = await bucket.file(targetPath).getMetadata();
+  return {
+    storagePath: targetPath,
+    size: parseInt(String(metadata.size || '0'), 10) || 0,
+    url: await createSignedReadUrl(targetPath)
+  };
+};
+
+const resolveFolderRecordPath = (doc: StoredDocumentRecord) => {
+  const parentPath = normalizeFolderPath(typeof doc.folder === 'string' ? doc.folder : undefined);
+  const name = typeof doc.name === 'string' && doc.name.trim() ? doc.name.trim() : 'Carpeta';
+  return parentPath === DEFAULT_FOLDER_NAME ? name : `${parentPath}/${name}`;
+};
+
+const resolveMergedDocName = (params: {
+  doc: StoredDocumentRecord;
+  targetDocs: StoredDocumentRecord[];
+}) => {
+  const baseName = typeof params.doc.name === 'string' && params.doc.name.trim()
+    ? params.doc.name.trim()
+    : 'Sin titulo';
+  const folder = normalizeFolderPath(typeof params.doc.folder === 'string' ? params.doc.folder : undefined);
+  const type = typeof params.doc.type === 'string' ? params.doc.type : DocumentType.Text;
+
+  const matches = (name: string) => params.targetDocs.some(existing => (
+    normalizeFolderPath(typeof existing.folder === 'string' ? existing.folder : undefined) === folder
+    && (typeof existing.type === 'string' ? existing.type : DocumentType.Text) === type
+    && String(existing.name || '').trim().toLowerCase() === name.trim().toLowerCase()
+  ));
+
+  if (!matches(baseName)) return baseName;
+
+  let suffix = 2;
+  let candidate = `${baseName} (copia)`;
+  while (matches(candidate)) {
+    candidate = `${baseName} (copia ${suffix})`;
+    suffix += 1;
+  }
+  return candidate;
+};
+
+const cloneTextDocumentToWorkspace = async (params: {
+  doc: StoredDocumentRecord;
+  targetWorkspaceId: string;
+  ownerId: string;
+  targetName: string;
+}) => {
+  const folder = normalizeFolderPath(typeof params.doc.folder === 'string' ? params.doc.folder : undefined);
+  const mimeType = typeof params.doc.mimeType === 'string' && params.doc.mimeType
+    ? params.doc.mimeType
+    : 'text/markdown';
+  const content = typeof params.doc.content === 'string' ? params.doc.content : '';
+  const storageFileName = ensureTextFileName(params.targetName);
+  const clonedStorage = typeof params.doc.storagePath === 'string'
+    ? await cloneStorageObject({
+      sourcePath: params.doc.storagePath,
+      targetWorkspaceId: params.targetWorkspaceId,
+      ownerId: params.ownerId,
+      folder,
+      fileName: storageFileName
+    })
+    : null;
+
+  if (!clonedStorage && content) {
+    const bucket = adminStorage.bucket();
+    if (bucket?.name) {
+      const targetPath = buildStoragePath({
+        workspaceId: params.targetWorkspaceId,
+        ownerId: params.ownerId,
+        folder,
+        fileName: storageFileName
+      });
+      await bucket.file(targetPath).save(content, {
+        contentType: mimeType,
+        metadata: { ownerId: params.ownerId }
+      });
+      return {
+        storagePath: targetPath,
+        url: await createSignedReadUrl(targetPath)
+      };
+    }
+  }
+
+  return clonedStorage;
+};
+
+const cloneFileDocumentToWorkspace = async (params: {
+  doc: StoredDocumentRecord;
+  targetWorkspaceId: string;
+  ownerId: string;
+  targetName: string;
+}) => {
+  const folder = normalizeFolderPath(typeof params.doc.folder === 'string' ? params.doc.folder : undefined);
+  const sourcePath = typeof params.doc.storagePath === 'string' ? params.doc.storagePath : null;
+  if (!sourcePath) {
+    return {
+      storagePath: typeof params.doc.storagePath === 'string' ? params.doc.storagePath : undefined,
+      url: typeof params.doc.url === 'string' ? params.doc.url : undefined,
+      size: typeof params.doc.size === 'number' ? params.doc.size : undefined
+    };
+  }
+
+  const cloned = await cloneStorageObject({
+    sourcePath,
+    targetWorkspaceId: params.targetWorkspaceId,
+    ownerId: params.ownerId,
+    folder,
+    fileName: sanitizeFileName(params.targetName)
+  });
+
+  if (cloned) {
+    return cloned;
+  }
+
+  return {
+    storagePath: sourcePath,
+    url: await createSignedReadUrl(sourcePath),
+    size: typeof params.doc.size === 'number' ? params.doc.size : undefined
+  };
+};
+
+const cloneWorkspaceDocuments = async (params: {
+  sourceWorkspaceId: string;
+  targetWorkspaceId: string;
+  ownerId: string;
+  mergeIntoExisting: boolean;
+}) => {
+  const sourceSnapshot = await adminDb
+    .collection('documents')
+    .where('workspaceId', '==', params.sourceWorkspaceId)
+    .get();
+
+  const targetSnapshot = await adminDb
+    .collection('documents')
+    .where('workspaceId', '==', params.targetWorkspaceId)
+    .get();
+
+  const targetDocs = targetSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...(doc.data() as StoredDocumentRecord)
+  })) as StoredWorkspaceDocument[];
+  let created = 0;
+  let skippedFolders = 0;
+  let clonedFiles = 0;
+
+  const sourceDocs = sourceSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...(doc.data() as StoredDocumentRecord)
+  })) as StoredWorkspaceDocument[];
+
+  sourceDocs
+    .sort((a, b) => {
+      const isFolderA = a.type === DocumentType.Folder;
+      const isFolderB = b.type === DocumentType.Folder;
+      if (isFolderA !== isFolderB) return isFolderA ? -1 : 1;
+      const folderA = normalizeFolderPath(typeof a.folder === 'string' ? a.folder : undefined);
+      const folderB = normalizeFolderPath(typeof b.folder === 'string' ? b.folder : undefined);
+      if (folderA !== folderB) return folderA.localeCompare(folderB);
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+  for (const sourceDoc of sourceDocs) {
+    const sourceType = typeof sourceDoc.type === 'string' ? sourceDoc.type : DocumentType.Text;
+    const folder = normalizeFolderPath(typeof sourceDoc.folder === 'string' ? sourceDoc.folder : undefined);
+    let targetName = typeof sourceDoc.name === 'string' && sourceDoc.name.trim()
+      ? sourceDoc.name.trim()
+      : 'Sin titulo';
+
+    if (params.mergeIntoExisting && sourceType === DocumentType.Folder) {
+      const sourcePath = resolveFolderRecordPath(sourceDoc);
+      const existingFolderDoc = targetDocs.find(existing => (
+        (typeof existing.type === 'string' ? existing.type : DocumentType.Text) === DocumentType.Folder
+        && resolveFolderRecordPath(existing) === sourcePath
+      ));
+      if (existingFolderDoc) {
+        skippedFolders += 1;
+        continue;
+      }
+    }
+
+    if (params.mergeIntoExisting && sourceType !== DocumentType.Folder) {
+      targetName = resolveMergedDocName({ doc: sourceDoc, targetDocs });
+    }
+
+    const cloneData: StoredDocumentRecord = {
+      name: targetName,
+      type: sourceType,
+      ownerId: params.ownerId,
+      workspaceId: params.targetWorkspaceId,
+      folder,
+      mimeType: typeof sourceDoc.mimeType === 'string' ? sourceDoc.mimeType : null,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    };
+    if (typeof sourceDoc.order === 'number') {
+      cloneData.order = sourceDoc.order;
+    }
+
+    if (typeof sourceDoc.sourceName === 'string') cloneData.sourceName = sourceDoc.sourceName;
+    if (typeof sourceDoc.sourceMimeType === 'string') cloneData.sourceMimeType = sourceDoc.sourceMimeType;
+    if (typeof sourceDoc.sourceStoragePath === 'string') cloneData.sourceStoragePath = sourceDoc.sourceStoragePath;
+    if (typeof sourceDoc.sourceUrl === 'string') cloneData.sourceUrl = sourceDoc.sourceUrl;
+    if (typeof sourceDoc.sourceFormat === 'string') cloneData.sourceFormat = sourceDoc.sourceFormat;
+
+    if (sourceType === DocumentType.File) {
+      const fileClone = await cloneFileDocumentToWorkspace({
+        doc: sourceDoc,
+        targetWorkspaceId: params.targetWorkspaceId,
+        ownerId: params.ownerId,
+        targetName
+      });
+      if (fileClone.storagePath) cloneData.storagePath = fileClone.storagePath;
+      if (fileClone.url) cloneData.url = fileClone.url;
+      if (typeof fileClone.size === 'number') cloneData.size = fileClone.size;
+      clonedFiles += 1;
+    } else if (sourceType !== DocumentType.Folder) {
+      cloneData.content = typeof sourceDoc.content === 'string' ? sourceDoc.content : '';
+      const textClone = await cloneTextDocumentToWorkspace({
+        doc: sourceDoc,
+        targetWorkspaceId: params.targetWorkspaceId,
+        ownerId: params.ownerId,
+        targetName
+      });
+      if (textClone?.storagePath) cloneData.storagePath = textClone.storagePath;
+      if (textClone?.url) cloneData.url = textClone.url;
+    }
+
+    const createdRef = await adminDb.collection('documents').add(cloneData);
+    targetDocs.push({ id: createdRef.id, ...cloneData });
+    created += 1;
+  }
+
+  return { created, skippedFolders, clonedFiles };
+};
+
+const cloneBoardDataToWorkspace = async (params: {
+  sourceWorkspaceId: string;
+  targetWorkspaceId: string;
+  mergeIntoExisting: boolean;
+}) => {
+  const sourceBoardRef = adminDb.collection('boards').doc(params.sourceWorkspaceId);
+  const sourceBoardSnap = await sourceBoardRef.get();
+  if (!sourceBoardSnap.exists) {
+    return { columnsCreated: 0, cardsCreated: 0 };
+  }
+
+  const targetBoardRef = await ensureBoardExists(params.targetWorkspaceId);
+  const sourceColumnsSnap = await sourceBoardRef.collection('columns').orderBy('order').get();
+  const sourceCardsSnap = await sourceBoardRef.collection('cards').orderBy('order').get();
+
+  if (!params.mergeIntoExisting) {
+    await Promise.all([
+      deleteCollectionInBatches(targetBoardRef.collection('columns')),
+      deleteCollectionInBatches(targetBoardRef.collection('cards'))
+    ]);
+
+    const columnIdMap = new Map<string, string>();
+    for (const sourceColumn of sourceColumnsSnap.docs) {
+      const targetColumnRef = targetBoardRef.collection('columns').doc();
+      columnIdMap.set(sourceColumn.id, targetColumnRef.id);
+      await targetColumnRef.set({
+        ...sourceColumn.data(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    }
+
+    for (const sourceCard of sourceCardsSnap.docs) {
+      const data = sourceCard.data();
+      await targetBoardRef.collection('cards').doc().set({
+        ...data,
+        columnId: columnIdMap.get(String(data.columnId || '')) || data.columnId,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    }
+
+    return {
+      columnsCreated: sourceColumnsSnap.size,
+      cardsCreated: sourceCardsSnap.size
+    };
+  }
+
+  const targetColumnsSnap = await targetBoardRef.collection('columns').orderBy('order').get();
+  const targetCardsSnap = await targetBoardRef.collection('cards').orderBy('order').get();
+  const targetColumnByName = new Map<string, { id: string; order: number }>();
+  let maxColumnOrder = 0;
+
+  targetColumnsSnap.docs.forEach(doc => {
+    const data = doc.data();
+    const name = typeof data.name === 'string' ? data.name.trim().toLowerCase() : '';
+    const order = typeof data.order === 'number' ? data.order : 0;
+    maxColumnOrder = Math.max(maxColumnOrder, order);
+    if (name) {
+      targetColumnByName.set(name, { id: doc.id, order });
+    }
+  });
+
+  const columnIdMap = new Map<string, string>();
+  let columnsCreated = 0;
+
+  for (const sourceColumn of sourceColumnsSnap.docs) {
+    const data = sourceColumn.data();
+    const normalizedName = typeof data.name === 'string' ? data.name.trim().toLowerCase() : '';
+    const existing = normalizedName ? targetColumnByName.get(normalizedName) : null;
+    if (existing) {
+      columnIdMap.set(sourceColumn.id, existing.id);
+      continue;
+    }
+
+    maxColumnOrder += 1000;
+    const targetColumnRef = targetBoardRef.collection('columns').doc();
+    await targetColumnRef.set({
+      name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Sin titulo',
+      order: maxColumnOrder,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    columnIdMap.set(sourceColumn.id, targetColumnRef.id);
+    columnsCreated += 1;
+  }
+
+  const maxOrderByColumn = new Map<string, number>();
+  targetCardsSnap.docs.forEach(doc => {
+    const data = doc.data();
+    const columnId = typeof data.columnId === 'string' ? data.columnId : '';
+    const order = typeof data.order === 'number' ? data.order : 0;
+    if (!columnId) return;
+    maxOrderByColumn.set(columnId, Math.max(maxOrderByColumn.get(columnId) ?? 0, order));
+  });
+
+  let cardsCreated = 0;
+  for (const sourceCard of sourceCardsSnap.docs) {
+    const data = sourceCard.data();
+    const sourceColumnId = typeof data.columnId === 'string' ? data.columnId : '';
+    const targetColumnId = columnIdMap.get(sourceColumnId) || sourceColumnId;
+    const nextOrder = (maxOrderByColumn.get(targetColumnId) ?? 0) + 1000;
+    maxOrderByColumn.set(targetColumnId, nextOrder);
+    await targetBoardRef.collection('cards').doc().set({
+      ...data,
+      columnId: targetColumnId,
+      order: nextOrder,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    cardsCreated += 1;
+  }
+
+  return { columnsCreated, cardsCreated };
+};
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
@@ -63,7 +487,81 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (!snap.exists) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
-    const wsData = snap.data() as { ownerId?: string; pendingInvites?: string[] } | undefined;
+    const wsData = snap.data() as WorkspaceRecord | undefined;
+
+    if (action === 'rename') {
+      const nextName = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!nextName) {
+        return NextResponse.json({ error: 'name is required' }, { status: 400 });
+      }
+      const canManage = await canManageWorkspace(wsData, auth.uid);
+      if (!canManage) {
+        return NextResponse.json({ error: 'Only workspace owner or admin can rename' }, { status: 403 });
+      }
+      await wsRef.update({
+        name: nextName,
+        updatedAt: FieldValue.serverTimestamp()
+      });
+      return NextResponse.json({ status: 'renamed', id, name: nextName });
+    }
+
+    if (action === 'duplicate') {
+      const nextName = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!nextName) {
+        return NextResponse.json({ error: 'name is required' }, { status: 400 });
+      }
+      const canManage = await canManageWorkspace(wsData, auth.uid);
+      if (!canManage) {
+        return NextResponse.json({ error: 'Only workspace owner or admin can duplicate' }, { status: 403 });
+      }
+
+      const targetWorkspaceRef = adminDb.collection('workspaces').doc();
+      const targetWorkspaceData = {
+        name: nextName,
+        ownerId: auth.uid,
+        members: [auth.uid],
+        pendingInvites: [],
+        type: WorkspaceType.Shared,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      };
+
+      await targetWorkspaceRef.set(targetWorkspaceData);
+
+      const [docResult, boardResult] = await Promise.all([
+        cloneWorkspaceDocuments({
+          sourceWorkspaceId: id,
+          targetWorkspaceId: targetWorkspaceRef.id,
+          ownerId: auth.uid,
+          mergeIntoExisting: false
+        }),
+        cloneBoardDataToWorkspace({
+          sourceWorkspaceId: id,
+          targetWorkspaceId: targetWorkspaceRef.id,
+          mergeIntoExisting: false
+        })
+      ]);
+
+      syncWorkspaceClaims(auth.uid).catch(() => {});
+      if (docResult.clonedFiles > 0) {
+        invalidateStorageUsageCache(auth.uid);
+      }
+
+      return NextResponse.json({
+        status: 'duplicated',
+        workspace: {
+          id: targetWorkspaceRef.id,
+          name: nextName,
+          ownerId: auth.uid,
+          members: [auth.uid],
+          pendingInvites: [],
+          type: WorkspaceType.Shared
+        },
+        documentsCreated: docResult.created,
+        boardColumnsCreated: boardResult.columnsCreated,
+        boardCardsCreated: boardResult.cardsCreated
+      });
+    }
 
     if (action === 'invite') {
       if (!email) {
@@ -116,6 +614,60 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         // Sync custom claims to revoke workspace access in rules
         syncWorkspaceClaims(userId).catch(() => {});
         return NextResponse.json({ status: 'removed' });
+    }
+
+    if (action === 'merge') {
+      const sourceWorkspaceId = typeof body.sourceWorkspaceId === 'string' ? body.sourceWorkspaceId.trim() : '';
+      if (!sourceWorkspaceId) {
+        return NextResponse.json({ error: 'sourceWorkspaceId is required' }, { status: 400 });
+      }
+      if (sourceWorkspaceId === id) {
+        return NextResponse.json({ error: 'Cannot merge a workspace into itself' }, { status: 400 });
+      }
+
+      const canManageTarget = await canManageWorkspace(wsData, auth.uid);
+      if (!canManageTarget) {
+        return NextResponse.json({ error: 'Only workspace owner or admin can receive a merge' }, { status: 403 });
+      }
+
+      const sourceRef = adminDb.collection('workspaces').doc(sourceWorkspaceId);
+      const sourceSnap = await sourceRef.get();
+      if (!sourceSnap.exists) {
+        return NextResponse.json({ error: 'Source workspace not found' }, { status: 404 });
+      }
+      const sourceData = sourceSnap.data() as WorkspaceRecord | undefined;
+      const canManageSource = await canManageWorkspace(sourceData, auth.uid);
+      if (!canManageSource) {
+        return NextResponse.json({ error: 'Only workspace owner or admin can merge this source workspace' }, { status: 403 });
+      }
+
+      const [docResult, boardResult] = await Promise.all([
+        cloneWorkspaceDocuments({
+          sourceWorkspaceId,
+          targetWorkspaceId: id,
+          ownerId: auth.uid,
+          mergeIntoExisting: true
+        }),
+        cloneBoardDataToWorkspace({
+          sourceWorkspaceId,
+          targetWorkspaceId: id,
+          mergeIntoExisting: true
+        })
+      ]);
+
+      if (docResult.clonedFiles > 0) {
+        invalidateStorageUsageCache(auth.uid);
+      }
+
+      await wsRef.set({ updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+      return NextResponse.json({
+        status: 'merged',
+        documentsCreated: docResult.created,
+        skippedFolders: docResult.skippedFolders,
+        boardColumnsCreated: boardResult.columnsCreated,
+        boardCardsCreated: boardResult.cardsCreated
+      });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
