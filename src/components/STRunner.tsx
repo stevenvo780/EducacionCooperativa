@@ -180,13 +180,34 @@ function SymbolsPanel({ symbolsList }: { symbolsList: SymbolInfo[] }) {
       {symbolsList.map((sym, i) => (
         <div
           key={i}
-          className="flex items-center gap-2 px-3 py-1.5 rounded border border-slate-800 bg-slate-900/50 text-xs hover:bg-slate-800/50 transition-colors"
+          className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs hover:bg-slate-800/50 transition-colors"
         >
-          {kindBadge(sym.kind)}
-          <span className="text-slate-200 font-mono">{sym.name}</span>
-          {sym.location?.line && (
-            <span className="text-slate-600 ml-auto">:{sym.location.line}</span>
-          )}
+          <div className="flex items-center gap-2">
+            {kindBadge(sym.kind)}
+            <span className="text-slate-200 font-mono break-all">{sym.name}</span>
+            {sym.location?.line && (
+              <span className="text-slate-600 ml-auto shrink-0">
+                l.{sym.location.line}{sym.location.column ? `:${sym.location.column}` : ''}
+              </span>
+            )}
+          </div>
+          <div className="mt-1.5 space-y-1">
+            {sym.detail && (
+              <div className="rounded bg-slate-950/70 px-2 py-1 font-mono text-[11px] leading-5 text-emerald-300 whitespace-pre-wrap break-words">
+                {sym.detail}
+              </div>
+            )}
+            {sym.description && (
+              <div className="text-[11px] leading-5 text-slate-400 whitespace-pre-wrap break-words">
+                {sym.description}
+              </div>
+            )}
+            {!sym.detail && !sym.description && (
+              <div className="text-[11px] italic text-slate-500">
+                Sin definicion textual disponible para este simbolo.
+              </div>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -260,14 +281,39 @@ export default function STRunner({
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(loadConfig);
   const isTouchTablet = useMemo(() => isTouchDeviceProfile(), []);
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
+  const currentFileId = fileMode?.docName || 'st-runner-scratch';
+
+  const getEnrichedSymbols = useCallback((source: string) => {
+    const symbols = getSymbols(source);
+    const definitions = STDefinitionsRegistry.extractFromSource(source, currentFileId);
+    const definitionMap = new Map(definitions.map((definition) => [definition.name, definition]));
+
+    return symbols.map((symbol) => {
+      const exact = definitionMap.get(symbol.name);
+      const localName = symbol.name.includes('.') ? symbol.name.split('.').pop() : symbol.name;
+      const fallback = exact || (localName ? definitionMap.get(localName) : undefined);
+      const fallbackDescription = fallback?.description
+        || (fallback?.naturalName && fallback.naturalName !== fallback.name ? fallback.naturalName : undefined);
+
+      return {
+        ...symbol,
+        detail: symbol.detail || fallback?.detail,
+        description: symbol.description || fallbackDescription
+      };
+    });
+  }, [currentFileId, getSymbols]);
 
   const runAnalysis = useCallback(() => {
     const diagnostics = validate(code);
-    const symbols = getSymbols(code);
+    const symbols = getEnrichedSymbols(code);
     setCurrentSymbols(symbols);
-    setActiveTab(diagnostics.length > 0 ? 'problems' : symbols.length > 0 ? 'symbols' : 'output');
+    setActiveTab((prev) => {
+      if (diagnostics.length > 0) return 'problems';
+      if (prev === 'problems') return 'output';
+      return prev;
+    });
     return diagnostics;
-  }, [code, getSymbols, validate]);
+  }, [code, getEnrichedSymbols, validate]);
 
   // ── Background Validation ──
   useEffect(() => {
@@ -335,14 +381,14 @@ export default function STRunner({
   const handleRun = useCallback(() => {
     const result = run(code);
     const diagnostics = collectSTDiagnostics(result);
-    setCurrentSymbols(getSymbols(code));
+    setCurrentSymbols(getEnrichedSymbols(code));
     if (diagnostics.length > 0) {
       setActiveTab('problems');
     } else {
       setActiveTab('output');
     }
     onExecute?.(code, result);
-  }, [code, run, getSymbols, onExecute]);
+  }, [code, run, getEnrichedSymbols, onExecute]);
 
   const handleAnalyze = useCallback(() => {
     runAnalysis();

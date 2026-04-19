@@ -319,12 +319,14 @@ const WorkspaceExplorer = ({
         <div
           onClick={() => onOpenDocument(doc)}
           {...getContextTriggerProps({ type: 'doc', id: doc.id, doc })}
-          draggable
-          data-drag-doc-id={doc.id}
-          data-drag-label={doc.name}
-          onDragStart={(e) => {
+          draggable={!isTouchDevice}
+          {...(!isTouchDevice ? {
+            'data-drag-doc-id': doc.id,
+            'data-drag-label': doc.name
+          } : {})}
+          onDragStart={!isTouchDevice ? ((e) => {
             onDocDragStart(e, doc);
-          }}
+          }) : undefined}
           onDragOver={(e) => {
             const types = Array.from(e.dataTransfer.types ?? []);
             if (!canReorderDocs || !types.includes(DOC_REORDER_TYPE)) return;
@@ -350,10 +352,10 @@ const WorkspaceExplorer = ({
               updateDragOver(null, null);
             }
           }}
-          onDragEnd={() => {
+          onDragEnd={!isTouchDevice ? (() => {
             updateDragOver(null, null);
             onDocDragEnd();
-          }}
+          }) : undefined}
           className={`group flex items-center gap-3 px-4 py-3 rounded-lg border border-surface-800/80 bg-surface-800/40 hover:bg-surface-800/70 hover:border-surface-600/80 transition cursor-pointer relative ${dragOverKey === `doc:${doc.id}` ? 'ring-1 ring-mandy-400/60' : ''} ${
             dragOverKey === `doc:${doc.id}` && dragOverPosition === 'before'
               ? 'before:absolute before:left-3 before:right-3 before:top-0 before:h-0.5 before:bg-mandy-400'
@@ -381,16 +383,20 @@ const WorkspaceExplorer = ({
             <SyncIcon className="w-3 h-3" />
             <span>{syncLabel}</span>
           </span>
-          {canReorderDocs && (
+          {(isTouchDevice || canReorderDocs) && (
             <button
               draggable
-              data-drag-label={`Reordenar ${doc.name}`}
+              data-drag-doc-id={doc.id}
+              data-drag-label={`Arrastrar ${doc.name}`}
               data-disable-context-menu-trigger="true"
               onDragStart={(e) => {
                 e.stopPropagation();
                 markInternalDragStart();
-                e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc-reorder');
-                e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
+                e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc');
+                e.dataTransfer.setData('application/x-doc-id', doc.id);
+                if (canReorderDocs) {
+                  e.dataTransfer.setData(DOC_REORDER_TYPE, doc.id);
+                }
                 e.dataTransfer.setData('text/plain', doc.id);
                 e.dataTransfer.effectAllowed = 'move';
               }}
@@ -402,7 +408,7 @@ const WorkspaceExplorer = ({
               }}
               onClick={(e) => e.stopPropagation()}
               className={`touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition ${touchHandleVisibilityClass} cursor-grab active:cursor-grabbing`}
-              title="Reordenar archivo"
+              title={canReorderDocs ? 'Arrastrar o reordenar archivo' : 'Arrastrar archivo'}
             >
               <GripVertical className="w-3.5 h-3.5" />
             </button>

@@ -396,6 +396,30 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   }, [activeFolderProp, resolvedActiveFolderProp, activeFolder]);
 
+  const expandFolderPath = useCallback((path: string) => {
+    const normalized = normalizeFolderPath(path);
+    const segments = normalized.split('/').filter(Boolean);
+    if (segments.length === 0) return;
+
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      let current = '';
+      segments.forEach(segment => {
+        current = current ? `${current}/${segment}` : segment;
+        next.add(current);
+      });
+      return next;
+    });
+  }, []);
+
+  const collapseAllFolders = useCallback(() => {
+    setExpandedFolders(new Set());
+  }, []);
+
+  useEffect(() => {
+    expandFolderPath(activeFolder);
+  }, [activeFolder, expandFolderPath]);
+
   useEffect(() => {
     if (activeFolder === '') return;
     if (!effectiveFolders.length) return;
@@ -561,6 +585,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   };
 
   const handleDocDoubleClick = (doc: DocItem) => {
+    onSelectDoc(doc);
+  };
+
+  const handleOpenDoc = (doc: DocItem) => {
     onSelectDoc(doc);
   };
 
@@ -904,6 +932,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   <GripVertical className="w-3.5 h-3.5" />
                 </button>
               )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenDoc(doc);
+                }}
+                className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
+                title="Abrir"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+              </button>
               {onDownloadDoc && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDownloadDoc(doc); }}
@@ -923,6 +961,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
           ) : (
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenDoc(doc);
+              }}
+              className="p-1 rounded-md text-surface-400 hover:text-surface-100 hover:bg-surface-700/70 transition"
+              title="Abrir"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+            </button>
             {canReorderDocs && (
               <button
                 draggable
@@ -1107,6 +1155,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             <Folder className="w-4 h-4 text-amber-400 shrink-0" />
             <span className="font-medium text-sm truncate max-w-[100px]">{currentWorkspaceName}</span>
           </div>
+        )}
+
+        {!sidebarCollapsed && !isUltraCompact && (
+          <button
+            type="button"
+            onClick={collapseAllFolders}
+            className="px-2 py-1 rounded text-[11px] text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition shrink-0"
+            title="Contraer toda la jerarquia"
+          >
+            Contraer
+          </button>
         )}
 
         {/* Search — collapsible in ultracompact */}
@@ -1347,6 +1406,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           data={contextMenu.data}
           docMap={docMap}
           favoriteDocIdSet={favoriteDocIdSet}
+          onOpenDoc={handleOpenDoc}
           onDuplicateDoc={onDuplicateDoc}
           onDownloadDoc={onDownloadDoc}
           onToggleFavorite={onToggleFavorite}

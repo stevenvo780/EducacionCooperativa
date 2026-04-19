@@ -866,7 +866,7 @@ function DashboardContent() {
         renameSession
     });
 
-    const { createWorkspace, deleteWorkspace, inviteMember, removeMember } = useWorkspaceActions({
+    const { createWorkspace, renameWorkspace, duplicateWorkspace, mergeWorkspaceIntoCurrent, deleteWorkspace, inviteMember, removeMember } = useWorkspaceActions({
         user,
         currentWorkspace,
         isAdmin,
@@ -885,6 +885,7 @@ function DashboardContent() {
         setSelectedDocId,
         setActiveFolderSafe,
         setClosedFilesTabByWorkspace,
+        requestDocsRefresh,
         showDialog,
         inviteEmail,
         setInviteEmail
@@ -1348,9 +1349,16 @@ function DashboardContent() {
         setDropPosition(null);
     };
 
+    const isPureReorderDrag = (types: string[]) => {
+        const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
+        const hasFolderReorder = types.includes('application/x-folder-reorder');
+        const hasDocReorderOnly = types.includes('application/x-doc-reorder') && !hasDocId;
+        return hasFolderReorder || hasDocReorderOnly;
+    };
+
     const _handleDropZoneDragOver = (e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
-        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        const isReorderDrag = isPureReorderDrag(types);
         if (isReorderDrag) return;
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (!hasDocId || types.includes('Files')) return;
@@ -1367,7 +1375,7 @@ function DashboardContent() {
 
     const _handleDropZoneDrop = (e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
-        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        const isReorderDrag = isPureReorderDrag(types);
         if (isReorderDrag) return;
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (!hasDocId || types.includes('Files')) return;
@@ -1390,7 +1398,7 @@ function DashboardContent() {
 
     const handleFolderDragOver = (e: ReactDragEvent, folderName: string) => {
         const types = Array.from(e.dataTransfer.types ?? []);
-        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        const isReorderDrag = isPureReorderDrag(types);
         if (isReorderDrag) return;
         const hasFiles = types.includes('Files');
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
@@ -1417,7 +1425,7 @@ function DashboardContent() {
             return;
         }
         const types = Array.from(e.dataTransfer.types ?? []);
-        const isReorderDrag = types.includes('application/x-doc-reorder') || types.includes('application/x-folder-reorder');
+        const isReorderDrag = isPureReorderDrag(types);
         if (isReorderDrag) return;
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         if (!hasDocId) return;
@@ -1591,6 +1599,9 @@ function DashboardContent() {
                         onOpenQuickSearch={openQuickSearch}
                         onAcceptInvite={acceptInvite}
                         onSelectWorkspace={selectWorkspace}
+                        onRenameWorkspace={renameWorkspace}
+                        onDuplicateWorkspace={duplicateWorkspace}
+                        onMergeWorkspace={mergeWorkspaceIntoCurrent}
                         onDeleteWorkspace={deleteWorkspace}
                         onNewWorkspace={() => setShowNewWorkspaceModal(true)}
                         onShowMembers={() => setShowMembersModal(true)}

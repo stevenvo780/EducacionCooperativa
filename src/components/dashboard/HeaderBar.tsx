@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
 import {
   AlertCircle,
+  ArrowRightLeft,
   BookMarked,
   BookOpen,
   Briefcase,
@@ -72,6 +73,9 @@ interface HeaderBarProps {
   onOpenQuickSearch: () => void;
   onAcceptInvite: (ws: Workspace) => void;
   onSelectWorkspace: (ws: Workspace) => void;
+  onRenameWorkspace: (ws: Workspace) => void;
+  onDuplicateWorkspace: (ws: Workspace) => void;
+  onMergeWorkspace: (ws: Workspace) => void;
   onDeleteWorkspace: (ws: Workspace) => void;
   onNewWorkspace: () => void;
   onShowMembers: () => void;
@@ -133,6 +137,9 @@ const HeaderBar = ({
   onOpenQuickSearch,
   onAcceptInvite,
   onSelectWorkspace,
+  onRenameWorkspace,
+  onDuplicateWorkspace,
+  onMergeWorkspace,
   onDeleteWorkspace,
   onNewWorkspace,
   onShowMembers,
@@ -431,7 +438,7 @@ const HeaderBar = ({
                   {workspaces.map(ws => (
                     <div
                       key={ws.id}
-                      className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-700 transition cursor-pointer ${currentWorkspace?.id === ws.id ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
+                      className={`group w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-700 transition cursor-pointer ${currentWorkspace?.id === ws.id ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
                       onClick={() => {
                         onSelectWorkspace(ws);
                         setShowWorkspaceMenu(false);
@@ -456,22 +463,66 @@ const HeaderBar = ({
                           <Copy className="w-3 h-3" />
                         </button>
                       )}
-                      {user && ws.type === WorkspaceType.Shared && ws.id !== personalWorkspaceId && (ws.ownerId === user.uid || isAdmin) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteWorkspace(ws);
-                          }}
-                          className="p-1 hover:bg-red-500/20 rounded shrink-0 text-red-400 disabled:opacity-50"
-                          title="Eliminar workspace"
-                          disabled={deletingWorkspaceId === ws.id}
-                        >
-                          {deletingWorkspaceId === ws.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3 h-3" />
+                      {user && ws.type === WorkspaceType.Shared && ws.id !== personalWorkspaceId && (
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                          {(ws.ownerId === user.uid || isAdmin) && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRenameWorkspace(ws);
+                                }}
+                                className="p-1 hover:bg-surface-600 rounded text-surface-400 hover:text-surface-100"
+                                title="Renombrar workspace"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDuplicateWorkspace(ws);
+                                }}
+                                className="p-1 hover:bg-surface-600 rounded text-surface-400 hover:text-surface-100"
+                                title="Duplicar workspace"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </>
                           )}
-                        </button>
+                          {(ws.ownerId === user.uid || isAdmin)
+                            && currentWorkspace
+                            && currentWorkspace.type === WorkspaceType.Shared
+                            && currentWorkspace.id !== ws.id
+                            && (currentWorkspace.ownerId === user.uid || isAdmin) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onMergeWorkspace(ws);
+                                }}
+                                className="p-1 hover:bg-sky-500/15 rounded text-surface-400 hover:text-sky-300"
+                                title={`Fusionar dentro de ${currentWorkspace.name}`}
+                              >
+                                <ArrowRightLeft className="w-3 h-3" />
+                              </button>
+                            )}
+                          {(ws.ownerId === user.uid || isAdmin) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteWorkspace(ws);
+                              }}
+                              className="p-1 hover:bg-red-500/20 rounded text-red-400 disabled:opacity-50"
+                              title="Eliminar workspace"
+                              disabled={deletingWorkspaceId === ws.id}
+                            >
+                              {deletingWorkspaceId === ws.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       )}
                       {currentWorkspace?.id === ws.id && <Check className="w-3 h-3 shrink-0" />}
                     </div>
