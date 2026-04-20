@@ -233,6 +233,10 @@ interface STRunnerProps {
   className?: string;
   /** Workspace para snippets dinámicos */
   workspaceId?: string;
+  /** Auto-ejecutar el código inicial al montar el componente */
+  autoRun?: boolean;
+  /** Reducir tamaño de fuente y padding en el output (para embeds) */
+  compactOutput?: boolean;
   /** Modo editor de archivo: permite guardar y manejar cambios externos */
   fileMode?: {
     docName: string;
@@ -250,6 +254,8 @@ export default function STRunner({
   onExecute,
   className = '',
   workspaceId = PERSONAL_WORKSPACE_ID,
+  autoRun = false,
+  compactOutput: _compactOutput = false,
   fileMode
 }: STRunnerProps) {
   const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles: _profiles, isRunning, getSymbols, validate, lastDiagnostics } =
@@ -389,6 +395,15 @@ export default function STRunner({
     }
     onExecute?.(code, result);
   }, [code, run, getEnrichedSymbols, onExecute]);
+
+  // ── Auto-run on mount ──
+  const autoRanRef = useRef(false);
+  useEffect(() => {
+    if (autoRun && !autoRanRef.current && code) {
+      autoRanRef.current = true;
+      handleRun();
+    }
+  }, [autoRun, code, handleRun]);
 
   const handleAnalyze = useCallback(() => {
     runAnalysis();
