@@ -97,8 +97,8 @@ function inferProfileFromSnippet(snippet?: Snippet): LogicProfile | null {
 
 /* ── Componente principal ───────────────────────────────────── */
 
-export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_ID }: { workspaceId?: string }) {
-  const [input, setInput] = useState('');
+export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_ID, initialInput = '' }: { workspaceId?: string; initialInput?: string }) {
+  const [input, setInput] = useState(initialInput);
   const [profile, setProfile] = useState<LogicProfile>('classical.propositional');
   const [results, setResults] = useState<FormalizeResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<string | null>(null);

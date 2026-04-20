@@ -15,7 +15,6 @@ import {
 const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 const MarkdownPreview = dynamic(() => import('@/components/mosaic-editor/MarkdownPreview').then(m => ({ default: m.MarkdownPreview })), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 const FormalizerPlayground = dynamic(() => import('@/components/FormalizerPlayground'), { ssr: false, loading: () => <div className="h-[500px] bg-surface-800/60 rounded-xl animate-pulse" /> });
-const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false, loading: () => <div className="h-[400px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 
 /* ─── code snippet for hero demo ──────────────────────────── */
 const ST_DEMO = `logic classical.propositional
@@ -625,7 +624,7 @@ function LandingPage() {
                 {/* Live Formalizer */}
                 <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-2xl">
                   <div className="h-[520px]">
-                    <FormalizerPlayground />
+                    <FormalizerPlayground initialInput="Si todos los hombres son mortales y Sócrates es un hombre, entonces Sócrates es mortal. Sócrates es un hombre. Todos los hombres son mortales. Por lo tanto, Sócrates es mortal." />
                   </div>
                 </div>
 
@@ -650,56 +649,6 @@ function LandingPage() {
                       <p className="text-surface-400 text-xs leading-relaxed">{card.desc}</p>
                     </m.div>
                   ))}
-                </div>
-              </m.div>
-            </div>
-          </div>
-        </section>
-
-        {/* ══════════════ SNIPPETS GALLERY LIVE ══════════════ */}
-        <section className="py-20 bg-surface-800/30 border-y border-surface-700/30">
-          <div className="container mx-auto px-4">
-            <div className="max-w-5xl mx-auto">
-              <m.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={fast}
-                className="space-y-8"
-              >
-                <div className="grid lg:grid-cols-[1fr_380px] gap-8 items-start">
-                  <div className="space-y-6">
-                    <div className="flex items-center gap-3 text-mandy-400 text-sm font-medium uppercase tracking-widest">
-                      <span className="w-8 h-px bg-mandy-500/50" />
-                      Galería de Snippets
-                    </div>
-                    <h2 className="text-3xl lg:text-4xl font-bold">Plantillas listas para usar</h2>
-                    <p className="text-surface-400 text-lg leading-relaxed">
-                      No empieces de cero. La galería incluye snippets verificados para las operaciones
-                      más comunes: silogismos, tablas de verdad, demostraciones por contradicción,
-                      formalización de argumentos clásicos, estructuras modales y más.
-                    </p>
-                    <ul className="space-y-2">
-                      {['Silogismos aristotélicos formalizados', 'Tablas de verdad y tautologías clásicas', 'Pruebas por contradicción y contrapositiva', 'Estructuras modales, deónticas y epistémicas', 'Plantillas de investigación académica'].map((item, i) => (
-                        <li key={i} className="flex items-center gap-2 text-surface-300 text-sm">
-                          <Check className="w-3.5 h-3.5 text-mandy-500 shrink-0" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  {/* Live SnippetGallery */}
-                  <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-xl">
-                    <div className="h-[480px] overflow-y-auto">
-                      <SnippetGallery
-                        workspaceId="__personal__"
-                        onInsert={() => {}}
-                        hideClose
-                        title="Snippets ST"
-                        emptyLabel="Cargando snippets..."
-                      />
-                    </div>
-                  </div>
                 </div>
               </m.div>
             </div>
