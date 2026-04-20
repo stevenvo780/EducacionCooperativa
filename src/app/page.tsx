@@ -655,6 +655,318 @@ function LandingPage() {
           </div>
         </section>
 
+        {/* ══════════════ HERRAMIENTAS INTERACTIVAS (MOCKUP) ══════════════ */}
+        <section className="py-20 bg-surface-800/30 border-y border-surface-700/30">
+          <div className="container mx-auto px-4">
+            <div className="max-w-6xl mx-auto space-y-16">
+              <m.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={fast} className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-3 text-mandy-400 text-sm font-medium uppercase tracking-widest">
+                  <span className="w-8 h-px bg-mandy-500/50" />
+                  Herramientas integradas
+                  <span className="w-8 h-px bg-mandy-500/50" />
+                </div>
+                <h2 className="text-3xl lg:text-4xl font-bold">Todo lo que necesitas, en un solo entorno</h2>
+                <p className="text-surface-400 max-w-3xl mx-auto text-lg">
+                  Cada herramienta está disponible dentro del editor. Aquí tienes una vista previa de lo que encontrarás al iniciar sesión.
+                </p>
+              </m.div>
+
+              {/* ── Snippets Gallery mockup ── */}
+              <m.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={fast} className="grid lg:grid-cols-[1fr_420px] gap-8 items-start">
+                <div className="space-y-5">
+                  <h3 className="text-2xl font-bold flex items-center gap-3">
+                    <Code2 className="w-6 h-6 text-mandy-400" />
+                    Galería de Snippets
+                  </h3>
+                  <p className="text-surface-400 leading-relaxed">
+                    Biblioteca de plantillas verificadas listas para insertar: silogismos, tablas de verdad, demostraciones por contradicción, estructuras modales y más. Crea tus propios snippets o usa los predeterminados.
+                  </p>
+                  <ul className="space-y-2">
+                    {['Silogismos aristotélicos formalizados', 'Tablas de verdad y tautologías clásicas', 'Pruebas por contradicción y contrapositiva', 'Estructuras modales, deónticas y epistémicas', 'Plantillas de investigación académica'].map((item, i) => (
+                      <li key={i} className="flex items-center gap-2 text-surface-300 text-sm">
+                        <Check className="w-3.5 h-3.5 text-mandy-500 shrink-0" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {/* Mock snippet cards */}
+                <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-xl">
+                  <div className="flex items-center justify-between border-b border-surface-700/50 px-4 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-surface-300">Snippets ST</span>
+                    <span className="text-[10px] text-surface-500">Vista previa</span>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    {[
+                      { cat: 'ST', title: 'Modus Ponens', code: 'logic classical.propositional\naxiom p: P\naxiom p_implies_q: P -> Q\nderive q: Q by mp(p, p_implies_q)' },
+                      { cat: 'ST', title: 'Silogismo Aristotélico', code: 'logic classical.first_order\naxiom all_men_mortal: forall x. (Man(x) -> Mortal(x))\naxiom socrates_man: Man(socrates)\nderive socrates_mortal: Mortal(socrates)' },
+                      { cat: 'Math', title: 'Tabla de Verdad', code: 'logic classical.propositional\naxiom a: A\naxiom b: B\ntruth_table A, B, A -> B, A & B | ~A' },
+                      { cat: 'ST', title: 'Reductio ad Absurdum', code: 'logic classical.propositional\nassume not_p: ~P\naxiom leads_to_q: ~P -> Q\naxiom leads_to_nq: ~P -> ~Q\nderive contradiction: Q & ~Q\nderive p: P by raa(not_p, contradiction)' },
+                      { cat: 'Modal', title: 'Necesidad Modal K', code: 'logic modal.K\naxiom nec_p: □P\naxiom k_axiom: □(P -> Q)\nderive nec_q: □Q by K(k_axiom, nec_p)' }
+                    ].map((s, i) => (
+                      <m.div
+                        key={i}
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={stagger(i)}
+                        className="rounded-lg border border-surface-700/40 bg-surface-900/60 p-3 hover:border-mandy-500/30 transition cursor-pointer group"
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-sm font-medium text-white group-hover:text-mandy-300 transition">{s.title}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-surface-400">{s.cat}</span>
+                        </div>
+                        <pre className="text-[11px] text-surface-500 font-mono leading-relaxed overflow-hidden max-h-12 whitespace-pre-wrap">{s.code}</pre>
+                      </m.div>
+                    ))}
+                  </div>
+                </div>
+              </m.div>
+
+              {/* ── Linter del Editor Markdown ── */}
+              <m.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={fast} className="space-y-8">
+                <div className="text-center space-y-3">
+                  <h3 className="text-2xl lg:text-3xl font-bold flex items-center justify-center gap-3">
+                    <FlaskConical className="w-7 h-7 text-amber-400" />
+                    Linter académico en tiempo real
+                  </h3>
+                  <p className="text-surface-400 max-w-3xl mx-auto leading-relaxed">
+                    El editor Markdown de Agora incluye <strong className="text-white">+30 reglas de linting</strong> que analizan tu texto mientras escribes: estructura, legibilidad, consistencia, accesibilidad y rigor académico. Cada error se marca en línea con sugerencias de corrección.
+                  </p>
+                </div>
+
+                {/* Mock editor with inline linting */}
+                <div className="grid lg:grid-cols-2 gap-6">
+                  {/* Left: "Editor" with bad text and inline markers */}
+                  <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-xl">
+                    <div className="flex items-center justify-between border-b border-surface-700/50 px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Edit3 className="w-3.5 h-3.5 text-surface-400" />
+                        <span className="text-xs font-medium text-surface-300">ensayo-kant.md</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px]">
+                        <span className="flex items-center gap-1 text-red-400">● 3 errores</span>
+                        <span className="flex items-center gap-1 text-amber-400">● 4 alertas</span>
+                        <span className="flex items-center gap-1 text-blue-400">● 2 info</span>
+                      </div>
+                    </div>
+                    <div className="p-4 font-mono text-[12px] leading-[1.8] space-y-1">
+                      {/* Line numbers + code with inline error highlights */}
+                      <div className="flex gap-3">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">1</span>
+                        <span><span className="text-red-400 underline decoration-wavy decoration-red-500/60"># Critica de la razón pura</span></span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">2</span>
+                        <span className="text-surface-500"># Introducción</span>
+                      </div>
+                      <div className="flex gap-3 bg-red-500/5 -mx-4 px-4 border-l-2 border-red-500/40">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">3</span>
+                        <span className="text-surface-300"><span className="text-red-300 underline decoration-wavy decoration-red-500/60" title="Múltiples h1 — solo debería haber uno">##</span> <span className="text-surface-300">Planteamiento del problema</span></span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">4</span>
+                        <span className="text-surface-500" />
+                      </div>
+                      <div className="flex gap-3 bg-amber-500/5 -mx-4 px-4 border-l-2 border-amber-500/40">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">5</span>
+                        <span className="text-surface-300">Kant propone que el conocimiento <span className="text-amber-300 underline decoration-wavy decoration-amber-500/60" title="Oración demasiado larga (+40 palabras)">empieza con la experiencia pero no todo conocimiento proviene de ella ya que existen formas a priori de la sensibilidad que estructuran nuestra percepción del mundo de manera necesaria y universal lo cual implica que no podemos conocer las cosas en sí mismas</span>.</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">6</span>
+                        <span className="text-surface-500" />
+                      </div>
+                      <div className="flex gap-3 bg-amber-500/5 -mx-4 px-4 border-l-2 border-amber-500/40">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">7</span>
+                        <span className="text-surface-300">- Punto primero</span>
+                      </div>
+                      <div className="flex gap-3 bg-amber-500/5 -mx-4 px-4 border-l-2 border-amber-500/40">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">8</span>
+                        <span className="text-surface-300"><span className="text-amber-300" title="Marcadores de lista mixtos: - vs *">*</span> Punto segundo</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">9</span>
+                        <span className="text-surface-300">+ Punto tercero</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">10</span>
+                        <span className="text-surface-500" />
+                      </div>
+                      <div className="flex gap-3 bg-blue-500/5 -mx-4 px-4 border-l-2 border-blue-500/40">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">11</span>
+                        <span className="text-surface-300">Ver más en <span className="text-blue-300 underline decoration-wavy decoration-blue-500/60" title="URL sin formato de enlace">https://plato.stanford.edu/entries/kant</span></span>
+                      </div>
+                      <div className="flex gap-3 bg-red-500/5 -mx-4 px-4 border-l-2 border-red-500/40">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">12</span>
+                        <span className="text-surface-300">Esto es <span className="text-red-300 underline decoration-wavy decoration-red-500/60" title="Paréntesis sin cerrar">muy importante (ver nota 3</span></span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-surface-600 select-none w-5 text-right shrink-0">13</span>
+                        <span className="text-surface-300"><span className="text-amber-300" title="Marcador TODO detectado">TODO:</span> revisar cita de B75</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Problems panel */}
+                  <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-xl">
+                    <div className="flex items-center justify-between border-b border-surface-700/50 px-4 py-2.5">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-surface-300">Problemas</span>
+                      <span className="text-[10px] text-surface-500">9 diagnósticos</span>
+                    </div>
+                    <div className="p-3 space-y-1.5 max-h-[380px] overflow-y-auto">
+                      {[
+                        { sev: 'error', icon: '✕', msg: 'Múltiples encabezados h1 — un documento debería tener solo uno', line: 'L1, L2', rule: 'structure_multiple_h1', color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+                        { sev: 'error', icon: '✕', msg: 'Salto de jerarquía: h1 → h3 (falta h2 intermedio)', line: 'L3', rule: 'structure_heading_hierarchy', color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+                        { sev: 'error', icon: '✕', msg: 'Paréntesis sin cerrar: "(" abierto sin ")" correspondiente', line: 'L12', rule: 'academic_unclosed_brackets', color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+                        { sev: 'warning', icon: '⚠', msg: 'Oración de 43 palabras — considere dividirla (máx. recomendado: 40)', line: 'L5', rule: 'readability_long_sentence', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+                        { sev: 'warning', icon: '⚠', msg: 'Marcadores de lista mixtos: se usan -, * y + en la misma lista', line: 'L7-L9', rule: 'consistency_list_markers', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+                        { sev: 'warning', icon: '⚠', msg: 'Marcador TODO/FIXME detectado — pendiente por resolver', line: 'L13', rule: 'academic_todo_markers', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+                        { sev: 'warning', icon: '⚠', msg: 'Índice de legibilidad Flesch-Kincaid: 18.2 (muy difícil)', line: 'L5', rule: 'readability_flesch_kincaid_es', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+                        { sev: 'info', icon: 'ℹ', msg: 'URL sin formato de enlace Markdown', line: 'L11', rule: 'links_bare_url', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
+                        { sev: 'info', icon: 'ℹ', msg: 'Posible error ortográfico: "Critica" → "Crítica"', line: 'L1', rule: 'spell_check', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' }
+                      ].map((d, i) => (
+                        <m.div
+                          key={i}
+                          initial={{ opacity: 0, x: 10 }}
+                          whileInView={{ opacity: 1, x: 0 }}
+                          viewport={{ once: true }}
+                          transition={stagger(i)}
+                          className={`flex items-start gap-2 rounded-lg border p-2.5 ${d.color}`}
+                        >
+                          <span className="text-xs font-bold shrink-0 mt-0.5 w-4 text-center">{d.icon}</span>
+                          <div className="min-w-0">
+                            <p className="text-surface-200 text-[11px] leading-snug">{d.msg}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[9px] text-surface-500">{d.line}</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-700/50 text-surface-500 font-mono">{d.rule}</span>
+                            </div>
+                          </div>
+                        </m.div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rule categories grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {[
+                    { icon: Layers, label: 'Estructura', count: 10, desc: 'Encabezados, tablas, bloques de código, notas al pie', color: 'text-cyan-400 bg-cyan-500/10' },
+                    { icon: BookOpen, label: 'Legibilidad', count: 4, desc: 'Oraciones largas, párrafos extensos, Flesch-Kincaid', color: 'text-emerald-400 bg-emerald-500/10' },
+                    { icon: Scale, label: 'Consistencia', count: 4, desc: 'Comillas, guiones, numeración, terminología', color: 'text-violet-400 bg-violet-500/10' },
+                    { icon: GraduationCap, label: 'Académico', count: 3, desc: 'Paréntesis, TODO/FIXME, frontmatter YAML', color: 'text-amber-400 bg-amber-500/10' },
+                    { icon: MonitorSmartphone, label: 'Accesibilidad', count: 3, desc: 'Alt-text, calidad de enlaces, HTML crudo', color: 'text-blue-400 bg-blue-500/10' },
+                    { icon: Sparkles, label: 'Ortografía', count: 1, desc: 'Corrector ortográfico en español con diccionario personalizable', color: 'text-fuchsia-400 bg-fuchsia-500/10' }
+                  ].map((cat, i) => (
+                    <m.div
+                      key={i}
+                      initial={{ opacity: 0, y: 15 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={stagger(i)}
+                      className="rounded-xl border border-surface-700/40 bg-surface-800/40 p-4 text-center hover:border-mandy-500/20 transition"
+                    >
+                      <div className={`w-9 h-9 rounded-lg ${cat.color} flex items-center justify-center mx-auto mb-2`}>
+                        <cat.icon className="w-4.5 h-4.5" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-white">{cat.label}</h4>
+                      <span className="text-[10px] text-mandy-400 font-medium">{cat.count} reglas</span>
+                      <p className="text-surface-500 text-[10px] mt-1 leading-snug">{cat.desc}</p>
+                    </m.div>
+                  ))}
+                </div>
+              </m.div>
+
+              {/* ── Mesa Semántica mockup ── */}
+              <m.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={fast} className="grid lg:grid-cols-[1fr_420px] gap-8 items-start">
+                <div className="space-y-5">
+                  <h3 className="text-2xl font-bold flex items-center gap-3">
+                    <Network className="w-6 h-6 text-cyan-400" />
+                    Mesa Semántica Global
+                  </h3>
+                  <p className="text-surface-400 leading-relaxed">
+                    Navega visualmente por todos los conceptos, proposiciones y relaciones formales de tu workspace. Cada nodo se enlaza con su formalización ST y su contexto documental.
+                  </p>
+                  <p className="text-surface-400 leading-relaxed">
+                    Ideal para descubrir conexiones entre documentos, detectar redundancias y construir ontologías compartidas en equipo.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-xl">
+                  <div className="flex items-center justify-between border-b border-surface-700/50 px-4 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-surface-300">Mesa Semántica</span>
+                    <span className="text-[10px] text-surface-500">12 conceptos · 8 relaciones</span>
+                  </div>
+                  <div className="p-4">
+                    {/* Mock semantic graph */}
+                    <div className="relative h-56 rounded-lg bg-surface-900/60 border border-surface-700/30 overflow-hidden">
+                      {[
+                        { label: 'Sustancia', x: '50%', y: '15%', color: 'bg-cyan-500' },
+                        { label: 'Accidente', x: '80%', y: '30%', color: 'bg-violet-500' },
+                        { label: 'Forma', x: '20%', y: '35%', color: 'bg-emerald-500' },
+                        { label: 'Materia', x: '15%', y: '65%', color: 'bg-amber-500' },
+                        { label: 'Causa', x: '50%', y: '55%', color: 'bg-mandy-500' },
+                        { label: 'Potencia', x: '75%', y: '70%', color: 'bg-blue-500' },
+                        { label: 'Acto', x: '40%', y: '80%', color: 'bg-fuchsia-500' }
+                      ].map((node, i) => (
+                        <div key={i} className="absolute transform -translate-x-1/2 -translate-y-1/2 group" style={{ left: node.x, top: node.y }}>
+                          <div className={`w-2.5 h-2.5 rounded-full ${node.color} ring-2 ring-surface-900 group-hover:ring-mandy-400 transition shadow-lg`} />
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] text-surface-400 whitespace-nowrap group-hover:text-white transition">{node.label}</span>
+                        </div>
+                      ))}
+                      {/* Mock connections */}
+                      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 420 224">
+                        <line x1="210" y1="34" x2="84" y2="78" stroke="rgba(100,200,255,0.15)" strokeWidth="1" />
+                        <line x1="210" y1="34" x2="336" y2="67" stroke="rgba(100,200,255,0.15)" strokeWidth="1" />
+                        <line x1="84" y1="78" x2="63" y2="146" stroke="rgba(100,200,255,0.12)" strokeWidth="1" />
+                        <line x1="210" y1="34" x2="210" y2="123" stroke="rgba(233,69,96,0.2)" strokeWidth="1" />
+                        <line x1="210" y1="123" x2="315" y2="157" stroke="rgba(100,200,255,0.12)" strokeWidth="1" />
+                        <line x1="210" y1="123" x2="168" y2="179" stroke="rgba(100,200,255,0.12)" strokeWidth="1" />
+                        <line x1="315" y1="157" x2="168" y2="179" stroke="rgba(200,100,255,0.15)" strokeWidth="1" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </m.div>
+
+              {/* ── Text Layer mockup ── */}
+              <m.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={fast} className="grid lg:grid-cols-[420px_1fr] gap-8 items-start">
+                <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-xl order-2 lg:order-1">
+                  <div className="flex items-center justify-between border-b border-surface-700/50 px-4 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-surface-300">Text Layer — Vinculación</span>
+                    <span className="flex items-center gap-1.5 text-[10px] text-violet-400"><Layers className="w-3 h-3" /> 3 bloques</span>
+                  </div>
+                  <div className="p-4 space-y-3 text-xs">
+                    {[
+                      { prose: '"Todo lo que es compuesto puede descomponerse…"', st: 'axiom composite_decomposable:\n  forall x. (Composite(x) -> Decomposable(x))', tag: 'Axioma' },
+                      { prose: '"El alma no es compuesta, por lo tanto…"', st: 'axiom soul_not_composite: ~Composite(soul)\nderive soul_indestructible:\n  ~Decomposable(soul)', tag: 'Derivación' },
+                      { prose: '"Luego el alma es inmortal."', st: 'check valid soul_indestructible', tag: 'Verificación' }
+                    ].map((block, i) => (
+                      <div key={i} className="rounded-lg border border-surface-700/40 bg-surface-900/60 p-3 hover:border-violet-500/30 transition">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-surface-400 italic">{block.prose}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 shrink-0 ml-2">{block.tag}</span>
+                        </div>
+                        <pre className="text-[11px] text-emerald-400/70 font-mono leading-relaxed whitespace-pre-wrap bg-surface-950/60 rounded p-2">{block.st}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-5 order-1 lg:order-2">
+                  <h3 className="text-2xl font-bold flex items-center gap-3">
+                    <Layers className="w-6 h-6 text-violet-400" />
+                    Text Layer
+                  </h3>
+                  <p className="text-surface-400 leading-relaxed">
+                    Vincula cada párrafo de tu documento Markdown con su bloque ST correspondiente. El lector puede verificar cualquier afirmación sin salir de la prosa — clic en la frase, aparece la demostración.
+                  </p>
+                  <p className="text-surface-400 leading-relaxed">
+                    Perfecto para artículos académicos, tesis y publicaciones que requieren transparencia lógica total. Exporta el documento con las pruebas embebidas.
+                  </p>
+                </div>
+              </m.div>
+            </div>
+          </div>
+        </section>
+
         {/* ══════════════ WORKFLOW ══════════════ */}
         <section id="workflow" className="py-20">
           <div className="container mx-auto px-4">
