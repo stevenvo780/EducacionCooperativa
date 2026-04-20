@@ -28,6 +28,21 @@ check valid ((P -> Q) -> (!Q -> !P))
 truth_table (P & Q) -> P
 `;
 
+const ST_DEEP_DEMO = `logic classical.propositional
+
+-- Modus Tollens
+axiom imp : P -> Q
+axiom neg : !Q
+
+derive !P from {imp, neg}
+
+check valid ((P -> Q) -> (!Q -> !P))
+
+check sat (P & !P)
+
+truth_table (P -> Q) <-> (!P | Q)
+`;
+
 const MD_DEMO = `# Crítica de la razón pura — §B75
 
 > *"Los pensamientos sin contenido son vacíos,*
@@ -344,7 +359,7 @@ function LandingPage() {
                     <span className="ml-auto text-[10px] text-emerald-400/80 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">Interactivo</span>
                   </div>
                   <div className="h-[420px]">
-                    <STRunner initialCode={ST_DEMO} height="100%" className="rounded-none border-0" />
+                    <STRunner initialCode={ST_DEMO} autoRun height="100%" className="rounded-none border-0" />
                   </div>
                 </div>
                 {/* Markdown Preview — live rendered */}
@@ -552,35 +567,10 @@ function LandingPage() {
                   transition={fast}
                   className="space-y-4"
                 >
-                  <div className="rounded-xl border border-surface-600/60 bg-surface-900/80 overflow-hidden shadow-2xl">
-                    <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-700/60 bg-surface-800/50">
-                      <div className="flex gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
-                      </div>
-                      <span className="text-xs text-surface-400 font-mono ml-2">ejemplo-completo.st</span>
+                  <div className="rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-2xl">
+                    <div className="h-[460px]">
+                      <STRunner initialCode={ST_DEEP_DEMO} autoRun height="100%" className="rounded-none border-0" />
                     </div>
-                    <pre className="p-5 text-[13px] leading-7 font-mono text-surface-300 overflow-x-auto">{`logic classical.propositional
-
--- Modus Tollens formalizado
-axiom imp : P -> Q
-axiom neg : !Q
-
-derive !P from {imp, neg}
--- ✓ Derivado por Modus Tollens
-
--- Verificar la ley
-check valid ((P -> Q) -> (!Q -> !P))
--- ✓ Tautología
-
--- ¿Es satisfacible?
-check sat (P & !P)
--- ✗ Insatisfacible — contradicción
-
--- Tabla de verdad
-truth_table (P -> Q) <-> (!P | Q)
--- ✓ Equivalencia material verificada`}</pre>
                   </div>
 
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
