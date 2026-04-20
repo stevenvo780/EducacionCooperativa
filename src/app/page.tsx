@@ -11,35 +11,51 @@ import {
   Pencil, Scale, Shield, Sparkles, Terminal, Users, Zap
 } from 'lucide-react';
 
+/* ─── lazy editor components ─────────────────────────────── */
+const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
+const MarkdownPreview = dynamic(() => import('@/components/mosaic-editor/MarkdownPreview').then(m => ({ default: m.MarkdownPreview })), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
+
 /* ─── code snippet for hero demo ──────────────────────────── */
 const ST_DEMO = `logic classical.propositional
 
-axiom modus_ponens : P -> Q
-axiom hipotesis   : P
+axiom a1 : P -> Q
+axiom a2 : P
 
-derive conclusion from {modus_ponens, hipotesis}
--- ✓ Q derivado exitosamente
+derive Q from {a1, a2}
 
 check valid ((P -> Q) -> (!Q -> !P))
--- ✓ Contrapositiva: tautología verificada
 
 truth_table (P & Q) -> P
--- ✓ Tabla de verdad generada`;
+`;
 
 const MD_DEMO = `# Crítica de la razón pura — §B75
 
-> "Los pensamientos sin contenido son vacíos,
->  las intuiciones sin conceptos son ciegas."
+> *"Los pensamientos sin contenido son vacíos,*
+> *las intuiciones sin conceptos son ciegas."*
 
 ## Formalización
 
 | Proposición             | Variable |
 |-------------------------|----------|
-| Pensamiento con contenido | P      |
-| Intuición con concepto    | Q      |
+| Pensamiento con contenido | $P$   |
+| Intuición con concepto    | $Q$   |
 
-**Tesis**: El conocimiento requiere la síntesis
-de ambas facultades: \`P ∧ Q → K\``;
+**Tesis**: el conocimiento requiere la síntesis
+de ambas facultades:
+
+$$P \\wedge Q \\rightarrow K$$
+
+---
+
+### Diagrama del argumento
+
+\`\`\`mermaid
+graph LR
+  A[Intuición Q] --> C{Síntesis}
+  B[Concepto P] --> C
+  C --> D[Conocimiento K]
+\`\`\`
+`;
 
 function LandingPage() {
   const { user, loading } = useAuth();
@@ -58,7 +74,7 @@ function LandingPage() {
       icon: Code2,
       accent: 'from-rose-500 to-pink-600',
       title: 'ST — Lenguaje de Lógica Formal',
-      desc: 'El primer lenguaje ejecutable diseñado para la investigación filosófica. 11 perfiles lógicos — desde la proposicional clásica hasta la paraconsistente — con derivaciones verificables, contramodelos y tablas de verdad.',
+      desc: 'El primer lenguaje ejecutable diseñado para la investigación académica rigurosa. 11 perfiles lógicos — desde la proposicional clásica hasta la paraconsistente — con derivaciones verificables, contramodelos y tablas de verdad.',
       details: [
         'Silogística aristotélica, modal K, deóntica, epistémica S5',
         'Lógica intuicionista, temporal LTL, probabilística',
@@ -276,8 +292,8 @@ function LandingPage() {
                 className="text-lg lg:text-xl text-surface-300 leading-relaxed max-w-3xl mx-auto"
               >
                 Agora une la escritura académica en Markdown con <strong className="text-white">ST</strong>, el primer lenguaje
-                ejecutable de lógica formal. Formaliza argumentos, verifica derivaciones y genera contramodelos
-                — todo en un entorno colaborativo, cifrado y accesible desde cualquier navegador.
+                ejecutable de lógica formal. Para filósofos, científicos, investigadores y académicos que
+                necesitan formalizar, verificar y colaborar — desde cualquier navegador, sin instalar nada.
               </m.p>
 
               <m.div
@@ -308,7 +324,7 @@ function LandingPage() {
                 <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Cifrado end-to-end</span>
                 <span className="flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5" /> Terminales Linux</span>
                 <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> Sin instalación</span>
-                <span className="flex items-center gap-1.5"><GraduationCap className="w-3.5 h-3.5" /> Hecho para filósofos</span>
+                <span className="flex items-center gap-1.5"><GraduationCap className="w-3.5 h-3.5" /> Hecho para académicos</span>
               </m.div>
             </div>
 
@@ -319,36 +335,28 @@ function LandingPage() {
               transition={{ ...fast, delay: 0.5 }}
               className="mt-16 max-w-5xl mx-auto"
             >
-              <div className="grid md:grid-cols-2 gap-4">
-                {/* ST panel */}
+              <div className="grid lg:grid-cols-2 gap-4">
+                {/* ST Runner — live interactive */}
                 <div className="rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-700/60 bg-surface-800/50">
-                    <div className="flex gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
-                    </div>
-                    <span className="text-xs text-surface-400 font-mono ml-2">argumento.st</span>
-                    <span className="ml-auto text-[10px] text-emerald-400/80 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">ST Lang</span>
+                    <Code2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs text-surface-400 font-mono">Motor ST — Pruébalo en vivo</span>
+                    <span className="ml-auto text-[10px] text-emerald-400/80 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">Interactivo</span>
                   </div>
-                  <pre className="p-4 text-[13px] leading-6 font-mono text-surface-300 overflow-x-auto">
-                    <code>{ST_DEMO}</code>
-                  </pre>
+                  <div className="h-[420px]">
+                    <STRunner initialCode={ST_DEMO} height="100%" className="rounded-none border-0" />
+                  </div>
                 </div>
-                {/* MD panel */}
+                {/* Markdown Preview — live rendered */}
                 <div className="rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-700/60 bg-surface-800/50">
-                    <div className="flex gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
-                    </div>
-                    <span className="text-xs text-surface-400 font-mono ml-2">investigacion.md</span>
-                    <span className="ml-auto text-[10px] text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full font-medium">Markdown</span>
+                    <FileText className="w-4 h-4 text-violet-400" />
+                    <span className="text-xs text-surface-400 font-mono">Vista previa Markdown — KaTeX + Mermaid</span>
+                    <span className="ml-auto text-[10px] text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full font-medium">Renderizado</span>
                   </div>
-                  <pre className="p-4 text-[13px] leading-6 font-mono text-surface-300 overflow-x-auto">
-                    <code>{MD_DEMO}</code>
-                  </pre>
+                  <div className="h-[420px] overflow-y-auto p-5 prose prose-invert prose-sm max-w-none">
+                    <MarkdownPreview content={MD_DEMO} />
+                  </div>
                 </div>
               </div>
             </m.div>
@@ -383,31 +391,31 @@ function LandingPage() {
                   Manifiesto
                 </div>
                 <h2 className="text-3xl lg:text-5xl font-bold leading-tight">
-                  La filosofía necesita herramientas que estén a la altura de sus preguntas
+                  La academia necesita herramientas que estén a la altura de sus preguntas
                 </h2>
                 <div className="grid md:grid-cols-2 gap-8 text-surface-300 text-lg leading-relaxed">
                   <div className="space-y-4">
                     <p>
-                      Durante siglos, la verificación de un argumento dependió de la agudeza del lector
-                      y de convenciones tipográficas heredadas del papel. Los errores lógicos se
-                      escondían entre párrafos elegantes; las falacias se camuflaban con retórica.
+                      Filósofos, científicos sociales, investigadores en humanidades, lingüistas,
+                      matemáticos, teólogos — toda disciplina que construya conocimiento sobre
+                      argumentos necesita herramientas que vayan más allá del procesador de texto.
                     </p>
                     <p>
-                      <strong className="text-white">Agora cambia eso.</strong> Cada afirmación puede vincularse
-                      con una formalización ejecutable. Cada derivación puede verificarse con un clic.
-                      Cada contramodelo se genera automáticamente.
+                      <strong className="text-white">Agora cambia las reglas.</strong> Un editor Markdown con
+                      LaTeX, diagramas y tablas. Un motor de lógica formal que verifica derivaciones.
+                      Terminales en la nube. Colaboración en tiempo real. Todo en el navegador.
                     </p>
                   </div>
                   <div className="space-y-4">
                     <p>
-                      No se trata de reemplazar la escritura filosófica con código, sino de
+                      No se trata de reemplazar la prosa académica con código, sino de
                       <em> darle a cada argumento la posibilidad de ser verificado formalmente</em>.
-                      El Text Layer de ST vincula pasajes de prosa con sus formalizaciones,
+                      El Text Layer vincula pasajes de tu texto con sus formalizaciones en ST,
                       creando un puente entre el lenguaje natural y la lógica simbólica.
                     </p>
                     <p>
                       Markdown para la expresión. ST para la verificación. La nube para la colaboración.
-                      Ese es el estándar que proponemos.
+                      Ese es el estándar que proponemos para toda la academia.
                     </p>
                   </div>
                 </div>
@@ -501,9 +509,9 @@ function LandingPage() {
                       ST: Symbolic Theory Language
                     </h2>
                     <p className="text-surface-300 text-lg leading-relaxed">
-                      ST no es solo un verificador — es un lenguaje de programación completo especializado
-                      en razonamiento formal. Declara axiomas, ejecuta derivaciones, genera tablas de verdad
-                      y busca contramodelos, todo en un archivo <code className="text-mandy-300 bg-mandy-500/10 px-1.5 py-0.5 rounded text-sm">.st</code>.
+                      ST no es solo un verificador — es un lenguaje completo para el razonamiento formal,
+                      pensado para académicos de cualquier disciplina. Declara axiomas, ejecuta derivaciones,
+                      genera tablas de verdad y busca contramodelos en un archivo <code className="text-mandy-300 bg-mandy-500/10 px-1.5 py-0.5 rounded text-sm">.st</code>.
                     </p>
                   </div>
 
