@@ -624,7 +624,7 @@ function LandingPage() {
                 {/* Live Formalizer */}
                 <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-2xl">
                   <div className="h-[520px]">
-                    <FormalizerPlayground initialInput="Si todos los hombres son mortales y Sócrates es un hombre, entonces Sócrates es mortal. Sócrates es un hombre. Todos los hombres son mortales. Por lo tanto, Sócrates es mortal." />
+                    <FormalizerPlayground initialInput="Si todos los hombres son mortales y Sócrates es un hombre, entonces Sócrates es mortal. Sócrates es un hombre. Todos los hombres son mortales. Por lo tanto, Sócrates es mortal." hideSnippets />
                   </div>
                 </div>
 

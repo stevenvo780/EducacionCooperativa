@@ -97,7 +97,7 @@ function inferProfileFromSnippet(snippet?: Snippet): LogicProfile | null {
 
 /* ── Componente principal ───────────────────────────────────── */
 
-export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_ID, initialInput = '' }: { workspaceId?: string; initialInput?: string }) {
+export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_ID, initialInput = '', hideSnippets = false }: { workspaceId?: string; initialInput?: string; hideSnippets?: boolean }) {
   const [input, setInput] = useState(initialInput);
   const [profile, setProfile] = useState<LogicProfile>('classical.propositional');
   const [results, setResults] = useState<FormalizeResult[]>([]);
@@ -531,16 +531,18 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
             )}
 
             {/* Snippets dinámicos */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
-              <SnippetGallery
-                workspaceId={workspaceId}
-                allowedCategories={['formalization']}
-                hideClose
-                title="Snippets de formalización"
-                emptyLabel="Todavía no hay snippets de formalización en este workspace."
-                onInsert={handleInsertFormalizationSnippet}
-              />
-            </div>
+            {!hideSnippets && (
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
+                <SnippetGallery
+                  workspaceId={workspaceId}
+                  allowedCategories={['formalization']}
+                  hideClose
+                  title="Snippets de formalización"
+                  emptyLabel="Todavía no hay snippets de formalización en este workspace."
+                  onInsert={handleInsertFormalizationSnippet}
+                />
+              </div>
+            )}
 
             {/* Historial */}
             {results.length > 0 && (
