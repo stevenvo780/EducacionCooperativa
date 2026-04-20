@@ -61,10 +61,16 @@ function StatusBadge({ ok }: { ok: boolean }) {
 }
 
 function HistoryPanel({ entries, viewMode }: { entries: STHistoryEntry[]; viewMode: OutputViewMode }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth'
+    });
   }, [entries.length]);
 
   if (entries.length === 0) {
@@ -76,7 +82,7 @@ function HistoryPanel({ entries, viewMode }: { entries: STHistoryEntry[]; viewMo
   }
 
   return (
-    <div className="flex-1 overflow-y-auto space-y-2 p-2">
+    <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2 p-2">
       {entries.map(entry => (
         <div key={entry.id} className="border border-slate-700 rounded-lg overflow-hidden">
           <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800/50 border-b border-slate-700">
@@ -91,7 +97,6 @@ function HistoryPanel({ entries, viewMode }: { entries: STHistoryEntry[]; viewMo
           </div>
         </div>
       ))}
-      <div ref={bottomRef} />
     </div>
   );
 }
@@ -543,6 +548,7 @@ export default function STRunner({
               {fileMode.docName}
             </span>
             <button
+              type="button"
               onClick={fileMode.onSave}
               disabled={fileMode.isSaving || !fileMode.isDirty}
               className={`flex items-center gap-1.5 px-2 py-1 text-[10px] rounded transition ${
@@ -559,6 +565,7 @@ export default function STRunner({
         ) : (
           <div className="flex bg-slate-800 rounded-md p-0.5">
             <button
+              type="button"
               onClick={() => setMode('script')}
               className={`px-3 py-1 text-xs rounded ${
                 mode === 'script'
@@ -570,6 +577,7 @@ export default function STRunner({
               Script
             </button>
             <button
+              type="button"
               onClick={() => setMode('repl')}
               className={`px-3 py-1 text-xs rounded ${
                 mode === 'repl'
@@ -588,6 +596,7 @@ export default function STRunner({
         {/* Actions */}
         {(mode === 'script' || !!fileMode) && (
           <button
+            type="button"
             onClick={handleRun}
             disabled={isRunning}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-md transition-colors"
@@ -600,6 +609,7 @@ export default function STRunner({
 
         {mode === 'script' && isTouchTablet && (
           <button
+            type="button"
             onClick={handleAnalyze}
             disabled={isRunning}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-sky-600/20 hover:bg-sky-600/30 disabled:bg-slate-700 disabled:text-slate-500 text-sky-300 rounded-md transition-colors"
@@ -611,6 +621,7 @@ export default function STRunner({
         )}
 
         <button
+          type="button"
           onClick={() => { reset(); clearHistory(); }}
           className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800"
           title="Reiniciar"
@@ -619,6 +630,7 @@ export default function STRunner({
         </button>
 
         <button
+          type="button"
           onClick={clearHistory}
           className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800"
           title="Limpiar salida"
@@ -627,6 +639,7 @@ export default function STRunner({
         </button>
 
         <button
+          type="button"
           onClick={() => setShowSnippetGallery((current) => !current)}
           className={`p-1.5 rounded transition ${showSnippetGallery ? 'bg-blue-600/20 text-blue-300' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
           title={showSnippetGallery ? 'Ocultar snippets ST' : 'Mostrar snippets ST'}
@@ -686,6 +699,7 @@ export default function STRunner({
 
                 <div className="flex items-center gap-0 border-b border-slate-800 px-1">
                   <button
+                    type="button"
                     onClick={() => setActiveTab('output')}
                     className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
                       activeTab === 'output'
@@ -697,6 +711,7 @@ export default function STRunner({
                     Salida
                   </button>
                   <button
+                    type="button"
                     onClick={() => setActiveTab('problems')}
                     className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
                       activeTab === 'problems'
@@ -717,6 +732,7 @@ export default function STRunner({
                     )}
                   </button>
                   <button
+                    type="button"
                     onClick={() => setActiveTab('symbols')}
                     className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
                       activeTab === 'symbols'
@@ -737,6 +753,7 @@ export default function STRunner({
                     <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                   )}
                   <button
+                    type="button"
                     onClick={() => setShowOutput(prev => !prev)}
                     className="px-3 py-1.5 text-slate-500 hover:text-slate-300 transition-colors"
                     title={showOutput ? 'Ocultar panel' : 'Mostrar panel'}
@@ -773,6 +790,7 @@ export default function STRunner({
                 autoComplete="off"
               />
               <button
+                type="button"
                 onClick={handleQuickEval}
                 className="p-1 text-amber-400 hover:text-amber-300 rounded hover:bg-slate-800"
                 title="Quick eval (auto classical.propositional)"
@@ -780,6 +798,7 @@ export default function STRunner({
                 <Zap className="w-4 h-4" />
               </button>
               <button
+                type="button"
                 onClick={handleReplSubmit}
                 disabled={!replInput.trim()}
                 className="p-1 text-emerald-400 hover:text-emerald-300 disabled:text-slate-600 rounded hover:bg-slate-800"
