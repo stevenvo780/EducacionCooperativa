@@ -14,6 +14,8 @@ import {
 /* ─── lazy editor components ─────────────────────────────── */
 const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 const MarkdownPreview = dynamic(() => import('@/components/mosaic-editor/MarkdownPreview').then(m => ({ default: m.MarkdownPreview })), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
+const FormalizerPlayground = dynamic(() => import('@/components/FormalizerPlayground'), { ssr: false, loading: () => <div className="h-[500px] bg-surface-800/60 rounded-xl animate-pulse" /> });
+const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false, loading: () => <div className="h-[400px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 
 /* ─── code snippet for hero demo ──────────────────────────── */
 const ST_DEMO = `logic classical.propositional
@@ -30,16 +32,16 @@ truth_table (P & Q) -> P
 
 const ST_DEEP_DEMO = `logic classical.propositional
 
--- Modus Tollens
+// Modus Tollens
 axiom imp : P -> Q
 axiom neg : !Q
 
 derive !P from {imp, neg}
 
+// Contrapositiva — tautología
 check valid ((P -> Q) -> (!Q -> !P))
 
-check sat (P & !P)
-
+// Equivalencia material
 truth_table (P -> Q) <-> (!P | Q)
 `;
 
@@ -101,24 +103,26 @@ function LandingPage() {
       icon: Edit3,
       accent: 'from-violet-500 to-purple-600',
       title: 'Editor Académico de Nueva Generación',
-      desc: 'Markdown con superpoderes: LaTeX nativo, diagramas Mermaid, hojas de cálculo integradas, corrector ortográfico en español y vista previa en tiempo real.',
+      desc: 'Markdown con superpoderes: LaTeX nativo, diagramas Mermaid, hojas de cálculo integradas, linter en tiempo real, galería de snippets y vista previa lado a lado.',
       details: [
-        'Soporte para KaTeX, tablas avanzadas y bloques de código',
-        'Vista previa renderizada mientras escribes',
-        'Corrector ortográfico Hunspell integrado (es)',
-        'Exportación y conversión de PDF, DOCX y más'
+        'KaTeX nativo para ecuaciones, tablas GFM y bloques de código',
+        'Linter en tiempo real: resalta errores ortográficos y de estilo',
+        'Galería de snippets: plantillas para teoremas, pruebas, tablas y más',
+        'Vista previa renderizada en vivo, diagramas Mermaid y ASCII-art',
+        'Corrector ortográfico Hunspell integrado (es)'
       ]
     },
     {
       icon: FlaskConical,
       accent: 'from-emerald-500 to-teal-600',
-      title: 'Formalización Automática',
-      desc: 'Convierte texto natural en lógica formal ST sin intervención manual. Un NL Linter detecta ambigüedades antes de formalizar, y el pipeline genera archivos .st companion verificables.',
+      title: 'Formalización y Análisis Semántico',
+      desc: 'Un ecosistema completo para pasar de la prosa al rigor: NL Linter que detecta ambigüedades y falacias, Mesa Semántica que mapea conceptos, y un pipeline NLP que genera código ST verificable.',
       details: [
-        'Pipeline NLP de 6 etapas: segmentación → extracción → emisión ST',
-        'NL Linter: detecta vaguedad, ambigüedad y falacias informales',
-        'Mesa Semántica: navegador de conceptos con formalización en vivo',
-        'Modo LLM/SLM para textos técnicos densos'
+        'NL Linter: señala vaguedad, ambigüedad, falacias y premisas ocultas',
+        'Mesa Semántica: mapa navegable de todos los conceptos del workspace',
+        'Pipeline NLP de 6 etapas: desde el texto natural hasta la emisión ST',
+        'Text Layer: vincula cada párrafo con su formalización en .st',
+        'Modo LLM/SLM para análisis de textos técnicos densos'
       ]
     },
     {
@@ -149,12 +153,13 @@ function LandingPage() {
       icon: Brain,
       accent: 'from-fuchsia-500 to-pink-600',
       title: 'Agora AI — Asistente de Investigación',
-      desc: 'Un asistente IA especializado en lógica formal, filosofía y redacción académica. Integrado directamente en el editor para ayudarte a formalizar, argumentar y escribir.',
+      desc: 'Un asistente IA que entiende tu workspace, tu investigación y la lógica formal. Te ayuda a redactar, formalizar, corregir argumentos y generar código ST — directamente en el editor.',
       details: [
-        'Contexto del workspace y documentos activos',
-        'Generación y corrección de scripts ST',
+        'Contexto completo del workspace, documentos y archivos .st activos',
+        'Genera, corrige y explica scripts ST a partir de tus indicaciones',
+        'Galería de snippets: ejemplos listos para silogismos, tablas de verdad, contramodelos',
         'Múltiples proveedores: OpenAI, Anthropic, Google',
-        'Snippets inteligentes y galería de ejemplos'
+        'Sugiere formalizaciones a partir de tu prosa académica'
       ]
     }
   ];
@@ -169,7 +174,8 @@ function LandingPage() {
     { icon: Brain, label: 'Asistente IA' },
     { icon: Network, label: 'Mesa Semántica' },
     { icon: Layers, label: 'Text Layer ST' },
-    { icon: Scale, label: 'Argumentación formal' },
+    { icon: Scale, label: 'NL Linter' },
+    { icon: Sparkles, label: 'Galería de snippets' },
     { icon: Cloud, label: 'Sync en tiempo real' },
     { icon: MonitorSmartphone, label: 'PWA multiplataforma' }
   ];
@@ -244,7 +250,7 @@ function LandingPage() {
             <a href="#vision" className="hover:text-mandy-400 transition">Visión</a>
             <a href="#pillars" className="hover:text-mandy-400 transition">Plataforma</a>
             <a href="#st" className="hover:text-mandy-400 transition">Lenguaje ST</a>
-            <a href="#workflow" className="hover:text-mandy-400 transition">Flujo</a>
+            <a href="#formalizer" className="hover:text-mandy-400 transition">Formalizador</a>
             <a href="#pricing" className="hover:text-mandy-400 transition">Planes</a>
             <Link href="/docs" className="hover:text-mandy-400 transition">Docs</Link>
             <Link href="/docs/st" className="hover:text-mandy-400 transition">Docs ST</Link>
@@ -273,7 +279,7 @@ function LandingPage() {
       <main className="flex-1">
 
         {/* ══════════════ HERO ══════════════ */}
-        <section className="relative py-24 lg:py-36 overflow-hidden">
+        <section className="relative py-12 lg:py-20 overflow-hidden">
           {/* Background decorations */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-mandy-500/5 rounded-full blur-3xl" />
@@ -359,7 +365,7 @@ function LandingPage() {
                     <span className="ml-auto text-[10px] text-emerald-400/80 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">Interactivo</span>
                   </div>
                   <div className="h-[420px]">
-                    <STRunner initialCode={ST_DEMO} autoRun height="100%" className="rounded-none border-0" />
+                    <STRunner initialCode={ST_DEMO} autoRun height="100%" initialOutputHeight={150} className="rounded-none border-0" />
                   </div>
                 </div>
                 {/* Markdown Preview — live rendered */}
@@ -532,14 +538,14 @@ function LandingPage() {
 
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-white">11 perfiles lógicos</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {profiles.map((p, i) => (
-                        <div key={i} className="flex items-center gap-2 bg-surface-800/60 border border-surface-700/40 rounded-lg px-3 py-2 text-sm">
-                          <code className="text-emerald-400 font-mono text-xs shrink-0">{p.name}</code>
-                          <span className="text-surface-500 text-xs ml-auto">{p.desc}</span>
-                        </div>
+                        <span key={i} className="inline-flex items-center bg-surface-800/60 border border-surface-700/40 rounded-md px-2.5 py-1 text-xs" title={p.desc}>
+                          <code className="text-emerald-400 font-mono">{p.name}</code>
+                        </span>
                       ))}
                     </div>
+                    <p className="text-surface-500 text-sm">Desde silogística aristotélica hasta lógica paraconsistente, temporal y probabilística.</p>
                   </div>
 
                   <div className="flex flex-wrap gap-3">
@@ -569,7 +575,7 @@ function LandingPage() {
                 >
                   <div className="rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-2xl">
                     <div className="h-[460px]">
-                      <STRunner initialCode={ST_DEEP_DEMO} autoRun height="100%" className="rounded-none border-0" />
+                      <STRunner initialCode={ST_DEEP_DEMO} autoRun height="100%" initialOutputHeight={150} className="rounded-none border-0" />
                     </div>
                   </div>
 
@@ -593,10 +599,117 @@ function LandingPage() {
           </div>
         </section>
 
-        {/* ══════════════ WORKFLOW ══════════════ */}
-        <section id="workflow" className="py-24">
+        {/* ══════════════ FORMALIZADOR LIVE ══════════════ */}
+        <section id="formalizer" className="py-20">
           <div className="container mx-auto px-4">
-            <div className="text-center mb-16 space-y-4">
+            <div className="max-w-6xl mx-auto">
+              <m.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={fast}
+                className="space-y-8"
+              >
+                <div className="text-center space-y-4">
+                  <div className="flex items-center justify-center gap-3 text-mandy-400 text-sm font-medium uppercase tracking-widest">
+                    <span className="w-8 h-px bg-mandy-500/50" />
+                    Formalización Automática
+                    <span className="w-8 h-px bg-mandy-500/50" />
+                  </div>
+                  <h2 className="text-3xl lg:text-4xl font-bold">Escribe en prosa, obtén lógica formal</h2>
+                  <p className="text-surface-400 max-w-3xl mx-auto text-lg">
+                    Pega cualquier argumento en lenguaje natural. El motor NLP de Agora lo analiza, detecta ambigüedades con el NL Linter y genera código ST verificable — todo en tu navegador.
+                  </p>
+                </div>
+
+                {/* Live Formalizer */}
+                <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-2xl">
+                  <div className="h-[520px]">
+                    <FormalizerPlayground />
+                  </div>
+                </div>
+
+                {/* Feature cards */}
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { icon: FlaskConical, title: 'NL Linter', desc: 'Señala vaguedad, ambigüedad estructural, falacias informales y premisas ocultas antes de formalizar.', color: 'text-amber-400' },
+                    { icon: Network, title: 'Mesa Semántica', desc: 'Mapa navegable de conceptos, proposiciones y relaciones de tu workspace con su formalización.', color: 'text-cyan-400' },
+                    { icon: Layers, title: 'Text Layer', desc: 'Vincula cada párrafo Markdown con su bloque ST. El lector verifica cualquier afirmación sin salir de la prosa.', color: 'text-violet-400' },
+                    { icon: Brain, title: 'Modo LLM', desc: 'Para textos densos, activa extracción semántica con OpenAI, Ollama u otros modelos.', color: 'text-fuchsia-400' }
+                  ].map((card, i) => (
+                    <m.div
+                      key={i}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={stagger(i)}
+                      className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5"
+                    >
+                      <card.icon className={`w-5 h-5 ${card.color} mb-3`} />
+                      <h4 className="font-semibold text-white text-sm mb-1.5">{card.title}</h4>
+                      <p className="text-surface-400 text-xs leading-relaxed">{card.desc}</p>
+                    </m.div>
+                  ))}
+                </div>
+              </m.div>
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════ SNIPPETS GALLERY LIVE ══════════════ */}
+        <section className="py-20 bg-surface-800/30 border-y border-surface-700/30">
+          <div className="container mx-auto px-4">
+            <div className="max-w-5xl mx-auto">
+              <m.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={fast}
+                className="space-y-8"
+              >
+                <div className="grid lg:grid-cols-[1fr_380px] gap-8 items-start">
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 text-mandy-400 text-sm font-medium uppercase tracking-widest">
+                      <span className="w-8 h-px bg-mandy-500/50" />
+                      Galería de Snippets
+                    </div>
+                    <h2 className="text-3xl lg:text-4xl font-bold">Plantillas listas para usar</h2>
+                    <p className="text-surface-400 text-lg leading-relaxed">
+                      No empieces de cero. La galería incluye snippets verificados para las operaciones
+                      más comunes: silogismos, tablas de verdad, demostraciones por contradicción,
+                      formalización de argumentos clásicos, estructuras modales y más.
+                    </p>
+                    <ul className="space-y-2">
+                      {['Silogismos aristotélicos formalizados', 'Tablas de verdad y tautologías clásicas', 'Pruebas por contradicción y contrapositiva', 'Estructuras modales, deónticas y epistémicas', 'Plantillas de investigación académica'].map((item, i) => (
+                        <li key={i} className="flex items-center gap-2 text-surface-300 text-sm">
+                          <Check className="w-3.5 h-3.5 text-mandy-500 shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  {/* Live SnippetGallery */}
+                  <div className="rounded-2xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden shadow-xl">
+                    <div className="h-[480px] overflow-y-auto">
+                      <SnippetGallery
+                        workspaceId="__personal__"
+                        onInsert={() => {}}
+                        hideClose
+                        title="Snippets ST"
+                        emptyLabel="Cargando snippets..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </m.div>
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════ WORKFLOW ══════════════ */}
+        <section id="workflow" className="py-20">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-12 space-y-4">
               <m.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={fast}>
                 <h2 className="text-3xl lg:text-4xl font-bold">De la idea a la demostración</h2>
                 <p className="text-surface-400 max-w-2xl mx-auto text-lg mt-4">
@@ -627,69 +740,6 @@ function LandingPage() {
                   </m.div>
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ══════════════ FORMALIZACIÓN AUTOMÁTICA ══════════════ */}
-        <section className="py-24 bg-surface-800/30 border-y border-surface-700/30">
-          <div className="container mx-auto px-4">
-            <div className="max-w-5xl mx-auto">
-              <m.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={fast}
-                className="space-y-12"
-              >
-                <div className="text-center space-y-4">
-                  <h2 className="text-3xl lg:text-4xl font-bold">Formalización automática</h2>
-                  <p className="text-surface-400 max-w-3xl mx-auto text-lg">
-                    Escribe en lenguaje natural. El motor NLP de Agora extrae la estructura lógica y genera
-                    el código ST equivalente — listo para verificar.
-                  </p>
-                </div>
-
-                {/* Pipeline visualization */}
-                <div className="rounded-2xl border border-surface-700/50 bg-surface-800/60 p-8 lg:p-10">
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {[
-                      { icon: FileText, label: 'Texto natural', detail: 'Redacta tu argumento en prosa académica', color: 'text-violet-400 bg-violet-500/10' },
-                      { icon: FlaskConical, label: 'NL Linter', detail: 'Detecta ambigüedades, vaguedad y falacias', color: 'text-amber-400 bg-amber-500/10' },
-                      { icon: Code2, label: 'Pipeline NLP', detail: 'Segmenta, extrae y emite código ST', color: 'text-emerald-400 bg-emerald-500/10' },
-                      { icon: Check, label: 'Verificación', detail: 'Ejecuta, valida y genera archivo .st', color: 'text-mandy-400 bg-mandy-500/10' }
-                    ].map((stage, i) => (
-                      <div key={i} className="text-center space-y-3">
-                        <div className={`w-14 h-14 rounded-xl ${stage.color} flex items-center justify-center mx-auto`}>
-                          <stage.icon className="w-7 h-7" />
-                        </div>
-                        <h4 className="font-semibold text-white">{stage.label}</h4>
-                        <p className="text-surface-400 text-sm">{stage.detail}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-3 gap-6">
-                  {[
-                    { title: 'Mesa Semántica', desc: 'Navega conceptos del workspace y visualiza sus formalizaciones en tiempo real. Cada concepto se vincula automáticamente con su representación formal.' },
-                    { title: 'Text Layer', desc: 'Vincula párrafos específicos de tu documento Markdown con bloques ST. El lector puede verificar cada afirmación sin salir del texto.' },
-                    { title: 'Modo LLM/SLM', desc: 'Para textos técnicos densos, activa la extracción semántica con modelos de lenguaje. Compatible con OpenAI, Ollama y modelos ONNX locales.' }
-                  ].map((card, i) => (
-                    <m.div
-                      key={i}
-                      initial={{ opacity: 0, y: 20 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={stagger(i)}
-                      className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-6"
-                    >
-                      <h4 className="font-semibold text-white mb-2">{card.title}</h4>
-                      <p className="text-surface-400 text-sm leading-relaxed">{card.desc}</p>
-                    </m.div>
-                  ))}
-                </div>
-              </m.div>
             </div>
           </div>
         </section>

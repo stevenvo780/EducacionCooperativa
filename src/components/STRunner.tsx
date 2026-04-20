@@ -235,8 +235,8 @@ interface STRunnerProps {
   workspaceId?: string;
   /** Auto-ejecutar el código inicial al montar el componente */
   autoRun?: boolean;
-  /** Reducir tamaño de fuente y padding en el output (para embeds) */
-  compactOutput?: boolean;
+  /** Altura inicial del panel de output en px (default 300) */
+  initialOutputHeight?: number;
   /** Modo editor de archivo: permite guardar y manejar cambios externos */
   fileMode?: {
     docName: string;
@@ -255,7 +255,7 @@ export default function STRunner({
   className = '',
   workspaceId = PERSONAL_WORKSPACE_ID,
   autoRun = false,
-  compactOutput: _compactOutput = false,
+  initialOutputHeight = 300,
   fileMode
 }: STRunnerProps) {
   const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles: _profiles, isRunning, getSymbols, validate, lastDiagnostics } =
@@ -281,7 +281,7 @@ export default function STRunner({
   const [activeTab, setActiveTab] = useState<OutputTab>('output');
   const [currentSymbols, setCurrentSymbols] = useState<SymbolInfo[]>([]);
   const [viewMode, setViewMode] = useState<OutputViewMode>('graphic');
-  const [outputHeight, setOutputHeight] = useState(300); // Height of the output panel in pixels
+  const [outputHeight, setOutputHeight] = useState(initialOutputHeight);
   const [showOutput, setShowOutput] = useState(true);
   const [isResizingOutput, setIsResizingOutput] = useState(false);
   const [editorConfig, setEditorConfig] = useState<EditorConfig>(loadConfig);
