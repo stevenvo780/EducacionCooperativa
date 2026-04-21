@@ -20,11 +20,28 @@ interface SymbolDef {
   column: number;
 }
 
+function clampDocPos(pos: number, docLength: number): number {
+  return Math.max(0, Math.min(pos, docLength));
+}
+
+function clampRange(
+  from: number,
+  to: number,
+  docLength: number,
+): { from: number; to: number } | null {
+  const safeFrom = clampDocPos(from, docLength);
+  const safeTo = clampDocPos(Math.max(to, safeFrom), docLength);
+
+  if (safeTo <= safeFrom) return null;
+  return { from: safeFrom, to: safeTo };
+}
+
 /**
  * Escanea el documento para encontrar todas las definiciones de símbolos ST.
  */
 function findDefinitions(doc: string): SymbolDef[] {
   const lines = doc.split('\n');
+  const docLength = doc.length;
   const lineOffsets: number[] = [];
   let offset = 0;
 
@@ -38,13 +55,14 @@ function findDefinitions(doc: string): SymbolDef[] {
     .map((symbol) => {
       const line = Math.max(1, symbol.location.line);
       const column = Math.max(1, symbol.location.column ?? 1);
-      const from = (lineOffsets[line - 1] ?? 0) + column - 1;
       const localName = symbol.name.includes('.') ? symbol.name.split('.').pop() || symbol.name : symbol.name;
+      const from = clampDocPos((lineOffsets[line - 1] ?? 0) + column - 1, docLength);
+      const to = clampDocPos(from + localName.length, docLength);
 
       return {
         name: symbol.name,
         from,
-        to: from + localName.length,
+        to,
         line,
         column
       };
@@ -103,7 +121,8 @@ export function stGotoDef() {
  * Intenta saltar a la definición del símbolo bajo el cursor.
  */
 function jumpToDefinition(view: EditorView, pos: number = view.state.selection.main.head): boolean {
-  const doc = view.state.doc.toString();
+  const stateDoc = view.state.doc;
+  const doc = stateDoc.toString();
   const wordInfo = getWordAt(doc, pos);
 
   if (!wordInfo) return false;
@@ -115,13 +134,21 @@ function jumpToDefinition(view: EditorView, pos: number = view.state.selection.m
       const location = getSemanticDefinition(doc, wordInfo.word);
       if (!location?.line) return null;
 
-      const line = view.state.doc.line(location.line);
-      const from = line.from + Math.max(0, (location.column ?? 1) - 1);
+      const lineNumber = Math.max(1, Math.min(location.line, stateDoc.lines));
+      const line = stateDoc.line(lineNumber);
+      const from = clampDocPos(line.from + Math.max(0, (location.column ?? 1) - 1), stateDoc.length);
+      const range = clampRange(
+        from,
+        from + (wordInfo.word.split('.').pop() || wordInfo.word).length,
+        stateDoc.length,
+      );
+      if (!range) return null;
+
       return {
         name: wordInfo.word,
-        from,
-        to: from + (wordInfo.word.split('.').pop() || wordInfo.word).length,
-        line: location.line,
+        from: range.from,
+        to: range.to,
+        line: lineNumber,
         column: location.column ?? 1
       };
     })();
@@ -140,7 +167,7 @@ function jumpToDefinition(view: EditorView, pos: number = view.state.selection.m
 
 // ── Ctrl+hover underline for clickable symbols ──────────────
 
-const ctrlHoverPlugin = ViewPlugin.fromClass(
+export const ctrlHoverPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     isCtrlHeld = false;
@@ -154,6 +181,7 @@ const ctrlHoverPlugin = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       if (update.docChanged) {
         this.definitions = findDefinitions(update.state.doc.toString());
+        this.decorations = Decoration.none;
       }
     }
 
@@ -198,10 +226,16 @@ const ctrlHoverPlugin = ViewPlugin.fromClass(
           || Boolean(getSemanticDefinition(doc, wordInfo.word));
 
         if (hasDef) {
+          const range = clampRange(wordInfo.from, wordInfo.to, view.state.doc.length);
+          if (!range) {
+            this.decorations = Decoration.none;
+            return;
+          }
+
           this.decorations = Decoration.set([
             Decoration.mark({
               class: 'cm-st-goto-link'
-            }).range(wordInfo.from, wordInfo.to)
+            }).range(range.from, range.to)
           ]);
         } else {
           this.decorations = Decoration.none;
