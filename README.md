@@ -623,5 +623,5 @@ Estados de suscripción: `active`, `pending`, `cancelled`, `expired`, `free`
 
 | Paquete | Versión | Uso |
 |---|---|---|
-| `@stevenvo780/st-lang` | ^3.0.2 | Parser/AST del lenguaje ST |
+| `@stevenvo780/st-lang` | 3.2.1 | Parser/AST del lenguaje ST |
 | `@stevenvo780/autologic` | ^2.2.2 | Motor de formalización lógica con LLM |

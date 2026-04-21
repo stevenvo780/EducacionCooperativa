@@ -5,11 +5,11 @@
  */
 
 export const ST_RUNTIME_MANIFEST = {
-  "generatedAt": "2026-04-18T00:12:43.174Z",
-  "canonicalVersion": "3.1.1",
-  "packageVersion": "3.1.1",
-  "cliVersion": "2.6.0",
-  "versionMismatch": true,
+  "generatedAt": "2026-04-21T11:15:56.049Z",
+  "canonicalVersion": "3.2.1",
+  "packageVersion": "3.2.1",
+  "cliVersion": "3.2.1",
+  "versionMismatch": false,
   "profiles": [
     {
       "id": "classical.propositional",
@@ -131,6 +131,8 @@ export const ST_RUNTIME_MANIFEST = {
     "exportar",
     "extends",
     "extiende",
+    "false",
+    "falso",
     "fn",
     "fold",
     "for",
@@ -190,11 +192,13 @@ export const ST_RUNTIME_MANIFEST = {
     "teoria",
     "theorem",
     "theory",
+    "true",
     "truth_table",
     "unfold",
     "until",
     "valid",
     "valido",
+    "verdadero",
     "verificar",
     "while",
     "xor"

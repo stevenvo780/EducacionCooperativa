@@ -50,7 +50,7 @@ vercel --prod
 Con versión explícita de ST:
 
 ```bash
-./desplieges-prod/deploy_docker.sh 3.1.3
+./desplieges-prod/deploy_docker.sh 3.2.1
 ```
 
 ### 4. Worker — `.deb` del manager + update all
@@ -62,7 +62,7 @@ Con versión explícita de ST:
 ### 5. Hotfix de emergencia de ST dentro de contenedores vivos
 
 ```bash
-ALLOW_INPLACE_ST_UPDATE=1 ./desplieges-prod/update_st_workers.sh 3.1.3
+ALLOW_INPLACE_ST_UPDATE=1 ./desplieges-prod/update_st_workers.sh 3.2.1
 ```
 
 > Solo para contingencia. No sustituye el rebuild de imagen.
