@@ -1,13 +1,19 @@
 #!/bin/bash
 # Deploy Hub to production
-# Requires: SSH key auth configured for hub-prod
+# Requires: SSH key auth configured for the current hub host
 set -euo pipefail
 
-HOST="hub-prod"
-LOCAL_DEB="services/hub/dist/edu-hub_1.0.1_amd64.deb"
-REMOTE_DEB="/tmp/edu-hub.deb"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REMOTE_HOST="${HUB_HOST:-stev@100.98.8.227}"
+REMOTE_SUDO_PASS="${HUB_SUDO_PASS:-${WORKER_SUDO_PASS:-}}"
+HUB_SYSTEMD_SCOPE="${HUB_SYSTEMD_SCOPE:-user}"
+LOCAL_DEB="${HUB_DEB_PATH:-services/hub/dist/edu-hub_1.0.1_amd64.deb}"
+REMOTE_DEB="/tmp/$(basename "$LOCAL_DEB")"
 
-echo "🚀 Deploying Hub to $HOST..."
+source "${SCRIPT_DIR}/lib/remote_common.sh"
+prompt_remote_sudo_if_needed "hub en ${REMOTE_HOST}"
+
+echo "🚀 Deploying Hub to $REMOTE_HOST..."
 
 # Build if needed
 if [ ! -f "$LOCAL_DEB" ]; then
@@ -17,14 +23,24 @@ fi
 
 # Upload
 echo "📤 Uploading package..."
-scp "$LOCAL_DEB" "$HOST:$REMOTE_DEB"
+remote_scp "$LOCAL_DEB" "$REMOTE_HOST:$REMOTE_DEB"
 
 # Install and restart
 echo "🔧 Installing..."
-ssh "$HOST" "sudo dpkg -i $REMOTE_DEB && sudo systemctl daemon-reload && sudo systemctl restart edu-hub"
+remote_sudo "dpkg -i --force-confold ${REMOTE_DEB@Q}"
+
+if [[ "$HUB_SYSTEMD_SCOPE" == "user" ]]; then
+    remote_ssh "systemctl --user daemon-reload && systemctl --user restart edu-hub"
+else
+    remote_sudo "systemctl daemon-reload && systemctl restart edu-hub"
+fi
 
 # Verify
 echo "✅ Verifying..."
-ssh "$HOST" "systemctl is-active edu-hub"
+if [[ "$HUB_SYSTEMD_SCOPE" == "user" ]]; then
+    remote_ssh "systemctl --user is-active edu-hub"
+else
+    remote_sudo "systemctl is-active edu-hub"
+fi
 
 echo "🎉 Hub deployed successfully!"

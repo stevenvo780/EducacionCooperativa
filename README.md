@@ -524,10 +524,10 @@ Documentación operativa completa en [desplieges-prod/README.md](desplieges-prod
 # 1. Frontend → Vercel
 vercel --prod
 
-# 2. Hub → .deb en hub-prod
+# 2. Hub → .deb en stev-server
 ./desplieges-prod/deploy_hub.sh
 
-# 3. Worker → Docker image en worker-prod
+# 3. Worker → Docker image en stev-server
 ./desplieges-prod/deploy_docker.sh
 
 # 4. Worker → .deb + Docker (completo)
@@ -555,19 +555,19 @@ docker push stevenvo780/edu-worker:latest
 
 ```bash
 # Estado de workers
-ssh worker-prod 'edu-worker-manager status'
+ssh stev-server 'sudo edu-worker-manager status'
 
-# Actualizar todos los workers (pull + restart)
-ssh worker-prod 'sudo edu-worker-manager update all'
+# Actualizar todos los workers (pull + recreate)
+ssh stev-server 'sudo edu-worker-manager update all'
 
 # Logs de un worker específico
-ssh worker-prod 'edu-worker-manager logs WORKSPACE_ID -f'
+ssh stev-server 'sudo edu-worker-manager logs WORKSPACE_ID -f'
 
 # Reiniciar Hub
-ssh hub-prod 'sudo systemctl restart edu-hub'
+ssh stev-server 'systemctl --user restart edu-hub'
 
 # Logs del Hub en vivo
-ssh hub-prod 'sudo journalctl -u edu-hub -f'
+ssh stev-server 'journalctl --user -u edu-hub -f'
 ```
 
 ---
