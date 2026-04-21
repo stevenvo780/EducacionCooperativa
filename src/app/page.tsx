@@ -4,9 +4,10 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
+import { ELENXOS_BRAND, PRODUCT_BRAND } from '@/lib/branding';
 import {
   ArrowRight, BookOpen, Brain, Check, ChevronDown, Cloud,
-  Code2, Edit3, FileText, FlaskConical, FolderOpen, GraduationCap,
+  Code2, Edit3, ExternalLink, FileText, FlaskConical, FolderOpen, GraduationCap,
   HardDrive, Kanban, Layers, Lock, MonitorSmartphone, Network,
   Pencil, Scale, Shield, Sparkles, Terminal, Users, Zap
 } from 'lucide-react';
@@ -253,6 +254,9 @@ function LandingPage() {
             <a href="#pricing" className="hover:text-mandy-400 transition">Planes</a>
             <Link href="/docs" className="hover:text-mandy-400 transition">Docs</Link>
             <Link href="/docs/st" className="hover:text-mandy-400 transition">Docs ST</Link>
+            <a href={ELENXOS_BRAND.homeUrl} target="_blank" rel="noopener noreferrer" className="hover:text-mandy-400 transition">
+              Elenxos
+            </a>
           </nav>
           <nav className="flex items-center gap-4">
             {loading ? (
@@ -332,6 +336,24 @@ function LandingPage() {
                   <BookOpen className="w-4 h-4" />
                   Documentación ST
                 </Link>
+              </m.div>
+
+              <m.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...fast, delay: 0.35 }}
+                className="flex flex-wrap items-center justify-center gap-2 text-sm text-surface-400"
+              >
+                <span>{ELENXOS_BRAND.ownershipLine}</span>
+                <a
+                  href={ELENXOS_BRAND.homeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-mandy-400 hover:text-mandy-300 transition"
+                >
+                  Conoce {ELENXOS_BRAND.name}
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
               </m.div>
 
               {/* Trust badges */}
@@ -1145,6 +1167,15 @@ function LandingPage() {
                 <Link href="/docs" className="text-surface-400 font-medium hover:text-mandy-400 transition px-6 py-4">
                   Explorar documentación
                 </Link>
+                <a
+                  href={ELENXOS_BRAND.homeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-surface-400 font-medium hover:text-mandy-400 transition px-6 py-4 inline-flex items-center gap-2"
+                >
+                  Conocer Elenxos
+                  <ExternalLink className="w-4 h-4" />
+                </a>
               </div>
             </m.div>
           </div>
@@ -1154,15 +1185,17 @@ function LandingPage() {
       {/* ══════════════ FOOTER ══════════════ */}
       <footer className="bg-surface-950 text-surface-500 py-12 border-t border-surface-600/30">
         <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8 mb-8">
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <BookOpen className="w-5 h-5 text-mandy-500" />
-                <span className="font-semibold text-white text-lg">Agora</span>
+                <span className="font-semibold text-white text-lg">{PRODUCT_BRAND.name}</span>
               </div>
               <p className="text-sm leading-relaxed">
-                Plataforma de investigación cooperativa. Markdown, lógica formal ST,
-                terminales cloud y colaboración en tiempo real.
+                {PRODUCT_BRAND.shortDescription} {PRODUCT_BRAND.fullDescription}
+              </p>
+              <p className="mt-3 text-xs leading-relaxed text-surface-600">
+                {ELENXOS_BRAND.ownershipDisclaimer}
               </p>
             </div>
             <div>
@@ -1186,13 +1219,30 @@ function LandingPage() {
                 </a>
               </nav>
             </div>
+            <div>
+              <h4 className="font-semibold text-surface-300 text-sm mb-3 uppercase tracking-wider">Elenxos</h4>
+              <nav className="flex flex-col gap-2 text-sm">
+                <a href={ELENXOS_BRAND.homeUrl} target="_blank" rel="noopener noreferrer" className="hover:text-mandy-400 transition">
+                  Sitio principal
+                </a>
+                <a href={ELENXOS_BRAND.aboutUrl} target="_blank" rel="noopener noreferrer" className="hover:text-mandy-400 transition">
+                  Nosotros
+                </a>
+                <a href={ELENXOS_BRAND.projectsUrl} target="_blank" rel="noopener noreferrer" className="hover:text-mandy-400 transition">
+                  Proyectos
+                </a>
+                <a href={ELENXOS_BRAND.salesUrl} className="hover:text-mandy-400 transition">
+                  Contactar ventas
+                </a>
+              </nav>
+            </div>
           </div>
           <div className="border-t border-surface-800 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="text-sm">
-              &copy; {new Date().getFullYear()} Agora — Plataforma de Investigación Cooperativa
+              &copy; {new Date().getFullYear()} {PRODUCT_BRAND.name} · Producto de {ELENXOS_BRAND.name}
             </div>
             <div className="text-xs text-surface-600">
-              Hecho con rigor para quienes piensan con rigor.
+              {ELENXOS_BRAND.footerDisclaimer}
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import PWAUpdater from '@/components/PWAUpdater';
 import { Toaster } from '@/components/ui/Toaster';
 import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
 import GlobalErrorCatcher from '@/components/GlobalErrorCatcher';
+import { PRODUCT_BRAND } from '@/lib/branding';
 
 export const viewport: Viewport = {
   themeColor: '#000000',
@@ -14,8 +15,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Agora',
-  description: 'Collaborative Learning Platform',
+  title: PRODUCT_BRAND.title,
+  description: PRODUCT_BRAND.metadataDescription,
   manifest: '/manifest.json',
   icons: {
     icon: '/favicon.svg',
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Agora'
+    title: PRODUCT_BRAND.name
   },
   formatDetection: {
     telephone: false

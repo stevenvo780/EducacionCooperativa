@@ -5,8 +5,9 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getErrorMessage } from '@/lib/error-utils';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
-import { Mail, Lock, AlertCircle, Chrome, ArrowLeft, Check, Loader2 } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Chrome, ArrowLeft, Check, ExternalLink, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { ELENXOS_BRAND } from '@/lib/branding';
 
 function LoginPage() {
   const { signInWithGoogle, loginWithEmail, registerWithEmail, resetPassword } = useAuth();
@@ -198,8 +199,20 @@ function LoginPage() {
                         {isLogin ? 'Bienvenido de nuevo' : 'Crea tu cuenta'}
                     </h2>
                     <p className="text-sm text-surface-400 mt-2">
-                        {isLogin ? 'Accede a tus documentos y continua editando' : 'Empieza a gestionar tus textos en griego'}
+                        {isLogin ? 'Accede a tus documentos y continúa investigando con rigor' : 'Crea tu cuenta para escribir, formalizar y colaborar con rigor'}
                     </p>
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-surface-500">
+                      <span>{ELENXOS_BRAND.ownershipLine}</span>
+                      <a
+                        href={ELENXOS_BRAND.homeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-mandy-400 hover:text-mandy-300 transition"
+                      >
+                        {ELENXOS_BRAND.name}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">

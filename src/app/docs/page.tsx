@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { ST_RUNTIME_VERSION } from '@/lib/st-runtime-manifest';
+import { ELENXOS_BRAND } from '@/lib/branding';
 
 function CopyBlock({ code, label }: { code: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -144,6 +145,18 @@ export default function DocsPage() {
                 La Plataforma Ágora no es solo un editor; es un ecosistema distribuido que combina IA, lógica formal, ejecución remota y gestión semántica de la información.
                 Este manual detalla cada funcionalidad para convertirte en un experto en el uso de la herramienta.
               </p>
+              <div className="mt-6 inline-flex flex-wrap items-center gap-2 rounded-full border border-mandy-500/20 bg-surface-900/70 px-4 py-2 text-xs text-surface-300">
+                <span className="font-semibold text-mandy-300">{ELENXOS_BRAND.name}</span>
+                <span>{ELENXOS_BRAND.ownershipDisclaimer}</span>
+                <a
+                  href={ELENXOS_BRAND.homeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-mandy-400 hover:text-mandy-300 transition"
+                >
+                  elenxos.com
+                </a>
+              </div>
               <div className="mt-8 flex flex-wrap gap-3">
                 <span className="text-[11px] font-bold bg-surface-700/80 px-4 py-2 rounded-xl text-surface-200 border border-surface-600/50 flex items-center gap-2"><Globe className="w-3.5 h-3.5 text-blue-400" /> Web PWA</span>
                 <span className="text-[11px] font-bold bg-surface-700/80 px-4 py-2 rounded-xl text-surface-200 border border-surface-600/50 flex items-center gap-2"><Layers className="w-3.5 h-3.5 text-emerald-400" /> Multi-Worker</span>
@@ -759,13 +772,15 @@ export default function DocsPage() {
           {/* Footer */}
           <div className="mt-16 pt-8 border-t border-surface-700/40 text-center space-y-4">
             <div className="flex justify-center gap-6">
-              <a href="#" className="text-surface-500 hover:text-white transition text-xs font-medium uppercase tracking-widest">Soporte</a>
-              <a href="#" className="text-surface-500 hover:text-white transition text-xs font-medium uppercase tracking-widest">Privacidad</a>
+              <a href={ELENXOS_BRAND.supportUrl} className="text-surface-500 hover:text-white transition text-xs font-medium uppercase tracking-widest">Soporte</a>
+              <a href={ELENXOS_BRAND.homeUrl} target="_blank" rel="noopener noreferrer" className="text-surface-500 hover:text-white transition text-xs font-medium uppercase tracking-widest">Elenxos</a>
+              <a href={ELENXOS_BRAND.projectsUrl} target="_blank" rel="noopener noreferrer" className="text-surface-500 hover:text-white transition text-xs font-medium uppercase tracking-widest">Proyectos</a>
               <a href="https://github.com/stevenvo780/EducacionCooperativa" target="_blank" rel="noopener noreferrer" className="text-mandy-400 hover:text-mandy-300 transition text-xs font-medium uppercase tracking-widest flex items-center gap-1">
                 GitHub <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-            <p className="text-[10px] text-surface-600 font-medium">Plataforma Ágora © 2026 — El conocimiento es un bien común.</p>
+            <p className="text-[10px] text-surface-600 font-medium">Plataforma Ágora © {new Date().getFullYear()} · Producto de {ELENXOS_BRAND.name}.</p>
+            <p className="text-[10px] text-surface-500 font-medium">Elenxos construye herramientas digitales que transforman la educación.</p>
             <p className="text-[10px] text-surface-500 font-medium">Documentación y derechos de autor: Steven Vallejo Ortiz.</p>
           </div>
         </div>
