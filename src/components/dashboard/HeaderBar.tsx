@@ -15,6 +15,7 @@ import {
   Crown,
   FolderOpen,
   FlaskConical,
+  Globe,
   KanbanSquare,
   Key,
   Loader2,
@@ -37,6 +38,7 @@ import {
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { ELENXOS_BRAND } from '@/lib/branding';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
 import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId, type WorkerStatus } from '@/types/terminal';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
@@ -348,6 +350,13 @@ const HeaderBar = ({
   ] as const;
 
   const utilityTools = [
+    {
+      id: 'company',
+      label: 'Elenxos',
+      description: 'Sitio institucional y ecosistema del producto',
+      icon: Globe,
+      href: ELENXOS_BRAND.homeUrl
+    },
     {
       id: 'team',
       label: 'Equipo',
