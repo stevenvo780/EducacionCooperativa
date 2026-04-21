@@ -319,6 +319,20 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
   }, []);
 
   const activeResult = results.find(r => r.id === selectedResult);
+  const proofResult = activeResult?.evalResult?.results.find(run => run.proof);
+  const proof = proofResult?.proof;
+  const hasStructuredProof = Boolean(proof);
+  const proofMethodLabel = proof?.method === 'natural_deduction'
+    ? 'deducción natural'
+    : proof?.method === 'tableau'
+      ? 'tableau'
+      : proof?.method === 'semantic'
+        ? 'verificación semántica'
+        : proof?.method === 'sat'
+          ? 'SAT'
+          : null;
+  const hasHeuristicDerivationBlock = Boolean(activeResult?.payload.stCode.match(/\/\/\s*derivaci(?:o|ó)n/i));
+  const reasoningLabel = proofResult?.reasoningType?.trim() || null;
 
   const reRunST = useCallback(() => {
     if (!activeResult || !activeResult.payload.stCode.trim()) return;
@@ -631,10 +645,35 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
                   )}
                 </div>
 
+                {hasStructuredProof && (
+                  <div className="rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-3 text-xs text-amber-100">
+                    <p>
+                      Este bloque muestra el <span className="font-semibold text-amber-50">código ST formalizado</span>, no la prueba formal certificada por el motor.
+                      La demostración válida está abajo en <span className="font-semibold text-amber-50">Ejecución ST → Visual</span>
+                      {proofMethodLabel ? ` (${proofMethodLabel})` : ''}.
+                    </p>
+                    {(reasoningLabel || hasHeuristicDerivationBlock) && (
+                      <p className="mt-1 text-[11px] text-amber-200/85">
+                        {reasoningLabel ? `Reglas detectadas por el motor: ${reasoningLabel}. ` : ''}
+                        {hasHeuristicDerivationBlock
+                          ? 'Si aquí aparece una “derivación” comentada o heurística, tómala como borrador textual y no como justificación lógica final.'
+                          : 'Usa el panel visual inferior como referencia autoritativa de la derivación.'}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Código ST */}
                 <div className="rounded-xl border border-slate-800 bg-slate-950/80 overflow-hidden">
                   <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2">
-                    <span className="text-xs font-medium text-slate-400">Salida ST</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-400">Código ST formalizado</span>
+                      {hasStructuredProof && (
+                        <span className="rounded bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 border border-amber-900/40">
+                          No es la prueba final
+                        </span>
+                      )}
+                    </div>
                     <button
                       onClick={() => copyToClipboard(activeResult.payload.stCode)}
                       className="text-[10px] text-slate-600 hover:text-cyan-400 transition"

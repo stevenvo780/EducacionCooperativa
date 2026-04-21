@@ -53,6 +53,8 @@ Con versión explícita de ST:
 ./desplieges-prod/deploy_docker.sh 3.2.1
 ```
 
+> El script construye la imagen con `ST_LANG_VERSION` explícita (si se la pasas), la publica y luego ejecuta `edu-worker-manager update all` en `stev-server`. Si `sudo` remoto requiere contraseña, la pedirá en la terminal o puede recibirse por variable de entorno sin dejarla hardcodeada en el repo.
+
 ### 4. Worker — `.deb` del manager + update all
 
 ```bash
@@ -66,6 +68,7 @@ ALLOW_INPLACE_ST_UPDATE=1 ./desplieges-prod/update_st_workers.sh 3.2.1
 ```
 
 > Solo para contingencia. No sustituye el rebuild de imagen.
+> El script ya no guarda contraseñas en texto plano: usa `WORKER_SUDO_PASS` si ya la cargaste desde Vault, o la pide de forma interactiva.
 
 ---
 
