@@ -6,7 +6,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_HOST="${WORKER_HOST:-stev@100.98.8.227}"
 REMOTE_SUDO_PASS="${WORKER_SUDO_PASS:-}"
-LOCAL_DEB="${WORKER_DEB_PATH:-services/worker/dist/edu-worker_1.0.1_amd64.deb}"
+WORKER_VERSION="${WORKER_VERSION:-$(python3 - <<'PY'
+import json
+from pathlib import Path
+pkg = json.loads(Path('services/worker/package.json').read_text())
+print(pkg.get('version', '0.0.0'))
+PY
+)}"
+LOCAL_DEB="${WORKER_DEB_PATH:-services/worker/dist/edu-worker_${WORKER_VERSION}_amd64.deb}"
 REMOTE_DEB="/tmp/$(basename "$LOCAL_DEB")"
 
 source "${SCRIPT_DIR}/lib/remote_common.sh"

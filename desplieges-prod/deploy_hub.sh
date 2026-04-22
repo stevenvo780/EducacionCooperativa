@@ -7,7 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_HOST="${HUB_HOST:-stev@100.98.8.227}"
 REMOTE_SUDO_PASS="${HUB_SUDO_PASS:-${WORKER_SUDO_PASS:-}}"
 HUB_SYSTEMD_SCOPE="${HUB_SYSTEMD_SCOPE:-user}"
-LOCAL_DEB="${HUB_DEB_PATH:-services/hub/dist/edu-hub_1.0.1_amd64.deb}"
+HUB_VERSION="${HUB_VERSION:-$(python3 - <<'PY'
+import json
+from pathlib import Path
+pkg = json.loads(Path('services/hub/package.json').read_text())
+print(pkg.get('version', '0.0.0'))
+PY
+)}"
+LOCAL_DEB="${HUB_DEB_PATH:-services/hub/dist/edu-hub_${HUB_VERSION}_amd64.deb}"
 REMOTE_DEB="/tmp/$(basename "$LOCAL_DEB")"
 
 source "${SCRIPT_DIR}/lib/remote_common.sh"
