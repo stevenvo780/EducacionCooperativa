@@ -6,14 +6,15 @@ const OVERLAY_CONTAINER_CLASS = 'katex-overlay-container';
 const EDITING_ATTR = 'data-katex-editing';
 
 type MathBlock = {
-  el: HTMLElement;
+  elements: HTMLElement[];
   latex: string;
-  startOffset: number;
+  cursorOffset: number;
   top: number;
   left: number;
   width: number;
   height: number;
 };
+const BLOCK_DELIMITER_REGEX = /(?:\\\$\\\$|\$\$)/g;
 
 type InlineMath = {
   el: HTMLElement;
@@ -82,6 +83,67 @@ const findTextNodeAtOffset = (
   return null;
 };
 
+const findNextBlockDelimiter = (text: string, fromIndex = 0) => {
+  BLOCK_DELIMITER_REGEX.lastIndex = fromIndex;
+  const match = BLOCK_DELIMITER_REGEX.exec(text);
+  if (!match) return null;
+
+  return {
+    index: match.index,
+    value: match[0],
+    length: match[0].length
+  };
+};
+
+const isMathCandidateElement = (el: HTMLElement) => {
+  if (el.getAttribute(EDITING_ATTR) === '1') return false;
+  return !el.closest('[class*="_codeBlockEditorWrapper"], [class*="_codeMirrorWrapper"], pre, code, .cm-editor');
+};
+
+const measureBlockGeometry = (
+  editable: HTMLElement,
+  elements: HTMLElement[],
+  start: { node: Text; offset: number },
+  end: { node: Text; offset: number },
+) => {
+  const editableRect = editable.getBoundingClientRect();
+  const firstRect = elements[0]?.getBoundingClientRect();
+  const fallbackRects = elements.map((element) => element.getBoundingClientRect());
+
+  let top = firstRect?.top ? firstRect.top - editableRect.top + editable.scrollTop : elements[0]?.offsetTop || 0;
+  let left = fallbackRects.length > 0
+    ? Math.min(...fallbackRects.map((rect) => rect.left - editableRect.left + editable.scrollLeft))
+    : 0;
+  let width = fallbackRects.length > 0
+    ? Math.max(...fallbackRects.map((rect) => rect.right - editableRect.left + editable.scrollLeft)) - left
+    : elements[0]?.getBoundingClientRect().width || 0;
+  let height = fallbackRects.length > 0
+    ? Math.max(...fallbackRects.map((rect) => rect.bottom)) - Math.min(...fallbackRects.map((rect) => rect.top))
+    : elements[0]?.getBoundingClientRect().height || 0;
+
+  try {
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    const rect = range.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      top = rect.top - editableRect.top + editable.scrollTop;
+      left = rect.left - editableRect.left + editable.scrollLeft;
+      width = rect.width;
+      height = rect.height;
+    }
+  } catch {
+    // fallback to element metrics
+  }
+
+  return {
+    top,
+    left,
+    width: Math.max(width, 0),
+    height: Math.max(height, 0)
+  };
+};
+
 const moveCursorToMath = (el: HTMLElement, delimiter: '$$' | '$') => {
   try {
     const range = document.createRange();
@@ -119,62 +181,88 @@ const moveCursorToOffset = (el: HTMLElement, charOffset: number) => {
   }
 };
 
-const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<Element>) => {
+export const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<Element>) => {
   const blocks: MathBlock[] = [];
   const blockParagraphs = new Set<HTMLElement>();
-  const editableRect = editable.getBoundingClientRect();
+  const candidates = Array.from(paragraphs)
+    .map((paragraph) => paragraph as HTMLElement)
+    .filter(isMathCandidateElement);
 
-  paragraphs.forEach((paragraph) => {
-    const el = paragraph as HTMLElement;
-    if (el.getAttribute(EDITING_ATTR) === '1') return;
+  for (let idx = 0; idx < candidates.length; idx += 1) {
+    const firstEl = candidates[idx];
+    if (blockParagraphs.has(firstEl)) continue;
 
-    // Skip elements inside code blocks / code mirrors
-    if (el.closest('[class*="_codeBlockEditorWrapper"], [class*="_codeMirrorWrapper"], pre, code, .cm-editor')) return;
+    const firstText = firstEl.textContent || '';
+    const openDelimiter = findNextBlockDelimiter(firstText);
+    if (!openDelimiter) continue;
 
-    const text = el.textContent || '';
+    const sameLineClose = findNextBlockDelimiter(
+      firstText,
+      openDelimiter.index + openDelimiter.length,
+    );
 
-    // Match both escaped (\$\$…\$\$) and unescaped ($$…$$) block math
-    const blockRegex = /(?:\\\$\\\$|\$\$)([\s\S]*?)(?:\\\$\\\$|\$\$)/g;
-    let match: RegExpExecArray | null;
-    while ((match = blockRegex.exec(text)) !== null) {
-      if (!match[1]?.trim()) continue;
+    if (sameLineClose) {
+      const latex = normalizeLatex(
+        firstText.slice(openDelimiter.index + openDelimiter.length, sameLineClose.index),
+      );
+      if (!latex.trim()) continue;
 
-      const start = findTextNodeAtOffset(el, match.index);
-      const end = findTextNodeAtOffset(el, match.index + match[0].length);
+      const start = findTextNodeAtOffset(firstEl, openDelimiter.index);
+      const end = findTextNodeAtOffset(firstEl, sameLineClose.index + sameLineClose.length);
       if (!start || !end) continue;
 
-      let top = el.offsetTop;
-      let left = 0;
-      let width = el.getBoundingClientRect().width;
-      let height = el.getBoundingClientRect().height;
+      const geometry = measureBlockGeometry(editable, [firstEl], start, end);
+      blockParagraphs.add(firstEl);
+      blocks.push({
+        elements: [firstEl],
+        latex,
+        cursorOffset: openDelimiter.index + openDelimiter.length,
+        ...geometry
+      });
+      continue;
+    }
 
-      try {
-        const range = document.createRange();
-        range.setStart(start.node, start.offset);
-        range.setEnd(end.node, end.offset);
-        const rect = range.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          top = rect.top - editableRect.top + editable.scrollTop;
-          left = rect.left - editableRect.left + editable.scrollLeft;
-          width = rect.width;
-          height = rect.height;
-        }
-      } catch {
-        // fallback to paragraph metrics
+    const blockElements = [firstEl];
+    const latexSegments = [firstText.slice(openDelimiter.index + openDelimiter.length)];
+    let closeMatch: ReturnType<typeof findNextBlockDelimiter> = null;
+    let lastEl = firstEl;
+
+    for (let nextIdx = idx + 1; nextIdx < candidates.length; nextIdx += 1) {
+      const candidate = candidates[nextIdx];
+      blockElements.push(candidate);
+
+      const candidateText = candidate.textContent || '';
+      const candidateClose = findNextBlockDelimiter(candidateText);
+      if (candidateClose) {
+        closeMatch = candidateClose;
+        lastEl = candidate;
+        latexSegments.push(candidateText.slice(0, candidateClose.index));
+        break;
       }
 
-      blockParagraphs.add(el);
-      blocks.push({
-        el,
-        latex: normalizeLatex(match[1]),
-        startOffset: match.index,
-        top,
-        left,
-        width,
-        height
-      });
+      latexSegments.push(candidateText);
     }
-  });
+
+    if (!closeMatch) continue;
+
+    const latex = normalizeLatex(latexSegments.join('\n'));
+    if (!latex.trim()) continue;
+
+    const start = findTextNodeAtOffset(firstEl, openDelimiter.index);
+    const end = findTextNodeAtOffset(lastEl, closeMatch.index + closeMatch.length);
+    if (!start || !end) continue;
+
+    const geometry = measureBlockGeometry(editable, blockElements, start, end);
+    blockElements.forEach((element) => blockParagraphs.add(element));
+    blocks.push({
+      elements: blockElements,
+      latex,
+      cursorOffset: openDelimiter.index + openDelimiter.length,
+      ...geometry
+    });
+
+    idx += blockElements.length - 1;
+  }
 
   return { blocks, blockParagraphs };
 };
@@ -252,9 +340,12 @@ const createBlockOverlay = (container: HTMLElement, block: MathBlock) => {
     event.preventDefault();
     event.stopPropagation();
     overlay.style.display = 'none';
-    block.el.setAttribute(EDITING_ATTR, '1');
-    block.el.focus();
-    moveCursorToOffset(block.el, block.startOffset + 2);
+    block.elements.forEach((element) => element.setAttribute(EDITING_ATTR, '1'));
+    const focusTarget = block.elements[0];
+    focusTarget?.focus();
+    if (focusTarget) {
+      moveCursorToOffset(focusTarget, block.cursorOffset);
+    }
   });
 
   container.appendChild(overlay);
@@ -307,6 +398,11 @@ export const useKatexOverlayDecorations = ({
     const shell = editorShellRef.current;
     if (!shell) return;
 
+    let observedEditable: HTMLElement | null = null;
+    let editableObserver: MutationObserver | null = null;
+    let shellObserver: MutationObserver | null = null;
+    let scrollTarget: HTMLElement | null = null;
+
     const decorateAll = () => {
       const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
       if (!editable) return;
@@ -333,6 +429,54 @@ export const useKatexOverlayDecorations = ({
       });
     };
 
+    let decorateTimer: ReturnType<typeof setTimeout> | null = null;
+    let isDecorating = false;
+
+    const debouncedDecorate = () => {
+      if (isDecorating) return;
+      if (decorateTimer) clearTimeout(decorateTimer);
+      decorateTimer = setTimeout(() => {
+        isDecorating = true;
+        decorateAll();
+        requestAnimationFrame(() => {
+          isDecorating = false;
+        });
+      }, 120);
+    };
+
+    const detachEditableBindings = () => {
+      editableObserver?.disconnect();
+      editableObserver = null;
+      if (scrollTarget) {
+        scrollTarget.removeEventListener('scroll', debouncedDecorate);
+        scrollTarget = null;
+      }
+      observedEditable = null;
+    };
+
+    const attachEditableBindings = () => {
+      const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
+      if (!editable) return;
+      if (editable === observedEditable) return;
+
+      detachEditableBindings();
+      observedEditable = editable;
+
+      editableObserver = new MutationObserver(debouncedDecorate);
+      editableObserver.observe(editable, { childList: true, subtree: true, characterData: true });
+
+      scrollTarget = editable.parentElement;
+      if (scrollTarget) {
+        scrollTarget.addEventListener('scroll', debouncedDecorate, { passive: true });
+      }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          decorateAll();
+        });
+      });
+    };
+
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (target.closest(`.${OVERLAY_CONTAINER_CLASS}`)) return;
@@ -347,41 +491,26 @@ export const useKatexOverlayDecorations = ({
       requestAnimationFrame(decorateAll);
     };
 
-    const initialTimer = setTimeout(decorateAll, 400);
-    let decorateTimer: ReturnType<typeof setTimeout> | null = null;
-    let isDecorating = false;
+    const initialTimer = setTimeout(() => {
+      attachEditableBindings();
+      decorateAll();
+    }, 400);
 
-    const debouncedDecorate = () => {
-      if (isDecorating) return;
-      if (decorateTimer) clearTimeout(decorateTimer);
-      decorateTimer = setTimeout(() => {
-        isDecorating = true;
-        decorateAll();
-        requestAnimationFrame(() => {
-          isDecorating = false;
-        });
-      }, 200);
-    };
+    shellObserver = new MutationObserver(() => {
+      attachEditableBindings();
+      debouncedDecorate();
+    });
+    shellObserver.observe(shell, { childList: true, subtree: true });
 
-    const observer = new MutationObserver(debouncedDecorate);
-    const editable = shell.querySelector('[contenteditable="true"]');
-    if (editable) {
-      observer.observe(editable, { childList: true, subtree: true, characterData: true });
-    }
-
-    const scrollTarget = editable?.parentElement;
-    const handleScroll = () => debouncedDecorate();
-    if (scrollTarget) {
-      scrollTarget.addEventListener('scroll', handleScroll, { passive: true });
-    }
+    attachEditableBindings();
 
     document.addEventListener('click', handleClickOutside);
 
     return () => {
       clearTimeout(initialTimer);
       if (decorateTimer) clearTimeout(decorateTimer);
-      observer.disconnect();
-      if (scrollTarget) scrollTarget.removeEventListener('scroll', handleScroll);
+      shellObserver?.disconnect();
+      detachEditableBindings();
       document.removeEventListener('click', handleClickOutside);
       const container = shell.querySelector(`.${OVERLAY_CONTAINER_CLASS}`);
       if (container) container.remove();
