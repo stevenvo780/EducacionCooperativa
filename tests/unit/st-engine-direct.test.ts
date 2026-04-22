@@ -72,4 +72,21 @@ describe('st engine direct compatibility', () => {
     expect(result.diagnostics ?? []).toHaveLength(0);
     expect(result.results?.[0]?.status).toBe('provable');
   });
+
+  it('expone pasos derivacionales en el caso !(!P | !Q), R -> !S, R | !Q |- !S', () => {
+    const result = evaluate(`logic classical.propositional
+let p1 = !(!P | !Q)
+let p2 = R -> !S
+let p3 = R | !Q
+let c = !S
+let d = derive c from {p1,p2,p3}`);
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics ?? []).toHaveLength(0);
+    expect(result.results?.[0]?.status).toBe('provable');
+    expect(result.results?.[0]?.proof?.method).toBe('natural_deduction');
+    expect(result.results?.[0]?.proof?.metadata?.semanticFallback).toBe(false);
+    expect(result.results?.[0]?.proof?.steps.some((step) => step.justification === 'Silogismo disyuntivo')).toBe(true);
+    expect(result.results?.[0]?.proof?.steps.some((step) => step.justification === 'Modus Ponens')).toBe(true);
+  });
 });
