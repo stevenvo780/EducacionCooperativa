@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { fetchDocsApi } from '@/services/dashboardApi';
-import { useSyncEvents } from '@/hooks/useSyncEvents';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { AgentDocumentsMutatedEventDetail } from '@/lib/agora-ai/types';
-import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 interface SyncRequestOptions {
   delayMs?: number;
@@ -221,20 +220,10 @@ export const useDashboardDocsSync = ({
     }, 600);
   }, [isPageVisible, requestDocsRefresh]);
 
-  const handleSyncEvent = useCallback((event: { type: string; path: string }) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[Sync] RTDB event received:', event.type, event.path);
-    }
-    scheduleSyncFetch();
-  }, [scheduleSyncFetch]);
-
-  useSyncEvents({
-    workspaceId: currentWorkspace?.id === personalWorkspaceId ? null : currentWorkspace?.id || null,
-    userId: user?.uid || null,
-    workspaceType: currentWorkspace?.id === personalWorkspaceId ? WorkspaceType.Personal : WorkspaceType.Shared,
-    onEvent: handleSyncEvent,
-    enabled: !!currentWorkspace && !!user && isPageVisible
-  });
+  // RTDB listener vive ahora en `SyncEventsBridge` (layout root) y reemite los
+  // eventos como `agora:docs-changed` (escuchado más abajo). Antes se montaba
+  // aquí, por lo que sólo funcionaba dentro de /dashboard. Mantener esa
+  // suscripción aquí causaría doble refresh.
 
   useEffect(() => {
     if (!currentWorkspace || !user || !isPageVisible) return;

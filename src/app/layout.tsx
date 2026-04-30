@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
 import StoreProvider from '@/components/StoreProvider';
+import SyncEventsBridge from '@/components/SyncEventsBridge';
 import PWAUpdater from '@/components/PWAUpdater';
 import { Toaster } from '@/components/ui/Toaster';
 import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
@@ -45,6 +46,7 @@ export default function RootLayout({
         <GlobalErrorBoundary>
           <StoreProvider>
             <AuthProvider>
+              <SyncEventsBridge />
               {children}
               <PWAUpdater />
             </AuthProvider>
