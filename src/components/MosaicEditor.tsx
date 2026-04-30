@@ -442,6 +442,14 @@ export default function MosaicEditor({
     const folder = typeof data.folder === 'string' ? data.folder : '';
     const workspaceId = typeof data.workspaceId === 'string' ? data.workspaceId : null;
     const isMarkdown = isMarkdownMime(mimeType) || isMarkdownName(name);
+    // Texto plano: cubre dotfiles (.syncignore, .gitignore, .env...) y mimes
+    // text/* aunque el doc se haya guardado con type: 'file'. Sin esto el
+    // viewer de archivos los abriría como binarios.
+    const isPlainTextLike = (
+      mimeType.startsWith('text/')
+      || mimeType === 'application/json'
+      || (name.startsWith('.') && name.indexOf('.', 1) === -1)
+    );
 
     currentDocMetaRef.current = {
       workspaceId,
@@ -450,7 +458,7 @@ export default function MosaicEditor({
     };
     setCurrentWorkspaceId(workspaceId || PERSONAL_WORKSPACE_ID);
 
-    if (type === DocumentType.File && !isMarkdown) {
+    if (type === DocumentType.File && !isMarkdown && !isPlainTextLike) {
       setDocType(DocumentType.File);
       setFileUrl(url);
       setFileName(name || 'Archivo');

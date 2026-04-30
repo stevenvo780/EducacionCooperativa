@@ -39,12 +39,25 @@ const splitRepoPath = (repoPath: string): { folder: string; name: string } => {
     return { folder: repoPath.slice(0, idx), name: repoPath.slice(idx + 1) };
 };
 
+const TEXT_EXT = new Set([
+    '.md', '.markdown', '.txt', '.log', '.json', '.yaml', '.yml', '.toml', '.ini',
+    '.csv', '.tsv', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less',
+    '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.rb', '.go', '.rs',
+    '.sh', '.bash', '.zsh', '.fish', '.env', '.conf', '.cfg', '.diff', '.patch',
+    '.st', '.sql', '.gitattributes', '.gitconfig', '.editorconfig'
+]);
+
 const inferType = (name: string, mimeType?: string): { type: string; mimeType: string } => {
     const lower = name.toLowerCase();
+    // Dotfiles tipo .syncignore, .gitignore, .env, .npmrc — son texto plano.
+    if (lower.startsWith('.') && lower.indexOf('.', 1) === -1) {
+        return { type: 'text', mimeType: mimeType ?? 'text/plain' };
+    }
     if (lower.endsWith('.md') || lower.endsWith('.markdown')) return { type: 'text', mimeType: mimeType ?? 'text/markdown' };
-    if (lower.endsWith('.txt') || lower.endsWith('.log')) return { type: 'text', mimeType: mimeType ?? 'text/plain' };
     if (lower.endsWith('.json')) return { type: 'text', mimeType: mimeType ?? 'application/json' };
-    if (lower.endsWith('.st')) return { type: 'text', mimeType: mimeType ?? 'text/plain' };
+    const dotIdx = lower.lastIndexOf('.');
+    const ext = dotIdx >= 0 ? lower.slice(dotIdx) : '';
+    if (TEXT_EXT.has(ext)) return { type: 'text', mimeType: mimeType ?? 'text/plain' };
     return { type: 'file', mimeType: mimeType ?? 'application/octet-stream' };
 };
 
