@@ -104,7 +104,8 @@ test('dashboard accepts an invite and deletes the accepted workspace', async ({ 
   await expect(header.getByRole('button', { name: 'Invitacion Pendiente', exact: true })).toBeVisible();
 
   await header.getByRole('button', { name: 'Invitacion Pendiente', exact: true }).click();
-  await workspaceMenu(page).getByTitle('Eliminar workspace').last().click();
+  await workspaceMenu(page).getByRole('button', { name: 'Opciones de Invitacion Pendiente' }).click();
+  await page.getByRole('menuitem', { name: 'Eliminar workspace' }).click();
 
   await expect(page.getByText('Eliminar espacio de trabajo')).toBeVisible();
   await page.getByPlaceholder('Invitacion Pendiente').fill('Invitacion Pendiente');

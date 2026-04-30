@@ -188,6 +188,11 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                 })
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            // Dispara el evento global que el dashboard escucha para refrescar
+            // la jerarquía sin recargar la página (mismo bus que usa MosaicEditor).
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new Event('agora:docs-changed'));
+            }
             await refreshAll();
             setToast('.gitignore creado en la raíz. Búscalo en el explorador para editarlo.');
         } catch (e) {
