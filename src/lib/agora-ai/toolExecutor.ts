@@ -1,7 +1,8 @@
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { check as checkST, createInterpreter, evaluate as evaluateST, listProfiles } from '@/lib/st-api';
 import { formalize as formalizeNLP, type LogicProfile } from '@stevenvo780/autologic';
-import { adminDb, adminStorage } from '@/lib/firebase-admin';
+import { adminDb } from '@/lib/firebase-admin';
+import { putObject, deleteObject } from '@/lib/nas-storage';
 import {
   analyzeMarkdown,
   compareMarkdownDocuments,
@@ -382,8 +383,6 @@ function resolveConcept(state: SemanticWorkspaceState, rawId: string): SemanticC
 
 async function syncTextDocumentToStorage(doc: StoredDocument, content: string) {
   try {
-    const bucket = adminStorage.bucket();
-    if (!bucket?.name) return null;
     const fileName = ensureTextFileName(doc.name || 'Sin titulo');
     const storagePath = doc.storagePath || buildStoragePath({
       workspaceId: doc.workspaceId || PERSONAL_WORKSPACE_ID,
@@ -391,9 +390,9 @@ async function syncTextDocumentToStorage(doc: StoredDocument, content: string) {
       folder: doc.folder,
       fileName
     });
-    await bucket.file(storagePath).save(content, {
+    await putObject(storagePath, content, {
       contentType: doc.mimeType || 'text/markdown',
-      metadata: { ownerId: doc.ownerId || 'unknown' }
+      metadata: { 'agora-source': 'agent', 'agora-owner': doc.ownerId || 'unknown' }
     });
     return storagePath;
   } catch (error) {
@@ -413,9 +412,7 @@ async function maybeDeleteStorageObject(storagePath?: string, documentId?: strin
     const hasOtherRefs = countSnap.data().count > 0;
     if (hasOtherRefs) return;
 
-    const bucket = adminStorage.bucket();
-    if (!bucket?.name) return;
-    await bucket.file(storagePath).delete().catch(() => undefined);
+    await deleteObject(storagePath).catch(() => undefined);
   } catch (error) {
     console.warn('Agora agent storage delete failed:', getErrorMessage(error));
   }

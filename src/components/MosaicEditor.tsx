@@ -57,6 +57,7 @@ import 'katex/dist/katex.min.css';
 
 import { createSnippet } from '@/services/snippetApi';
 import { authFetch } from '@/services/apiClient';
+import { fetchDocumentRawApi } from '@/services/dashboardApi';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
 import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
@@ -390,19 +391,28 @@ export default function MosaicEditor({
     if (rawLoadInFlightRef.current || key === lastRawKeyRef.current) return;
     rawLoadInFlightRef.current = true;
     lastRawKeyRef.current = key;
+    // Importante: mientras carga el raw, no consideremos el editor "cargado"
+    // — eso evita que handleContentChange dispare un autosave con texto
+    // vacío (estado inicial) y tire 409 refused-empty-overwrite.
+    hasLoadedRef.current = false;
     setIsDocLoading(true);
     try {
-      const res = await authFetch(`/api/documents/${roomId}/raw`, { cache: 'no-store' });
-      if (!res.ok) return;
-      const text = await res.text();
-      if (text && text !== contentRef.current) {
+      // fetchDocumentRawApi: (a) cachea en IndexedDB, (b) sirve desde cache si offline.
+      const text = await fetchDocumentRawApi(roomId);
+      // Cargar incluso si está vacío para sincronizar lastSyncedContentRef.
+      if (text !== contentRef.current) {
         setEditorContent(text);
       }
+      contentRef.current = text;
+      lastSyncedContentRef.current = text;
+      pendingLocalChangeRef.current = false;
+      setStatsContent(text);
     } catch (e) {
       console.error('Error loading raw content:', e);
     } finally {
       rawLoadInFlightRef.current = false;
       setIsDocLoading(false);
+      hasLoadedRef.current = true;
     }
   }, [roomId, setEditorContent]);
 
@@ -487,20 +497,17 @@ export default function MosaicEditor({
           setEditorContent(incoming);
         }
       }
-    } else if (type === DocumentType.File && (url || storagePath)) {
+    } else if (storagePath || url) {
+      // El snapshot viene sin `content` inline (caso normal con MinIO data plane).
+      // Cargar contenido real desde /raw. NO marcar hasLoaded hasta que el raw
+      // termine — si lo marcáramos ahora, handleContentChange dispararía un
+      // autosave con texto vacío antes de que llegue el contenido real,
+      // causando 409 refused-empty-overwrite y spinner infinito.
       const rawKey = storagePath || url;
       maybeLoadRawContent(rawKey);
-    } else if (!hasUnsavedLocalChanges()) {
-      if (mdxEditorRef.current) {
-        contentRef.current = '';
-        lastSyncedContentRef.current = '';
-        pendingLocalChangeRef.current = false;
-        setStatsContent('');
-        mdxEditorRef.current.setMarkdown('');
-      } else {
-        setEditorContent('');
-      }
+      return;
     }
+    // Si no hay storagePath ni url y no hay content — no tocar el editor.
 
     hasLoadedRef.current = true;
   }, [hasUnsavedLocalChanges, maybeLoadRawContent, resetDocState, setEditorContent, user?.uid]);
@@ -667,6 +674,7 @@ export default function MosaicEditor({
 
     saveTimeoutRef.current = setTimeout(async () => {
       const requestId = ++saveRequestIdRef.current;
+      let saveError: Error | null = null;
       try {
         const res = await authFetch(`/api/documents/${roomId}`, {
           method: 'PUT',
@@ -678,24 +686,35 @@ export default function MosaicEditor({
           })
         });
         if (!res.ok) {
-          throw new Error('Failed to save');
-        }
-
-        if (requestId === saveRequestIdRef.current && contentRef.current === val) {
+          // Leer el body para distinguir refused-empty-overwrite (409) vs error real.
+          let body: { error?: string; message?: string } | null = null;
+          try { body = await res.json(); } catch { /* not json */ }
+          if (res.status === 409 && body?.error === 'refused-empty-overwrite') {
+            // El servidor protegió el doc — marcar como sincronizado para evitar
+            // reintentos infinitos. El texto vacío local NO se guardará.
+            lastSyncedContentRef.current = val;
+            pendingLocalChangeRef.current = false;
+          } else {
+            saveError = new Error(`Save failed (${res.status}): ${body?.message ?? body?.error ?? res.statusText}`);
+          }
+        } else if (requestId === saveRequestIdRef.current && contentRef.current === val) {
           lastSyncedContentRef.current = val;
           pendingLocalChangeRef.current = false;
-          setSaving(false);
-        } else {
-          pendingLocalChangeRef.current = contentRef.current !== lastSyncedContentRef.current;
-          setSaving(pendingLocalChangeRef.current);
         }
       } catch (e) {
-        console.error('Error saving:', e);
+        saveError = e instanceof Error ? e : new Error(String(e));
+        console.error('Error saving:', saveError);
       } finally {
         if (requestId === saveRequestIdRef.current) {
           const stillUnsaved = contentRef.current !== lastSyncedContentRef.current;
           pendingLocalChangeRef.current = stillUnsaved;
+          // Si hubo error, NO dejamos saving=true infinito: el indicador
+          // refleja "hay cambios pendientes locales", no "request en vuelo".
           setSaving(stillUnsaved);
+          if (saveError) {
+            // El error queda en consola; UI muestra "pendiente" pero no bloquea.
+            console.warn('[autosave] continuing with local changes:', saveError.message);
+          }
         }
       }
     }, SAVE_DEBOUNCE_MS);

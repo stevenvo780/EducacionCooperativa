@@ -1,4 +1,9 @@
-import { adminDb, adminStorage } from '@/lib/firebase-admin';
+/**
+ * /api/documents/[id]
+ * GET / PUT / DELETE — usa Firestore (metadata) + MinIO (blobs).
+ * El campo `content` ya NO se persiste; la verdad vive en MinIO bajo `storagePath`.
+ */
+import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -9,12 +14,11 @@ import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 import { mockGetDoc, mockUpdateDoc, mockDeleteDoc } from '@/lib/insecure-mock-store';
 import { invalidateStorageUsageCache } from '@/lib/storage-usage';
+import { isNasConfigured, putObject, moveObject, deleteObject, presignGet, getObjectBuffer } from '@/lib/nas-storage';
+import { emitPing } from '@/lib/nas-events';
 
 const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 
-// Throttle Firestore URL updates: max once per 50 minutes per document
-const urlRefreshThrottle = new Map<string, number>();
-const URL_REFRESH_THROTTLE_MS = 50 * 60 * 1000;
 type StoredDocumentRecord = Record<string, unknown>;
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -23,18 +27,14 @@ const canAccessDoc = async (data: Record<string, unknown> | undefined, uid: stri
     if (isPersonalWorkspaceId(workspaceId)) {
         return data?.ownerId === uid;
     }
-    if (!workspaceId) {
-        return false;
-    }
+    if (!workspaceId) return false;
     return isWorkspaceMember(workspaceId, uid);
 };
 
 export async function PUT(req: NextRequest, context: RouteContext) {
     try {
         const auth = await requireAuth(req);
-        if (!auth) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-        }
+        if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
         const { id } = await context.params;
 
@@ -45,18 +45,21 @@ export async function PUT(req: NextRequest, context: RouteContext) {
             return NextResponse.json({ status: 'success' });
         }
 
+        if (!isNasConfigured()) {
+            return NextResponse.json({ error: 'NAS storage not configured' }, { status: 503 });
+        }
+
         const body = await req.json();
 
         const docRef = adminDb.collection('documents').doc(id);
         const snap = await docRef.get();
-        if (!snap.exists) {
-            return NextResponse.json({ error: 'Document not found' }, { status: 404 });
-        }
+        if (!snap.exists) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
 
         const existingData = snap.data() as StoredDocumentRecord | undefined;
         if (!(await canAccessDoc(existingData, auth.uid))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
+
         const existingWorkspaceId = typeof existingData?.workspaceId === 'string' ? existingData.workspaceId : PERSONAL_WORKSPACE_ID;
         const existingOwnerId = typeof existingData?.ownerId === 'string' ? existingData.ownerId : auth.uid;
         const existingFolder = typeof existingData?.folder === 'string' ? existingData.folder : undefined;
@@ -87,94 +90,70 @@ export async function PUT(req: NextRequest, context: RouteContext) {
             });
         }
 
-        const moveStorageObject = async (fromPath: string, toPath: string) => {
-            const bucket = adminStorage.bucket();
-            if (!bucket?.name) {
-                throw new Error('Storage bucket not configured');
-            }
-            const sourceRef = bucket.file(fromPath);
-            const targetRef = bucket.file(toPath);
-            const [sourceExists] = await sourceRef.exists();
-            const [targetExists] = await targetRef.exists();
-
-            if (!sourceExists && targetExists) {
-                return { moved: true, usedTarget: true };
-            }
-            if (!sourceExists && !targetExists) {
-                return { moved: false, missing: true };
-            }
-            if (targetExists) {
-                const [srcMeta] = await sourceRef.getMetadata();
-                const [dstMeta] = await targetRef.getMetadata();
-                const hasHash = Boolean(srcMeta.md5Hash && dstMeta.md5Hash);
-                if (hasHash && srcMeta.md5Hash !== dstMeta.md5Hash) {
-                    return { moved: false, conflict: true };
-                }
-                const hasSize = Boolean(srcMeta.size && dstMeta.size);
-                if (!hasHash && hasSize && srcMeta.size !== dstMeta.size) {
-                    return { moved: false, conflict: true };
-                }
-                await sourceRef.delete().catch(() => {});
-                return { moved: true, deduped: true };
-            }
-
-            await sourceRef.copy(targetRef);
-            const [afterExists] = await targetRef.exists();
-            if (!afterExists) {
-                return { moved: false, missing: true };
-            }
-            await sourceRef.delete().catch(() => {});
-            return { moved: true };
-        };
-
         if (storagePath && targetStoragePath && storagePath !== targetStoragePath) {
-            const moveResult = await moveStorageObject(storagePath, targetStoragePath);
-            if (moveResult.conflict) {
-                return NextResponse.json({ error: 'Storage target already exists' }, { status: 409 });
-            }
-            if (moveResult.moved) {
+            try {
+                await moveObject(storagePath, targetStoragePath);
                 storagePath = targetStoragePath;
+            } catch (err) {
+                console.warn('NAS moveObject failed:', getErrorMessage(err));
             }
         } else if (!storagePath && targetStoragePath) {
             storagePath = targetStoragePath;
         }
 
-        if (body.content !== undefined && existingData?.type !== DocumentType.File) {
-            const bucket = adminStorage.bucket();
-            if (bucket.name && storagePath) {
-                try {
-                    // Determinar contentType según extensión del storagePath
-                    const storageExt = (storagePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase();
-                    const isMarkdownStorage = storageExt === '.md' || storageExt === '.markdown';
-                    const storageContentType = isMarkdownStorage ? 'text/markdown' : (
-                        typeof existingData?.mimeType === 'string' ? existingData.mimeType : 'text/plain'
-                    );
-                    await bucket.file(storagePath).save(body.content, {
-                        contentType: storageContentType,
-                        metadata: { ownerId: existingOwnerId }
-                    });
-                } catch (error) {
-                    console.warn('Failed to update storage backing:', getErrorMessage(error));
+        let contentHash: string | null = null;
+        let size: number | null = null;
+        if (body.content !== undefined && !isFileDoc && storagePath) {
+            // SALVAGUARDA: nunca sobrescribir un blob no-vacío con contenido vacío
+            // a menos que el cliente lo pida explícitamente (allowEmptyOverwrite=true)
+            // Y sea el owner del documento. Esto previene perder docs por bug del
+            // editor o request maliciosa de un colaborador.
+            const newContent: string = body.content;
+            const allowEmpty = body.allowEmptyOverwrite === true && existingOwnerId === auth.uid;
+            if (newContent.length === 0 && !allowEmpty) {
+                const existingSize = typeof existingData?.size === 'number' ? existingData.size : 0;
+                if (existingSize > 0) {
+                    return NextResponse.json({
+                        error: 'refused-empty-overwrite',
+                        message: 'Se rechazó guardar contenido vacío sobre un documento que tenía contenido. Usa allowEmptyOverwrite:true para forzar.',
+                        existingSize
+                    }, { status: 409 });
                 }
             }
+            const ext = (storagePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase();
+            const isMd = ext === '.md' || ext === '.markdown';
+            const ct = isMd ? 'text/markdown'
+                : (typeof existingData?.mimeType === 'string' ? existingData.mimeType : 'text/plain');
+            const out = await putObject(storagePath, newContent, {
+                contentType: ct,
+                metadata: { 'agora-source': 'api-update', 'agora-writer': auth.uid }
+            });
+            contentHash = out.contentHash;
+            size = out.size;
         }
 
         const updateData: Record<string, unknown> = {
             updatedAt: FieldValue.serverTimestamp()
         };
 
-        if (body.content !== undefined && existingData?.type !== DocumentType.File) {
-            updateData.content = body.content;
-            updateData.lastUpdatedBy = auth.uid;
+        if (body.content !== undefined && !isFileDoc) {
+            updateData.content = FieldValue.delete();
+            updateData.storageBackend = 'minio';
+            if (contentHash) updateData.contentHash = contentHash;
+            if (size !== null) updateData.size = size;
+            const baseVersion = typeof existingData?.version === 'number' ? existingData.version : 0;
+            updateData.baseVersion = baseVersion;
+            updateData.version = baseVersion + 1;
+            updateData.syncState = 'synced';
+            updateData.lastWriter = auth.uid;
         }
         if (typeof body.name === 'string') updateData.name = body.name;
         if (typeof body.type === 'string') updateData.type = body.type;
         if (typeof body.mimeType === 'string' || body.mimeType === null) updateData.mimeType = body.mimeType ?? null;
         if (typeof body.folder === 'string') updateData.folder = normalizeFolderPath(body.folder);
-        if (typeof body.size === 'number') updateData.size = body.size;
+        if (typeof body.size === 'number' && size === null) updateData.size = body.size;
         if (typeof body.order === 'number') updateData.order = body.order;
-
-        if (storagePath && storagePath !== existingData?.storagePath) {
+        if (storagePath && storagePath !== existingStoragePath) {
             updateData.storagePath = storagePath;
         }
 
@@ -182,7 +161,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
             storagePath
             && isFileDoc
             && (
-                storagePath !== existingData?.storagePath
+                storagePath !== existingStoragePath
                 || body.refreshUrl === true
                 || typeof body.mimeType === 'string'
                 || typeof body.size === 'number'
@@ -191,14 +170,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
         if (storagePath && shouldRefreshFileUrl) {
             try {
-                const bucket = adminStorage.bucket();
-                if (bucket?.name) {
-                    const [url] = await bucket.file(storagePath).getSignedUrl({
-                        action: 'read' as const,
-                        expires: Date.now() + 60 * 60 * 1000 // 1 hour
-                    });
-                    updateData.url = url;
-                }
+                updateData.url = await presignGet(storagePath, 60 * 60);
             } catch (error) {
                 console.warn('Failed to refresh file URL:', getErrorMessage(error));
             }
@@ -206,19 +178,36 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
         await docRef.update(updateData);
 
-        return NextResponse.json({ status: 'success' });
+        await emitPing({
+            scope: 'document',
+            workspaceId: existingWorkspaceId,
+            userId: existingOwnerId,
+            docId: id,
+            path: storagePath ?? null,
+            version: typeof updateData.version === 'number' ? updateData.version : null,
+            contentHash,
+            sender: auth.uid
+        }).catch(() => undefined);
+
+        return NextResponse.json({
+            status: 'success',
+            ...(typeof updateData.version === 'number' ? { version: updateData.version } : {}),
+            ...(contentHash ? { contentHash } : {})
+        });
     } catch (error: unknown) {
-        console.error('Error updating document:', getErrorMessage(error));
-        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
+        const err = error as Error;
+        console.error('[documents/[id] PUT] error:', err?.message, err?.stack);
+        return NextResponse.json({
+            error: getErrorMessage(error),
+            detail: err?.stack?.split('\n').slice(0, 4).join(' | ')
+        }, { status: 500 });
     }
 }
 
 export async function GET(req: NextRequest, context: RouteContext) {
     try {
         const auth = await requireAuth(req);
-        if (!auth) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-        }
+        if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
         const { id } = await context.params;
 
@@ -229,33 +218,33 @@ export async function GET(req: NextRequest, context: RouteContext) {
         }
 
         const docSnap = await adminDb.collection('documents').doc(id).get();
-        if (!docSnap.exists) {
-             return NextResponse.json({ error: 'Document not found' }, { status: 404 });
-        }
+        if (!docSnap.exists) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+
         const data = (docSnap.data() ?? {}) as StoredDocumentRecord;
         if (!(await canAccessDoc(data, auth.uid))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Refresh signed URL for file-type documents so viewers never get ExpiredToken errors.
-        // Throttle Firestore writes to at most once per 50 min per document.
-        if (data.type === DocumentType.File && typeof data.storagePath === 'string') {
+        const storagePath = typeof data.storagePath === 'string' ? data.storagePath : undefined;
+        if (data.type === DocumentType.File && storagePath && isNasConfigured()) {
             try {
-                const bucket = adminStorage.bucket();
-                if (bucket?.name) {
-                    const [freshUrl] = await bucket.file(data.storagePath).getSignedUrl({
-                        action: 'read' as const,
-                        expires: Date.now() + 60 * 60 * 1000 // 1 hour
-                    });
-                    data.url = freshUrl;
-                    const lastRefresh = urlRefreshThrottle.get(id) ?? 0;
-                    if (Date.now() - lastRefresh > URL_REFRESH_THROTTLE_MS) {
-                        urlRefreshThrottle.set(id, Date.now());
-                        adminDb.collection('documents').doc(id).update({ url: freshUrl }).catch(() => {});
-                    }
-                }
+                data.url = await presignGet(storagePath, 60 * 60);
             } catch (error) {
                 console.warn('Failed to refresh signed URL on GET:', getErrorMessage(error));
+            }
+        }
+
+        // Para docs de texto, inyectar `content` desde MinIO si el cliente lo pide.
+        // Esto evita que el editor cargue con state.content="" y luego machaque MinIO con vacío.
+        const isTextDoc = data.type === DocumentType.Text || data.type === 'markdown' || (!data.type && storagePath);
+        const url = new URL(req.url);
+        const includeContent = url.searchParams.get('includeContent') !== 'false';
+        if (isTextDoc && storagePath && includeContent && isNasConfigured()) {
+            try {
+                const buf = await getObjectBuffer(storagePath);
+                if (buf) data.content = buf.toString('utf8');
+            } catch (error) {
+                console.warn('Failed to inline content from NAS:', getErrorMessage(error));
             }
         }
 
@@ -269,9 +258,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 export async function DELETE(req: NextRequest, context: RouteContext) {
     try {
         const auth = await requireAuth(req);
-        if (!auth) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-        }
+        if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
         const { id } = await context.params;
 
@@ -282,9 +269,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
         const docRef = adminDb.collection('documents').doc(id);
         const snap = await docRef.get();
-        if (!snap.exists) {
-            return NextResponse.json({ error: 'Document not found' }, { status: 404 });
-        }
+        if (!snap.exists) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
 
         const data = snap.data() as StoredDocumentRecord | undefined;
         if (!(await canAccessDoc(data, auth.uid))) {
@@ -292,26 +277,32 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
         }
         const storagePath = typeof data?.storagePath === 'string' ? data.storagePath : undefined;
 
-        // Borrar archivo de Storage si existe (tanto para files como para documentos markdown)
         if (storagePath) {
-            // count() evita cargar documentos en memoria — solo verifica si hay referencias adicionales
             const countSnap = await adminDb.collection('documents')
                 .where('storagePath', '==', storagePath)
                 .where(FieldPath.documentId(), '!=', id)
                 .count()
                 .get();
             const hasOtherReferences = countSnap.data().count > 0;
-            if (!hasOtherReferences) {
-                const bucket = adminStorage.bucket();
-                if (bucket?.name) {
-                    await bucket.file(storagePath).delete().catch((error) => console.warn('Storage delete failed', getErrorMessage(error)));
-                }
+            if (!hasOtherReferences && isNasConfigured()) {
+                await deleteObject(storagePath).catch((err) => console.warn('NAS delete failed', getErrorMessage(err)));
             }
         }
 
         await docRef.delete();
-        // Invalidate cached storage usage so next check reflects the deletion
         invalidateStorageUsageCache(auth.uid);
+
+        await emitPing({
+            scope: 'document',
+            workspaceId: typeof data?.workspaceId === 'string' ? data.workspaceId : null,
+            userId: typeof data?.ownerId === 'string' ? data.ownerId : null,
+            docId: id,
+            path: storagePath ?? null,
+            version: null,
+            contentHash: null,
+            sender: auth.uid
+        }).catch(() => undefined);
+
         return NextResponse.json({ status: 'deleted' });
     } catch (error: unknown) {
         console.error('Error deleting document:', getErrorMessage(error));

@@ -28,6 +28,9 @@ export const ensureTextFileName = (value: string) => {
   const lower = safe.toLowerCase();
   // Already .md → keep as-is
   if (lower.endsWith('.md')) return safe;
+  // Dotfiles (.gitignore, .env, .editorconfig...) — el nombre ES el archivo;
+  // no agregar .md ni tratarlos como extensiones desconocidas.
+  if (safe.startsWith('.') && safe.indexOf('.', 1) === -1) return safe;
   // Known non-markdown text extension → keep as-is
   const dotIdx = lower.lastIndexOf('.');
   if (dotIdx >= 0) {
