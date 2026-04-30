@@ -55,9 +55,6 @@ const projectId = process.env.FIREBASE_PROJECT_ID ? process.env.FIREBASE_PROJECT
 const configuredBucket = process.env.FIREBASE_STORAGE_BUCKET ? process.env.FIREBASE_STORAGE_BUCKET.trim() : undefined;
 const fallbackBucket = projectId ? `${projectId}.appspot.com` : undefined;
 const storageBucket = configuredBucket || fallbackBucket;
-// RTDB: el cliente construye `https://<projectId>-default-rtdb.firebaseio.com`.
-// Sin esto el admin SDK no sabe a qué instancia hacer push y los pings fallan
-// en silencio (nas-events.ts envuelve la llamada en try/catch).
 const configuredRtdbUrl = process.env.FIREBASE_DATABASE_URL ? process.env.FIREBASE_DATABASE_URL.trim() : undefined;
 const fallbackRtdbUrl = projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined;
 const databaseURL = configuredRtdbUrl || fallbackRtdbUrl;

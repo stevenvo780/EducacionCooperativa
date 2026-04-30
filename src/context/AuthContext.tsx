@@ -106,12 +106,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
 
+        let cancelled = false;
+        let pendingNullCheck: ReturnType<typeof setTimeout> | null = null;
         try {
             const firebaseAuth = getAuth();
             const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
+                if (cancelled) return;
+                if (pendingNullCheck) { clearTimeout(pendingNullCheck); pendingNullCheck = null; }
+
                 if (authUser) {
                     setUser(authUser);
-                    // Para Google sign-in, el email viene en el user
                     if (authUser.email) {
                         setUserEmail(authUser.email);
                         localStorage.setItem('agora_user_email', authUser.email);
@@ -119,13 +123,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
                     localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
                     localStorage.removeItem('agora_user');
-                } else {
-                    setUser(null);
+                    setLoading(false);
+                    return;
                 }
-                setLoading(false);
+
+                // null callback: confirmar antes de cerrar sesión. Evita el
+                // "phantom logout" cuando Firebase Auth dispara null brevemente
+                // durante reconnects transitorios. Si tras 1.5s `currentUser`
+                // sigue null, sí cerramos.
+                pendingNullCheck = setTimeout(() => {
+                    if (cancelled) return;
+                    if (firebaseAuth.currentUser) {
+                        setUser(firebaseAuth.currentUser);
+                    } else {
+                        setUser(null);
+                    }
+                    setLoading(false);
+                }, 1500);
             });
-            return () => unsubscribe();
-        } catch (_e) {
+            return () => { cancelled = true; if (pendingNullCheck) clearTimeout(pendingNullCheck); unsubscribe(); };
+        } catch {
             setLoading(false);
         }
     }, []);
