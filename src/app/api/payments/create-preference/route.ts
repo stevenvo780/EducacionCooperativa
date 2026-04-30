@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
     const preferenceClient = new Preference(client);
 
-    const appUrl = 'https://agora.humanizar.cloud';
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://agora.elenxos.com').replace(/\/+$/, '');
 
     const preference = await preferenceClient.create({
       body: {

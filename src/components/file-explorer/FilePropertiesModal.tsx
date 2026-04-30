@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Copy, ExternalLink, FileText, Folder as FolderIcon, Loader2, X } from 'lucide-react';
 import { authFetch } from '@/services/apiClient';
 import type { DocItem } from '@/components/FileExplorer';
@@ -55,6 +55,11 @@ export default function FilePropertiesModal({ doc, onClose }: FilePropertiesModa
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState<string | null>(null);
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => {
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -80,7 +85,8 @@ export default function FilePropertiesModal({ doc, onClose }: FilePropertiesModa
         try {
             await navigator.clipboard.writeText(value);
             setCopied(label);
-            setTimeout(() => setCopied(null), 1200);
+            if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+            copiedTimerRef.current = setTimeout(() => setCopied(null), 1200);
         } catch { /* noop */ }
     };
 
