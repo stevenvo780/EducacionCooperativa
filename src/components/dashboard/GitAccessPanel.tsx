@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Loader2, RefreshCcw, X } from 'lucide-react';
 import { authFetch } from '@/services/apiClient';
 
@@ -36,6 +36,11 @@ export default function GitAccessPanel({ onClose }: GitAccessPanelProps) {
     const [issuedToken, setIssuedToken] = useState<IssuedToken | null>(null);
     const [showToken, setShowToken] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => {
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -69,7 +74,8 @@ export default function GitAccessPanel({ onClose }: GitAccessPanelProps) {
         try {
             await navigator.clipboard.writeText(value);
             setCopied(label);
-            setTimeout(() => setCopied(null), 1500);
+            if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+            copiedTimerRef.current = setTimeout(() => setCopied(null), 1500);
         } catch { /* noop */ }
     };
 

@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const paymentId = searchParams.get('payment_id') || searchParams.get('collection_id') || '';
   const queryReference = parsePaymentExternalReference(searchParams.get('external_reference') || '');
 
-  const appUrl = 'https://agora.humanizar.cloud';
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://agora.elenxos.com').replace(/\/+$/, '');
   const redirectUrl = new URL(`${appUrl}/dashboard`);
   redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Pending);
 

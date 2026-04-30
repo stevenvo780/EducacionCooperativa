@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const collectionStatus = searchParams.get('collection_status') || searchParams.get('status') || '';
   const queryReference = parsePaymentExternalReference(searchParams.get('external_reference') || '');
 
-  const appUrl = 'https://agora.humanizar.cloud';
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://agora.elenxos.com').replace(/\/+$/, '');
   const redirectUrl = new URL(`${appUrl}/dashboard`);
   redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Success);
 
