@@ -36,6 +36,7 @@ import { getUpdatedAtValue } from '@/services/dashboardUtils';
 import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { FileExplorerContextMenu } from '@/components/file-explorer/FileExplorerContextMenu';
+import FilePropertiesModal from '@/components/file-explorer/FilePropertiesModal';
 import { useFileExplorerDND, DOC_REORDER_TYPE, FOLDER_REORDER_TYPE } from '@/components/file-explorer/useFileExplorerDND';
 import type { DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
@@ -590,6 +591,25 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   const handleOpenDoc = (doc: DocItem) => {
     onSelectDoc(doc);
+  };
+
+  const [propertiesDoc, setPropertiesDoc] = useState<DocItem | null>(null);
+
+  const handleShowProperties = (doc: DocItem) => setPropertiesDoc(doc);
+
+  const handleCopyPath = async (doc: DocItem) => {
+    const folder = doc.folder && doc.folder !== 'No estructurado' ? `${doc.folder}/` : '';
+    const path = `${folder}${doc.name ?? 'untitled'}`;
+    try { await navigator.clipboard.writeText(path); } catch { /* noop */ }
+  };
+
+  const handleOpenInForgejo = (doc: DocItem) => {
+    const repoFullName = (doc as unknown as { git?: { repoFullName?: string } }).git?.repoFullName;
+    if (!repoFullName) return;
+    const folder = doc.folder && doc.folder !== 'No estructurado' ? `${doc.folder}/` : '';
+    const repoPath = encodeURI(`${folder}${doc.name ?? ''}`).replace(/'/g, '%27');
+    const apiBase = process.env.NEXT_PUBLIC_FORGEJO_WEB_URL ?? 'https://git.proxy.humanizar-dev.cloud';
+    window.open(`${apiBase}/${repoFullName}/src/branch/main/${repoPath}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleMoveDoc = (doc: DocItem) => {
@@ -1415,7 +1435,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           onDeleteDoc={onDeleteDoc}
           onDownloadFolder={onDownloadFolder}
           onDeleteFolder={onDeleteFolder}
+          onShowProperties={handleShowProperties}
+          onCopyPath={handleCopyPath}
+          onOpenInForgejo={handleOpenInForgejo}
         />
+      )}
+      {propertiesDoc && (
+        <FilePropertiesModal doc={propertiesDoc} onClose={() => setPropertiesDoc(null)} />
       )}
     </div>
   );

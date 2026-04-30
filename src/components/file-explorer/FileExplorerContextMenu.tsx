@@ -1,6 +1,6 @@
 import React from 'react';
 import { ContextMenu } from '@/components/ui/ContextMenu';
-import { Copy, Download, FolderOpen, Star, Pencil, FolderInput, Trash2 } from 'lucide-react';
+import { Copy, Download, FolderOpen, Star, Pencil, FolderInput, Trash2, Info, GitBranch } from 'lucide-react';
 import type { DocItem, FolderItem } from '../FileExplorer';
 
 export interface FileExplorerContextMenuProps {
@@ -25,6 +25,9 @@ export interface FileExplorerContextMenuProps {
   onDeleteDoc?: (docId: string) => void;
   onDownloadFolder?: (folderPath: string) => void;
   onDeleteFolder?: (folder: FolderItem) => void;
+  onShowProperties?: (doc: DocItem) => void;
+  onCopyPath?: (doc: DocItem) => void;
+  onOpenInForgejo?: (doc: DocItem) => void;
 }
 
 export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({
@@ -42,7 +45,10 @@ export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = (
   onMoveDocPrompt,
   onDeleteDoc,
   onDownloadFolder,
-  onDeleteFolder
+  onDeleteFolder,
+  onShowProperties,
+  onCopyPath,
+  onOpenInForgejo
 }) => {
   return (
     <ContextMenu
@@ -81,6 +87,25 @@ export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = (
               label: 'Mover a...',
               icon: <FolderInput className="w-4 h-4" />,
               onClick: () => { const doc = data.doc || (data.id ? docMap.get(data.id) : null); if (doc) onMoveDocPrompt(doc); }
+            }] : [])
+          ]
+        },
+        {
+          actions: [
+            ...(onCopyPath ? [{
+              label: 'Copiar ruta',
+              icon: <Copy className="w-4 h-4" />,
+              onClick: () => { const doc = data.doc || (data.id ? docMap.get(data.id) : null); if (doc) onCopyPath(doc); }
+            }] : []),
+            ...(onOpenInForgejo ? [{
+              label: 'Ver en Forgejo',
+              icon: <GitBranch className="w-4 h-4" />,
+              onClick: () => { const doc = data.doc || (data.id ? docMap.get(data.id) : null); if (doc) onOpenInForgejo(doc); }
+            }] : []),
+            ...(onShowProperties ? [{
+              label: 'Propiedades',
+              icon: <Info className="w-4 h-4" />,
+              onClick: () => { const doc = data.doc || (data.id ? docMap.get(data.id) : null); if (doc) onShowProperties(doc); }
             }] : [])
           ]
         },
