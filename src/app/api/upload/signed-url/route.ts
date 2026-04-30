@@ -1,5 +1,9 @@
+/**
+ * POST /api/upload/signed-url
+ * Genera un signed URL PUT para subida directa cliente → MinIO. El cliente luego
+ * llama POST /api/upload/register para registrar el documento.
+ */
 import { NextRequest, NextResponse } from 'next/server';
-import { adminStorage } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
@@ -8,15 +12,15 @@ import { calculateOwnedStorageUsageBytes } from '@/lib/storage-usage';
 import { formatStorageSize, getStorageLimitMB } from '@/types/subscription';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 import { getActivePlanId } from '@/app/api/payments/helpers';
+import { isNasConfigured, presignPut } from '@/lib/nas-storage';
 
 export const runtime = 'nodejs';
 
-/**
- * Generates a signed URL for direct client-side upload to Firebase Storage
- * This bypasses Vercel's 4.5MB body limit by uploading directly to GCS
- */
 export async function POST(req: NextRequest) {
     try {
+        if (!isNasConfigured()) {
+            return NextResponse.json({ error: 'NAS storage not configured' }, { status: 503 });
+        }
         const auth = await requireAuth(req);
         if (!auth) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
@@ -52,12 +56,9 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'fileSize must be a positive number' }, { status: 400 });
         }
 
-        // Check storage limit for the user's plan
         const planId = await getActivePlanId(auth.uid);
         const limitMB = getStorageLimitMB(planId);
         const limitBytes = limitMB * 1024 * 1024;
-
-        // Calculate current usage
         const totalBytes = await calculateOwnedStorageUsageBytes(auth.uid);
 
         if (totalBytes + fileSize > limitBytes) {
@@ -79,24 +80,12 @@ export async function POST(req: NextRequest) {
             fileName: safeName
         });
 
-        const bucket = adminStorage.bucket();
-        if (!bucket?.name) {
-            throw new Error('Storage bucket not configured');
-        }
-
-        const fileRef = bucket.file(storagePath);
-
-        // Generate signed URL for resumable upload (supports large files)
-        const [signedUrl] = await fileRef.getSignedUrl({
-            version: 'v4',
-            action: 'write',
-            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-            contentType: mimeType
-        });
+        const signedUrl = await presignPut(storagePath, 15 * 60, mimeType);
 
         return NextResponse.json({
             signedUrl,
             storagePath,
+            storageBackend: 'minio',
             fileName: safeName,
             originalName: fileName,
             mimeType,
@@ -104,7 +93,6 @@ export async function POST(req: NextRequest) {
             folder: normalizedFolder,
             ownerId: auth.uid
         });
-
     } catch (error: unknown) {
         console.error('Signed URL Error:', getErrorMessage(error));
         return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });

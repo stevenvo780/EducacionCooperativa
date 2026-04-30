@@ -1,7 +1,6 @@
 import { cert, getApps, initializeApp, App, getApp, type ServiceAccount } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
 
 type FirebaseServiceAccount = {
   projectId?: string;
@@ -75,6 +74,5 @@ if (!getApps().length) {
 
 const adminAuth = getAuth(app);
 const adminDb = getFirestore(app);
-const adminStorage = getStorage(app);
 
-export { adminAuth, adminDb, adminStorage };
+export { adminAuth, adminDb };

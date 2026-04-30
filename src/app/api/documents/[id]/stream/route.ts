@@ -1,28 +1,40 @@
-import { adminDb, adminStorage } from '@/lib/firebase-admin';
+import { adminDb } from '@/lib/firebase-admin';
 import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest } from 'next/server';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 import { getErrorMessage } from '@/lib/error-utils';
+import { isNasConfigured, presignGet } from '@/lib/nas-storage';
 
 // In-memory throttle so we don't re-sign on every onSnapshot tick.
 const streamUrlThrottle = new Map<string, { url: string; ts: number }>();
-const STREAM_URL_TTL_MS = 45 * 60 * 1000; // 45 min – well within the 1 h signed-URL lifetime
+const STREAM_URL_TTL_MS = 45 * 60 * 1000;
+const STREAM_URL_MAX_ENTRIES = 500;
+
+const evictStaleStreamUrls = () => {
+    const now = Date.now();
+    for (const [k, v] of streamUrlThrottle) {
+        if (now - v.ts > STREAM_URL_TTL_MS) streamUrlThrottle.delete(k);
+    }
+    // Si después del barrido sigue sobre el límite, descartar las más viejas.
+    if (streamUrlThrottle.size > STREAM_URL_MAX_ENTRIES) {
+        const sorted = [...streamUrlThrottle.entries()].sort((a, b) => a[1].ts - b[1].ts);
+        const drop = sorted.slice(0, streamUrlThrottle.size - STREAM_URL_MAX_ENTRIES);
+        for (const [k] of drop) streamUrlThrottle.delete(k);
+    }
+};
 
 async function maybeFreshUrl(docId: string, data: Record<string, unknown>): Promise<string | null> {
     if (data.type !== DocumentType.File || typeof data.storagePath !== 'string') return null;
     const cached = streamUrlThrottle.get(docId);
     if (cached && Date.now() - cached.ts < STREAM_URL_TTL_MS) return cached.url;
+    if (!isNasConfigured()) return null;
     try {
-        const bucket = adminStorage.bucket();
-        if (!bucket?.name) return null;
-        const [freshUrl] = await bucket.file(data.storagePath as string).getSignedUrl({
-            action: 'read' as const,
-            expires: Date.now() + 60 * 60 * 1000 // 1 hour
-        });
-        streamUrlThrottle.set(docId, { url: freshUrl, ts: Date.now() });
-        return freshUrl;
+        const url = await presignGet(data.storagePath as string, 60 * 60);
+        streamUrlThrottle.set(docId, { url, ts: Date.now() });
+        if (streamUrlThrottle.size > STREAM_URL_MAX_ENTRIES) evictStaleStreamUrls();
+        return url;
     } catch (error) {
         console.warn('stream: failed to refresh signed URL', getErrorMessage(error));
         return null;
@@ -57,7 +69,6 @@ export async function GET(req: NextRequest, context: RouteContext) {
                     data: {
                         id,
                         name: 'Documento de Prueba.md',
-                        content: 'Este es un texto de prueba para la busqueda. La busqueda debe funcionar.',
                         type: DocumentType.Text,
                         workspaceId: PERSONAL_WORKSPACE_ID,
                         folder: 'No estructurado',

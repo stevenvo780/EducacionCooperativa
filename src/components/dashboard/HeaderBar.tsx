@@ -11,6 +11,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  GitBranch,
   Copy,
   Crown,
   FolderOpen,
@@ -40,6 +41,7 @@ import type { TerminalSession } from '@/context/TerminalContext';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { ELENXOS_BRAND } from '@/lib/branding';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
+import GitWorkbench from '@/components/dashboard/GitWorkbench';
 import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId, type WorkerStatus } from '@/types/terminal';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { formatStorageSize } from '@/types/subscription';
@@ -171,6 +173,7 @@ const HeaderBar = ({
 }: HeaderBarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const [showGitPanel, setShowGitPanel] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
@@ -350,6 +353,13 @@ const HeaderBar = ({
   ] as const;
 
   const utilityTools = [
+    {
+      id: 'git',
+      label: 'Git',
+      description: 'Cambios, staging, commits e historial del workspace',
+      icon: GitBranch,
+      onClick: () => setShowGitPanel(true)
+    },
     {
       id: 'company',
       label: 'Elenxos',
@@ -978,6 +988,30 @@ const HeaderBar = ({
       {/* Hidden file inputs */}
       <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
       <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
+
+      {/* Git Workbench modal — VS Code style: cambios, stage, commit, historial */}
+      {showGitPanel && currentWorkspace && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4"
+          onClick={() => setShowGitPanel(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Git Workbench"
+        >
+          <div
+            className="w-full max-w-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GitWorkbench
+              workspaceId={currentWorkspace.id === PERSONAL_WORKSPACE_ID && user
+                ? `personal:${user.uid}`
+                : currentWorkspace.id}
+              workspaceName={currentWorkspace.name}
+              onClose={() => setShowGitPanel(false)}
+            />
+          </div>
+        </div>
+      )}
     </header>
   );
 };

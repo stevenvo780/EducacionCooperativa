@@ -1,4 +1,6 @@
-import { adminDb, adminStorage } from '@/lib/firebase-admin';
+import { adminDb } from '@/lib/firebase-admin';
+import { presignGet, putObject, getObjectBuffer, copyObject, getNasClient, getNasBucket } from '@/lib/nas-storage';
+import { ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { FieldValue, type CollectionReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -76,13 +78,11 @@ const ensureBoardExists = async (workspaceId: string) => {
 };
 
 const createSignedReadUrl = async (storagePath: string) => {
-  const bucket = adminStorage.bucket();
-  if (!bucket?.name) return undefined;
-  const [url] = await bucket.file(storagePath).getSignedUrl({
-    action: 'read' as const,
-    expires: Date.now() + 60 * 60 * 1000
-  });
-  return url;
+  try {
+    return await presignGet(storagePath, 60 * 60);
+  } catch {
+    return undefined;
+  }
 };
 
 const cloneStorageObject = async (params: {
@@ -92,17 +92,6 @@ const cloneStorageObject = async (params: {
   folder: string;
   fileName: string;
 }) => {
-  const bucket = adminStorage.bucket();
-  if (!bucket?.name) {
-    return null;
-  }
-
-  const sourceRef = bucket.file(params.sourcePath);
-  const [exists] = await sourceRef.exists();
-  if (!exists) {
-    return null;
-  }
-
   const targetPath = buildStoragePath({
     workspaceId: params.targetWorkspaceId,
     ownerId: params.ownerId,
@@ -110,16 +99,20 @@ const cloneStorageObject = async (params: {
     fileName: params.fileName
   });
 
-  if (targetPath !== params.sourcePath) {
-    await sourceRef.copy(bucket.file(targetPath));
+  try {
+    if (targetPath !== params.sourcePath) {
+      await copyObject(params.sourcePath, targetPath);
+    }
+    const buf = await getObjectBuffer(targetPath);
+    if (!buf) return null;
+    return {
+      storagePath: targetPath,
+      size: buf.length,
+      url: await createSignedReadUrl(targetPath)
+    };
+  } catch {
+    return null;
   }
-
-  const [metadata] = await bucket.file(targetPath).getMetadata();
-  return {
-    storagePath: targetPath,
-    size: parseInt(String(metadata.size || '0'), 10) || 0,
-    url: await createSignedReadUrl(targetPath)
-  };
 };
 
 const resolveFolderRecordPath = (doc: StoredDocumentRecord) => {
@@ -178,23 +171,20 @@ const cloneTextDocumentToWorkspace = async (params: {
     : null;
 
   if (!clonedStorage && content) {
-    const bucket = adminStorage.bucket();
-    if (bucket?.name) {
-      const targetPath = buildStoragePath({
-        workspaceId: params.targetWorkspaceId,
-        ownerId: params.ownerId,
-        folder,
-        fileName: storageFileName
-      });
-      await bucket.file(targetPath).save(content, {
-        contentType: mimeType,
-        metadata: { ownerId: params.ownerId }
-      });
-      return {
-        storagePath: targetPath,
-        url: await createSignedReadUrl(targetPath)
-      };
-    }
+    const targetPath = buildStoragePath({
+      workspaceId: params.targetWorkspaceId,
+      ownerId: params.ownerId,
+      folder,
+      fileName: storageFileName
+    });
+    await putObject(targetPath, content, {
+      contentType: mimeType,
+      metadata: { 'agora-source': 'workspace-clone', 'agora-owner': params.ownerId }
+    });
+    return {
+      storagePath: targetPath,
+      url: await createSignedReadUrl(targetPath)
+    };
   }
 
   return clonedStorage;
@@ -727,9 +717,27 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       })(),
       deleteBoardData(id).catch(error => { console.warn('Board cleanup failed for workspace', id, getErrorMessage(error)); return false; }),
       (async () => {
-        const bucket = adminStorage.bucket();
-        if (!bucket?.name) return false;
-        await bucket.deleteFiles({ prefix: `workspaces/${id}/` });
+        const s3 = getNasClient();
+        const bucketName = getNasBucket();
+        const prefix = `workspaces/${id}/`;
+        let token: string | undefined;
+        do {
+          const out = await s3.send(new ListObjectsV2Command({
+            Bucket: bucketName,
+            Prefix: prefix,
+            ContinuationToken: token
+          }));
+          const keys = (out.Contents ?? [])
+            .map(o => o.Key)
+            .filter((k): k is string => typeof k === 'string');
+          if (keys.length > 0) {
+            await s3.send(new DeleteObjectsCommand({
+              Bucket: bucketName,
+              Delete: { Objects: keys.map(Key => ({ Key })) }
+            }));
+          }
+          token = out.IsTruncated ? out.NextContinuationToken : undefined;
+        } while (token);
         return true;
       })().catch(error => { console.warn('Storage cleanup failed for workspace', id, getErrorMessage(error)); return false; })
     ]);
