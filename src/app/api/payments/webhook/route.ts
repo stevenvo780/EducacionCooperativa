@@ -38,6 +38,17 @@ const verifyMpSignature = (req: NextRequest, dataId: string | number | undefined
   } catch { return false; }
 };
 
+const logPaymentEvent = async (entry: Record<string, unknown>) => {
+  try {
+    await adminDb.collection('paymentEvents').add({
+      ...entry,
+      receivedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.warn('[mp/webhook] paymentEvent log failed:', (e as Error).message);
+  }
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -47,11 +58,13 @@ export async function POST(req: NextRequest) {
 
     if (!verifyMpSignature(req, data?.id)) {
       console.warn('[mp/webhook] firma inválida o ausente, paymentId=', data?.id);
+      await logPaymentEvent({ kind: 'webhook-rejected', reason: 'bad-signature', dataId: data?.id ?? null });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
     if (!mpWebhookSecret) {
       console.warn('[mp/webhook] MERCADOPAGO_WEBHOOK_SECRET no configurado — webhook abierto (NO RECOMENDADO en producción)');
     }
+    await logPaymentEvent({ kind: 'webhook-received', type, dataId: data?.id ?? null });
 
     if (type === MercadoPagoNotificationType.Payment) {
       const paymentId = data?.id;
@@ -111,6 +124,7 @@ export async function POST(req: NextRequest) {
           }, { merge: true });
 
           console.debug(`[Webhook] Subscription activated for user ${userId}, plan: ${planId}`);
+          await logPaymentEvent({ kind: 'subscription-activated', userId, planId, paymentId: String(paymentId) });
         }
       } else if (isPendingMercadoPagoPaymentStatus(payment.status)) {
         // Solo poner pending si NO tiene ya una suscripción activa
@@ -126,6 +140,7 @@ export async function POST(req: NextRequest) {
           }, { merge: true });
 
           console.debug(`[Webhook] Payment pending for user ${userId}, plan: ${planId}`);
+          await logPaymentEvent({ kind: 'payment-pending', userId, planId, paymentId: String(paymentId) });
         }
       } else if (isCancelledMercadoPagoPaymentStatus(payment.status)) {
         // Solo cancelar si el pago rechazado corresponde al pago ACTUAL
@@ -141,6 +156,7 @@ export async function POST(req: NextRequest) {
           }, { merge: true });
 
           console.debug(`[Webhook] Payment rejected/cancelled for user ${userId}`);
+          await logPaymentEvent({ kind: 'payment-cancelled', userId, planId, paymentId: String(paymentId) });
         }
       }
     }
