@@ -20,7 +20,8 @@ export const dynamic = 'force-dynamic';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { objectExists, isNasConfigured } from '@/lib/nas-storage';
+import { objectExists, deleteObject, isNasConfigured } from '@/lib/nas-storage';
+import { enforceStorageQuota } from '@/lib/plan-guard';
 import { isPersonalWorkspaceId } from '@/types/workspace';
 import { emitPing } from '@/lib/nas-events';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -94,6 +95,24 @@ export async function POST(req: NextRequest) {
             .limit(1)
             .get();
 
+        // Resolver owner del workspace para aplicar cuota de su plan.
+        const wsSnapEarly = await adminDb.collection('workspaces').doc(ctx.workspaceId).get();
+        const wsOwner = (wsSnapEarly.data() as { ownerId?: string } | undefined)?.ownerId ?? '';
+        if (!wsOwner) {
+            await deleteObject(storagePath).catch(() => undefined);
+            return NextResponse.json({ error: 'Workspace ownerId not found' }, { status: 500 });
+        }
+        if (size && size > 0) {
+            // Para updates, descontar el size del doc existente (no double-count).
+            const oldSize = existingSnap.empty ? 0 : Number((existingSnap.docs[0].data() as { size?: number }).size ?? 0);
+            const delta = Math.max(0, size - oldSize);
+            const quotaResp = await enforceStorageQuota(wsOwner, delta);
+            if (quotaResp) {
+                await deleteObject(storagePath).catch(() => undefined);
+                return quotaResp;
+            }
+        }
+
         let docId: string;
         let version = 1;
         let created = false;
@@ -117,20 +136,13 @@ export async function POST(req: NextRequest) {
             });
             docId = ref.id;
         } else {
-            // Owner del workspace para asignar al doc nuevo.
-            const wsSnap = await adminDb.collection('workspaces').doc(ctx.workspaceId).get();
-            const wsData = wsSnap.data() as { ownerId?: string } | undefined;
-            const ownerId = wsData?.ownerId ?? '';
-            if (!ownerId) {
-                return NextResponse.json({ error: 'Workspace ownerId not found' }, { status: 500 });
-            }
             const ref = await adminDb.collection('documents').add({
                 name,
                 folder,
                 type: inferredType,
                 mimeType: inferredMime,
                 workspaceId: ctx.workspaceId,
-                ownerId,
+                ownerId: wsOwner,
                 storagePath,
                 storageBackend: 'minio',
                 contentHash,

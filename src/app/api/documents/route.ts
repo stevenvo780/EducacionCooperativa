@@ -8,6 +8,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
+import { enforceStorageQuota } from '@/lib/plan-guard';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, ensureTextFileName } from '@/lib/storage-path';
 import { DocumentType } from '@/types/documents';
@@ -78,6 +79,9 @@ export async function POST(req: NextRequest) {
                 });
             }
             if (typeof content === 'string') {
+                const incomingBytes = Buffer.byteLength(content, 'utf8');
+                const quotaResp = await enforceStorageQuota(ownerId, incomingBytes);
+                if (quotaResp) return quotaResp;
                 const ext = (finalStoragePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase();
                 const ct = ext === '.md' || ext === '.markdown'
                     ? 'text/markdown'
