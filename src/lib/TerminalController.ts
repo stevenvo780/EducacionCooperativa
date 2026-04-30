@@ -310,6 +310,14 @@ export class TerminalController {
       this.subscribedWorkspaces.forEach(workspaceId => {
         this.socket?.emit('workspace:subscribe', { workspaceId });
       });
+      // Re-join cada sesión que el cliente recuerda. Si una ya no existe
+      // server-side, llegará `restore-failed → session-not-found` y el handler
+      // la limpia. Esto evita las terminales residuales sin output tras un
+      // reconnect: o bien se reanudan, o bien se borran solas.
+      this.terminals.forEach((instance, sessionId) => {
+        instance.term?.writeln('\r\n\x1b[33mReconectando…\x1b[0m');
+        this.socket?.emit('restore-session', { sessionId });
+      });
     });
 
     this.socket.on('disconnect', () => {
