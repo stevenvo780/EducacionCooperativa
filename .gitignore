@@ -101,3 +101,7 @@ public/worker-*.js
 
 scripts
 .env*.local
+
+# Notas privadas para Claude (credenciales de infraestructura) — NUNCA commitear.
+.claude/secrets.md
+.claude/scheduled_tasks.lock
