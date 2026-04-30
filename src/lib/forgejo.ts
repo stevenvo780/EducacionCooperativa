@@ -101,6 +101,21 @@ export const repoNameForWorkspace = (workspaceId: string, ownerUid: string): str
   return slugify(workspaceId);
 };
 
+/**
+ * Borra el repo asociado al workspace en Forgejo. Idempotente: 404 → no-op.
+ * Acepta tanto un `repoFullName` (`org/repo`) ya conocido como derivarlo desde
+ * `workspaceId + ownerUid`.
+ */
+export const deleteForgejoRepo = async (params: { repoFullName?: string; workspaceId?: string; ownerUid?: string }): Promise<boolean> => {
+  let target = params.repoFullName;
+  if (!target && params.workspaceId && params.ownerUid) {
+    target = `${org}/${repoNameForWorkspace(params.workspaceId, params.ownerUid)}`;
+  }
+  if (!target) return false;
+  const res = await fetchAdmin(`/api/v1/repos/${target}`, { method: 'DELETE' });
+  return res.status >= 200 && res.status < 300;
+};
+
 export const ensureOrgExists = async (): Promise<void> => {
   const probe = await fetchAdmin<{ id: number }>(`/api/v1/orgs/${org}`);
   if (probe.status === 200) return;

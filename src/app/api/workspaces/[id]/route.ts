@@ -11,6 +11,8 @@ import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { buildStoragePath, ensureTextFileName, sanitizeFileName } from '@/lib/storage-path';
 import { DocumentType } from '@/types/documents';
 import { invalidateStorageUsageCache } from '@/lib/storage-usage';
+import { deleteForgejoRepo, isForgejoConfigured } from '@/lib/forgejo';
+import { emitPing } from '@/lib/nas-events';
 
 const deleteCollectionInBatches = async (collectionRef: CollectionReference, batchLimit = 400) => {
   let lastDoc: QueryDocumentSnapshot | null = null;
@@ -649,14 +651,78 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         invalidateStorageUsageCache(auth.uid);
       }
 
+      // Tras el clone exitoso, dejar el workspace SOURCE listo para borrar:
+      // docs Firestore, board, blobs MinIO, repo Forgejo y el doc workspace.
+      // Es lo que el usuario espera de "fusionar A en B": A deja de existir.
+      const sourceCleanup = { docsDeleted: 0, boardDeleted: false, storageDeleted: false, forgejoDeleted: false };
+      const sourceOwnerUid = sourceData?.ownerId ?? auth.uid;
+      await Promise.allSettled([
+        (async () => {
+          const batchLimit = 400;
+          let count = 0;
+          let lastDoc: QueryDocumentSnapshot | null = null;
+          while (true) {
+            let q = adminDb.collection('documents').where('workspaceId', '==', sourceWorkspaceId).orderBy('__name__').limit(batchLimit);
+            if (lastDoc) q = q.startAfter(lastDoc);
+            const snap = await q.get();
+            if (snap.empty) break;
+            const batch = adminDb.batch();
+            snap.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            count += snap.size;
+            if (snap.size < batchLimit) break;
+            lastDoc = snap.docs[snap.docs.length - 1];
+          }
+          sourceCleanup.docsDeleted = count;
+        })().catch((e) => console.warn('[merge] source docs cleanup failed:', getErrorMessage(e))),
+        deleteBoardData(sourceWorkspaceId)
+          .then(() => { sourceCleanup.boardDeleted = true; })
+          .catch((e) => console.warn('[merge] source board cleanup failed:', getErrorMessage(e))),
+        (async () => {
+          const s3 = getNasClient();
+          const bucketName = getNasBucket();
+          const prefix = `workspaces/${sourceWorkspaceId}/`;
+          let token: string | undefined;
+          do {
+            const out = await s3.send(new ListObjectsV2Command({
+              Bucket: bucketName, Prefix: prefix, ContinuationToken: token
+            }));
+            const keys = (out.Contents ?? [])
+              .map(o => o.Key).filter((k): k is string => typeof k === 'string');
+            if (keys.length > 0) {
+              await s3.send(new DeleteObjectsCommand({
+                Bucket: bucketName, Delete: { Objects: keys.map(Key => ({ Key })) }
+              }));
+            }
+            token = out.IsTruncated ? out.NextContinuationToken : undefined;
+          } while (token);
+          sourceCleanup.storageDeleted = true;
+        })().catch((e) => console.warn('[merge] source storage cleanup failed:', getErrorMessage(e))),
+        (async () => {
+          if (!isForgejoConfigured()) return;
+          const ok = await deleteForgejoRepo({ workspaceId: sourceWorkspaceId, ownerUid: sourceOwnerUid });
+          sourceCleanup.forgejoDeleted = ok;
+        })().catch((e) => console.warn('[merge] source forgejo cleanup failed:', getErrorMessage(e)))
+      ]);
+      await sourceRef.delete().catch((e) => console.warn('[merge] source workspace delete failed:', getErrorMessage(e)));
+
       await wsRef.set({ updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+      // Refresca clientes web del workspace target.
+      emitPing({
+        scope: 'workspace',
+        op: 'updated',
+        workspaceId: id,
+        sender: `merge:${auth.uid}`
+      }).catch(() => undefined);
 
       return NextResponse.json({
         status: 'merged',
         documentsCreated: docResult.created,
         skippedFolders: docResult.skippedFolders,
         boardColumnsCreated: boardResult.columnsCreated,
-        boardCardsCreated: boardResult.cardsCreated
+        boardCardsCreated: boardResult.cardsCreated,
+        source: { id: sourceWorkspaceId, ...sourceCleanup }
       });
     }
 

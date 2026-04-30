@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 import { WorkspaceType } from '@/types/workspace';
 import { syncWorkspaceClaims } from '@/lib/workspace-claims';
+import { seedSyncignore } from '@/lib/workspace-defaults';
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,6 +66,10 @@ export async function POST(req: NextRequest) {
 
     // Sync custom claims so security rules work without get()/exists()
     syncWorkspaceClaims(auth.uid).catch(() => {});
+
+    // Siembra `.syncignore` con defaults — el daemon lo aplica para evitar que
+    // archivos temp del editor (swp, ~) se conviertan en docs zombie.
+    seedSyncignore(docRef.id, auth.uid).catch((e) => console.warn('[workspaces] seed .syncignore failed:', e?.message));
 
     return NextResponse.json({
       id: docRef.id,

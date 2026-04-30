@@ -8,6 +8,7 @@ import { requireAuth, isWorkspaceMember } from '@/lib/server-auth';
 export const runtime = 'nodejs';
 import { isPersonalWorkspaceId } from '@/types/workspace';
 import { provisionWorkspaceRepo, isForgejoConfigured } from '@/lib/forgejo';
+import { seedGitignore } from '@/lib/workspace-defaults';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -88,6 +89,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
                 provisionedAt: FieldValue.serverTimestamp()
             };
             await adminDb.collection('workspaces').doc(workspaceId).set({ git: gitPatch }, { merge: true });
+            // Siembra `.gitignore` con plantilla vacía. El user decide qué excluir
+            // de los commits desde la web.
+            seedGitignore(workspaceId, auth.uid).catch((e) => console.warn('[provision-git] seed .gitignore failed:', e?.message));
         }
 
         return NextResponse.json({
