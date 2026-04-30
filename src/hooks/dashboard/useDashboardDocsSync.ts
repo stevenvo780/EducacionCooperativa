@@ -220,10 +220,8 @@ export const useDashboardDocsSync = ({
     }, 600);
   }, [isPageVisible, requestDocsRefresh]);
 
-  // RTDB listener vive ahora en `SyncEventsBridge` (layout root) y reemite los
-  // eventos como `agora:docs-changed` (escuchado más abajo). Antes se montaba
-  // aquí, por lo que sólo funcionaba dentro de /dashboard. Mantener esa
-  // suscripción aquí causaría doble refresh.
+  // RTDB listener vive en SyncEventsBridge (layout root) y dispara
+  // `agora:docs-changed`, escuchado abajo.
 
   useEffect(() => {
     if (!currentWorkspace || !user || !isPageVisible) return;

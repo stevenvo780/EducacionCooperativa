@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
 import { getFirestore, Firestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getDatabase, Database } from 'firebase/database';
@@ -38,6 +38,11 @@ function getFirebaseAuth(): Auth {
   }
   if (!auth) {
     auth = getAuth(getFirebaseApp());
+    // IndexedDB sobrevive a recargas, cierre del browser y modos incógnito de
+    // algunos navegadores; localStorage es el fallback.
+    setPersistence(auth, indexedDBLocalPersistence).catch(() => {
+      setPersistence(auth!, browserLocalPersistence).catch(() => undefined);
+    });
   }
   return auth;
 }

@@ -1,17 +1,11 @@
 /**
- * RTDB-only event emitter. Payload mínimo: ping con metadata para que el
- * suscriptor decida si hace pull. El contenido vive en MinIO, la metadata en
- * Firestore.
+ * Emisor de pings RTDB. El payload sólo lleva metadata; el contenido vive en
+ * MinIO y la metadata canónica en Firestore. El cliente (`useSyncEvents`)
+ * filtra por `orderByChild('timestamp') + startAt(now-5s)`, por lo que el
+ * payload debe traer `timestamp`, `type` y `source` con esos nombres.
  *
- * Outbox: collection `syncEventsOutbox` en Firestore (auditoría + replay).
- *
- * IMPORTANTE: el payload incluye los campos que `useSyncEvents` (cliente)
- * necesita para que `orderByChild('timestamp') + startAt(now-5s)` matchee:
- *   - `timestamp` (no sólo `ts`)
- *   - `type` (mapeado desde `op`/`scope`)
- *   - `source` ('worker' por defecto, distinto de 'frontend' que el cliente
- *     auto-ignora)
- * Mantenemos también `scope`, `ts`, `sender` por retro-compat con outbox.
+ * Outbox `syncEventsOutbox` queda como auditoría/replay si la publicación a
+ * RTDB falla.
  */
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -43,10 +37,9 @@ const getRtdb = () => {
 };
 
 /**
- * Resuelve el canal RTDB. Importante: para workspace personal el cliente
- * escucha `sync-events/personal_<uid>`. Si el ping trae `workspaceId` con
- * forma `personal` o `personal:<uid>` (helpers `isPersonalWorkspaceId`),
- * se reescribe al canal personal del usuario.
+ * Resuelve el canal RTDB. Para workspace personal el cliente escucha
+ * `sync-events/personal_<uid>`; reescribimos cuando llega un ping con
+ * `workspaceId` en forma `personal` o `personal:<uid>`.
  */
 const channelFor = (ping: SyncPing): string => {
   const ws = ping.workspaceId ?? null;
@@ -65,14 +58,12 @@ export const emitPing = async (ping: SyncPing): Promise<{ outboxId: string; rtdb
   const rtdbPath = channelFor(ping);
   const type: SyncPingOp = ping.op ?? 'updated';
   const payload = {
-    // Campos consumidos por `useSyncEvents` (cliente):
     type,
     path: ping.path ?? '',
     folder: ping.folder ?? 'No estructurado',
     docId: ping.docId ?? null,
     timestamp: ts,
     source: 'worker',
-    // Campos legacy / auditoría:
     scope: ping.scope,
     workspaceId: ping.workspaceId ?? null,
     userId: ping.userId ?? null,

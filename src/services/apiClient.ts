@@ -43,15 +43,14 @@ const waitForAuthUser = (timeoutMs = 3000): Promise<User | null> => {
   return authWaiter;
 };
 
-export const getAuthToken = async () => {
+export const getAuthToken = async (forceRefresh = false) => {
   if (typeof window === 'undefined') return null;
 
   try {
     const firebaseAuth = getAuth();
     const user = firebaseAuth.currentUser ?? await waitForAuthUser();
-    /* v8 ignore next -- user objects without getIdToken are treated as unauthenticated */
     if (user?.getIdToken) {
-      return await user.getIdToken();
+      return await user.getIdToken(forceRefresh);
     }
   } catch {
   }
@@ -78,28 +77,34 @@ export const getAuthToken = async () => {
   return null;
 };
 
-export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const token = await getAuthToken();
+const doFetch = async (input: RequestInfo | URL, init: RequestInit, forceRefresh: boolean) => {
+  const token = await getAuthToken(forceRefresh);
   const headers = new Headers(init.headers || {});
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+};
+
+export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   try {
-    const response = await fetch(input, { ...init, headers });
+    let response = await doFetch(input, init, false);
+    // Si el server rechaza por auth, reintenta una vez forzando refresh del
+    // ID token. Cubre el caso clásico: token expirado a las 1h pero el user
+    // sigue siendo válido en Firebase.
+    if (response.status === 401) {
+      response = await doFetch(input, init, true);
+    }
     if (!response.ok) {
       let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
       try {
-        // Clone before reading so the original body stays available for the caller
         const errorData = await response.clone().json();
         if (errorData?.message) errorMessage = errorData.message;
-      } catch (e) { /* ignore json parse error */ }
-      
+      } catch { /* json parse */ }
       toast.error('Error en la petición', { description: errorMessage });
     }
     return response;
-  } catch (err: any) {
-    toast.error('Fallo de Red', { description: err?.message || 'No se pudo contactar al servidor.' });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'No se pudo contactar al servidor.';
+    toast.error('Fallo de Red', { description: msg });
     throw err;
   }
 };

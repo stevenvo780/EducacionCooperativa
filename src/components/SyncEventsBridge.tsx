@@ -1,16 +1,10 @@
 'use client';
 
 /**
- * Listener RTDB global. Se monta una sola vez en el layout root (después de
- * StoreProvider + AuthProvider) y suscribe al canal personal del usuario más
- * el canal del workspace actualmente activo. Cada evento entrante se reemite
- * como `window.dispatchEvent('agora:rtdb-event')` y `agora:docs-changed`,
- * para que CUALQUIER página (dashboard, editor, workspace) escuche cambios
- * sin tener que montar su propio listener RTDB.
- *
- * Antes de esto `useSyncEvents` solo se montaba en /dashboard, así que en
- * /editor o /workspace los usuarios no se enteraban de cambios remotos
- * hasta recargar.
+ * Listener RTDB global montado en el layout root. Suscribe al canal personal
+ * del usuario y al del workspace activo, y reemite cada evento como
+ * `window.dispatchEvent('agora:rtdb-event' | 'agora:docs-changed')` para que
+ * cualquier página lo consuma.
  */
 import { useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -28,8 +22,6 @@ export default function SyncEventsBridge() {
     const reemit = useCallback((event: SyncEvent) => {
         if (typeof window === 'undefined') return;
         window.dispatchEvent(new CustomEvent('agora:rtdb-event', { detail: event }));
-        // Compat: el dashboard ya escuchaba este evento para refrescar la
-        // jerarquía. Lo conservamos como atajo "algo cambió, refresca".
         window.dispatchEvent(new Event('agora:docs-changed'));
     }, []);
 

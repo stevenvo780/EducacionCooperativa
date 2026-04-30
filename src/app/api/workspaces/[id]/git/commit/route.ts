@@ -19,11 +19,7 @@ import { isNasConfigured, getObjectBuffer } from '@/lib/nas-storage';
 import { getErrorMessage } from '@/lib/error-utils';
 import crypto from 'node:crypto';
 
-// Máximo permitido por Vercel (Pro/Fluid Compute). Sin reintentos del cliente
-// dentro de la function — el retry vive dentro de applyCommit por chunk.
 export const maxDuration = 800;
-// Force dynamic + non-cached para garantizar streaming de la response
-// (Next/Vercel a veces bufferiza si lo trata como cacheable).
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
@@ -69,10 +65,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
         const changes: CommitChange[] = [];
         const planned: { docId: string; repoPath: string; ref: typeof refs[number] }[] = [];
 
-        // Cargar reglas .gitignore del workspace (defaults + el que el user haya
-        // subido). Filtrar AQUÍ evita descargar buffers de archivos ignorados
-        // (ej: node_modules/ con miles de archivos pequeños) y evita que Forgejo
-        // los reciba aunque el cliente los seleccionara.
+        // Filtrar antes de descargar buffers evita gastar MinIO+Forgejo en
+        // archivos ignorados aunque el cliente los seleccione.
         let docsQuery: FirebaseFirestore.Query = adminDb.collection('documents');
         if (isPersonalWorkspaceId(workspaceId)) {
             docsQuery = docsQuery
@@ -83,10 +77,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
         }
         const ig = await loadWorkspaceIgnore(docsQuery);
 
-        // OPT: 1 sola llamada para resolver TODOS los shas existentes en el repo.
-        // Antes hacíamos 1 getFileMeta por archivo (devuelve blob completo, lento
-        // para PDFs grandes: 3-9s por archivo). El tree es 1 call y devuelve sha
-        // por path. Para 494 archivos: 40min → 2s.
         let preTree = new Map<string, string>();
         try {
             preTree = await listRepoTree(repoFullName, 'main');
@@ -120,7 +110,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
                 const buf = await getObjectBuffer(data.storagePath);
                 if (!buf) return null;
 
-                // Resolver sha sin call a Forgejo: prefer git.lastSha, fallback a tree.
                 const shaIfUpdate: string | undefined = data.git?.lastSha ?? preTree.get(repoPath);
                 return { snap, repoPath, change: {
                     path: repoPath,
@@ -140,21 +129,17 @@ export async function POST(req: NextRequest, context: RouteContext) {
             return NextResponse.json({ error: 'No hay archivos para commitear' }, { status: 400 });
         }
 
-        // SSE streaming — text/event-stream evita buffering en Vercel/Next/proxies.
+        // SSE: text/event-stream evita buffering del proxy de Vercel.
         const encoder = new TextEncoder();
         const stream = new ReadableStream<Uint8Array>({
             start(controller) {
                 const send = (obj: unknown) => {
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
                 };
-                // Heartbeat inicial para que el cliente confirme que el stream está vivo.
                 send({ event: 'connected', ts: Date.now(), skippedIgnored });
-                // Padding inicial: algunos proxies (incluido el de Vercel) necesitan
-                // ~2KB antes de empezar a flushear chunks al cliente.
+                // El proxy necesita ~2KB antes de empezar a flushear.
                 controller.enqueue(encoder.encode(`: ${' '.repeat(2048)}\n\n`));
 
-                // Heartbeat cada 10s mientras procesamos. Mantiene la conexión viva y
-                // le da al cliente progreso aunque un retry de Forgejo tarde minutos.
                 const heartbeat = setInterval(() => {
                     try { controller.enqueue(encoder.encode(`: heartbeat ${Date.now()}\n\n`)); } catch { /* closed */ }
                 }, 10_000);
@@ -171,8 +156,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
                             onProgress: (ev) => send({ event: 'progress', ...ev })
                         });
 
-                        // Actualizar Firestore (committedHash, lastSha, contentHash).
-                        // OPT: 1 sola llamada al tree post-commit en lugar de N getFileMeta.
                         const okPaths = new Set(planned.map(p => p.repoPath).filter(p => !result.errors.some(e => e.path === p)));
                         send({ event: 'persist', total: okPaths.size });
                         let postTree = new Map<string, string>();
