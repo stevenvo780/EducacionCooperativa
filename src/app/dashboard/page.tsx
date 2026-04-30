@@ -66,6 +66,7 @@ import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import MembersModal from '@/components/dashboard/MembersModal';
 import ChangePasswordModal from '@/components/dashboard/ChangePasswordModal';
 import NewWorkspaceModal from '@/components/dashboard/NewWorkspaceModal';
+import WorkspaceManagerModal from '@/components/dashboard/WorkspaceManagerModal';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { PLANS } from '@/types/subscription';
@@ -285,6 +286,7 @@ function DashboardContent() {
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [showNewFileModal, setShowNewFileModal] = useState(false);
+    const [showWorkspaceManagerModal, setShowWorkspaceManagerModal] = useState(false);
     const [newFileTargetFolder, setNewFileTargetFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -446,6 +448,11 @@ function DashboardContent() {
         setCurrentWorkspace,
         subscribeToWorkspace
     });
+
+    const openMembersForWorkspace = useCallback((workspace: Workspace) => {
+        selectWorkspace(workspace);
+        setShowMembersModal(true);
+    }, [selectWorkspace, setShowMembersModal]);
 
     const acceptInvite = async (ws: Workspace) => {
         if (!user || !userEmail) {
@@ -995,6 +1002,7 @@ function DashboardContent() {
                 dialogConfig
                 || showNewFileModal
                 || showNewWorkspaceModal
+                || showWorkspaceManagerModal
                 || showMembersModal
                 || showPasswordModal
                 || showPricingModal
@@ -1083,6 +1091,7 @@ function DashboardContent() {
         showMembersModal,
         showNewFileModal,
         showNewWorkspaceModal,
+        showWorkspaceManagerModal,
         showPasswordModal,
         showPricingModal,
         showQuickSearch
@@ -1604,6 +1613,7 @@ function DashboardContent() {
                         onMergeWorkspace={mergeWorkspaceIntoCurrent}
                         onDeleteWorkspace={deleteWorkspace}
                         onNewWorkspace={() => setShowNewWorkspaceModal(true)}
+                        onOpenWorkspaceManager={() => setShowWorkspaceManagerModal(true)}
                         onShowMembers={() => setShowMembersModal(true)}
                         onOpenPassword={() => {
                             setPasswordForm({ current: '', new: '', confirm: '' });
@@ -1854,6 +1864,28 @@ function DashboardContent() {
                         )}
                     </div>
                 </div>
+
+                <WorkspaceManagerModal
+                    isOpen={showWorkspaceManagerModal}
+                    onClose={() => setShowWorkspaceManagerModal(false)}
+                    workspaces={workspaces}
+                    invites={invites}
+                    currentWorkspace={currentWorkspace}
+                    user={user}
+                    isAdmin={isAdmin}
+                    deletingWorkspaceId={deletingWorkspaceId}
+                    personalWorkspaceId={PERSONAL_WORKSPACE_ID}
+                    onAcceptInvite={acceptInvite}
+                    onSelectWorkspace={selectWorkspace}
+                    onRenameWorkspace={renameWorkspace}
+                    onDuplicateWorkspace={duplicateWorkspace}
+                    onMergeWorkspace={mergeWorkspaceIntoCurrent}
+                    onDeleteWorkspace={deleteWorkspace}
+                    onNewWorkspace={() => setShowNewWorkspaceModal(true)}
+                    onOpenMembers={openMembersForWorkspace}
+                    modalFade={modalFade}
+                    modalPop={modalPop}
+                />
 
                 <NewWorkspaceModal
                     isOpen={showNewWorkspaceModal}

@@ -48,6 +48,13 @@ test('dashboard switches workspaces and creates a new workspace', async ({ page 
   await expect(page.getByText('Bibliografia.md')).toBeVisible();
 
   await header.getByRole('button', { name: 'Historia Cooperativa', exact: true }).click();
+  await page.getByRole('button', { name: 'Gestionar', exact: true }).click();
+  const workspaceManager = page.getByRole('dialog', { name: 'Gestionar espacios' });
+  await expect(workspaceManager.getByRole('heading', { name: 'Gestionar espacios' })).toBeVisible();
+  await expect(page.getByPlaceholder('Buscar espacio')).toBeVisible();
+  await workspaceManager.getByRole('button', { name: 'Cerrar' }).click();
+
+  await header.getByRole('button', { name: 'Historia Cooperativa', exact: true }).click();
   await page.getByRole('button', { name: 'Nuevo Espacio' }).click();
   await expect(page.getByRole('heading', { name: 'Nuevo Espacio de Trabajo' })).toBeVisible();
 

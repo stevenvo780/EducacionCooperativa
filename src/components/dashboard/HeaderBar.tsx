@@ -34,7 +34,8 @@ import {
   Users,
   X,
   Zap,
-  Bot
+  Bot,
+  type LucideIcon
 } from 'lucide-react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
@@ -82,6 +83,7 @@ interface HeaderBarProps {
   onMergeWorkspace: (ws: Workspace) => void;
   onDeleteWorkspace: (ws: Workspace) => void;
   onNewWorkspace: () => void;
+  onOpenWorkspaceManager: () => void;
   onShowMembers: () => void;
   onOpenPassword: () => void;
   onLogout: () => void;
@@ -146,6 +148,7 @@ const HeaderBar = ({
   onMergeWorkspace,
   onDeleteWorkspace,
   onNewWorkspace,
+  onOpenWorkspaceManager,
   onShowMembers,
   onOpenPassword,
   onLogout,
@@ -176,9 +179,13 @@ const HeaderBar = ({
   const [showGitPanel, setShowGitPanel] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [workspaceActionMenuId, setWorkspaceActionMenuId] = useState<string | null>(null);
+  const [workspaceActionMenuPos, setWorkspaceActionMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const workspaceActionMenuRef = useRef<HTMLDivElement>(null);
+  const workspaceActionMenuButtonRef = useRef<HTMLButtonElement>(null);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
   const toolsMenuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -271,6 +278,39 @@ const HeaderBar = ({
       setShowToolsMenu(false);
     }
   }, [showWorkspaceMenu, showUserMenu]);
+
+  useEffect(() => {
+    if (!showWorkspaceMenu) {
+      setWorkspaceActionMenuId(null);
+      setWorkspaceActionMenuPos(null);
+    }
+  }, [showWorkspaceMenu]);
+
+  useEffect(() => {
+    if (!workspaceActionMenuId) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const insideMenu = workspaceActionMenuRef.current && workspaceActionMenuRef.current.contains(target);
+      const insideButton = workspaceActionMenuButtonRef.current && workspaceActionMenuButtonRef.current.contains(target);
+      if (!insideMenu && !insideButton) {
+        setWorkspaceActionMenuId(null);
+        setWorkspaceActionMenuPos(null);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setWorkspaceActionMenuId(null);
+        setWorkspaceActionMenuPos(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [workspaceActionMenuId]);
 
   const panelTools = [
     {
@@ -383,6 +423,108 @@ const HeaderBar = ({
     }
   ] as const;
 
+  type WorkspaceActionItem = {
+    id: string;
+    label: string;
+    icon: LucideIcon;
+    onClick: () => void;
+    danger?: boolean;
+    disabled?: boolean;
+  };
+
+  const closeWorkspaceActionMenu = () => {
+    setWorkspaceActionMenuId(null);
+    setWorkspaceActionMenuPos(null);
+  };
+
+  const canManageWorkspace = (workspace: Workspace) => Boolean(
+    user
+    && workspace.type === WorkspaceType.Shared
+    && workspace.id !== personalWorkspaceId
+    && (!workspace.ownerId || workspace.ownerId === user.uid || isAdmin)
+  );
+
+  const canMergeWorkspace = (workspace: Workspace) => Boolean(
+    canManageWorkspace(workspace)
+    && currentWorkspace
+    && currentWorkspace.type === WorkspaceType.Shared
+    && currentWorkspace.id !== workspace.id
+    && (!currentWorkspace.ownerId || currentWorkspace.ownerId === user?.uid || isAdmin)
+  );
+
+  const copyWorkspaceId = (workspace: Workspace) => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(workspace.id);
+  };
+
+  const getWorkspaceActions = (workspace: Workspace): WorkspaceActionItem[] => {
+    const isPersonalWorkspace = workspace.id === personalWorkspaceId || workspace.type === WorkspaceType.Personal;
+    const actions: WorkspaceActionItem[] = [];
+
+    if (!isPersonalWorkspace) {
+      actions.push({
+        id: 'copy-id',
+        label: 'Copiar ID',
+        icon: Copy,
+        onClick: () => copyWorkspaceId(workspace)
+      });
+    }
+
+    if (canManageWorkspace(workspace)) {
+      actions.push(
+        {
+          id: 'rename',
+          label: 'Renombrar workspace',
+          icon: Pencil,
+          onClick: () => onRenameWorkspace(workspace)
+        },
+        {
+          id: 'duplicate',
+          label: 'Duplicar workspace',
+          icon: Copy,
+          onClick: () => onDuplicateWorkspace(workspace)
+        }
+      );
+    }
+
+    if (canMergeWorkspace(workspace)) {
+      actions.push({
+        id: 'merge',
+        label: `Fusionar dentro de ${currentWorkspace?.name || 'actual'}`,
+        icon: ArrowRightLeft,
+        onClick: () => onMergeWorkspace(workspace)
+      });
+    }
+
+    if (canManageWorkspace(workspace)) {
+      actions.push({
+        id: 'delete',
+        label: 'Eliminar workspace',
+        icon: deletingWorkspaceId === workspace.id ? Loader2 : Trash2,
+        onClick: () => onDeleteWorkspace(workspace),
+        danger: true,
+        disabled: deletingWorkspaceId === workspace.id
+      });
+    }
+
+    return actions;
+  };
+
+  const openWorkspaceActionMenu = (event: React.MouseEvent<HTMLButtonElement>, workspaceId: string) => {
+    event.stopPropagation();
+    event.preventDefault();
+    if (workspaceActionMenuId === workspaceId) {
+      closeWorkspaceActionMenu();
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 224;
+    const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth));
+    setWorkspaceActionMenuPos({ top: rect.bottom + 6, left });
+    setWorkspaceActionMenuId(workspaceId);
+  };
+
   return (
     <header className="h-11 bg-surface-800 border-b border-surface-600/50 flex items-center px-3 shrink-0 z-50 relative gap-2">
       {/* ── Left: Logo + Workspace ── */}
@@ -454,106 +596,104 @@ const HeaderBar = ({
                   <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider px-2">Mis Espacios</span>
                 </div>
                 <div className="max-h-60 overflow-y-auto">
-                  {workspaces.map(ws => (
-                    <div
-                      key={ws.id}
-                      className={`group w-full text-left px-4 py-3 text-sm flex items-center gap-3 hover:bg-surface-700 transition cursor-pointer ${currentWorkspace?.id === ws.id ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
-                      onClick={() => {
-                        onSelectWorkspace(ws);
-                        setShowWorkspaceMenu(false);
-                      }}
-                    >
-                      {ws.type === WorkspaceType.Personal ? <User className="w-4 h-4 shrink-0" /> : <Briefcase className="w-4 h-4 shrink-0" />}
-                      <div className="flex flex-col flex-1 min-w-0">
-                        <span className="truncate">{ws.name}</span>
-                        {ws.id !== personalWorkspaceId && (
-                          <span className="text-[10px] font-mono text-surface-500 truncate">{ws.id}</span>
+                  {workspaces.map(ws => {
+                    const workspaceActions = getWorkspaceActions(ws);
+                    const isCurrentWorkspace = currentWorkspace?.id === ws.id;
+
+                    return (
+                      <div
+                        key={ws.id}
+                        className={`group w-full px-3 py-2.5 text-sm flex items-center gap-2 hover:bg-surface-700 transition ${isCurrentWorkspace ? 'bg-mandy-500/10 text-mandy-400' : 'text-surface-300'}`}
+                      >
+                        <button
+                          type="button"
+                          className="min-w-0 flex flex-1 items-center gap-3 text-left"
+                          onClick={() => {
+                            onSelectWorkspace(ws);
+                            setShowWorkspaceMenu(false);
+                          }}
+                        >
+                          {ws.type === WorkspaceType.Personal ? <User className="w-4 h-4 shrink-0" /> : <Briefcase className="w-4 h-4 shrink-0" />}
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <span className="truncate">{ws.name}</span>
+                            {ws.id !== personalWorkspaceId && (
+                              <span className="text-[10px] font-mono text-surface-500 truncate">{ws.id}</span>
+                            )}
+                          </div>
+                        </button>
+                        {isCurrentWorkspace && <Check className="w-3 h-3 shrink-0" />}
+                        {workspaceActions.length > 0 && (
+                          <button
+                            ref={workspaceActionMenuId === ws.id ? workspaceActionMenuButtonRef : undefined}
+                            type="button"
+                            onClick={(e) => openWorkspaceActionMenu(e, ws.id)}
+                            className={`p-1.5 rounded-md shrink-0 transition ${
+                              workspaceActionMenuId === ws.id
+                                ? 'bg-surface-600 text-surface-100'
+                                : 'text-surface-500 hover:bg-surface-600 hover:text-surface-100'
+                            }`}
+                            title={`Opciones de ${ws.name}`}
+                            aria-label={`Opciones de ${ws.name}`}
+                            aria-haspopup="menu"
+                            aria-expanded={workspaceActionMenuId === ws.id}
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {workspaceActionMenuId === ws.id && workspaceActionMenuPos && (
+                          <div
+                            ref={workspaceActionMenuRef}
+                            role="menu"
+                            className="fixed z-[70] w-56 overflow-hidden rounded-lg border border-surface-600/60 bg-surface-800 shadow-2xl shadow-black/50"
+                            style={{ top: workspaceActionMenuPos.top, left: workspaceActionMenuPos.left }}
+                          >
+                            {workspaceActions.map(action => {
+                              const Icon = action.icon;
+                              return (
+                                <button
+                                  key={action.id}
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={action.disabled}
+                                  title={action.label}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    closeWorkspaceActionMenu();
+                                    action.onClick();
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                    action.danger
+                                      ? 'text-red-400 hover:bg-red-500/10'
+                                      : 'text-surface-300 hover:bg-surface-700 hover:text-surface-100'
+                                  }`}
+                                >
+                                  <Icon className={`w-3.5 h-3.5 ${action.id === 'delete' && deletingWorkspaceId === ws.id ? 'animate-spin' : ''}`} />
+                                  <span className="truncate">{action.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
-                      {ws.id !== personalWorkspaceId && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigator.clipboard.writeText(ws.id);
-                          }}
-                          className="p-1 hover:bg-surface-600 rounded shrink-0"
-                          title="Copiar ID"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                      )}
-                      {user && ws.type === WorkspaceType.Shared && ws.id !== personalWorkspaceId && (
-                        <div className="flex items-center gap-0.5 shrink-0 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-                          {(ws.ownerId === user.uid || isAdmin) && (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onRenameWorkspace(ws);
-                                }}
-                                className="p-1 hover:bg-surface-600 rounded text-surface-400 hover:text-surface-100"
-                                title="Renombrar workspace"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDuplicateWorkspace(ws);
-                                }}
-                                className="p-1 hover:bg-surface-600 rounded text-surface-400 hover:text-surface-100"
-                                title="Duplicar workspace"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                            </>
-                          )}
-                          {(ws.ownerId === user.uid || isAdmin)
-                            && currentWorkspace
-                            && currentWorkspace.type === WorkspaceType.Shared
-                            && currentWorkspace.id !== ws.id
-                            && (currentWorkspace.ownerId === user.uid || isAdmin) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onMergeWorkspace(ws);
-                                }}
-                                className="p-1 hover:bg-sky-500/15 rounded text-surface-400 hover:text-sky-300"
-                                title={`Fusionar dentro de ${currentWorkspace.name}`}
-                              >
-                                <ArrowRightLeft className="w-3 h-3" />
-                              </button>
-                            )}
-                          {(ws.ownerId === user.uid || isAdmin) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteWorkspace(ws);
-                              }}
-                              className="p-1 hover:bg-red-500/20 rounded text-red-400 disabled:opacity-50"
-                              title="Eliminar workspace"
-                              disabled={deletingWorkspaceId === ws.id}
-                            >
-                              {deletingWorkspaceId === ws.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3 h-3" />
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {currentWorkspace?.id === ws.id && <Check className="w-3 h-3 shrink-0" />}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                <div className="p-2 border-t border-surface-600/50 bg-surface-700/50">
+                <div className="p-2 border-t border-surface-600/50 bg-surface-700/50 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      onOpenWorkspaceManager();
+                      setShowWorkspaceMenu(false);
+                    }}
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-xs font-medium hover:border-mandy-500/50 hover:text-mandy-400 transition"
+                  >
+                    <Briefcase className="w-3 h-3" /> Gestionar
+                  </button>
                   <button
                     onClick={() => {
                       onNewWorkspace();
                       setShowWorkspaceMenu(false);
                     }}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-xs font-medium hover:border-mandy-500/50 hover:text-mandy-400 transition"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-xs font-medium hover:border-mandy-500/50 hover:text-mandy-400 transition"
                   >
                     <Plus className="w-3 h-3" /> Nuevo Espacio
                   </button>
