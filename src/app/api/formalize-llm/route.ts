@@ -7,6 +7,7 @@
  * Falls back to server env vars when no client config is provided.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/server-auth';
 import {
   formalizeWithLLM,
   type FormalizeWithLLMOptions,
@@ -68,6 +69,14 @@ function buildLLMConfig(body: Record<string, unknown>): LLMConfig {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json(
+        emptyFormalizationResultPayload('llm', 'No autorizado'),
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { text, profile, language } = body as {
       text: string;

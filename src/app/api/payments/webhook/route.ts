@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { adminDb } from '@/lib/firebase-admin';
@@ -12,6 +13,30 @@ import {
 } from '@/types/payments';
 
 const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
+const mpWebhookSecret = (process.env.MERCADOPAGO_WEBHOOK_SECRET || '').trim();
+
+/**
+ * Verifica la firma de un webhook de MercadoPago.
+ * MP firma `id:<dataId>;request-id:<requestId>;ts:<ts>;` con HMAC-SHA256.
+ * Header `x-signature: ts=<ts>,v1=<hex>` y `x-request-id`.
+ */
+const verifyMpSignature = (req: NextRequest, dataId: string | number | undefined): boolean => {
+  if (!mpWebhookSecret) return true; // sin secret → permisivo, pero loguear (ver más abajo)
+  const sigHeader = req.headers.get('x-signature') ?? '';
+  const requestId = req.headers.get('x-request-id') ?? '';
+  if (!sigHeader || !requestId || !dataId) return false;
+  const parts = Object.fromEntries(
+    sigHeader.split(',').map((p) => p.trim().split('=', 2) as [string, string])
+  );
+  const ts = parts.ts;
+  const v1 = parts.v1;
+  if (!ts || !v1) return false;
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  const expected = crypto.createHmac('sha256', mpWebhookSecret).update(manifest).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
+  } catch { return false; }
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,6 +44,14 @@ export async function POST(req: NextRequest) {
 
     // MercadoPago envía el tipo de notificación y el data.id
     const { type, data } = body;
+
+    if (!verifyMpSignature(req, data?.id)) {
+      console.warn('[mp/webhook] firma inválida o ausente, paymentId=', data?.id);
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+    if (!mpWebhookSecret) {
+      console.warn('[mp/webhook] MERCADOPAGO_WEBHOOK_SECRET no configurado — webhook abierto (NO RECOMENDADO en producción)');
+    }
 
     if (type === MercadoPagoNotificationType.Payment) {
       const paymentId = data?.id;
