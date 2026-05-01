@@ -436,10 +436,7 @@ export function useMosaicTabs({
 
         setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: false }));
 
-        setOpenTabs(prev => {
-            if (prev.some(tab => tab.id === filesTabId)) return prev;
-            return [...prev, newFilesItem];
-        });
+        setOpenTabs(prev => prev.some(tab => tab.id === filesTabId) ? prev : [...prev, newFilesItem]);
 
         const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
         setMosaicNode(current => {

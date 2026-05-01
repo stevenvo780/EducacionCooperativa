@@ -129,7 +129,9 @@ export const useDashboardPersistence = ({
         ownerId: userUid
       };
 
-      setOpenTabs(prev => [...prev, newFilesItem]);
+      // Dedupe dentro del setter — el effect puede dispararse 2x y ambas
+      // pasadas ven `hasFilesTab=false` antes de que la primera commit.
+      setOpenTabs(prev => prev.some(t => t.id === filesTabId) ? prev : [...prev, newFilesItem]);
       const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
       setMosaicNode(current => {
         const leaves = getLeaves(current);
