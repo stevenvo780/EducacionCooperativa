@@ -346,7 +346,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                 setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: subiendo a Forgejo (${files.length} archivos)…` });
 
                 // POST DIRECTO a Forgejo (sin pasar por Vercel).
-                const fr = await fetch(`${repoApiBase}/contents`, {
+                let fr = await fetch(`${repoApiBase}/contents`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `token ${forgejoToken}`,
@@ -355,15 +355,49 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                     body: JSON.stringify({ files, branch: 'main', message: partMessage })
                 });
 
+                // Fallback 422: leer cada archivo del repo, conseguir su sha real,
+                // y reintentar marcando los existentes como `update`. Cubre repos
+                // donde el preTree quedó desactualizado o donde algún archivo se
+                // creó por otra vía (worker daemon, agora-cli) entre el status y
+                // el commit.
+                if (fr.status === 422) {
+                    const txt422 = await fr.clone().text();
+                    console.warn('[git/commit] 422 inicial, raw:', txt422.slice(0, 400));
+                    const recovered: typeof files = [];
+                    for (const f of files) {
+                        try {
+                            const meta = await fetch(`${repoApiBase}/contents/${encodeURI(f.path)}?ref=main`, {
+                                headers: { 'Authorization': `token ${forgejoToken}` }
+                            });
+                            if (meta.ok) {
+                                const m = await meta.json() as { sha?: string };
+                                recovered.push({ ...f, operation: 'update', sha: m.sha ?? f.sha });
+                            } else {
+                                recovered.push({ ...f, operation: 'create', sha: undefined });
+                            }
+                        } catch {
+                            recovered.push(f);
+                        }
+                    }
+                    fr = await fetch(`${repoApiBase}/contents`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `token ${forgejoToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ files: recovered, branch: 'main', message: partMessage })
+                    });
+                }
+
                 if (!fr.ok) {
                     const txt = await fr.text();
-                    // Si token inválido (401), invalidar y pedir al user reintentar.
                     if (fr.status === 401) {
                         localStorage.removeItem(TOKEN_KEY);
                         throw new Error('Token Forgejo inválido. Reintenta — se emitirá uno nuevo.');
                     }
+                    console.warn('[git/commit] fail status=', fr.status, 'raw:', txt.slice(0, 400));
                     for (const f of files) errors.push({ path: f.path, status: fr.status, raw: txt.slice(0, 200) });
-                    continue; // sigue con próximo chunk; no aborta
+                    continue;
                 }
 
                 const result = await fr.json() as { commit?: { sha: string } };
