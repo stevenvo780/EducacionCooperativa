@@ -22,7 +22,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { objectExists, deleteObject, isNasConfigured } from '@/lib/nas-storage';
 import { enforceStorageQuota } from '@/lib/plan-guard';
-import { isPersonalWorkspaceId } from '@/types/workspace';
+import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { emitPing } from '@/lib/nas-events';
 import { getErrorMessage } from '@/lib/error-utils';
 
@@ -67,8 +67,9 @@ export async function POST(req: NextRequest) {
         if (!isNasConfigured()) return NextResponse.json({ error: 'NAS not configured' }, { status: 503 });
         const ctx = verifyWorkerAuth(req);
         if (!ctx) return NextResponse.json({ error: 'Worker auth required' }, { status: 401 });
-        if (isPersonalWorkspaceId(ctx.workspaceId)) {
-            return NextResponse.json({ error: 'Personal workspace not supported via worker auth' }, { status: 400 });
+        const isPersonal = isPersonalWorkspaceId(ctx.workspaceId);
+        if (isPersonal && !ctx.userId) {
+            return NextResponse.json({ error: 'Personal workspace requires X-Worker-Uid' }, { status: 400 });
         }
 
         const body = await req.json() as { repoPath?: unknown; contentHash?: unknown; size?: unknown; mimeType?: unknown };
@@ -79,7 +80,9 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'repoPath and contentHash required' }, { status: 400 });
         }
 
-        const storagePath = `workspaces/${ctx.workspaceId}/${repoPath}`;
+        const storagePath = isPersonal
+            ? `users/${ctx.userId}/${repoPath}`
+            : `workspaces/${ctx.workspaceId}/${repoPath}`;
         if (!(await objectExists(storagePath))) {
             return NextResponse.json({ error: 'Blob not found in NAS — upload first' }, { status: 412 });
         }
@@ -87,20 +90,28 @@ export async function POST(req: NextRequest) {
         const { folder, name } = splitRepoPath(repoPath);
         const { type: inferredType, mimeType: inferredMime } = inferType(name, typeof body.mimeType === 'string' ? body.mimeType : undefined);
 
-        // Buscar doc existente por (workspaceId, name, folder).
-        const existingSnap = await adminDb.collection('documents')
-            .where('workspaceId', '==', ctx.workspaceId)
-            .where('name', '==', name)
-            .where('folder', '==', folder)
-            .limit(1)
-            .get();
+        // Buscar doc existente. Personal: por (ownerId, name, folder); Shared: por (workspaceId, name, folder).
+        const existingQuery = isPersonal
+            ? adminDb.collection('documents')
+                .where('ownerId', '==', ctx.userId)
+                .where('workspaceId', '==', PERSONAL_WORKSPACE_ID)
+                .where('name', '==', name)
+                .where('folder', '==', folder)
+            : adminDb.collection('documents')
+                .where('workspaceId', '==', ctx.workspaceId)
+                .where('name', '==', name)
+                .where('folder', '==', folder);
+        const existingSnap = await existingQuery.limit(1).get();
 
-        // Resolver owner del workspace para aplicar cuota de su plan.
-        const wsSnapEarly = await adminDb.collection('workspaces').doc(ctx.workspaceId).get();
-        const wsOwner = (wsSnapEarly.data() as { ownerId?: string } | undefined)?.ownerId ?? '';
+        // Owner para cuota — en personal es el propio uid; en shared es ownerId del workspace.
+        let wsOwner = ctx.userId ?? '';
+        if (!isPersonal) {
+            const wsSnapEarly = await adminDb.collection('workspaces').doc(ctx.workspaceId).get();
+            wsOwner = (wsSnapEarly.data() as { ownerId?: string } | undefined)?.ownerId ?? '';
+        }
         if (!wsOwner) {
             await deleteObject(storagePath).catch(() => undefined);
-            return NextResponse.json({ error: 'Workspace ownerId not found' }, { status: 500 });
+            return NextResponse.json({ error: 'Owner not resolvable' }, { status: 500 });
         }
         if (size && size > 0) {
             // Para updates, descontar el size del doc existente (no double-count).
@@ -141,7 +152,7 @@ export async function POST(req: NextRequest) {
                 folder,
                 type: inferredType,
                 mimeType: inferredMime,
-                workspaceId: ctx.workspaceId,
+                workspaceId: isPersonal ? PERSONAL_WORKSPACE_ID : ctx.workspaceId,
                 ownerId: wsOwner,
                 storagePath,
                 storageBackend: 'minio',

@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { deleteObject, isNasConfigured } from '@/lib/nas-storage';
-import { isPersonalWorkspaceId } from '@/types/workspace';
+import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { emitPing } from '@/lib/nas-events';
 import { getErrorMessage } from '@/lib/error-utils';
 
@@ -38,8 +38,9 @@ export async function POST(req: NextRequest) {
         if (!isNasConfigured()) return NextResponse.json({ error: 'NAS not configured' }, { status: 503 });
         const ctx = verifyWorkerAuth(req);
         if (!ctx) return NextResponse.json({ error: 'Worker auth required' }, { status: 401 });
-        if (isPersonalWorkspaceId(ctx.workspaceId)) {
-            return NextResponse.json({ error: 'Personal workspace not supported via worker auth' }, { status: 400 });
+        const isPersonal = isPersonalWorkspaceId(ctx.workspaceId);
+        if (isPersonal && !ctx.userId) {
+            return NextResponse.json({ error: 'Personal workspace requires X-Worker-Uid' }, { status: 400 });
         }
 
         const body = await req.json() as { repoPath?: unknown };
@@ -48,12 +49,17 @@ export async function POST(req: NextRequest) {
 
         const { folder, name } = splitRepoPath(repoPath);
 
-        const snap = await adminDb.collection('documents')
-            .where('workspaceId', '==', ctx.workspaceId)
-            .where('name', '==', name)
-            .where('folder', '==', folder)
-            .limit(1)
-            .get();
+        const query = isPersonal
+            ? adminDb.collection('documents')
+                .where('ownerId', '==', ctx.userId)
+                .where('workspaceId', '==', PERSONAL_WORKSPACE_ID)
+                .where('name', '==', name)
+                .where('folder', '==', folder)
+            : adminDb.collection('documents')
+                .where('workspaceId', '==', ctx.workspaceId)
+                .where('name', '==', name)
+                .where('folder', '==', folder);
+        const snap = await query.limit(1).get();
 
         let docId: string | null = null;
         let storagePath: string | null = null;
@@ -65,8 +71,9 @@ export async function POST(req: NextRequest) {
             await ref.delete();
         }
 
-        // Si no había doc Firestore, asume el path canónico para borrar el blob.
-        const blobPath = storagePath ?? `workspaces/${ctx.workspaceId}/${repoPath}`;
+        const blobPath = storagePath ?? (isPersonal
+            ? `users/${ctx.userId}/${repoPath}`
+            : `workspaces/${ctx.workspaceId}/${repoPath}`);
         await deleteObject(blobPath).catch((e) => console.warn('[worker-delete] blob delete failed:', getErrorMessage(e)));
 
         await emitPing({
