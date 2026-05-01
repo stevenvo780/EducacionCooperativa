@@ -105,7 +105,7 @@ export const listCommits = async (
 };
 
 interface GitTreeEntry { path: string; mode: string; type: string; sha: string; size?: number }
-interface GitTreeResponse { tree?: GitTreeEntry[]; truncated?: boolean }
+interface GitTreeResponse { tree?: GitTreeEntry[]; truncated?: boolean; page?: number; total_count?: number }
 
 /**
  * 1 sola llamada para obtener todo el árbol del repo (recursive).
@@ -116,15 +116,29 @@ export const listRepoTree = async (
   repoFullName: string,
   ref = 'HEAD'
 ): Promise<Map<string, string>> => {
-  // Resolver ref → commit sha → tree sha
   const commits = await call<ForgejoCommitInfo[]>(`/api/v1/repos/${repoFullName}/commits?limit=1&sha=${encodeURIComponent(ref)}`);
   const head = Array.isArray(commits.body) && commits.body[0] ? commits.body[0] : null;
   if (!head) return new Map();
-  const r = await call<GitTreeResponse>(`/api/v1/repos/${repoFullName}/git/trees/${head.sha}?recursive=true&per_page=1000`);
   const map = new Map<string, string>();
-  if (r.body?.tree) {
-    for (const entry of r.body.tree) {
+  // Forgejo límite máximo per_page=1000 + paginación cuando hay más. Sin esto,
+  // workspaces con >1000 archivos veían los excedentes como "no existe" y el
+  // cliente los reportaba como `create` → 422 "file already exists".
+  const PAGE_SIZE = 1000;
+  let page = 1;
+  while (true) {
+    const r = await call<GitTreeResponse>(
+      `/api/v1/repos/${repoFullName}/git/trees/${head.sha}?recursive=true&per_page=${PAGE_SIZE}&page=${page}`
+    );
+    const entries = r.body?.tree;
+    if (!entries || entries.length === 0) break;
+    for (const entry of entries) {
       if (entry.type === 'blob') map.set(entry.path, entry.sha);
+    }
+    if (!r.body?.truncated && entries.length < PAGE_SIZE) break;
+    page++;
+    if (page > 100) {
+      console.warn('[listRepoTree] safety stop after 100 pages — repo gigante?');
+      break;
     }
   }
   return map;
