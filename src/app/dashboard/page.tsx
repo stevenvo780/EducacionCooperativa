@@ -284,7 +284,17 @@ function DashboardContent() {
 
     const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
     const [favoriteDocIds, setFavoriteDocIds] = useState<string[]>([]);
-    const [openTabs, setOpenTabs] = useState<DocItem[]>([]);
+    const [openTabs, setOpenTabsRaw] = useState<DocItem[]>([]);
+    // Saneo: si entran duplicados (bug histórico del effect que se disparaba 2x),
+    // descartar los repetidos por id manteniendo el primero.
+    const setOpenTabs: typeof setOpenTabsRaw = useCallback((value) => {
+        setOpenTabsRaw(prev => {
+            const next = typeof value === 'function' ? (value as (p: DocItem[]) => DocItem[])(prev) : value;
+            const seen = new Set<string>();
+            const dedup = next.filter(t => seen.has(t.id) ? false : (seen.add(t.id), true));
+            return dedup.length === next.length ? next : dedup;
+        });
+    }, []);
     const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
     const [closedFilesTabByWorkspace, setClosedFilesTabByWorkspace] = useState<Record<string, boolean>>({});
     const boardTabId = currentWorkspaceId ? `board-${currentWorkspaceId}` : null;
