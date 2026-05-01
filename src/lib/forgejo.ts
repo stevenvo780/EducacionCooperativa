@@ -297,7 +297,7 @@ export const provisionWorkspaceRepo = async (params: {
       userResult.user.login,
       userResult.password,
       `/api/v1/users/${userResult.user.login}/tokens`,
-      { method: 'POST', body: JSON.stringify({ name: tokenName, scopes: ['write:repository', 'read:user'] }) }
+      { method: 'POST', body: JSON.stringify({ name: tokenName, scopes: ['write:repository', 'read:repository', 'read:user'] }) }
     );
     if (t.body?.sha1) token = t.body.sha1;
   }
@@ -316,7 +316,7 @@ export const provisionWorkspaceRepo = async (params: {
  * Pensado para que el cliente browser obtenga un token nuevo cuando se le perdió
  * el inicial (provisioning) o cuando el admin lo revocó.
  */
-export const issueTokenForUser = async (uid: string, tokenName: string, scopes: string[] = ['write:repository', 'read:user']): Promise<string | null> => {
+export const issueTokenForUser = async (uid: string, tokenName: string, scopes: string[] = ['write:repository', 'read:repository', 'read:user']): Promise<string | null> => {
   const login = userLoginFor(uid);
   // Probe: el user debe existir.
   const probe = await fetchAdmin<ForgejoUser>(`/api/v1/users/${login}`);
