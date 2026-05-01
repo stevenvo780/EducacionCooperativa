@@ -393,7 +393,11 @@ export default function MosaicEditor({
 
   const maybeLoadRawContent = useCallback(async (key: string | null) => {
     if (!roomId || !key) return;
-    if (rawLoadInFlightRef.current || key === lastRawKeyRef.current) return;
+    if (rawLoadInFlightRef.current) return;
+    // Skip solo si ya tenemos contenido cargado para este key. Si contentRef
+    // está vacío (remount, transición cerrar→abrir), forzamos re-fetch
+    // aunque lastRawKeyRef coincida — sino el editor queda en blanco.
+    if (key === lastRawKeyRef.current && contentRef.current !== '') return;
     rawLoadInFlightRef.current = true;
     lastRawKeyRef.current = key;
     // Importante: mientras carga el raw, no consideremos el editor "cargado"
