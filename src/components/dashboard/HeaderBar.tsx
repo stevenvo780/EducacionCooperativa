@@ -12,7 +12,6 @@ import {
   ChevronDown,
   ChevronUp,
   GitBranch,
-  KeyRound,
   Copy,
   Crown,
   FolderOpen,
@@ -44,7 +43,6 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import { ELENXOS_BRAND } from '@/lib/branding';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
 import GitWorkbench from '@/components/dashboard/GitWorkbench';
-import GitAccessPanel from '@/components/dashboard/GitAccessPanel';
 import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId, type WorkerStatus } from '@/types/terminal';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { formatStorageSize } from '@/types/subscription';
@@ -179,7 +177,6 @@ const HeaderBar = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showGitPanel, setShowGitPanel] = useState(false);
-  const [showGitAccess, setShowGitAccess] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [workspaceActionMenuId, setWorkspaceActionMenuId] = useState<string | null>(null);
@@ -399,16 +396,9 @@ const HeaderBar = ({
     {
       id: 'git',
       label: 'Git',
-      description: 'Cambios, staging, commits e historial del workspace',
+      description: 'Cambios, historial, y credenciales para clonar fuera de Agora',
       icon: GitBranch,
       onClick: () => setShowGitPanel(true)
-    },
-    {
-      id: 'git-access',
-      label: 'Acceso Git',
-      description: 'Tu usuario, token y URLs para clonar fuera de Agora',
-      icon: KeyRound,
-      onClick: () => setShowGitAccess(true)
     },
     {
       id: 'company',
@@ -1139,31 +1129,17 @@ const HeaderBar = ({
       <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} multiple />
       <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderUpload} multiple {...folderInputProps} />
 
-      {showGitAccess && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4"
-          onClick={() => setShowGitAccess(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Acceso Git"
-        >
-          <div className="w-full max-w-lg max-h-[80vh] overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950" onClick={(e) => e.stopPropagation()}>
-            <GitAccessPanel onClose={() => setShowGitAccess(false)} />
-          </div>
-        </div>
-      )}
-
       {/* Git Workbench modal — VS Code style: cambios, stage, commit, historial */}
       {showGitPanel && currentWorkspace && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4"
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-8 pb-4 px-4"
           onClick={() => setShowGitPanel(false)}
           role="dialog"
           aria-modal="true"
           aria-label="Git Workbench"
         >
           <div
-            className="w-full max-w-lg"
+            className="w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden rounded-lg shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <GitWorkbench
