@@ -95,10 +95,26 @@ export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}
     }
     if (!response.ok) {
       let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
+      let errorPayload: { error?: string; message?: string; currentPlan?: string; feature?: string } | null = null;
       try {
-        const errorData = await response.clone().json();
-        if (errorData?.message) errorMessage = errorData.message;
+        errorPayload = await response.clone().json();
+        if (errorPayload?.message) errorMessage = errorPayload.message;
       } catch { /* json parse */ }
+      // Plan/cuota: dispatch evento global para que el dashboard abra
+      // PricingModal en vez de mostrar solo el toast.
+      const isPlanGate = response.status === 403 && errorPayload?.error === 'plan-required';
+      const isQuotaGate = response.status === 413 && errorPayload?.error === 'storage-quota-exceeded';
+      if ((isPlanGate || isQuotaGate) && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agora:plan-required', {
+          detail: {
+            kind: isQuotaGate ? 'quota' : 'plan',
+            currentPlan: errorPayload?.currentPlan,
+            feature: errorPayload?.feature,
+            message: errorMessage
+          }
+        }));
+        return response;
+      }
       toast.error('Error en la petición', { description: errorMessage });
     }
     return response;
