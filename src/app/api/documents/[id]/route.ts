@@ -226,6 +226,15 @@ export async function GET(req: NextRequest, context: RouteContext) {
         }
 
         const storagePath = typeof data.storagePath === 'string' ? data.storagePath : undefined;
+        const docName = typeof data.name === 'string' ? data.name : '';
+        const isDotfile = docName.startsWith('.') && docName.indexOf('.', 1) === -1;
+        // Normaliza dotfiles que se hayan guardado con type='file' en migraciones
+        // anteriores: el cliente espera type='text' + mimeType text/plain para
+        // abrirlos con el editor de código y NO necesita signed URL.
+        if (isDotfile && data.type === DocumentType.File) {
+            data.type = DocumentType.Text;
+            data.mimeType = 'text/plain';
+        }
         if (data.type === DocumentType.File && storagePath && isNasConfigured()) {
             try {
                 data.url = await presignGet(storagePath, 60 * 60);
