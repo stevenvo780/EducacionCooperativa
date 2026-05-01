@@ -447,13 +447,15 @@ export default function MosaicEditor({
     const folder = typeof data.folder === 'string' ? data.folder : '';
     const workspaceId = typeof data.workspaceId === 'string' ? data.workspaceId : null;
     const isMarkdown = isMarkdownMime(mimeType) || isMarkdownName(name);
-    // Texto plano: cubre dotfiles (.syncignore, .gitignore, .env...) y mimes
-    // text/* aunque el doc se haya guardado con type: 'file'. Sin esto el
-    // viewer de archivos los abriría como binarios.
+    // Dotfile: nombre tipo `.gitignore`, `.syncignore`, `.env`, `.editorconfig`
+    // (sin segunda extensión). Siempre se trata como texto plano, sin importar
+    // qué `type`/`mimeType` haya quedado en Firestore — algunos docs viejos
+    // quedaron con type='file' o mime='application/octet-stream'.
+    const isDotfile = name.startsWith('.') && name.indexOf('.', 1) === -1;
     const isPlainTextLike = (
-      mimeType.startsWith('text/')
+      isDotfile
+      || mimeType.startsWith('text/')
       || mimeType === 'application/json'
-      || (name.startsWith('.') && name.indexOf('.', 1) === -1)
     );
 
     currentDocMetaRef.current = {
@@ -463,7 +465,7 @@ export default function MosaicEditor({
     };
     setCurrentWorkspaceId(workspaceId || PERSONAL_WORKSPACE_ID);
 
-    if (type === DocumentType.File && !isMarkdown && !isPlainTextLike) {
+    if (type === DocumentType.File && !isMarkdown && !isPlainTextLike && !isDotfile) {
       setDocType(DocumentType.File);
       setIsPlainText(false);
       setFileUrl(url);

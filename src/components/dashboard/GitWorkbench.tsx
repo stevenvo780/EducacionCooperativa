@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     GitBranch, GitCommit, RefreshCcw, AlertCircle, Check, History,
-    FileText, FilePlus, Loader2, ExternalLink, Plus
+    FileText, FilePlus, Loader2, ExternalLink, Plus, KeyRound
 } from 'lucide-react';
+import GitAccessPanel from '@/components/dashboard/GitAccessPanel';
 import { useAuth } from '@/context/AuthContext';
 import { authFetch } from '@/services/apiClient';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
@@ -69,7 +70,7 @@ interface GitWorkbenchProps {
     onClose?: () => void;
 }
 
-type Tab = 'changes' | 'history';
+type Tab = 'changes' | 'history' | 'access';
 
 export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenchProps) {
     const { user } = useAuth();
@@ -417,7 +418,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
     if (!user) return null;
 
     return (
-        <div className="flex flex-col h-full max-h-[80vh] rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex flex-col h-full min-h-0 rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
                 <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -477,6 +478,9 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                         </button>
                         <button type="button" onClick={() => setTab('history')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'history' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
                             <History className="h-3.5 w-3.5" /> Historial
+                        </button>
+                        <button type="button" onClick={() => setTab('access')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'access' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
+                            <KeyRound className="h-3.5 w-3.5" /> Acceso
                         </button>
                     </div>
 
@@ -558,6 +562,12 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                                         <div className="mt-0.5 text-[10px] text-zinc-500">{c.authorName}</div>
                                     </a>
                                 ))}
+                            </div>
+                        )}
+
+                        {tab === 'access' && (
+                            <div className="-mx-3 -my-2">
+                                <GitAccessPanel />
                             </div>
                         )}
                     </div>
