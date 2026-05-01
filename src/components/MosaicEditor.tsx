@@ -505,10 +505,14 @@ export default function MosaicEditor({
         return;
       }
 
-      if (!same) {
-        // Use setMarkdown if editor is mounted (avoids full remount),
-        // fall back to remount via setEditorContent
-        if (mdxEditorRef.current) {
+      // CodeMirror plain text: SIEMPRE setEditorContent al recibir contenido
+      // del API, sin importar el flag `same`. El cache contentRef puede
+      // sobrevivir al remount del componente y dejar el editor visualmente
+      // vacío aunque la ref diga lo contrario.
+      const isPlainTextNow = isPlainTextLike && !isMarkdown;
+      if (!same || isPlainTextNow) {
+        if (!isPlainTextNow && mdxEditorRef.current) {
+          // MDX rich: update sin remount.
           contentRef.current = incoming;
           lastSyncedContentRef.current = incoming;
           pendingLocalChangeRef.current = false;
