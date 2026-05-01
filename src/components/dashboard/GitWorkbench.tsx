@@ -345,65 +345,67 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
 
                 setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: subiendo a Forgejo (${files.length} archivos)…` });
 
-                // POST DIRECTO a Forgejo (sin pasar por Vercel).
-                let fr = await fetch(`${repoApiBase}/contents`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `token ${forgejoToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ files, branch: 'main', message: partMessage })
-                });
+                // POST por archivo individual a /contents/<path>. Permite que
+                // 1 colisión no aborte 39 commits exitosos. Auto-retry como
+                // update si Forgejo dice "already exists".
+                const successfulBlobs: typeof blobs = [];
+                let commitSha: string | undefined;
+                for (let fi = 0; fi < files.length; fi++) {
+                    const f = files[fi];
+                    const blob = blobs.filter((x): x is NonNullable<typeof x> => x !== null).find(b => b.p.repoPath === f.path);
+                    if (!blob) continue;
+                    setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: archivo ${fi + 1}/${files.length}…` });
 
-                // Fallback 422: leer cada archivo del repo, conseguir su sha real,
-                // y reintentar marcando los existentes como `update`. Cubre repos
-                // donde el preTree quedó desactualizado o donde algún archivo se
-                // creó por otra vía (worker daemon, agora-cli) entre el status y
-                // el commit.
-                if (fr.status === 422) {
-                    const txt422 = await fr.clone().text();
-                    console.warn('[git/commit] 422 inicial, raw:', txt422.slice(0, 400));
-                    const recovered: typeof files = [];
-                    for (const f of files) {
+                    const singleBody: Record<string, unknown> = {
+                        content: f.content,
+                        branch: 'main',
+                        message: partMessage
+                    };
+                    if (f.sha) singleBody.sha = f.sha;
+
+                    const url = `${repoApiBase}/contents/${encodeURI(f.path)}`;
+                    let fr2 = await fetch(url, {
+                        method: f.operation === 'update' ? 'PUT' : 'POST',
+                        headers: { 'Authorization': `token ${forgejoToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(singleBody)
+                    });
+
+                    // Si "already exists" en create → resolver sha y reintentar como update.
+                    if (fr2.status === 422 && f.operation === 'create') {
                         try {
-                            const meta = await fetch(`${repoApiBase}/contents/${encodeURI(f.path)}?ref=main`, {
-                                headers: { 'Authorization': `token ${forgejoToken}` }
-                            });
+                            const meta = await fetch(`${url}?ref=main`, { headers: { 'Authorization': `token ${forgejoToken}` } });
                             if (meta.ok) {
                                 const m = await meta.json() as { sha?: string };
-                                recovered.push({ ...f, operation: 'update', sha: m.sha ?? f.sha });
-                            } else {
-                                recovered.push({ ...f, operation: 'create', sha: undefined });
+                                if (m.sha) {
+                                    fr2 = await fetch(url, {
+                                        method: 'PUT',
+                                        headers: { 'Authorization': `token ${forgejoToken}`, 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ ...singleBody, sha: m.sha })
+                                    });
+                                }
                             }
-                        } catch {
-                            recovered.push(f);
-                        }
+                        } catch { /* deja el 422 original */ }
                     }
-                    fr = await fetch(`${repoApiBase}/contents`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `token ${forgejoToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ files: recovered, branch: 'main', message: partMessage })
-                    });
-                }
 
-                if (!fr.ok) {
-                    const txt = await fr.text();
-                    if (fr.status === 401) {
+                    if (fr2.status === 401) {
                         localStorage.removeItem(TOKEN_KEY);
                         throw new Error('Token Forgejo inválido. Reintenta — se emitirá uno nuevo.');
                     }
-                    console.warn('[git/commit] fail status=', fr.status, 'raw:', txt.slice(0, 400));
-                    for (const f of files) errors.push({ path: f.path, status: fr.status, raw: txt.slice(0, 200) });
-                    continue;
+
+                    if (!fr2.ok) {
+                        const txt = await fr2.text();
+                        console.warn('[git/commit] fail', f.path, 'status=', fr2.status, 'raw:', txt.slice(0, 300));
+                        errors.push({ path: f.path, status: fr2.status, raw: txt.slice(0, 200) });
+                        continue;
+                    }
+
+                    const result = await fr2.json() as { commit?: { sha: string } };
+                    if (result.commit?.sha) commitSha = result.commit.sha;
+                    successfulBlobs.push(blob);
                 }
 
-                const result = await fr.json() as { commit?: { sha: string } };
-                const commitSha = result.commit?.sha;
-
-                for (const b of blobs.filter((x): x is NonNullable<typeof x> => x !== null)) {
+                for (const b of successfulBlobs) {
+                    if (!b) continue;
                     persistEntries.push({
                         docId: b.p.docId,
                         repoPath: b.p.repoPath,
