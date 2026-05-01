@@ -21,8 +21,10 @@ import {
   toolbarPlugin,
   type MDXEditorMethods
 } from '@mdxeditor/editor';
+import dynamic from 'next/dynamic';
 import { DynamicMDXEditor } from '@/components/editor/DynamicMDXEditor';
 import '@mdxeditor/editor/style.css';
+const CodeMirrorPlain = dynamic(() => import('@uiw/react-codemirror').then(m => m.default), { ssr: false });
 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
@@ -119,6 +121,9 @@ export default function MosaicEditor({
   const [statsContent, setStatsContent] = useState(initialContent); // only for stats display
   const [saving, setSaving] = useState(false);
   const [docType, setDocType] = useState<DocumentType.Text | DocumentType.File>(DocumentType.Text);
+  // True para archivos texto-plano sin sintaxis markdown (.gitignore, .syncignore,
+  // .env, .yml, etc.). Se renderiza con CodeMirror en lugar del editor MDX rich.
+  const [isPlainText, setIsPlainText] = useState(false);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('');
@@ -460,6 +465,7 @@ export default function MosaicEditor({
 
     if (type === DocumentType.File && !isMarkdown && !isPlainTextLike) {
       setDocType(DocumentType.File);
+      setIsPlainText(false);
       setFileUrl(url);
       setFileName(name || 'Archivo');
       setFileMime(mimeType);
@@ -471,6 +477,7 @@ export default function MosaicEditor({
     }
 
     setDocType(DocumentType.Text);
+    setIsPlainText(isPlainTextLike && !isMarkdown);
     setFileUrl(null);
     setFileName('');
     setFileMime(mimeType);
@@ -1921,6 +1928,16 @@ export default function MosaicEditor({
             </>
           ) : (
             <div className="flex-1 relative overflow-hidden h-full">
+              {isPlainText ? (
+                <CodeMirrorPlain
+                  key={editorKey}
+                  value={initialMarkdown}
+                  onChange={handleMdxChange}
+                  height="100%"
+                  basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
+                  className="h-full"
+                />
+              ) : (
               <DynamicMDXEditor
                 key={editorKey}
                 ref={mdxEditorRef}
@@ -1931,6 +1948,7 @@ export default function MosaicEditor({
                 className="mdx-editor-root h-full"
                 placeholder="Escribe aquí... Usa Markdown como en Obsidian"
               />
+              )}
               <LinterPlugin
                 diagnostics={allDiagnostics}
                 editorShellRef={editorShellRef}

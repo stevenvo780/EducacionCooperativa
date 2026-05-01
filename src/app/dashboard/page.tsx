@@ -16,6 +16,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode
 } from 'react';
+import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -115,6 +116,19 @@ function DashboardContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { currentPlan, subscriptionEndDate, showPricingModal, setShowPricingModal } = useSubscription(user, searchParams);
+
+    useEffect(() => {
+        const handler = (event: Event) => {
+            const detail = (event as CustomEvent<{ kind?: string; message?: string }>).detail;
+            const isQuota = detail?.kind === 'quota';
+            toast.error(isQuota ? 'Cuota excedida' : 'Plan requerido', {
+                description: detail?.message || 'Esta acción requiere un plan superior.',
+                action: { label: 'Ver planes', onClick: () => setShowPricingModal(true) }
+            });
+        };
+        window.addEventListener('agora:plan-required', handler as EventListener);
+        return () => window.removeEventListener('agora:plan-required', handler as EventListener);
+    }, [setShowPricingModal]);
     const reduceMotion = useReducedMotion();
     const modalFade = useMemo<Transition>(() => ({
         duration: reduceMotion ? 0.01 : 0.08,
