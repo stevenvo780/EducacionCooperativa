@@ -198,7 +198,23 @@ export async function GET(req: NextRequest) {
         const offsetParam = searchParams.get('offset');
         const limitVal = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10)), 1000) : 1000;
         const snapshot = await q.limit(limitVal).get();
-        let docs = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }));
+        let docs = snapshot.docs.map(doc => {
+            const raw: Record<string, unknown> = { id: doc.id, ...(doc.data() as Record<string, unknown>) };
+            const name = typeof raw.name === 'string' ? raw.name : '';
+            const isDotfile = name.startsWith('.') && name.indexOf('.', 1) === -1;
+            // Normaliza dotfiles legacy: type='file' + url firmado caducado.
+            // El editor los abre como texto; el url firmado caducado provoca
+            // "AccessDenied Request has expired" si algo lo fetchea.
+            if (isDotfile) {
+                if (raw.type === DocumentType.File) raw.type = DocumentType.Text;
+                const mt = raw.mimeType;
+                if (typeof mt !== 'string' || !mt.startsWith('text/')) {
+                    raw.mimeType = 'text/plain';
+                }
+                delete raw.url;
+            }
+            return raw;
+        });
         if (offsetParam) {
             const offsetVal = Math.max(0, parseInt(offsetParam, 10));
             docs = docs.slice(offsetVal);
