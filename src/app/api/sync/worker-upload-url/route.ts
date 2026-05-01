@@ -30,15 +30,17 @@ export async function POST(req: NextRequest) {
         if (!isNasConfigured()) return NextResponse.json({ error: 'NAS not configured' }, { status: 503 });
         const ctx = verifyWorkerAuth(req);
         if (!ctx) return NextResponse.json({ error: 'Worker auth required' }, { status: 401 });
-        if (isPersonalWorkspaceId(ctx.workspaceId)) {
-            return NextResponse.json({ error: 'Personal workspace not supported via worker auth' }, { status: 400 });
+        if (isPersonalWorkspaceId(ctx.workspaceId) && !ctx.userId) {
+            return NextResponse.json({ error: 'Personal workspace requires X-Worker-Uid' }, { status: 400 });
         }
 
         const body = await req.json() as { repoPath?: unknown; contentType?: unknown };
         const repoPath = sanitizeRepoPath(body.repoPath);
         if (!repoPath) return NextResponse.json({ error: 'Invalid repoPath' }, { status: 400 });
 
-        const storagePath = `workspaces/${ctx.workspaceId}/${repoPath}`;
+        const storagePath = ctx.userId
+            ? `users/${ctx.userId}/${repoPath}`
+            : `workspaces/${ctx.workspaceId}/${repoPath}`;
         const contentType = typeof body.contentType === 'string' ? body.contentType : undefined;
         const url = await presignPut(storagePath, PUT_TTL, contentType);
 

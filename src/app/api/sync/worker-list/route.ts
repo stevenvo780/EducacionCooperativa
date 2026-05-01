@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { adminDb } from '@/lib/firebase-admin';
-import { isPersonalWorkspaceId } from '@/types/workspace';
+import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
 import { presignGet, isNasConfigured } from '@/lib/nas-storage';
 import { buildRepoPath } from '@/lib/forgejo-path';
@@ -52,9 +52,10 @@ export async function GET(req: NextRequest) {
 
         let q: FirebaseFirestore.Query = adminDb.collection('documents');
         if (isPersonalWorkspaceId(wsParam)) {
-            // Para workspace personal, el `workerToken` debería traer también
-            // un userId (no implementado aún). Bloqueamos por ahora.
-            return NextResponse.json({ error: 'Personal workspace sync not supported via worker auth' }, { status: 400 });
+            if (!ctx.userId) {
+                return NextResponse.json({ error: 'Personal workspace requires X-Worker-Uid' }, { status: 400 });
+            }
+            q = q.where('ownerId', '==', ctx.userId).where('workspaceId', '==', PERSONAL_WORKSPACE_ID);
         } else {
             q = q.where('workspaceId', '==', wsParam);
         }
