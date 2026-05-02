@@ -43,7 +43,6 @@ interface UseEditorSelectionActionsOptions {
 const MIN_TEXT_LENGTH = 2;
 const PRE_CONTEXT_TTL_MS = 1500;
 
-/* ──── DEBUG: quitar cuando se confirme que funciona ──── */
 const DEBUG_SELECTION = true;
 const dbg = (...args: unknown[]) => {
   if (DEBUG_SELECTION) console.warn('[SelectionCapture]', ...args);

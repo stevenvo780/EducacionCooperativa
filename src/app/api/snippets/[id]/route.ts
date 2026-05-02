@@ -15,10 +15,6 @@ const canAccessSnippet = async (snippet: Record<string, unknown> | undefined, ui
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-/* ──────────────────────────────────────────────────────────
-   PUT /api/snippets/[id]
-   Actualiza un snippet existente.
-   ────────────────────────────────────────────────────────── */
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
     const auth = await requireAuth(req);
@@ -49,10 +45,6 @@ export async function PUT(req: NextRequest, context: RouteContext) {
   }
 }
 
-/* ──────────────────────────────────────────────────────────
-   DELETE /api/snippets/[id]
-   Elimina un snippet.
-   ────────────────────────────────────────────────────────── */
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
     const auth = await requireAuth(req);

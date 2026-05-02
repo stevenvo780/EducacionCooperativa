@@ -15,7 +15,11 @@ import {
   parseForgejoTokenResponse,
   parseForgejoCommitResponse,
   parseForgejoTreeResponse,
-  parseForgejoFileMeta
+  parseForgejoFileMeta,
+  parseSnippetCreatePayload,
+  parseDocumentCreatePayload,
+  sanitizeRepoPath,
+  splitRepoPath
 } from '@/lib/contracts';
 
 describe('parseWorkerCommitPayload', () => {
@@ -275,5 +279,71 @@ describe('parseForgejoFileMeta', () => {
   });
   it('rechaza type desconocido', () => {
     expect(parseForgejoFileMeta({ path: 'a', sha: 's', type: 'wat' }).ok).toBe(false);
+  });
+});
+
+describe('parseSnippetCreatePayload', () => {
+  it('acepta payload mínimo', () => {
+    const r = parseSnippetCreatePayload({ title: 'X', markdown: '# x' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.title).toBe('X');
+      expect(r.value.category).toBe('general');
+      expect(r.value.order).toBe(0);
+      expect(r.value.workspaceId).toBeNull();
+    }
+  });
+  it('trim title', () => {
+    const r = parseSnippetCreatePayload({ title: '  Y  ', markdown: '' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.title).toBe('Y');
+  });
+  it('rechaza title vacío', () => {
+    expect(parseSnippetCreatePayload({ title: '   ', markdown: 'x' }).ok).toBe(false);
+  });
+  it('rechaza markdown faltante', () => {
+    expect(parseSnippetCreatePayload({ title: 'X' }).ok).toBe(false);
+  });
+});
+
+describe('parseDocumentCreatePayload', () => {
+  it('default name "Sin titulo" si no llega', () => {
+    const r = parseDocumentCreatePayload({});
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.name).toBe('Sin titulo');
+  });
+  it('default type text', () => {
+    const r = parseDocumentCreatePayload({});
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('text');
+  });
+  it('content nullable', () => {
+    const r = parseDocumentCreatePayload({ name: 'a', content: 'foo' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.content).toBe('foo');
+  });
+  it('content no-string → null', () => {
+    const r = parseDocumentCreatePayload({ name: 'a', content: 42 });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.content).toBeNull();
+  });
+});
+
+describe('sanitizeRepoPath / splitRepoPath', () => {
+  it('sanitizeRepoPath normaliza slashes iniciales', () => {
+    expect(sanitizeRepoPath('//a/b.md')).toBe('a/b.md');
+  });
+  it('sanitizeRepoPath rechaza traversal', () => {
+    expect(sanitizeRepoPath('../etc')).toBeNull();
+  });
+  it('sanitizeRepoPath rechaza no-string', () => {
+    expect(sanitizeRepoPath(42)).toBeNull();
+    expect(sanitizeRepoPath(null)).toBeNull();
+  });
+  it('splitRepoPath sin folder → "No estructurado"', () => {
+    expect(splitRepoPath('readme.md')).toEqual({ folder: 'No estructurado', name: 'readme.md' });
+  });
+  it('splitRepoPath con folder anidado', () => {
+    expect(splitRepoPath('docs/sub/note.md')).toEqual({ folder: 'docs/sub', name: 'note.md' });
   });
 });

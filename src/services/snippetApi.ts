@@ -13,7 +13,6 @@ export interface Snippet {
 
 export type SnippetInput = Omit<Snippet, 'id' | 'ownerId'>;
 
-/* ── Fetch all snippets for a workspace ── */
 export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => {
   const res = await authFetch(`/api/snippets?workspaceId=${encodeURIComponent(workspaceId)}`, {
     cache: 'no-store'
@@ -23,7 +22,6 @@ export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => 
   return Array.isArray(data) ? data as Snippet[] : [];
 };
 
-/* ── Create a snippet ── */
 export const createSnippet = async (data: SnippetInput): Promise<Snippet | null> => {
   const res = await authFetch('/api/snippets', {
     method: 'POST',
@@ -34,7 +32,6 @@ export const createSnippet = async (data: SnippetInput): Promise<Snippet | null>
   return res.json();
 };
 
-/* ── Update a snippet ── */
 export const updateSnippet = async (
   id: string,
   data: Partial<Pick<Snippet, 'title' | 'description' | 'markdown' | 'category' | 'order'>>
@@ -47,13 +44,11 @@ export const updateSnippet = async (
   return res.ok;
 };
 
-/* ── Delete a snippet ── */
 export const deleteSnippet = async (id: string): Promise<boolean> => {
   const res = await authFetch(`/api/snippets/${encodeURIComponent(id)}`, { method: 'DELETE' });
   return res.ok;
 };
 
-/* ── Default snippets to seed when workspace has none ── */
 export const DEFAULT_SNIPPETS: Omit<SnippetInput, 'workspaceId'>[] = [
   {
     title: 'LaTeX inline',
@@ -347,7 +342,6 @@ export const DEFAULT_SNIPPETS: Omit<SnippetInput, 'workspaceId'>[] = [
 const buildSnippetKey = (snippet: Pick<Snippet, 'title' | 'category'> | Omit<SnippetInput, 'workspaceId'>) =>
   `${snippet.category}::${snippet.title}`.trim().toLowerCase();
 
-/* ── Ensure default snippets exist for a workspace ── */
 export const seedDefaultSnippets = async (workspaceId: string, existingSnippets?: Snippet[]): Promise<Snippet[]> => {
   const current = Array.isArray(existingSnippets)
     ? existingSnippets

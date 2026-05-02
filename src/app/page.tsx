@@ -12,12 +12,10 @@ import {
   Pencil, Scale, Shield, Sparkles, Terminal, Users, Zap
 } from 'lucide-react';
 
-/* ─── lazy editor components ─────────────────────────────── */
 const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 const MarkdownPreview = dynamic(() => import('@/components/mosaic-editor/MarkdownPreview').then(m => ({ default: m.MarkdownPreview })), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 const FormalizerPlayground = dynamic(() => import('@/components/FormalizerPlayground'), { ssr: false, loading: () => <div className="h-[500px] bg-surface-800/60 rounded-xl animate-pulse" /> });
 
-/* ─── code snippet for hero demo ──────────────────────────── */
 const ST_DEMO = `logic classical.propositional
 
 axiom a1 : P -> Q
@@ -83,8 +81,6 @@ function LandingPage() {
     duration: reduceMotion ? 0.01 : 0.25,
     ease: 'easeOut'
   });
-
-  /* ─── data ────────────────────────────────────────────── */
 
   const pillars = [
     {

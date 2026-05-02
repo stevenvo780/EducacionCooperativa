@@ -17,7 +17,7 @@ import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace'
 import { mockCreateDoc, mockListDocs } from '@/lib/insecure-mock-store';
 import { isNasConfigured, putObject } from '@/lib/nas-storage';
 import { emitPing } from '@/lib/nas-events';
-import { normalizeDotfileLegacy } from '@/lib/contracts';
+import { normalizeDotfileLegacy, parseDocumentCreatePayload } from '@/lib/contracts';
 
 const isInsecure = env.ALLOW_INSECURE_AUTH();
 
@@ -46,13 +46,15 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'NAS storage not configured' }, { status: 503 });
         }
 
-        const body = (await req.json()) as Record<string, unknown>;
-        const { name, content, type, workspaceId, folder, mimeType, url, storagePath, order } = body;
-        const normalizedFolder = normalizeFolderPath(typeof folder === 'string' ? folder : undefined);
-        const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : PERSONAL_WORKSPACE_ID;
+        const rawBody = await req.json().catch(() => null);
+        const parsed = parseDocumentCreatePayload(rawBody);
+        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+        const { name, content, type, workspaceId, folder, mimeType, url, storagePath, order } = parsed.value;
+        const normalizedFolder = normalizeFolderPath(folder ?? undefined);
+        const resolvedWorkspaceId = workspaceId ?? PERSONAL_WORKSPACE_ID;
         const ownerId = auth.uid;
-        const docName = typeof name === 'string' && name.trim() ? name : 'Sin titulo';
-        const docType = typeof type === 'string' ? type : DocumentType.Text;
+        const docName = name;
+        const docType = type;
 
         if (!isPersonalWorkspaceId(resolvedWorkspaceId)) {
             const member = await isWorkspaceMember(resolvedWorkspaceId, auth.uid);
@@ -62,11 +64,11 @@ export async function POST(req: NextRequest) {
         const allowedPrefix = isPersonalWorkspaceId(resolvedWorkspaceId)
             ? `users/${ownerId}/`
             : `workspaces/${resolvedWorkspaceId}/`;
-        if (typeof storagePath === 'string' && !storagePath.startsWith(allowedPrefix)) {
+        if (storagePath && !storagePath.startsWith(allowedPrefix)) {
             return NextResponse.json({ error: 'Invalid storagePath' }, { status: 403 });
         }
 
-        let finalStoragePath = typeof storagePath === 'string' ? storagePath : undefined;
+        let finalStoragePath = storagePath ?? undefined;
         let contentHash: string | null = null;
         let size: number | null = null;
 
@@ -80,14 +82,14 @@ export async function POST(req: NextRequest) {
                     fileName: fname
                 });
             }
-            if (typeof content === 'string') {
+            if (content !== null) {
                 const incomingBytes = Buffer.byteLength(content, 'utf8');
                 const quotaResp = await enforceStorageQuota(ownerId, incomingBytes);
                 if (quotaResp) return quotaResp;
                 const ext = (finalStoragePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase();
                 const ct = ext === '.md' || ext === '.markdown'
                     ? 'text/markdown'
-                    : (typeof mimeType === 'string' && mimeType ? mimeType : 'text/plain');
+                    : (mimeType ?? 'text/plain');
                 const out = await putObject(finalStoragePath, content, {
                     contentType: ct,
                     metadata: { 'agora-source': 'api-create', 'agora-owner': ownerId }
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest) {
         const docData: Record<string, unknown> = {
             name: docName,
             type: docType,
-            mimeType: mimeType || null,
+            mimeType: mimeType ?? null,
             ownerId,
             workspaceId: resolvedWorkspaceId,
             folder: normalizedFolder,
@@ -112,11 +114,11 @@ export async function POST(req: NextRequest) {
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
         };
-        if (typeof order === 'number') docData.order = order;
+        if (order !== null) docData.order = order;
         if (finalStoragePath) docData.storagePath = finalStoragePath;
         if (contentHash) docData.contentHash = contentHash;
         if (size !== null) docData.size = size;
-        if (typeof url === 'string' && finalStoragePath) docData.url = url;
+        if (url && finalStoragePath) docData.url = url;
 
         const ref = await adminDb.collection('documents').add(docData);
 

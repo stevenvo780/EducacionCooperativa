@@ -440,7 +440,6 @@ export const setSemanticWorkspacePreferences = (
   }
 }));
 
-/* ── Delete / Edit operations ── */
 
 export const deleteConcept = (context: SemanticStoreContext, conceptId: string) => updateState(context, (state) => {
   state.concepts = state.concepts.filter(c => c.id !== conceptId);
