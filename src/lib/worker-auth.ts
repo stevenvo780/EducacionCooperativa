@@ -14,9 +14,9 @@
  */
 import crypto from 'node:crypto';
 import type { NextRequest } from 'next/server';
+import { env } from '@/lib/env';
 
-// eslint-disable-next-line no-restricted-syntax -- el selector AST no detecta .trim() en el padre; este es el lector canónico.
-const SECRET = (process.env.WORKER_SECRET ?? '').trim();
+const SECRET = env.WORKER_SECRET();
 const MAX_SKEW_MS = 5 * 60 * 1000;
 
 export interface WorkerAuthContext {

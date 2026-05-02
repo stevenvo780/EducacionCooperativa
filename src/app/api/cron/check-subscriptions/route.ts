@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { Plan, SubscriptionStatus } from '@/types/subscription';
+import { env } from '@/lib/env';
 
 /**
  * GET /api/cron/check-subscriptions
@@ -14,7 +15,7 @@ import { Plan, SubscriptionStatus } from '@/types/subscription';
 export async function GET(req: NextRequest) {
   // Verificar autenticación del cron
   const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = env.CRON_SECRET();
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     console.warn('[Cron] Unauthorized cron attempt');

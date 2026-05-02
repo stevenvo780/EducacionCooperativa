@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { parseForgejoTokenResponse } from '@/lib/contracts';
+import { env } from '@/lib/env';
 
 /**
  * Forgejo API client.
@@ -18,9 +19,9 @@ import { parseForgejoTokenResponse } from '@/lib/contracts';
  * (generado al crear el user; nunca se persiste).
  */
 
-const apiUrl = process.env.FORGEJO_API_URL?.trim();
-const adminToken = process.env.FORGEJO_ADMIN_TOKEN?.trim();
-const org = process.env.FORGEJO_ORG?.trim() || 'agora';
+const apiUrl = env.FORGEJO_API_URL() || undefined;
+const adminToken = env.FORGEJO_ADMIN_TOKEN() || undefined;
+const org = env.FORGEJO_ORG();
 
 export const isForgejoConfigured = (): boolean => Boolean(apiUrl && adminToken);
 export const getForgejoOrg = (): string => org;

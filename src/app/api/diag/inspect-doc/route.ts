@@ -5,14 +5,14 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { env } from '@/lib/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
     const auth = req.headers.get('authorization') ?? '';
-    // eslint-disable-next-line no-restricted-syntax -- selector AST no detecta .trim() en el padre.
-    const expected = `Bearer ${(process.env.WORKER_SECRET ?? '').trim()}`;
+    const expected = `Bearer ${env.WORKER_SECRET()}`;
     if (!auth || auth !== expected) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
     const id = new URL(req.url).searchParams.get('id');

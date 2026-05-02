@@ -16,6 +16,7 @@ import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace'
 import { mockCreateDoc, mockListDocs } from '@/lib/insecure-mock-store';
 import { isNasConfigured, putObject } from '@/lib/nas-storage';
 import { emitPing } from '@/lib/nas-events';
+import { normalizeDotfileLegacy } from '@/lib/contracts';
 
 const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 
@@ -200,19 +201,7 @@ export async function GET(req: NextRequest) {
         const snapshot = await q.limit(limitVal).get();
         let docs = snapshot.docs.map(doc => {
             const raw: Record<string, unknown> = { id: doc.id, ...(doc.data() as Record<string, unknown>) };
-            const name = typeof raw.name === 'string' ? raw.name : '';
-            const isDotfile = name.startsWith('.') && name.indexOf('.', 1) === -1;
-            // Normaliza dotfiles legacy: type='file' + url firmado caducado.
-            // El editor los abre como texto; el url firmado caducado provoca
-            // "AccessDenied Request has expired" si algo lo fetchea.
-            if (isDotfile) {
-                if (raw.type === DocumentType.File) raw.type = DocumentType.Text;
-                const mt = raw.mimeType;
-                if (typeof mt !== 'string' || !mt.startsWith('text/')) {
-                    raw.mimeType = 'text/plain';
-                }
-                delete raw.url;
-            }
+            normalizeDotfileLegacy(raw);
             return raw;
         });
         if (offsetParam) {

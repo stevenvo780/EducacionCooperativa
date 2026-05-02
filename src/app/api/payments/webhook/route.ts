@@ -11,9 +11,10 @@ import {
   isCancelledMercadoPagoPaymentStatus,
   isPendingMercadoPagoPaymentStatus
 } from '@/types/payments';
+import { env } from '@/lib/env';
 
-const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
-const mpWebhookSecret = (process.env.MERCADOPAGO_WEBHOOK_SECRET || '').trim();
+const mpAccessToken = env.MERCADOPAGO_ACCESS_TOKEN();
+const mpWebhookSecret = env.MERCADOPAGO_WEBHOOK_SECRET();
 
 /**
  * Verifica la firma de un webhook de MercadoPago.

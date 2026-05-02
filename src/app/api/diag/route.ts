@@ -4,24 +4,25 @@
 import { NextResponse } from 'next/server';
 import { isNasConfigured, getNasBucket, objectExists } from '@/lib/nas-storage';
 import { isForgejoConfigured, getForgejoApiUrl, getForgejoOrg } from '@/lib/forgejo';
+import { env } from '@/lib/env';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
-    const env = {
+    const envSummary = {
         AGORA_USE_NAS: process.env.AGORA_USE_NAS ?? null,
-        NAS_S3_ENDPOINT: process.env.NAS_S3_ENDPOINT ?? null,
-        NAS_S3_BUCKET: process.env.NAS_S3_BUCKET ?? null,
-        NAS_S3_HAS_KEY: Boolean(process.env.NAS_S3_ACCESS_KEY),
-        NAS_S3_HAS_SECRET: Boolean(process.env.NAS_S3_SECRET_KEY),
-        FORGEJO_API_URL: process.env.FORGEJO_API_URL ?? null,
-        FORGEJO_HAS_TOKEN: Boolean(process.env.FORGEJO_ADMIN_TOKEN),
-        FORGEJO_ORG: process.env.FORGEJO_ORG ?? null,
-        FIREBASE_DATABASE_URL: process.env.FIREBASE_DATABASE_URL ?? null,
-        FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID ?? null
+        NAS_S3_ENDPOINT: env.NAS_S3_ENDPOINT() || null,
+        NAS_S3_BUCKET: env.NAS_S3_BUCKET() || null,
+        NAS_S3_HAS_KEY: Boolean(env.NAS_S3_ACCESS_KEY()),
+        NAS_S3_HAS_SECRET: Boolean(env.NAS_S3_SECRET_KEY()),
+        FORGEJO_API_URL: env.FORGEJO_API_URL() || null,
+        FORGEJO_HAS_TOKEN: Boolean(env.FORGEJO_ADMIN_TOKEN()),
+        FORGEJO_ORG: env.FORGEJO_ORG(),
+        FIREBASE_DATABASE_URL: env.FIREBASE_DATABASE_URL() || null,
+        FIREBASE_PROJECT_ID: env.FIREBASE_PROJECT_ID() || null
     };
 
-    const nas: Record<string, unknown> = { configured: isNasConfigured(), endpoint: env.NAS_S3_ENDPOINT, bucket: getNasBucket() };
+    const nas: Record<string, unknown> = { configured: isNasConfigured(), endpoint: envSummary.NAS_S3_ENDPOINT, bucket: getNasBucket() };
     if (nas.configured) {
         try {
             await objectExists('__diag__/__never__');
@@ -36,7 +37,7 @@ export async function GET() {
     if (forgejo.configured) {
         try {
             const res = await fetch(`${forgejo.apiUrl}/api/v1/version`, {
-                headers: { Authorization: `token ${process.env.FORGEJO_ADMIN_TOKEN}` }
+                headers: { Authorization: `token ${env.FORGEJO_ADMIN_TOKEN()}` }
             });
             forgejo.status = res.status;
             forgejo.health = res.ok ? 'ok' : 'fail';
@@ -46,5 +47,5 @@ export async function GET() {
         }
     }
 
-    return NextResponse.json({ env, nas, forgejo, ts: new Date().toISOString() });
+    return NextResponse.json({ env: envSummary, nas, forgejo, ts: new Date().toISOString() });
 }

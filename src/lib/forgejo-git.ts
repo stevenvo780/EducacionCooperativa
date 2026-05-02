@@ -4,9 +4,10 @@
  * `/commits` para obtener historia.
  */
 import { parseForgejoCommitResponse, parseForgejoTreeResponse } from '@/lib/contracts';
+import { env } from '@/lib/env';
 
-const apiUrl = process.env.FORGEJO_API_URL?.trim();
-const adminToken = process.env.FORGEJO_ADMIN_TOKEN?.trim();
+const apiUrl = env.FORGEJO_API_URL() || undefined;
+const adminToken = env.FORGEJO_ADMIN_TOKEN() || undefined;
 
 const headers = (): HeadersInit => ({
   Accept: 'application/json',

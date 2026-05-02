@@ -16,6 +16,7 @@ import { mockGetDoc, mockUpdateDoc, mockDeleteDoc } from '@/lib/insecure-mock-st
 import { invalidateStorageUsageCache } from '@/lib/storage-usage';
 import { isNasConfigured, putObject, moveObject, deleteObject, presignGet, getObjectBuffer } from '@/lib/nas-storage';
 import { emitPing } from '@/lib/nas-events';
+import { isDotfileName } from '@/lib/contracts';
 
 const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
 
@@ -227,11 +228,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
         const storagePath = typeof data.storagePath === 'string' ? data.storagePath : undefined;
         const docName = typeof data.name === 'string' ? data.name : '';
-        const isDotfile = docName.startsWith('.') && docName.indexOf('.', 1) === -1;
-        // Normaliza dotfiles que se hayan guardado con type='file' en migraciones
-        // anteriores: el cliente espera type='text' + mimeType text/plain para
-        // abrirlos con el editor de código y NO necesita signed URL.
-        if (isDotfile && data.type === DocumentType.File) {
+        // Normaliza dotfiles legacy con type='file' — el editor los abre como
+        // texto y el signed URL caduca antes de ser usado.
+        if (isDotfileName(docName) && data.type === DocumentType.File) {
             data.type = DocumentType.Text;
             data.mimeType = 'text/plain';
         }

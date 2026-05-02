@@ -14,6 +14,7 @@ import { getDatabase } from 'firebase-admin/database';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getErrorMessage } from '@/lib/error-utils';
 import { parseOutboxRecord } from '@/lib/contracts';
+import { env } from '@/lib/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,9 +25,8 @@ const MAX_RETRIES = 5;
 
 export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization') ?? '';
-    const cronSecret = (process.env.CRON_SECRET ?? '').trim();
-    // eslint-disable-next-line no-restricted-syntax -- selector AST no detecta .trim() en el padre.
-    const workerSecret = (process.env.WORKER_SECRET ?? '').trim();
+    const cronSecret = env.CRON_SECRET();
+    const workerSecret = env.WORKER_SECRET();
     const ok =
         (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
         (workerSecret && authHeader === `Bearer ${workerSecret}`);
