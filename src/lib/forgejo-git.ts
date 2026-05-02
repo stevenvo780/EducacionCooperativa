@@ -3,6 +3,8 @@
  * No clonamos localmente: hacemos PUT/POST/DELETE sobre `/contents/{path}` y
  * `/commits` para obtener historia.
  */
+import { parseForgejoCommitResponse, parseForgejoTreeResponse } from '@/lib/contracts';
+
 const apiUrl = process.env.FORGEJO_API_URL?.trim();
 const adminToken = process.env.FORGEJO_ADMIN_TOKEN?.trim();
 
@@ -104,9 +106,6 @@ export const listCommits = async (
   return Array.isArray(r.body) ? r.body : [];
 };
 
-interface GitTreeEntry { path: string; mode: string; type: string; sha: string; size?: number }
-interface GitTreeResponse { tree?: GitTreeEntry[]; truncated?: boolean; page?: number; total_count?: number }
-
 /**
  * 1 sola llamada para obtener todo el árbol del repo (recursive).
  * Mucho más rápido que N getFileMeta() por path.
@@ -126,15 +125,20 @@ export const listRepoTree = async (
   const PAGE_SIZE = 1000;
   let page = 1;
   while (true) {
-    const r = await call<GitTreeResponse>(
+    const r = await call<unknown>(
       `/api/v1/repos/${repoFullName}/git/trees/${head.sha}?recursive=true&per_page=${PAGE_SIZE}&page=${page}`
     );
-    const entries = r.body?.tree;
-    if (!entries || entries.length === 0) break;
+    const parsed = parseForgejoTreeResponse(r.body);
+    if (!parsed.ok) {
+      console.warn('[listRepoTree] tree response malformed:', parsed.error);
+      break;
+    }
+    const { entries, truncated } = parsed.value;
+    if (entries.length === 0) break;
     for (const entry of entries) {
       if (entry.type === 'blob') map.set(entry.path, entry.sha);
     }
-    if (!r.body?.truncated && entries.length < PAGE_SIZE) break;
+    if (!truncated && entries.length < PAGE_SIZE) break;
     page++;
     if (page > 100) {
       console.warn('[listRepoTree] safety stop after 100 pages — repo gigante?');
@@ -299,9 +303,9 @@ export const applyCommit = async (params: {
       ? params.message
       : `${params.message} (parte ${chunkIndex}/${chunks.length})`;
 
-    let r: { status: number; body: { commit?: { sha: string } } | null; raw: string; attempts: number };
+    let r: { status: number; body: unknown; raw: string; attempts: number };
     try {
-      r = await callWithRetry<{ commit?: { sha: string } }>(
+      r = await callWithRetry<unknown>(
         `/api/v1/repos/${params.repoFullName}/contents`,
         {
           method: 'POST',
@@ -345,7 +349,8 @@ export const applyCommit = async (params: {
         totalFiles: params.changes.length
       });
     } else {
-      lastSha = r.body?.commit?.sha ?? lastSha;
+      const parsed = parseForgejoCommitResponse(r.body);
+      if (parsed.ok) lastSha = parsed.value.sha;
     }
     params.onProgress?.({
       totalChunks: chunks.length,

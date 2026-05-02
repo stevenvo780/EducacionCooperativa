@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { parseForgejoTokenResponse } from '@/lib/contracts';
 
 /**
  * Forgejo API client.
@@ -293,13 +294,14 @@ export const provisionWorkspaceRepo = async (params: {
   let tokenName: string | null = null;
   if (userResult.justCreated && userResult.password) {
     tokenName = `agora-initial-${Date.now()}`;
-    const t = await fetchAsUser<{ sha1: string }>(
+    const t = await fetchAsUser(
       userResult.user.login,
       userResult.password,
       `/api/v1/users/${userResult.user.login}/tokens`,
       { method: 'POST', body: JSON.stringify({ name: tokenName, scopes: ['write:repository', 'read:repository', 'read:user'] }) }
     );
-    if (t.body?.sha1) token = t.body.sha1;
+    const parsedToken = parseForgejoTokenResponse(t.body);
+    if (parsedToken.ok) token = parsedToken.value.sha1;
   }
 
   return {
@@ -331,20 +333,21 @@ export const issueTokenForUser = async (uid: string, tokenName: string, scopes: 
   if (patched.status >= 400) return null;
 
   // POST token con basic auth.
-  const t = await fetchAsUser<{ sha1: string }>(login, tempPassword, `/api/v1/users/${login}/tokens`, {
+  const t = await fetchAsUser(login, tempPassword, `/api/v1/users/${login}/tokens`, {
     method: 'POST',
     body: JSON.stringify({ name: tokenName, scopes })
   });
-  if (!t.body?.sha1) return null;
+  const parsed = parseForgejoTokenResponse(t.body);
 
   // Re-set password a algo random no-recuperable (el user accede por token, no por password).
+  // Se hace SIEMPRE — incluso si el token failed — para no dejar tempPassword vivo.
   const newRandomPwd = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
   await fetchAdmin(`/api/v1/admin/users/${login}`, {
     method: 'PATCH',
     body: JSON.stringify({ password: newRandomPwd, must_change_password: false, source_id: 0 })
   });
 
-  return t.body.sha1;
+  return parsed.ok ? parsed.value.sha1 : null;
 };
 
 /** Lista repos accesibles para un user (usa búsqueda admin). */

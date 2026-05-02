@@ -6,6 +6,7 @@ import { getErrorMessage } from '@/lib/error-utils';
 import { ref, onChildAdded, off, push, query, orderByChild, startAt } from 'firebase/database';
 import { SyncEventSource, SyncEventType, type SyncEvent } from '@/types/sync';
 import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
+import { parseSyncEventPayload } from '@/lib/contracts';
 
 interface UseSyncEventsOptions {
   workspaceId: string | null;
@@ -91,14 +92,25 @@ export function useSyncEvents({
 
     // Listener para nuevos eventos
     const unsubscribe = onChildAdded(eventsRef, (snapshot) => {
-      const event = snapshot.val() as SyncEvent | null;
-      if (!event) return;
+      const parsed = parseSyncEventPayload(snapshot.val());
+      if (!parsed.ok) {
+        console.warn('[useSyncEvents] payload malformado:', parsed.error);
+        return;
+      }
+      const event = parsed.value;
 
       // Ignorar eventos propios del frontend
       if (event.source === SyncEventSource.Frontend) return;
 
-      // Notificar al callback (usando ref para estabilidad)
-      onEventRef.current?.(event);
+      const legacy: SyncEvent = {
+        type: event.type,
+        path: event.path,
+        folder: event.folder,
+        docId: event.docId ?? undefined,
+        timestamp: event.timestamp,
+        source: event.source === 'hub' ? SyncEventSource.Worker : event.source
+      };
+      onEventRef.current?.(legacy);
     });
 
     listenerRef.current = () => {
