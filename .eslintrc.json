@@ -44,6 +44,10 @@
       {
         "selector": "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='WORKER_SECRET']:not(:has(CallExpression[callee.property.name='trim']))",
         "message": "WORKER_SECRET debe leerse con .trim() — newlines silentes rompen la firma HMAC."
+      },
+      {
+        "selector": "MemberExpression[object.object.name='process'][object.property.name='env'][property.name=/^(MERCADOPAGO_WEBHOOK_SECRET|FORGEJO_ADMIN_TOKEN|CRON_SECRET)$/]",
+        "message": "Lee este secret desde @/lib/env (env.X()) — centraliza .trim() y aparece en auditProductionEnv."
       }
     ]
   },
@@ -58,6 +62,26 @@
       "files": ["src/app/api/**/*"],
       "rules": {
         "no-console": "off"
+      }
+    },
+    {
+      "files": ["src/lib/env.ts"],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    },
+    {
+      "files": ["src/lib/**/*.ts", "src/app/api/**/*.ts"],
+      "excludedFiles": ["src/lib/contracts/**"],
+      "parser": "@typescript-eslint/parser",
+      "parserOptions": {
+        "project": "./tsconfig.typecheck.json"
+      },
+      "rules": {
+        "@typescript-eslint/no-floating-promises": ["error", {
+          "ignoreVoid": true,
+          "ignoreIIFE": true
+        }]
       }
     }
   ],

@@ -167,10 +167,12 @@ Revisar y comunicar al user si reaparecen:
   `npm install firebase-admin@latest next@latest` (cambia lockfile).
 - **`MERCADOPAGO_WEBHOOK_SECRET`** falta en Vercel prod — el webhook hace
   fail-closed pero el secret debería estar para que la firma HMAC proteja.
-- **`noUncheckedIndexedAccess`** desactivado — habilitarlo descubre ~560
-  errores reales (muchos en bordes de Firestore). Migración aparte.
-- **`no-floating-promises`** desactivado — requiere upgrade de
-  `@typescript-eslint/parser` a typed linting.
+- **`noUncheckedIndexedAccess`** activado solo en `src/lib/contracts/` y
+  `src/lib/env.ts` (vía `tsconfig.contracts.json`). Habilitarlo en todo
+  el repo descubre ~560 errores reales — migración aparte.
+- **`no-floating-promises`** activado solo en `src/lib/**` y
+  `src/app/api/**` (typed linting con parser TS, ver `.eslintrc.json`
+  override). Lo demás sería slow para CI sin más beneficio.
 
 ### Resueltos (no perseguir)
 
@@ -185,9 +187,26 @@ Datos que cruzan red/disco se validan con parsers antes de usarse. Reglas:
 - **Nunca** `as { ... }` directo sobre `req.json()`, `snap.data()` o `r.body`.
   Usa `parseX` (uno por borde). Si llega malformado, falla con mensaje
   concreto en lugar de propagarse silenciosamente.
-- Tests en `tests/unit/contracts.test.ts` — uno por regresión histórica.
-- ESLint bloquea: literal `'sync-events/personal'` y `WORKER_SECRET` sin `.trim()`.
-- Env vars: usa `src/lib/env.ts` (`.trim()` central + audit en prod).
+- Bordes cubiertos: worker payloads (`commit`/`delete`/`upload-url`),
+  document records Firestore (con dotfile legacy), sync events RTDB,
+  outbox, Forgejo (token/commit/tree/file).
+- `normalizeDotfileLegacy(raw)` — helper para in-place fix de docs
+  legacy con `type=file` + url firmado caducado. Úsalo donde devuelvas
+  el raw doc Firestore al cliente.
+- Tests en `tests/unit/contracts.test.ts` y `env-audit.test.ts` — uno
+  por regresión histórica.
+- ESLint bloquea (en `.eslintrc.json`):
+  - Literal `'sync-events/personal'` (canal sin uid).
+  - `WORKER_SECRET` leído sin `.trim()`.
+  - `process.env.{MERCADOPAGO_WEBHOOK_SECRET, FORGEJO_ADMIN_TOKEN, CRON_SECRET}`
+    fuera de `src/lib/env.ts`.
+- Env vars: usa `import { env } from '@/lib/env'` y llama `env.X()`.
+  `auditProductionEnv()` reporta faltantes en producción.
+- `no-floating-promises` activo en `src/lib/**` y `src/app/api/**` —
+  promesas sin await, .then o `.catch` son error de lint.
+- `noUncheckedIndexedAccess` activo en `src/lib/contracts/` y
+  `src/lib/env.ts` (`tsconfig.contracts.json`). El typecheck del paquete
+  corre como segundo paso de `npm run typecheck`.
 
 ## 10. Estructura del repo (lo crítico)
 

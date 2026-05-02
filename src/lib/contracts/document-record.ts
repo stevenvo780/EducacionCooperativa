@@ -28,7 +28,32 @@ export interface DocumentRecord {
   updatedAtMs: number | null;
 }
 
-const isDotfile = (name: string): boolean => name.startsWith('.') && name.indexOf('.', 1) === -1;
+export const isDotfileName = (name: string): boolean =>
+  name.startsWith('.') && name.indexOf('.', 1) === -1;
+
+const isDotfile = isDotfileName;
+
+/**
+ * Normaliza in-place un raw doc Firestore para arreglar dotfiles legacy:
+ *  - type='file' + dotfile → type='text'
+ *  - mimeType no-text en dotfile → 'text/plain'
+ *  - quita `url` (signed URL caducado, el editor no lo necesita)
+ *
+ * Pensado para el listing GET /api/documents y GET /api/documents/[id]
+ * que devuelven el raw enriquecido con campos extra (order, sourceName,
+ * etc.) que parseDocumentRecord no incluye. Si solo necesitas el shape
+ * canónico, usa parseDocumentRecord.
+ */
+export const normalizeDotfileLegacy = (raw: Record<string, unknown>): void => {
+  const name = typeof raw.name === 'string' ? raw.name : '';
+  if (!isDotfileName(name)) return;
+  if (raw.type === 'file') raw.type = 'text';
+  const mt = raw.mimeType;
+  if (typeof mt !== 'string' || !mt.startsWith('text/')) {
+    raw.mimeType = 'text/plain';
+  }
+  delete raw.url;
+};
 
 const coerceType = (rawType: unknown, name: string): DocumentTypeId => {
   if (typeof rawType === 'string' && isDocumentType(rawType)) {

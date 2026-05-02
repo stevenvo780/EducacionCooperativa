@@ -156,7 +156,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
                 if (isFirst) {
                     isFirst = false;
                     pendingSnap = snap;
-                    flushSnapshot();
+                    void flushSnapshot();
                     return;
                 }
                 pendingSnap = snap;
