@@ -38,34 +38,12 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { FileExplorerContextMenu } from '@/components/file-explorer/FileExplorerContextMenu';
 import FilePropertiesModal from '@/components/file-explorer/FilePropertiesModal';
 import { useFileExplorerDND, DOC_REORDER_TYPE, FOLDER_REORDER_TYPE } from '@/components/file-explorer/useFileExplorerDND';
-import type { DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { useIsTouchDeviceProfile } from '@/lib/device-input';
 import { useElementSize } from '@/hooks/useElementSize';
 
-export interface DocItem {
-  id: string;
-  name: string;
-  type?: DocumentTypeId;
-  content?: string;
-  url?: string;
-  folder?: string;
-  storagePath?: string;
-  mimeType?: string;
-  updatedAt?: unknown;
-  ownerId?: string;
-  order?: number;
-}
-
-export interface FolderItem {
-  id: string;
-  name: string;
-  path: string;
-  parentPath: string;
-  kind: 'system' | 'record' | 'virtual';
-  docId?: string;
-  order?: number;
-}
+export type { DocItem, FolderItem } from '@/types/document-item';
+import type { DocItem, FolderItem } from '@/types/document-item';
 
 type ContentItem =
   | { kind: 'folder'; folder: FolderItem }

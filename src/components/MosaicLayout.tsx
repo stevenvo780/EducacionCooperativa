@@ -7,7 +7,7 @@ import { Columns, Pencil, X, Search, ChevronUp, ChevronDown, Check, XCircle, Max
 import dynamic from 'next/dynamic';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
-import { DocumentType, type DocumentTypeId } from '@/types/documents';
+import { DocumentType } from '@/types/documents';
 import type { WorkspaceTypeId } from '@/types/workspace';
 import { isMarkdownDocument } from '@/lib/document-format';
 import { CompatMosaicWindow } from '@/components/mosaic/CompatMosaicWindow';
@@ -75,33 +75,8 @@ interface SearchState {
 
 export type ViewMode = 'edit' | 'preview' | 'split' | 'raw';
 
-export interface DocItem {
-  id: string;
-  name: string;
-  type?: DocumentTypeId;
-  sessionId?: string;
-  content?: string;
-  url?: string;
-  folder?: string;
-  storagePath?: string;
-  workspaceId?: string;
-  order?: number;
-
-  mimeType?: string;
-  size?: number;
-  updatedAt?: unknown;
-  ownerId?: string;
-}
-
-export interface FolderItem {
-  id: string;
-  name: string;
-  path: string;
-  parentPath: string;
-  kind: 'system' | 'record' | 'virtual';
-  docId?: string;
-  order?: number;
-}
+export type { DocItem, FolderItem } from '@/types/document-item';
+import type { DocItem, FolderItem } from '@/types/document-item';
 
 interface MosaicLayoutProps {
   value: MosaicNode<string> | null;
