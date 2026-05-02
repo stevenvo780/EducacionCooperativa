@@ -34,7 +34,18 @@
     "react/jsx-curly-spacing": ["error", { "when": "never", "children": true }],
     "react/self-closing-comp": ["error", { "component": true, "html": true }],
     "react-hooks/rules-of-hooks": "error",
-    "react-hooks/exhaustive-deps": "error"
+    "react-hooks/exhaustive-deps": "error",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value='sync-events/personal']",
+        "message": "Canal RTDB inválido: el cliente escucha 'sync-events/personal_<uid>'. Usa resolveSyncChannel() de @/lib/contracts."
+      },
+      {
+        "selector": "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='WORKER_SECRET']:not(:has(CallExpression[callee.property.name='trim']))",
+        "message": "WORKER_SECRET debe leerse con .trim() — newlines silentes rompen la firma HMAC."
+      }
+    ]
   },
   "overrides": [
     {
@@ -55,6 +66,9 @@
     ".next/",
     "out/",
     "services/",
+    "public/sw.js",
+    "public/workbox-*.js",
+    "src/generated/",
     "*.config.js",
     "*.config.ts",
     "*.config.mjs"

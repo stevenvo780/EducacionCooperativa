@@ -19,9 +19,17 @@ const mpWebhookSecret = (process.env.MERCADOPAGO_WEBHOOK_SECRET || '').trim();
  * Verifica la firma de un webhook de MercadoPago.
  * MP firma `id:<dataId>;request-id:<requestId>;ts:<ts>;` con HMAC-SHA256.
  * Header `x-signature: ts=<ts>,v1=<hex>` y `x-request-id`.
+ *
+ * Política: si `MERCADOPAGO_WEBHOOK_SECRET` no está configurado en producción,
+ * RECHAZAR (fail-closed). Sólo en dev/test se permite sin firma para tests
+ * locales. Esto cierra el vector de DoS donde un atacante envía POSTs
+ * fraudulentos que el handler tendría que validar contra la API real de MP.
  */
 const verifyMpSignature = (req: NextRequest, dataId: string | number | undefined): boolean => {
-  if (!mpWebhookSecret) return true; // sin secret → permisivo, pero loguear (ver más abajo)
+  if (!mpWebhookSecret) {
+    if (process.env.NODE_ENV === 'production') return false;
+    return true;
+  }
   const sigHeader = req.headers.get('x-signature') ?? '';
   const requestId = req.headers.get('x-request-id') ?? '';
   if (!sigHeader || !requestId || !dataId) return false;
@@ -57,12 +65,15 @@ export async function POST(req: NextRequest) {
     const { type, data } = body;
 
     if (!verifyMpSignature(req, data?.id)) {
-      console.warn('[mp/webhook] firma inválida o ausente, paymentId=', data?.id);
-      await logPaymentEvent({ kind: 'webhook-rejected', reason: 'bad-signature', dataId: data?.id ?? null });
+      const reason = !mpWebhookSecret && process.env.NODE_ENV === 'production'
+        ? 'webhook-secret-missing'
+        : 'bad-signature';
+      console.warn('[mp/webhook] rechazado:', reason, 'paymentId=', data?.id);
+      await logPaymentEvent({ kind: 'webhook-rejected', reason, dataId: data?.id ?? null });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
     if (!mpWebhookSecret) {
-      console.warn('[mp/webhook] MERCADOPAGO_WEBHOOK_SECRET no configurado — webhook abierto (NO RECOMENDADO en producción)');
+      console.warn('[mp/webhook] MERCADOPAGO_WEBHOOK_SECRET no configurado — modo dev permisivo');
     }
     await logPaymentEvent({ kind: 'webhook-received', type, dataId: data?.id ?? null });
 
