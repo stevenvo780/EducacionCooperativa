@@ -11,7 +11,11 @@ import {
   parseDocumentRecord,
   parseSyncEventPayload,
   resolveSyncChannel,
-  parseOutboxRecord
+  parseOutboxRecord,
+  parseForgejoTokenResponse,
+  parseForgejoCommitResponse,
+  parseForgejoTreeResponse,
+  parseForgejoFileMeta
 } from '@/lib/contracts';
 
 describe('parseWorkerCommitPayload', () => {
@@ -207,5 +211,69 @@ describe('parseOutboxRecord', () => {
 
   it('rechaza outbox sin rtdbPath', () => {
     expect(parseOutboxRecord('o1', { ts: 1 }).ok).toBe(false);
+  });
+});
+
+describe('parseForgejoTokenResponse', () => {
+  it('acepta sha1 válido', () => {
+    expect(parseForgejoTokenResponse({ sha1: 'abc' }).ok).toBe(true);
+  });
+  it('rechaza sha1 vacío', () => {
+    expect(parseForgejoTokenResponse({ sha1: '' }).ok).toBe(false);
+  });
+  it('rechaza body no-objeto', () => {
+    expect(parseForgejoTokenResponse(null).ok).toBe(false);
+    expect(parseForgejoTokenResponse('abc').ok).toBe(false);
+  });
+});
+
+describe('parseForgejoCommitResponse', () => {
+  it('acepta { commit: { sha } }', () => {
+    const r = parseForgejoCommitResponse({ commit: { sha: 'deadbeef' } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.sha).toBe('deadbeef');
+  });
+  it('rechaza response sin commit', () => {
+    expect(parseForgejoCommitResponse({}).ok).toBe(false);
+  });
+  it('rechaza commit sin sha (regresión db0a123)', () => {
+    expect(parseForgejoCommitResponse({ commit: {} }).ok).toBe(false);
+  });
+});
+
+describe('parseForgejoTreeResponse', () => {
+  it('extrae solo entries con shape válido', () => {
+    const r = parseForgejoTreeResponse({
+      tree: [
+        { path: 'a.md', sha: 's1', type: 'blob' },
+        { path: 'b', type: 'tree' }, // sha falta — descartado
+        { path: 'c.md', sha: 's3', type: 'blob' }
+      ],
+      truncated: false
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.entries.length).toBe(2);
+      expect(r.value.truncated).toBe(false);
+    }
+  });
+  it('preserva truncated=true (regresión cc0e919)', () => {
+    const r = parseForgejoTreeResponse({ tree: [], truncated: true });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.truncated).toBe(true);
+  });
+  it('rechaza tree no-array', () => {
+    expect(parseForgejoTreeResponse({ tree: 'foo' }).ok).toBe(false);
+  });
+});
+
+describe('parseForgejoFileMeta', () => {
+  it('acepta meta válida', () => {
+    const r = parseForgejoFileMeta({ path: 'a.md', sha: 's', size: 100, type: 'file' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.size).toBe(100);
+  });
+  it('rechaza type desconocido', () => {
+    expect(parseForgejoFileMeta({ path: 'a', sha: 's', type: 'wat' }).ok).toBe(false);
   });
 });

@@ -159,16 +159,35 @@ curl -s https://agora.elenxos.com/api/diag | python3 -m json.tool
 ## 9. Tareas pendientes recurrentes
 
 Revisar y comunicar al user si reaparecen:
-- **Pricing/cuotas** (`src/lib/storage-usage.ts`) — mide en Firebase Storage,
-  hay que migrar a leer de MinIO.
-- **Outbox `syncEventsOutbox`** sin drainer — si RTDB falla, los pings
-  quedan `published:false` y no hay replay automático.
 - **Docker daemon** crashes recurrentes en stev-server — recomendar `apt
   upgrade docker-ce` cuando haya ventana de mantenimiento.
-- **Workspace personal sync** — los endpoints `/api/sync/worker-*` rechazan
-  workspaces personales. Falta soporte (necesita `userId` en la firma HMAC).
 - **MinIO basura histórica** (~32 objetos en raíz: `21Vu.../.git/...`,
   `dev-user-123/`, `groups/`, `system/`) — no afecta nada pero ensucia.
+- **Vulnerabilidades npm** — 1 critical (protobufjs) + 5 high. Fix con
+  `npm install firebase-admin@latest next@latest` (cambia lockfile).
+- **`MERCADOPAGO_WEBHOOK_SECRET`** falta en Vercel prod — el webhook hace
+  fail-closed pero el secret debería estar para que la firma HMAC proteja.
+- **`noUncheckedIndexedAccess`** desactivado — habilitarlo descubre ~560
+  errores reales (muchos en bordes de Firestore). Migración aparte.
+- **`no-floating-promises`** desactivado — requiere upgrade de
+  `@typescript-eslint/parser` a typed linting.
+
+### Resueltos (no perseguir)
+
+- ~~Storage usage en Firebase Storage~~ → migrado: lee `size` de Firestore.
+- ~~Outbox sin drainer~~ → `/api/cron/drain-outbox` cada 5min.
+- ~~Workspace personal sync rechazado~~ → `isPersonalWorkspaceId` + `userId`
+  en HMAC en todos los endpoints `/api/sync/*`.
+
+## Contratos de borde (`src/lib/contracts/`)
+
+Datos que cruzan red/disco se validan con parsers antes de usarse. Reglas:
+- **Nunca** `as { ... }` directo sobre `req.json()`, `snap.data()` o `r.body`.
+  Usa `parseX` (uno por borde). Si llega malformado, falla con mensaje
+  concreto en lugar de propagarse silenciosamente.
+- Tests en `tests/unit/contracts.test.ts` — uno por regresión histórica.
+- ESLint bloquea: literal `'sync-events/personal'` y `WORKER_SECRET` sin `.trim()`.
+- Env vars: usa `src/lib/env.ts` (`.trim()` central + audit en prod).
 
 ## 10. Estructura del repo (lo crítico)
 
