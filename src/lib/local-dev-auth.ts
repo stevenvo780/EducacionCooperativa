@@ -65,8 +65,10 @@ export const verifyLocalDevAuthToken = (token: string) => {
 
   const parts = token.split('.');
   if (parts.length !== 3) return null;
-
-  const [encodedHeader, encodedPayload, providedSignature] = parts;
+  const encodedHeader = parts[0];
+  const encodedPayload = parts[1];
+  const providedSignature = parts[2];
+  if (!encodedHeader || !encodedPayload || !providedSignature) return null;
   const unsignedToken = `${encodedHeader}.${encodedPayload}`;
   const expectedSignature = sign(unsignedToken, secret);
 
