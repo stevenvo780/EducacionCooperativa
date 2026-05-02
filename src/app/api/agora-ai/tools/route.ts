@@ -38,8 +38,6 @@ const actionAliases: Record<string, string> = {
 
 const normalizeAction = (action: string) => actionAliases[action] || action;
 
-// ── GET: list_files / read_file ─────────────────────────────────────────────
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const workspaceId = searchParams.get('workspaceId') ?? '';
@@ -90,8 +88,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
   }
 }
-
-// ── POST: write and advanced actions ────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   const body = await request.json() as {

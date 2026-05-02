@@ -47,8 +47,6 @@ export function useSTLinterRules() {
     [definitions]
   );
 
-  // ── Regla 1: Referencias cualificadas ST sin definir ──────
-
   const stUndefinedRefRule: LinterRule = useMemo(() => ({
     id: 'semantic_st_undefined_ref',
     name: 'Referencias ST sin definir',
@@ -88,8 +86,6 @@ export function useSTLinterRules() {
     }
   }), [definedNamesSet]);
 
-  // ── Regla 2: Teoremas/axiomas no referenciados ────────────
-
   const stUnusedTheoremRule: LinterRule = useMemo(() => ({
     id: 'semantic_st_unused_theorem',
     name: 'Teoremas ST no referenciados',
@@ -123,8 +119,6 @@ export function useSTLinterRules() {
       return results;
     }
   }), [theoremsAndAxioms]);
-
-  // ── Regla 3: Conflictos entre definiciones en múltiples archivos ──
 
   const stCrossDocConflictRule: LinterRule = useMemo(() => ({
     id: 'semantic_st_cross_doc_conflict',

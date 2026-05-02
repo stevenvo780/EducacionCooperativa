@@ -152,8 +152,6 @@ async function executeToolsParallel(
   });
 }
 
-// ── OpenAI ──────────────────────────────────────────────────────────────────
-
 async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
   const steps: AgentTraceStep[] = [];
   const rollback: AgentRollbackAction[] = [];
@@ -288,8 +286,6 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
   return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
 }
 
-// ── Anthropic ───────────────────────────────────────────────────────────────
-
 /**
  * Models that support native extended thinking (interleaved with tool calls).
  * Haiku models currently do NOT support it.
@@ -350,7 +346,6 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
     const data = await res.json() as { content?: AnthropicBlock[]; stop_reason?: string };
     const blocks = data.content ?? [];
 
-    // ── Extract thinking and text ─────────────────────────────────────────
     let visibleContent: string;
 
     if (useNativeThinking) {
@@ -462,8 +457,6 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
 
   return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
 }
-
-// ── Gemini ──────────────────────────────────────────────────────────────────
 
 async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
   const steps: AgentTraceStep[] = [];
@@ -595,8 +588,6 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
 
   return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
 }
-
-// ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export async function runProviderConversation(options: ProviderRunOptions): Promise<AgentRun> {
   switch (options.provider) {

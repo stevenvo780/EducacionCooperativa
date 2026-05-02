@@ -13,8 +13,6 @@ import SnippetGallery from '@/components/SnippetGallery';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { collectSTDiagnostics, hasSTExecutionErrors } from '@/lib/st-execution';
 
-// ── Constantes ──────────────────────────────────────────────
-
 const DEFAULT_SCRIPT = `// ST — Motor de Lógica Formal
 // Escribe tu script ST aquí
 
@@ -43,8 +41,6 @@ function runWhenBrowserIdle(task: () => void, timeout: number): () => void {
   const timer = globalThis.setTimeout(task, 0);
   return () => globalThis.clearTimeout(timer);
 }
-
-// ── Subcomponentes ──────────────────────────────────────────
 
 function StatusBadge({ ok }: { ok: boolean }) {
   return (
@@ -221,8 +217,6 @@ function SymbolsPanel({ symbolsList }: { symbolsList: SymbolInfo[] }) {
 
 type OutputTab = 'output' | 'problems' | 'symbols';
 
-// ── Componente principal ────────────────────────────────────
-
 export type STRunnerMode = 'script' | 'repl';
 
 interface STRunnerProps {
@@ -326,7 +320,6 @@ export default function STRunner({
     return diagnostics;
   }, [code, getEnrichedSymbols, validate]);
 
-  // ── Background Validation ──
   useEffect(() => {
     if (mode !== 'script' || isTouchTablet) return;
 
@@ -343,7 +336,6 @@ export default function STRunner({
     };
   }, [code, isTouchTablet, mode, runAnalysis]);
 
-  // ── Sync ST definitions to cross-doc registry ──
   useEffect(() => {
     const fileId = fileMode?.docName || 'st-runner-scratch';
     const defs = STDefinitionsRegistry.extractFromSource(code, fileId);
@@ -388,7 +380,6 @@ export default function STRunner({
     };
   }, [isResizingOutput, resizeOutput, stopResizingOutput]);
 
-  // ── Ejecutar script completo ──
   const handleRun = useCallback(() => {
     const result = run(code);
     const diagnostics = collectSTDiagnostics(result);
@@ -401,7 +392,6 @@ export default function STRunner({
     onExecute?.(code, result);
   }, [code, run, getEnrichedSymbols, onExecute]);
 
-  // ── Auto-run on mount ──
   const autoRanRef = useRef(false);
   useEffect(() => {
     if (autoRun && !autoRanRef.current && code) {
@@ -423,7 +413,6 @@ export default function STRunner({
     setCode(nextCode);
   }, [code, setCode]);
 
-  // ── Ejecutar línea REPL ──
   const handleReplSubmit = useCallback(() => {
     const line = replInput.trim();
     if (!line) return;
@@ -435,7 +424,6 @@ export default function STRunner({
     setReplInput('');
   }, [replInput, execLine, onExecute]);
 
-  // ── Quick eval ──
   const handleQuickEval = useCallback(() => {
     const expr = replInput.trim();
     if (!expr) return;
@@ -446,7 +434,6 @@ export default function STRunner({
     setReplInput('');
   }, [replInput, quick, onExecute]);
 
-  // ── Navegación historial REPL ──
   const handleReplKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -479,7 +466,6 @@ export default function STRunner({
     [handleReplSubmit, replHistory, replHistoryIdx]
   );
 
-  // ── Atajos de teclado ──
   const handleCodeKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -506,7 +492,6 @@ export default function STRunner({
     [fileMode, handleRun, setCode]
   );
 
-  // ── Resumen de teoría (sidebar info) ──
   const theoryInfo = useMemo(() => {
     if (!theorySummary) return null;
     return (

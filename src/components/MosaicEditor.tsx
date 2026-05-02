@@ -163,7 +163,6 @@ export default function MosaicEditor({
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const currentDocMetaRef = useRef<MarkdownDocMeta>({ workspaceId: null, folder: '', name: '' });
 
-  // ── Custom hooks ──
   const {
     searchTerm,
     setSearchTerm,
@@ -1194,8 +1193,6 @@ export default function MosaicEditor({
     clearSemanticSelection();
   }, [clearSemanticSelection, dictionaryCandidate, runLint]);
 
-  // ── Linter tooltip actions (open confirm modal) ───────────
-
   const handleLinterAddToDictionary = useCallback((word: string) => {
     setLinterAction({ type: 'dictionary', word });
   }, []);
@@ -1486,7 +1483,6 @@ export default function MosaicEditor({
     })
   ], []);
 
-  // ── Linter quick-fix: replace text at diagnostic position ──
   const handleLinterFix = useCallback((diag: LinterDiagnostic, replacement: string) => {
     const md = mdxEditorRef.current?.getMarkdown() ?? contentRef.current;
     const lines = md.split('\n');
@@ -1509,7 +1505,6 @@ export default function MosaicEditor({
     handleContentChange(md);
   }, [handleContentChange]);
 
-  // ── File viewer (non-markdown files) ──
   if (docType === 'file') {
     const safeName = fileName || 'Archivo';
     const lowerName = safeName.toLowerCase();
@@ -1578,7 +1573,6 @@ export default function MosaicEditor({
     );
   }
 
-  // ── WYSIWYG Markdown Editor (tipo Obsidian) ──
   return (
     <div
       ref={editorShellRef}

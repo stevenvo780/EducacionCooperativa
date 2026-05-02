@@ -7,16 +7,12 @@
 
 import { type LinterRule, type LinterDiagnostic, getCodeBlockLines } from './types';
 
-// ── Utilidades ───────────────────────────────────────────────
-
 function skipLine(line: string): boolean {
   const t = line.trim();
   return /^[#\-*+>|]/.test(t) || t.startsWith('```') || t.startsWith('~~~');
 }
 
-// ═══════════════════════════════════════════════════════════
 // 1. VOZ PASIVA EXCESIVA (español)
-// ═══════════════════════════════════════════════════════════
 
 export const passiveVoiceEsRule: LinterRule = {
   id: 'academic_passive_voice_es',
@@ -62,9 +58,7 @@ export const passiveVoiceEsRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 2. NOMINALIZACIONES (español)
-// ═══════════════════════════════════════════════════════════
 
 const NOMINALIZATIONS: Array<[string, string]> = [
   ['la realización de', 'realizar'],
@@ -132,9 +126,7 @@ export const nominalizationEsRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 3. CUANTIFICADORES VAGOS (español)
-// ═══════════════════════════════════════════════════════════
 
 export const vagueQuantifierEsRule: LinterRule = {
   id: 'academic_vague_quantifier_es',
@@ -172,9 +164,7 @@ export const vagueQuantifierEsRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 4. REDUNDANCIAS LÉXICAS (español)
-// ═══════════════════════════════════════════════════════════
 
 const REDUNDANCIES: Array<[string, string]> = [
   ['completamente terminado', 'terminado'],

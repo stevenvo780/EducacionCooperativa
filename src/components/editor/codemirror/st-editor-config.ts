@@ -20,8 +20,6 @@ import { isTouchDeviceProfile } from '@/lib/device-input';
 
 export { isTouchDeviceProfile };
 
-// ── Feature keys ────────────────────────────────────────────
-
 export type EditorFeature =
   | 'minimap'
   | 'lineNumbers'
@@ -50,8 +48,6 @@ export interface EditorConfig {
   hover: boolean;
   lightTheme: boolean;
 }
-
-// ── Defaults ────────────────────────────────────────────────
 
 const STORAGE_KEY = 'st-editor-config';
 
@@ -115,8 +111,6 @@ export function saveConfig(config: EditorConfig): void {
   } catch { /* ignore */ }
 }
 
-// ── Compartments ────────────────────────────────────────────
-
 export interface EditorCompartments {
   minimap: Compartment;
   lineNumbers: Compartment;
@@ -148,8 +142,6 @@ export function createCompartments(): EditorCompartments {
     lightTheme: new Compartment()
   };
 }
-
-// ── Extension factories ─────────────────────────────────────
 
 function minimapExtension(enabled: boolean): Extension {
   if (!enabled) return [];
@@ -208,8 +200,6 @@ function lightThemeExtension(enabled: boolean): Extension {
   return enabled ? stLightTheme() : stTheme();
 }
 
-// ── Build initial extensions ────────────────────────────────
-
 export function buildCompartmentExtensions(
   compartments: EditorCompartments,
   config: EditorConfig
@@ -229,8 +219,6 @@ export function buildCompartmentExtensions(
     compartments.lightTheme.of(lightThemeExtension(config.lightTheme))
   ];
 }
-
-// ── Reconfigure single feature ──────────────────────────────
 
 const FACTORY_MAP: Record<EditorFeature, (enabled: boolean) => Extension> = {
   minimap: minimapExtension,
@@ -262,8 +250,6 @@ export function reconfigureFeature(
     effects: compartment.reconfigure(factory(enabled))
   });
 }
-
-// ── Feature labels (UI) ─────────────────────────────────────
 
 export const FEATURE_LABELS: Record<EditorFeature, string> = {
   minimap: 'Minimap',

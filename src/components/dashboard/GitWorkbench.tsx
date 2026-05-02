@@ -225,12 +225,6 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
         setProgress({ phase: 'commit', current: 0, total: 1, label: 'Preparando…' });
 
         try {
-            // ───────────────────────────────────────────────────────────────────
-            // ARQUITECTURA: cliente browser habla DIRECTO a NAS (MinIO + Forgejo).
-            // Vercel solo emite signed URLs (KB) y persiste metadata final (KB).
-            // Cero data transfer por Vercel → no más OOM ni maxDuration.
-            // ───────────────────────────────────────────────────────────────────
-
             // 1) Token Forgejo del user (cache en localStorage para no regenerar).
             const TOKEN_KEY = `agora_forgejo_token_${user.uid}`;
             let forgejoToken = localStorage.getItem(TOKEN_KEY) ?? '';

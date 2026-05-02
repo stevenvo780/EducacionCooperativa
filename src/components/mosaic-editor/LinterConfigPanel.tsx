@@ -24,8 +24,6 @@ const RULE_CATEGORY_ICONS: Record<RuleCategory, React.ReactNode> = {
   thesis:        <FileText className="w-3 h-3" />
 };
 
-// ── Sync with registry ──────────────────────────────────────
-
 function getSnapshot(): RuleState[] {
   return MarkdownLinterRegistry.getAllRuleStates();
 }
@@ -38,8 +36,6 @@ function getEnabledCount(): string {
 function getActiveProfile(): ProfileId {
   return MarkdownLinterRegistry.getActiveProfile();
 }
-
-// ── Component ───────────────────────────────────────────────
 
 interface LinterConfigPanelProps {
   linterStatus?: LinterStatus;

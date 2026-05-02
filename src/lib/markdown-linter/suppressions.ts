@@ -61,8 +61,6 @@ function notify(): void {
   for (const listener of _listeners) listener();
 }
 
-// ── Public API ──────────────────────────────────────────────
-
 /**
  * Check if a diagnostic is suppressed.
  */

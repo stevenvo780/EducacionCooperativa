@@ -9,8 +9,6 @@
 import { StreamLanguage, StringStream, LanguageSupport, indentService, foldService } from '@codemirror/language';
 import { KEYWORDS, BUILTINS, PROFILES } from '../st-editor/tokenizer';
 
-// ── Operators multi-char ────────────────────────────────────
-
 const _MULTI_OPS: Record<string, true> = {
   '<->': true,
   '->': true,
@@ -21,8 +19,6 @@ const _MULTI_OPS: Record<string, true> = {
   '>=': true
 };
 
-// ── State ───────────────────────────────────────────────────
-
 interface STState {
   /** Depth de paréntesis/llaves (para rainbow) */
   parenDepth: number;
@@ -32,8 +28,6 @@ interface STState {
   inDoubleBracket: boolean;
 }
 
-// ── Stream parser ───────────────────────────────────────────
-
 const stStreamParser = {
   name: 'st',
 
@@ -42,7 +36,6 @@ const stStreamParser = {
   },
 
   token(stream: StringStream, state: STState): string | null {
-    // ── Continue block comment ──
     if (state.inBlockComment) {
       const endIdx = stream.string.indexOf('*/', stream.pos);
       if (endIdx === -1) {
@@ -54,7 +47,6 @@ const stStreamParser = {
       return 'blockComment';
     }
 
-    // ── Continue [[ ... ]] literal ──
     if (state.inDoubleBracket) {
       const endIdx = stream.string.indexOf(']]', stream.pos);
       if (endIdx === -1) {
@@ -66,16 +58,13 @@ const stStreamParser = {
       return 'string';
     }
 
-    // ── Skip whitespace ──
     if (stream.eatSpace()) return null;
 
-    // ── Line comment ──
     if (stream.match('//')) {
       stream.skipToEnd();
       return 'lineComment';
     }
 
-    // ── Block comment start ──
     if (stream.match('/*')) {
       state.inBlockComment = true;
       const endIdx = stream.string.indexOf('*/', stream.pos);
@@ -88,7 +77,6 @@ const stStreamParser = {
       return 'blockComment';
     }
 
-    // ── Double bracket literal [[ ... ]] ──
     if (stream.match('[[')) {
       state.inDoubleBracket = true;
       const endIdx = stream.string.indexOf(']]', stream.pos);
@@ -101,7 +89,6 @@ const stStreamParser = {
       return 'string';
     }
 
-    // ── String literal ──
     if (stream.peek() === '"') {
       stream.next();
       while (!stream.eol()) {
@@ -111,7 +98,6 @@ const stStreamParser = {
       return 'string';
     }
 
-    // ── Multi-char operators ──
     if (stream.match('<->')) return 'operator';
     if (stream.match('<=')) return 'operator';
     if (stream.match('>=')) return 'operator';
@@ -125,7 +111,6 @@ const stStreamParser = {
       return 'operator';
     }
 
-    // ── Single-char operators ──
     const ch = stream.peek();
     if (ch && '~&|!=+-*/%^<>'.includes(ch)) {
       stream.next();
@@ -136,7 +121,6 @@ const stStreamParser = {
       return 'operator';
     }
 
-    // ── Parens / braces (coloreados por el ViewPlugin rainbow-parens) ──
     if (ch === '(' || ch === '{') {
       state.parenDepth++;
       stream.next();
@@ -148,19 +132,16 @@ const stStreamParser = {
       return 'punctuation';
     }
 
-    // ── Punctuation ──
     if (ch && '[],:;#'.includes(ch)) {
       stream.next();
       return 'punctuation';
     }
 
-    // ── Numbers ──
     if (ch && /\d/.test(ch)) {
       stream.match(/^\d+(\.\d+)?/);
       return 'number';
     }
 
-    // ── Words (keywords, builtins, profiles, atoms, identifiers) ──
     if (ch && /[a-zA-Z_]/.test(ch)) {
       stream.match(/^[a-zA-Z0-9_.]+/);
       const word = stream.current();
@@ -174,7 +155,6 @@ const stStreamParser = {
       return 'variableName';
     }
 
-    // ── Anything else ──
     stream.next();
     return null;
   },
@@ -185,11 +165,7 @@ const stStreamParser = {
   }
 };
 
-// ── Language instance ───────────────────────────────────────
-
 export const stLanguage = StreamLanguage.define(stStreamParser);
-
-// ── Smart indentation for ST ────────────────────────────────
 
 /**
  * Indentación inteligente para bloques ST.

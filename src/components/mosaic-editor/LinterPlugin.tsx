@@ -26,8 +26,6 @@ interface LinterPluginProps {
   interactive?: boolean;
 }
 
-// ── DOM text-index helpers ──────────────────────────────────
-
 interface TextNodeSegment {
   node: Text;
   text: string;
@@ -142,8 +140,6 @@ function findDiagnosticRange(
   return null;
 }
 
-// ── SVG icons ───────────────────────────────────────────────
-
 const svgPen = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400 flex-shrink-0"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
 const svgRuler = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-cyan-400"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg>';
 const svgBulb = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-px"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>';
@@ -171,8 +167,6 @@ function groupDiagnosticsByRange(diagnostics: LinterDiagnostic[]) {
 
   return Array.from(groups.values()).map((group) => group.sort(compareDiagnosticsByPriority));
 }
-
-// ── Component ───────────────────────────────────────────────
 
 export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, onApplyFix, onAddToDictionary, onIgnoreRule, onIgnoreDiagnostic, interactive = true }: LinterPluginProps) {
   // Flipped when contenteditable appears asynchronously (MDXEditor mounts late)
@@ -205,8 +199,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   const hideCooldownRef = useRef(false);
   // True while mouse hovers any marker — prevents decorate() from destroying hit areas
   const hoverActiveRef = useRef(false);
-
-  // ── Tooltip helpers (stable — operate on refs only) ──
 
   const hideTooltipFull = () => {
     const tooltip = sharedTooltipRef.current;
@@ -245,7 +237,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     hoverHideTimerRef.current = window.setTimeout(hideTooltipFull, 350);
   };
 
-  // ── Dismiss tooltip on click outside ──
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const container = containerRef.current;
@@ -264,7 +255,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     };
   }, []);
 
-  // ── Setup effect: container, observers, scroll ──
   // IMPORTANT: Does NOT depend on `interactive` (read via ref) to avoid
   // tearing down the entire overlay on every selection change.
   useEffect(() => {
@@ -304,7 +294,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       scrollParent.style.position = 'relative';
     }
 
-    // ── Ensure overlay container ──
     if (!containerRef.current) {
       let existing = scrollParent.querySelector(`.${LINTER_OVERLAY_CONTAINER_CLASS}`) as HTMLDivElement | null;
       if (!existing) {
@@ -325,7 +314,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
 
     const container = containerRef.current;
 
-    // ── Create persistent shared tooltip (survives decorate() calls) ──
     if (!sharedTooltipRef.current || !container.contains(sharedTooltipRef.current)) {
       const tooltip = document.createElement('div');
       tooltip.className = `${TOOLTIP_CLASS} absolute hidden flex-col bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2.5 z-[100100] min-w-[220px] max-w-[380px]`;
@@ -347,8 +335,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     }
 
     const sharedTooltip = sharedTooltipRef.current;
-
-    // ── Tooltip presentation helpers ──
 
     const positionTooltip = (targetRect: DOMRect) => {
       const spRect = scrollParent.getBoundingClientRect();
@@ -489,7 +475,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
         sharedTooltip.appendChild(fixSection);
       }
 
-      // ── Action buttons: dictionary, ignore diagnostic, disable rule ──
       const isSpelling = diag.ruleId?.startsWith('spelling_') || diag.source === 'Spelling';
       const diagText = diag.text || '';
       const diagRuleId = diag.ruleId || '';
@@ -552,7 +537,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       positionTooltip(targetRect);
     };
 
-    // ── Decorate: clears only decorations, preserves tooltip ──
     const decorate = () => {
       if (!container || viewMode !== 'edit') return;
 
@@ -741,7 +725,6 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorShellRef, viewMode, editableReady]); // NO depende de interactive ni diagnostics
 
-  // ── Re-decorate when diagnostics change ──
   useEffect(() => {
     if (decorateRef.current) {
       cancelAnimationFrame(rafIdRef.current);

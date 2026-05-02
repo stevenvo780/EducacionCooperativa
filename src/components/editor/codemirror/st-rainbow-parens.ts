@@ -15,8 +15,6 @@ import {
 } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
 
-// ── Decoration marks for each depth ────────────────────────
-
 const parenDecos = [
   Decoration.mark({ class: 'cm-st-paren-0' }),
   Decoration.mark({ class: 'cm-st-paren-1' }),
@@ -26,8 +24,6 @@ const parenDecos = [
 
 const OPEN = new Set(['(', '{']);
 const CLOSE = new Set([')', '}']);
-
-// ── Build decorations ───────────────────────────────────────
 
 function buildRainbowDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
@@ -53,8 +49,6 @@ function buildRainbowDecorations(view: EditorView): DecorationSet {
 
   return builder.finish();
 }
-
-// ── ViewPlugin ──────────────────────────────────────────────
 
 export const rainbowParensPlugin = ViewPlugin.fromClass(
   class {

@@ -14,16 +14,9 @@ import { verifyWorkerAuth } from '@/lib/worker-auth';
 import { presignPut, isNasConfigured } from '@/lib/nas-storage';
 import { isPersonalWorkspaceId } from '@/types/workspace';
 import { getErrorMessage } from '@/lib/error-utils';
+import { sanitizeRepoPath } from '@/lib/contracts';
 
 const PUT_TTL = 15 * 60;
-
-const sanitizeRepoPath = (input: unknown): string | null => {
-    if (typeof input !== 'string') return null;
-    const cleaned = input.replace(/^\/+/, '').trim();
-    if (!cleaned) return null;
-    if (cleaned.split('/').some((seg) => seg === '..' || seg === '')) return null;
-    return cleaned;
-};
 
 export async function POST(req: NextRequest) {
     try {
@@ -34,14 +27,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Personal workspace requires X-Worker-Uid' }, { status: 400 });
         }
 
-        const body = await req.json() as { repoPath?: unknown; contentType?: unknown };
-        const repoPath = sanitizeRepoPath(body.repoPath);
+        const body = await req.json().catch(() => null) as { repoPath?: unknown; contentType?: unknown } | null;
+        const repoPath = sanitizeRepoPath(body?.repoPath);
         if (!repoPath) return NextResponse.json({ error: 'Invalid repoPath' }, { status: 400 });
 
         const storagePath = ctx.userId
             ? `users/${ctx.userId}/${repoPath}`
             : `workspaces/${ctx.workspaceId}/${repoPath}`;
-        const contentType = typeof body.contentType === 'string' ? body.contentType : undefined;
+        const contentType = typeof body?.contentType === 'string' ? body.contentType : undefined;
         const url = await presignPut(storagePath, PUT_TTL, contentType);
 
         return NextResponse.json({ storagePath, signedUrl: url, ttlSeconds: PUT_TTL });

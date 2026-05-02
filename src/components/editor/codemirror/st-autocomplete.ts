@@ -27,8 +27,6 @@ function buildInfoText(label: string, category: 'keyword' | 'builtin' | 'profile
     .join('\n\n');
 }
 
-// ── Static keyword completions ──────────────────────────────
-
 function makeKeywordCompletions(): Completion[] {
   const items: Completion[] = [];
   for (const kw of KEYWORDS) {
@@ -84,8 +82,6 @@ const renderTargetCompletions: Completion[] = [
   { label: 'claims', type: 'keyword', detail: 'Renderizar los claims actuales', boost: 2 },
   { label: 'all', type: 'keyword', detail: 'Renderizar todo el estado actual', boost: 2 }
 ];
-
-// ── Snippet completions (CM6 native with tab-stop placeholders) ──
 
 function makeSnippetCompletions(): Completion[] {
   return [
@@ -308,7 +304,6 @@ function makeSnippetCompletions(): Completion[] {
       info: buildInfoText('get_atoms', 'builtin'),
       boost: 3
     }),
-    // ── Modal alias snippets ──
     snippetCompletion('logic epistemic.s5\nK(${formula})', {
       label: 'K()',
       type: 'text',
@@ -411,8 +406,6 @@ function makeSnippetCompletions(): Completion[] {
 
 const snippetCompletions = makeSnippetCompletions();
 
-// ── Semantic completions from st-lang ───────────────────────
-
 function mapSemanticKind(kind: string): Completion['type'] {
   switch (kind) {
     case 'keyword':
@@ -468,8 +461,6 @@ function completionContextKind(linePrefix: string): 'logic' | 'premises' | 'rend
   if (/(render|mostrar)\s+$/i.test(linePrefix)) return 'render';
   return null;
 }
-
-// ── Main completion source ──────────────────────────────────
 
 function stCompletionSource(context: CompletionContext): CompletionResult | null {
   const word = context.matchBefore(/[\w.]+/);
@@ -531,8 +522,6 @@ function stCompletionSource(context: CompletionContext): CompletionResult | null
     validFor: /^[\w.]*$/
   };
 }
-
-// ── Export ───────────────────────────────────────────────────
 
 /**
  * CodeMirror autocompletion extension for ST language.

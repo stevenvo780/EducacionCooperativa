@@ -12,8 +12,6 @@ import { Diagnostic as CMDiagnostic, setDiagnostics, lintGutter } from '@codemir
 import { EditorView } from '@codemirror/view';
 import type { Diagnostic as STDiagnostic } from '@stevenvo780/st-lang/api';
 
-// ── Convertir ST diagnostics → CM diagnostics ──────────────
-
 function stToCMSeverity(severity: string): 'error' | 'warning' | 'info' {
   if (severity === 'error') return 'error';
   if (severity === 'warning') return 'warning';
@@ -60,8 +58,6 @@ function convertDiagnostics(
 
   return cmDiags;
 }
-
-// ── Export ───────────────────────────────────────────────────
 
 /**
  * Extensiones de lint para ST.

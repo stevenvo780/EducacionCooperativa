@@ -16,8 +16,6 @@ import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace'
 
 export const maxDuration = 60;
 
-// ── Route handler ──────────────────────────────────────────────────────────
-
 export async function POST(request: NextRequest) {
   try {
     // Require authenticated user

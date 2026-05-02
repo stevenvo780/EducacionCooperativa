@@ -4,8 +4,6 @@
  * Cada handler devuelve `true` si consumió el evento (para preventDefault).
  */
 
-// ── Helpers ─────────────────────────────────────────────────
-
 function getLineRange(text: string, pos: number): { start: number; end: number; lineText: string } {
   const start = text.lastIndexOf('\n', pos - 1) + 1;
   let end = text.indexOf('\n', pos);
@@ -33,8 +31,6 @@ function setTextareaValue(
   });
 }
 
-// ── Duplicate Line (Ctrl+D) ────────────────────────────────
-
 export function handleDuplicateLine(
   ta: HTMLTextAreaElement,
   onChange: (v: string) => void
@@ -46,8 +42,6 @@ export function handleDuplicateLine(
   setTextareaValue(ta, newValue, newCursor, newCursor, onChange);
   return true;
 }
-
-// ── Toggle Line Comment (Ctrl+/) ───────────────────────────
 
 export function handleToggleComment(
   ta: HTMLTextAreaElement,
@@ -93,8 +87,6 @@ export function handleToggleComment(
   return true;
 }
 
-// ── Move Line Up/Down (Alt+↑/↓) ───────────────────────────
-
 export function handleMoveLine(
   ta: HTMLTextAreaElement,
   onChange: (v: string) => void,
@@ -131,8 +123,6 @@ export function handleMoveLine(
   return true;
 }
 
-// ── Delete Line (Ctrl+Shift+K) ─────────────────────────────
-
 export function handleDeleteLine(
   ta: HTMLTextAreaElement,
   onChange: (v: string) => void
@@ -150,8 +140,6 @@ export function handleDeleteLine(
   setTextareaValue(ta, newValue, newCursor, newCursor, onChange);
   return true;
 }
-
-// ── Indent / Dedent (Ctrl+] / Ctrl+[) ─────────────────────
 
 export function handleIndent(
   ta: HTMLTextAreaElement,
@@ -194,8 +182,6 @@ export function handleIndent(
   return true;
 }
 
-// ── Smart Indentation (Enter key) ──────────────────────────
-
 export function handleSmartNewline(
   ta: HTMLTextAreaElement,
   onChange: (v: string) => void
@@ -224,8 +210,6 @@ export function handleSmartNewline(
   setTextareaValue(ta, newValue, newCursor, newCursor, onChange);
   return true;
 }
-
-// ── Auto-close brackets ────────────────────────────────────
 
 const BRACKET_PAIRS: Record<string, string> = {
   '(': ')',
@@ -280,8 +264,6 @@ export function handleAutoClose(
   return false;
 }
 
-// ── Backspace: delete pair ─────────────────────────────────
-
 export function handleBackspacePair(
   ta: HTMLTextAreaElement,
   onChange: (v: string) => void
@@ -298,8 +280,6 @@ export function handleBackspacePair(
   }
   return false;
 }
-
-// ── Bracket matching (find matching pair) ──────────────────
 
 export interface BracketMatch {
   openPos: number; // absolute position in code

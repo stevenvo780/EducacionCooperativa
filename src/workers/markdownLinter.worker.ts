@@ -6,8 +6,6 @@ import { initSpellEngine, syncPersonalDictionary } from '@/lib/markdown-linter/s
 // as soon as the worker is created instead of waiting for the first lint request.
 initSpellEngine().catch(() => { /* fail-open: dictionaries will retry on demand */ });
 
-// ── Tipos de mensajes ────────────────────────────────────────
-
 type LintRequestMessage = {
   type: 'lint';
   requestId: number;
@@ -49,8 +47,6 @@ type LintIncrementalResultMessage = {
   documentDiagnostics: LinterDiagnostic[];
 };
 
-// ── Helpers ──────────────────────────────────────────────────
-
 const sortDiagnostics = (diagnostics: LinterDiagnostic[]) =>
   diagnostics.sort((a, b) => a.line !== b.line ? a.line - b.line : a.column - b.column);
 
@@ -74,13 +70,10 @@ function runRulesOnText(text: string, ruleIds: string[]): LinterDiagnostic[] {
   return diagnostics;
 }
 
-// ── Handler principal ────────────────────────────────────────
-
 self.onmessage = async (event: MessageEvent<LintRequestMessage | LintIncrementalMessage>) => {
   const message = event.data;
   if (!message) return;
 
-  // ── Linting completo (comportamiento original) ───────────
   if (message.type === 'lint') {
     const { requestId, text, ruleIds, personalDictionary } = message;
     await ensureSpellEngine(ruleIds, personalDictionary);
@@ -94,7 +87,6 @@ self.onmessage = async (event: MessageEvent<LintRequestMessage | LintIncremental
     return;
   }
 
-  // ── Linting incremental ──────────────────────────────────
   if (message.type === 'lint-incremental') {
     const {
       requestId,

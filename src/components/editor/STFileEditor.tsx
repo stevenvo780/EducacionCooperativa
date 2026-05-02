@@ -41,7 +41,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     savingRef.current = saving;
   }, [saving]);
 
-  // ── Fetch raw content (reusable) ──
   const fetchContent = useCallback(async () => {
     try {
       const text = await fetchDocumentRawApi(docId);
@@ -52,7 +51,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     }
   }, [docId]);
 
-  // ── Load document content ──
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -73,7 +71,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     return () => { cancelled = true; };
   }, [docId, fetchContent]);
 
-  // ── Real-time sync: listen for doc-change events via Hub socket ──
   useEffect(() => {
     if (!onDocChangeCallback || !docId) return;
     return onDocChangeCallback((event) => {
@@ -98,7 +95,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     });
   }, [onDocChangeCallback, docId, fetchContent]);
 
-  // ── Refresh when companion sync updates this file ──
   useEffect(() => {
     if (!docId) return;
     const handler = (e: Event) => {
@@ -122,7 +118,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     return () => window.removeEventListener('agora:doc-content-updated', handler);
   }, [docId, docName, fetchContent]);
 
-  // ── Re-fetch content when tab becomes visible again ──
   useEffect(() => {
     if (!isPageVisible || !docId || loading) return;
     // Only refresh if there are no local edits
@@ -138,7 +133,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     });
   }, [isPageVisible, docId, loading, fetchContent]);
 
-  // ── Auto-save with debounce (2s) ──
   const scheduleAutoSave = useCallback((value: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -167,14 +161,12 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     };
   }, []);
 
-  // ── Handle change ──
   const handleChange = useCallback((value: string) => {
     setContent(value);
     setDirty(true);
     scheduleAutoSave(value);
   }, [scheduleAutoSave]);
 
-  // ── Sync ST definitions to cross-doc registry ──
   useEffect(() => {
     if (content) {
       const fileId = docName || docId;
@@ -187,7 +179,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     };
   }, [content, docId, docName]);
 
-  // ── Manual save (Ctrl+S) ──
   const handleSave = useCallback(async () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     try {

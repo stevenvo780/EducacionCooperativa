@@ -12,8 +12,6 @@
 
 import { type LinterRule, type LinterDiagnostic, getCodeBlockLines } from './types';
 
-// ── Helpers ──────────────────────────────────────────────────
-
 /** Extrae todos los encabezados del documento con su nivel y línea. */
 function extractHeadings(lines: string[], codeLines: Set<number>): Array<{ level: number; text: string; lineIdx: number }> {
   const headings: Array<{ level: number; text: string; lineIdx: number }> = [];
@@ -32,9 +30,7 @@ function headingMatchesPattern(text: string, patterns: string[]): boolean {
   return patterns.some((p) => lower.includes(p));
 }
 
-// ═══════════════════════════════════════════════════════════
 // 1. SECCIONES REQUERIDAS EN TESIS
-// ═══════════════════════════════════════════════════════════
 
 const REQUIRED_SECTIONS: Array<{
   key: string;
@@ -118,9 +114,7 @@ export const thesisMissingSectionRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 2. PRIMERA PERSONA SINGULAR EN TESIS
-// ═══════════════════════════════════════════════════════════
 
 export const thesisFirstPersonRule: LinterRule = {
   id: 'thesis_first_person_singular',
@@ -160,9 +154,7 @@ export const thesisFirstPersonRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 3. AFIRMACIONES SIN RESPALDO (argumentos débiles)
-// ═══════════════════════════════════════════════════════════
 
 const WEAK_ASSERTIONS: Array<[string, string]> = [
   ['es obvio que', 'Sustituye "es obvio que" por evidencia o cita bibliográfica.'],
@@ -217,9 +209,7 @@ export const thesisWeakAssertionRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 4. HIPÓTESIS EN LA INTRODUCCIÓN
-// ═══════════════════════════════════════════════════════════
 
 export const thesisHypothesisRule: LinterRule = {
   id: 'thesis_hypothesis_statement',
@@ -276,9 +266,7 @@ export const thesisHypothesisRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 5. LONGITUD DEL RESUMEN
-// ═══════════════════════════════════════════════════════════
 
 export const thesisAbstractLengthRule: LinterRule = {
   id: 'thesis_abstract_length',
@@ -340,9 +328,7 @@ export const thesisAbstractLengthRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 6. PALABRAS CLAVE (keywords)
-// ═══════════════════════════════════════════════════════════
 
 export const thesisKeywordsRule: LinterRule = {
   id: 'thesis_keywords',
@@ -386,9 +372,7 @@ export const thesisKeywordsRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 7. ORDEN DE SECCIONES
-// ═══════════════════════════════════════════════════════════
 
 export const thesisSectionOrderRule: LinterRule = {
   id: 'thesis_section_order',

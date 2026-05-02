@@ -25,13 +25,7 @@ import { enforceStorageQuota } from '@/lib/plan-guard';
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { emitPing } from '@/lib/nas-events';
 import { getErrorMessage } from '@/lib/error-utils';
-import { parseWorkerCommitPayload } from '@/lib/contracts';
-
-const splitRepoPath = (repoPath: string): { folder: string; name: string } => {
-    const idx = repoPath.lastIndexOf('/');
-    if (idx === -1) return { folder: 'No estructurado', name: repoPath };
-    return { folder: repoPath.slice(0, idx), name: repoPath.slice(idx + 1) };
-};
+import { parseWorkerCommitPayload, splitRepoPath } from '@/lib/contracts';
 
 const TEXT_EXT = new Set([
     '.md', '.markdown', '.txt', '.log', '.json', '.yaml', '.yml', '.toml', '.ini',

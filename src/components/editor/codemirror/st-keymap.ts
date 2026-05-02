@@ -28,8 +28,6 @@ import { searchKeymap, highlightSelectionMatches, gotoLine } from '@codemirror/s
 import { completionKeymap } from '@codemirror/autocomplete';
 import { lintKeymap } from '@codemirror/lint';
 
-// ── Custom ST keybindings ───────────────────────────────────
-
 /**
  * Crea keybindings personalizados para ST.
  * @param onRun   Callback para ejecutar código (Ctrl+Enter)
@@ -62,8 +60,6 @@ export function stKeybindings(
   return bindings;
 }
 
-// ── Extended keybindings (editor roadmap 1.2) ───────────────
-
 const extendedKeymap: KeyBinding[] = [
   // Comentar/descomentar
   { key: 'Ctrl-/', mac: 'Cmd-/', run: toggleComment, preventDefault: true },
@@ -94,8 +90,6 @@ const extendedKeymap: KeyBinding[] = [
   // Ir a paréntesis opuesto
   { key: 'Ctrl-Shift-\\', run: cursorMatchingBracket, preventDefault: true }
 ];
-
-// ── All keymaps combined ────────────────────────────────────
 
 /**
  * Todas las extensiones de keymap para el editor ST.

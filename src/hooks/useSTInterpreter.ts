@@ -16,8 +16,6 @@ import {
 } from '@/lib/st-api';
 import { collectSTDiagnostics } from '@/lib/st-execution';
 
-// ── Tipos del hook ──────────────────────────────────────────
-
 export interface STHistoryEntry {
   id: number;
   input: string;
@@ -53,8 +51,6 @@ export interface UseSTInterpreterReturn {
   /** Diagnósticos acumulados de la última ejecución o validación */
   lastDiagnostics: Diagnostic[];
 }
-
-// ── Hook ────────────────────────────────────────────────────
 
 export function useSTInterpreter(): UseSTInterpreterReturn {
   const [lastResult, setLastResult] = useState<STEvalResult | null>(null);

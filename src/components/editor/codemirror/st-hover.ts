@@ -10,8 +10,6 @@ import { getHoverInfo } from '../st-editor/hover-info';
 import { escapeHtml, getTokenAtPosition } from '../st-editor/tokenizer';
 import { getSemanticHover } from './st-semantic';
 
-// ── Tooltip DOM renderer ────────────────────────────────────
-
 function markdownishToHtml(markdown: string): string {
   const codeBlocks: string[] = [];
   const placeholderPrefix = '\u0000st-code-block-';
@@ -68,8 +66,6 @@ function createTooltipDOM(info: { title?: string; description?: string; example?
   return dom;
 }
 
-// ── Hover handler ───────────────────────────────────────────
-
 function getWordRangeAtColumn(lineText: string, column: number): { start: number; end: number } | null {
   if (column < 0 || column >= lineText.length) return null;
 
@@ -123,8 +119,6 @@ function stHoverHandler(view: EditorView, pos: number, _side: 1 | -1): Tooltip |
     }
   };
 }
-
-// ── Export ───────────────────────────────────────────────────
 
 /**
  * Hover tooltip extension for ST language.
