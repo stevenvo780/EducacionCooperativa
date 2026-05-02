@@ -46,7 +46,6 @@ export default function GlobalSemanticBrowser({
   const isPageVisible = usePageVisibility();
   const isOnline = useOnlineStatus();
 
-  /* ── Mutation lock: prevents reload from overwriting in-flight changes ── */
   const mutatingRef = useRef(false);
   const lastReloadAtRef = useRef(0);
 

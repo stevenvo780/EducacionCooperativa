@@ -196,7 +196,6 @@ const HeaderBar = ({
     }
   }, [showUserMenu, storageUsage]);
 
-  /* ── Terminal helpers ── */
   const workerToken = currentWorkspace && user
     ? (currentWorkspace.type === WorkspaceType.Personal || currentWorkspace.id === PERSONAL_WORKSPACE_ID
         ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`

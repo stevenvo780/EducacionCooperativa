@@ -1,14 +1,15 @@
+/**
+ * /api/snippets — GET (list) y POST (create).
+ * Auth Firebase. Snippets viven en Firestore (sin MinIO).
+ */
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
 import { isWorkspaceMember, requireAuth } from '@/lib/server-auth';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import { parseSnippetCreatePayload } from '@/lib/contracts';
 
-/* ──────────────────────────────────────────────────────────
-   GET /api/snippets?workspaceId=xxx
-   Devuelve los snippets de un workspace (o "personal").
-   ────────────────────────────────────────────────────────── */
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireAuth(req);
@@ -40,26 +41,17 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/* ──────────────────────────────────────────────────────────
-   POST /api/snippets
-   Crea un snippet nuevo.
-   Body: { title, description?, markdown, workspaceId?, category?, order? }
-   ────────────────────────────────────────────────────────── */
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req);
     if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const body = await req.json();
-    const { title, description, markdown, workspaceId, category, order } = body as Record<string, unknown>;
-    const resolvedWorkspaceId = typeof workspaceId === 'string' && workspaceId ? workspaceId : PERSONAL_WORKSPACE_ID;
+    const body = await req.json().catch(() => null);
+    const parsed = parseSnippetCreatePayload(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { title, description, markdown, workspaceId: wsRaw, category, order } = parsed.value;
+    const resolvedWorkspaceId = wsRaw ?? PERSONAL_WORKSPACE_ID;
 
-    if (typeof title !== 'string' || !title.trim()) {
-      return NextResponse.json({ error: 'title is required' }, { status: 400 });
-    }
-    if (typeof markdown !== 'string') {
-      return NextResponse.json({ error: 'markdown is required' }, { status: 400 });
-    }
     if (!isPersonalWorkspaceId(resolvedWorkspaceId)) {
       const member = await isWorkspaceMember(resolvedWorkspaceId, auth.uid);
       if (!member) {
@@ -68,12 +60,12 @@ export async function POST(req: NextRequest) {
     }
 
     const data: Record<string, unknown> = {
-      title: title.trim(),
-      description: typeof description === 'string' ? description.trim() : '',
+      title,
+      description,
       markdown,
       workspaceId: resolvedWorkspaceId,
-      category: typeof category === 'string' ? category.trim() : 'general',
-      order: typeof order === 'number' ? order : 0,
+      category,
+      order,
       ownerId: auth.uid,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()

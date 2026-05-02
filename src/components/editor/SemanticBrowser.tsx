@@ -97,7 +97,6 @@ const formatDate = (ts: number) => {
   return new Date(ts).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-/* ── Metric Card ── */
 function MetricCard({ label, value, hint, accent }: { label: string; value: number; hint: string; accent?: string }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
@@ -108,7 +107,6 @@ function MetricCard({ label, value, hint, accent }: { label: string; value: numb
   );
 }
 
-/* ── Action Card ── */
 function ActionCard({ icon, title, description, onClick, variant }: {
   icon: React.ReactNode;
   title: string;
@@ -136,7 +134,6 @@ function ActionCard({ icon, title, description, onClick, variant }: {
   );
 }
 
-/* ── Concept Detail Card ── */
 function ConceptCard({ concept, relationsCount, fragments, onDelete, onEdit }: {
   concept: SemanticConceptRecord;
   relationsCount: number;
@@ -326,7 +323,6 @@ function ConceptCard({ concept, relationsCount, fragments, onDelete, onEdit }: {
   );
 }
 
-/* ── Fragment Card ── */
 function FragmentCard({ fragment, onDelete, onEdit }: {
   fragment: SemanticFragmentRecord;
   onDelete?: (id: string) => void;
@@ -492,7 +488,6 @@ function FragmentCard({ fragment, onDelete, onEdit }: {
   );
 }
 
-/* ── Relation Card ── */
 function RelationCard({ relation, fragment, onDelete }: {
   relation: SemanticRelationRecord;
   fragment?: SemanticFragmentRecord;
@@ -551,7 +546,6 @@ function RelationCard({ relation, fragment, onDelete }: {
   );
 }
 
-/* ── ST Files Section ── */
 function STFilesPanel({ filterFileName }: { filterFileName?: string }) {
   const allFiles = STDefinitionsRegistry.getRegisteredFiles();
   const entries = allFiles.map(fileName => ({
@@ -605,7 +599,6 @@ function STFilesPanel({ filterFileName }: { filterFileName?: string }) {
   );
 }
 
-/* ── Empty State ── */
 function EmptyState({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
     <div className="text-center py-12">
@@ -624,7 +617,6 @@ function ChevronLeftIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/* ── ST Preview Block (modo experto) ── */
 function STPreviewBlock({ content }: { content: string }) {
   const [collapsed, setCollapsed] = useState(true);
   const lines = content.split('\n').length;
@@ -650,10 +642,6 @@ function STPreviewBlock({ content }: { content: string }) {
     </div>
   );
 }
-
-/* ══════════════════════════════════════════════
-   ══  SemanticBrowser — Full Tab Component  ══
-   ══════════════════════════════════════════════ */
 
 export function SemanticBrowser({
   docName,

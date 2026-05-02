@@ -14,7 +14,6 @@ import {
   ST_RUNTIME_VERSION
 } from '@/lib/st-runtime-manifest';
 
-/* ──────────── Types ──────────── */
 interface NavItem { id: string; label: string }
 interface SyntaxBlock { title: string; code: string; note?: string }
 interface CommandBlock { cmd: string; desc: string; example: string }
@@ -451,7 +450,6 @@ check valid (E -> (A -> E))
 explain (E -> A)
 render theory`;
 
-/* ──────────── Data: navigation ──────────── */
 const NAV: NavItem[] = [
   { id: 'intro', label: 'Introducción' },
   { id: 'structure', label: 'Estructura' },
@@ -473,7 +471,6 @@ const NAV: NavItem[] = [
   { id: 'ai-prompt', label: 'Prompt para IA' }
 ];
 
-/* ──────────── Data: syntax blocks ──────────── */
 const SYNTAX: SyntaxBlock[] = [
   {
     title: 'Declarar perfil lógico',
@@ -571,7 +568,6 @@ const SYNTAX: SyntaxBlock[] = [
   }
 ];
 
-/* ──────────── Data: commands ──────────── */
 const COMMANDS: CommandBlock[] = [
   {
     cmd: 'check valid <φ>',
@@ -1002,7 +998,6 @@ const COURSE_GROUPS: CourseGroup[] = [
   }
 ];
 
-/* ──────────── Data: detailed logic courses ──────────── */
 const COURSES: LogicCourse[] = [
   {
     id: 'propositional',
@@ -1160,7 +1155,6 @@ const COURSES: LogicCourse[] = [
   }
 ];
 
-/* ──────────── Data: 11 profile manuals ──────────── */
 const PROFILES: ProfileManual[] = [
   {
     id: 'classical-prop',
@@ -1459,7 +1453,6 @@ function CourseIndexCard({ course }: { course: LogicCourse }) {
   );
 }
 
-/* ──────────── Main Page ──────────── */
 export default function STDocsPage() {
   const [openProfile, setOpenProfile] = useState<string | null>(null);
 

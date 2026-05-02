@@ -16,8 +16,6 @@ import {
   saveClientConfig
 } from '@/lib/clientConfigStorage';
 
-/* ── Tipos ──────────────────────────────────────────────────── */
-
 type FormalizeEngine = 'nlp' | 'llm';
 type LLMProvider = 'ollama' | 'openwebui' | 'openai';
 
@@ -57,8 +55,6 @@ interface FormalizeResult {
   engine: FormalizeEngine;
 }
 
-/* ── Perfiles disponibles ───────────────────────────────────── */
-
 const profileShortLabel = (profile: string) => (
   profile
     .split('.')
@@ -95,8 +91,6 @@ function inferProfileFromSnippet(snippet?: Snippet): LogicProfile | null {
   return match?.profile ?? null;
 }
 
-/* ── Componente principal ───────────────────────────────────── */
-
 export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_ID, initialInput = '', hideSnippets = false }: { workspaceId?: string; initialInput?: string; hideSnippets?: boolean }) {
   const [input, setInput] = useState(initialInput);
   const [profile, setProfile] = useState<LogicProfile>('classical.propositional');
@@ -122,7 +116,6 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
     });
   }, []);
 
-  /* ── NLP formalize (sync, local) ─────────────────────────── */
   const runFormalizeNLP = useCallback((text: string, prof: LogicProfile) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -205,7 +198,6 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
     setSelectedResult(result.id);
   }, []);
 
-  /* ── LLM formalize (async, server-side via /api/formalize-llm) */
   const runFormalizeLLM = useCallback(async (text: string, prof: LogicProfile) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -814,8 +806,6 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
     </div>
   );
 }
-
-/* ── Highlight básico para código ST ────────────────────────── */
 
 function STHighlight({ code }: { code: string }) {
   const lines = code.split('\n');
