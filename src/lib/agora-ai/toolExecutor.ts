@@ -30,11 +30,16 @@ import type {
 import { isWorkspaceMember } from '@/lib/server-auth';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
-
-const DEFAULT_DOC_LIMIT = 25;
-const MAX_DOC_SCAN = 200;
-const MAX_CONTENT_PREVIEW = 800;
-const DEFAULT_BOARD_COLUMNS = ['Por hacer', 'En progreso', 'Hecho'];
+import {
+  DEFAULT_DOC_LIMIT,
+  MAX_DOC_SCAN,
+  DEFAULT_BOARD_COLUMNS,
+  clamp,
+  excerpt,
+  sanitizeFirestoreValue,
+  resolveSemanticDocId,
+  normalizeLookupKey
+} from './toolExecutor-helpers';
 
 type StoredDocument = {
   id: string;
@@ -81,29 +86,6 @@ type StoredBoardCard = {
   sourceFragment?: string | null;
   sourcePath?: string | null;
 };
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-const excerpt = (value: string, maxLength = MAX_CONTENT_PREVIEW) => (
-  value.length > maxLength ? `${value.slice(0, maxLength)}…` : value
-);
-
-const sanitizeFirestoreValue = (value: unknown): unknown => {
-  if (value === undefined) return null;
-  if (value === null) return null;
-  if (Array.isArray(value)) return value.map(item => sanitizeFirestoreValue(item));
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(record).map(([key, item]) => [key, sanitizeFirestoreValue(item)])
-    );
-  }
-  return value;
-};
-
-const resolveSemanticDocId = (workspaceId: string, uid: string) => (
-  isPersonalWorkspaceId(workspaceId) ? `${PERSONAL_WORKSPACE_ID}:${uid}` : workspaceId
-);
 
 async function ensureWorkspaceAccess(workspaceId: string, uid: string) {
   if (isPersonalWorkspaceId(workspaceId)) {
@@ -199,8 +181,6 @@ async function fetchDocumentForUser(documentId: string, ctx: AgentExecutionConte
   }
   return data;
 }
-
-const normalizeLookupKey = (value: string) => value.trim().toLowerCase();
 
 async function listWorkspaceSnippets(ctx: AgentExecutionContext): Promise<StoredSnippet[]> {
   await ensureWorkspaceAccess(ctx.workspaceId, ctx.uid);
