@@ -41,6 +41,7 @@ import { useFileExplorerDND, DOC_REORDER_TYPE, FOLDER_REORDER_TYPE } from '@/com
 import type { DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { useIsTouchDeviceProfile } from '@/lib/device-input';
+import { useElementSize } from '@/hooks/useElementSize';
 
 export interface DocItem {
   id: string;
@@ -71,40 +72,6 @@ type ContentItem =
   | { kind: 'doc'; doc: DocItem };
 
 const CONTENT_ROW_HEIGHT = 52;
-
-const useElementSize = <T extends HTMLElement>() => {
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  const observerRef = useRef<ResizeObserver | null>(null);
-
-  const ref = useCallback((node: T | null) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-      observerRef.current = null;
-    }
-
-    if (node !== null) {
-      const updateSize = () => {
-          const rect = node.getBoundingClientRect();
-          setSize({ width: rect.width, height: rect.height });
-      };
-
-      updateSize();
-
-      if (typeof ResizeObserver !== 'undefined') {
-        observerRef.current = new ResizeObserver((entries) => {
-          const entry = entries[0];
-          if (entry) {
-             const { width, height } = entry.contentRect;
-             setSize({ width, height });
-          }
-        });
-        observerRef.current.observe(node);
-      }
-    }
-  }, []);
-
-  return [ref, size] as const;
-};
 
 interface FileExplorerProps {
   docs: DocItem[];
