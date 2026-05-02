@@ -15,8 +15,6 @@ const PROFILE_STORAGE_KEY = 'agora:linter-profile';
 
 type Listener = () => void;
 
-// ── Definiciones de perfiles ────────────────────────────────
-
 type ProfileDefinition = {
   id: ProfileId;
   name: string;
@@ -162,8 +160,6 @@ class MarkdownLinterRegistryClass {
     this._loadProfileFromStorage();
   }
 
-  // ── Inicialización ──────────────────────────────────────
-
   private _loadDefaults(): void {
     for (const rule of ALL_BUILTIN_RULES) {
       this._rules.set(rule.id, rule);
@@ -199,8 +195,6 @@ class MarkdownLinterRegistryClass {
       // localStorage unavailable
     }
   }
-
-  // ── API pública ─────────────────────────────────────────
 
   /** Registra una regla custom (ej: desde un plugin externo) */
   registerRule(rule: LinterRule): void {
@@ -318,8 +312,6 @@ class MarkdownLinterRegistryClass {
     return this._rules.size;
   }
 
-  // ── Perfiles ─────────────────────────────────────────────
-
   getActiveProfile(): ProfileId {
     return this._activeProfile;
   }
@@ -370,8 +362,6 @@ class MarkdownLinterRegistryClass {
   getProfiles(): Array<{ id: ProfileId; name: string; description: string }> {
     return PROFILE_DEFINITIONS.map(({ id, name, description }) => ({ id, name, description }));
   }
-
-  // ── Suscripción reactiva ────────────────────────────────
 
   subscribe(listener: Listener): () => void {
     this._listeners.add(listener);

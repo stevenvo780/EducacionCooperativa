@@ -11,8 +11,6 @@ import type { LinterDiagnostic, LinterRule } from '@/lib/markdown-linter/types';
 export type { LinterDiagnostic, LinterRule };
 export type { LinterSeverity } from '@/lib/markdown-linter/types';
 
-// ── Stable selectors for useSyncExternalStore ───────────────
-
 function getRegistrySnapshot(): LinterRule[] {
   return MarkdownLinterRegistry.getEnabledRules();
 }
@@ -20,8 +18,6 @@ function getRegistrySnapshot(): LinterRule[] {
 function subscribeRegistry(onStoreChange: () => void): () => void {
   return MarkdownLinterRegistry.subscribe(onStoreChange);
 }
-
-// ── Comparador de diagnósticos ──────────────────────────────
 
 function diagnosticsEqual(a: LinterDiagnostic[], b: LinterDiagnostic[]): boolean {
   if (a.length !== b.length) return false;
@@ -34,8 +30,6 @@ function diagnosticsEqual(a: LinterDiagnostic[], b: LinterDiagnostic[]): boolean
 function sortDiagnostics(diagnostics: LinterDiagnostic[]): LinterDiagnostic[] {
   return [...diagnostics].sort((a, b) => a.line !== b.line ? a.line - b.line : a.column - b.column);
 }
-
-// ── Utilidades de linting incremental ──────────────────────
 
 /** djb2 hash compacto para identificar contenido de párrafo */
 function contentHash(s: string): string {
@@ -85,8 +79,6 @@ function splitIntoParagraphs(text: string): Paragraph[] {
   return paragraphs;
 }
 
-// ── Tipos de mensajes del worker ─────────────────────────────
-
 type WorkerResultMessage =
   | { type: 'lint-result'; requestId: number; diagnostics: LinterDiagnostic[] }
   | {
@@ -104,8 +96,6 @@ const MIN_INITIALIZING_DISPLAY_MS = 800;
 
 // Cache entry: diagnósticos con líneas relativas al párrafo (1-based)
 type ParagraphCacheEntry = { diagnostics: LinterDiagnostic[] };
-
-// ── Hook principal ──────────────────────────────────────────
 
 /**
  * Hook de linting Markdown con soporte para:
@@ -140,8 +130,6 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   customRulesRef.current = customRules;
   const enabledRulesRef = useRef(enabledRules);
   enabledRulesRef.current = enabledRules;
-
-  // ── Inicialización del worker ──────────────────────────────
 
   useEffect(() => {
     if (typeof Worker === 'undefined') { workerAvailableRef.current = false; return; }
@@ -236,8 +224,6 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     });
   }, []);
 
-  // ── Reglas custom (hilo principal) ─────────────────────────
-
   const runCustomRules = useCallback((text: string) => {
     const rules = [
       ...enabledRulesRef.current.filter((r) => !BUILTIN_RULE_IDS.has(r.id)),
@@ -247,8 +233,6 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       r.check(text).map(d => ({ ...d, ruleId: d.ruleId ?? r.id }))
     ));
   }, []);
-
-  // ── runLint principal ───────────────────────────────────────
 
   const runLint = useCallback((text: string) => {
     const requestId = latestRequestIdRef.current + 1;
@@ -343,8 +327,6 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runCustomRules]);
 
-  // ── Efectos de re-lint ──────────────────────────────────────
-
   useEffect(() => {
     const delay = hasLintedOnceRef.current ? 300 : 50;
     const timer = setTimeout(() => {
@@ -363,7 +345,6 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     return () => { cancelled = true; };
   }, [runLint]);
 
-  // ── Safety timeout: force 'ready' if stuck in 'initializing' ───
   useEffect(() => {
     if (linterStatus !== 'initializing') return;
     const timeout = setTimeout(() => {

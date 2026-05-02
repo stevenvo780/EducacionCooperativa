@@ -14,19 +14,33 @@ export interface WorkerCommitPayload {
   mimeType: string | null;
 }
 
-const sanitizeRepoPath = (input: string): string | null => {
+/**
+ * Sanitiza un repoPath relativo: quita slashes iniciales, rechaza traversal
+ * y dobles slashes. Compartido por todos los endpoints worker-*.
+ */
+export const sanitizeRepoPath = (input: unknown): string | null => {
+  if (typeof input !== 'string') return null;
   const cleaned = input.replace(/^\/+/, '').trim();
   if (!cleaned) return null;
   if (cleaned.split('/').some((seg) => seg === '..' || seg === '')) return null;
   return cleaned;
 };
 
+/** Divide repoPath en (folder, name). Folder vacío → "No estructurado". */
+export const splitRepoPath = (repoPath: string): { folder: string; name: string } => {
+  const idx = repoPath.lastIndexOf('/');
+  if (idx === -1) return { folder: 'No estructurado', name: repoPath };
+  return { folder: repoPath.slice(0, idx), name: repoPath.slice(idx + 1) };
+};
+
 export const parseWorkerCommitPayload = (input: unknown): ParseResult<WorkerCommitPayload> => {
   if (!isObject(input)) return err('body must be a JSON object');
   const { repoPath, contentHash, size, mimeType } = input;
-  if (!isString(repoPath)) return fieldErr('repoPath', 'string', repoPath);
   const sanitized = sanitizeRepoPath(repoPath);
-  if (!sanitized) return err('field "repoPath" contains traversal or empty segments');
+  if (!sanitized) {
+    if (!isString(repoPath)) return fieldErr('repoPath', 'string', repoPath);
+    return err('field "repoPath" contains traversal or empty segments');
+  }
   if (!isString(contentHash) || !contentHash) return fieldErr('contentHash', 'non-empty string', contentHash);
   let normalizedSize: number | null = null;
   if (size !== undefined && size !== null) {
@@ -48,9 +62,11 @@ export interface WorkerDeletePayload {
 export const parseWorkerDeletePayload = (input: unknown): ParseResult<WorkerDeletePayload> => {
   if (!isObject(input)) return err('body must be a JSON object');
   const { repoPath } = input;
-  if (!isString(repoPath)) return fieldErr('repoPath', 'string', repoPath);
   const sanitized = sanitizeRepoPath(repoPath);
-  if (!sanitized) return err('field "repoPath" contains traversal or empty segments');
+  if (!sanitized) {
+    if (!isString(repoPath)) return fieldErr('repoPath', 'string', repoPath);
+    return err('field "repoPath" contains traversal or empty segments');
+  }
   return ok({ repoPath: sanitized });
 };
 
@@ -63,9 +79,11 @@ export interface WorkerUploadUrlPayload {
 export const parseWorkerUploadUrlPayload = (input: unknown): ParseResult<WorkerUploadUrlPayload> => {
   if (!isObject(input)) return err('body must be a JSON object');
   const { repoPath, size, mimeType } = input;
-  if (!isString(repoPath)) return fieldErr('repoPath', 'string', repoPath);
   const sanitized = sanitizeRepoPath(repoPath);
-  if (!sanitized) return err('field "repoPath" contains traversal or empty segments');
+  if (!sanitized) {
+    if (!isString(repoPath)) return fieldErr('repoPath', 'string', repoPath);
+    return err('field "repoPath" contains traversal or empty segments');
+  }
   if (!isNumber(size) || size <= 0) return fieldErr('size', 'positive number', size);
   let normalizedMime: string | null = null;
   if (mimeType !== undefined && mimeType !== null) {

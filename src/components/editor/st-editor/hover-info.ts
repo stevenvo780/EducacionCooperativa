@@ -9,8 +9,6 @@ export interface HoverData {
   category?: 'keyword' | 'operator' | 'builtin' | 'profile' | 'alias';
 }
 
-// ── Keywords ────────────────────────────────────────────────
-
 const keywordInfo: Record<string, HoverData> = {
   axiom:       { title: 'axiom', description: 'Declara un axioma (fórmula asumida como verdadera).', example: 'axiom ax1 : p -> (q -> p)', category: 'keyword' },
   axioma:      { title: 'axioma (→ axiom)', description: 'Alias en español de axiom.', example: 'axioma ax1 : p -> (q -> p)', category: 'alias' },
@@ -119,8 +117,6 @@ const keywordInfo: Record<string, HoverData> = {
   descripcion: { title: 'descripcion (→ description)', description: 'Alias en español de description.', example: 'definir F(x) := P(x)\ndescripcion "propiedad fundamental"', category: 'alias' }
 };
 
-// ── Operators ───────────────────────────────────────────────
-
 const operatorInfo: Record<string, HoverData> = {
   '->':  { title: '→  Implicación', description: 'Si A entonces B. Falso solo cuando A es verdadero y B es falso.', example: 'p -> q   equivale a  ¬p ∨ q', category: 'operator' },
   '→':   { title: '→  Implicación', description: 'Versión Unicode de ->. La capa de compatibilidad la normaliza automáticamente.', example: 'p → q', category: 'operator' },
@@ -160,8 +156,6 @@ const operatorInfo: Record<string, HoverData> = {
   '≥':   { title: '≥  Mayor o igual que', description: 'Versión Unicode de >=.', example: 'x ≥ 10', category: 'operator' }
 };
 
-// ── Builtins ────────────────────────────────────────────────
-
 const builtinInfo: Record<string, HoverData> = {
   valid:        { title: 'valid', description: 'Verifica si la fórmula es una tautología (verdadera en toda interpretación).', example: 'check valid p -> p', category: 'builtin' },
   valido:       { title: 'válido (→ valid)', description: 'Alias español de valid.', category: 'alias' },
@@ -181,8 +175,6 @@ const builtinInfo: Record<string, HoverData> = {
   input:        { title: 'input(arg)', description: 'Función nativa para pedir entrada interactiva cuando el runtime está en CLI/REPL.', example: 'let nombre = input("Tu nombre:")', category: 'builtin' }
 };
 
-// ── Profiles ────────────────────────────────────────────────
-
 const profileInfo: Record<string, HoverData> = {
   'classical.propositional':  { title: 'Lógica proposicional clásica', description: 'Operadores: ¬ ∧ ∨ → ↔\nTableaux con ramas abiertas/cerradas.\nSemántica bivalente (V/F).', category: 'profile' },
   'classical.first_order':    { title: 'Lógica de primer orden', description: 'Extensión con cuantificadores ∀ ∃, predicados, funciones e igualdad.', category: 'profile' },
@@ -197,8 +189,6 @@ const profileInfo: Record<string, HoverData> = {
   arithmetic:                 { title: 'Lógica arithmetic', description: 'Perfil numérico para evaluar expresiones aritméticas, comparaciones y combinarlas con scripting ST.', category: 'profile' }
 };
 
-// ── Modal Aliases (context-dependent) ────────────────────────
-
 const modalAliasInfo: Record<string, HoverData> = {
   'K':  { title: 'K — Conocimiento (epistemic.s5)', description: 'Alias modal: K(φ) ≡ □φ. "El agente sabe que φ". Solo activo en el perfil epistemic.s5.', example: 'logic epistemic.s5\ncheck valid K(P) -> P', category: 'alias' },
   'B':  { title: 'B — Creencia (epistemic.s5)', description: 'Alias modal: B(φ) ≡ ◇φ. "El agente cree que φ". Solo activo en el perfil epistemic.s5.', example: 'logic epistemic.s5\ncheck valid K(P) -> B(P)', category: 'alias' },
@@ -207,8 +197,6 @@ const modalAliasInfo: Record<string, HoverData> = {
   'F':  { title: 'F — Prohibición / Eventually', description: 'Como alias modal: F(φ) ≡ □¬φ (deontic: "prohibido") o F(φ) ≡ ◇φ (temporal: "eventualmente"). Depende del perfil activo.', example: 'logic temporal.ltl\ncheck valid G(P) -> F(P)', category: 'alias' },
   'G':  { title: 'G — Siempre / Globally (temporal.ltl)', description: 'Alias modal: G(φ) ≡ □φ. "Siempre se cumple φ". Solo activo en el perfil temporal.ltl.', example: 'logic temporal.ltl\ncheck valid G(P) -> P', category: 'alias' }
 };
-
-// ── Lookup unificado ────────────────────────────────────────
 
 /**
  * Busca información hover para un token dado su texto y categoría.

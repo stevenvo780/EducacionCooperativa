@@ -15,8 +15,6 @@ import type {
   World
 } from '@stevenvo780/st-lang/types';
 
-// ── Tipos ───────────────────────────────────────────────────
-
 export type OutputViewMode = 'steps' | 'json' | 'graphic';
 
 export interface STHistoryEntryLike {
@@ -25,8 +23,6 @@ export interface STHistoryEntryLike {
   result: STEvalResult;
   timestamp: number;
 }
-
-// ── Formula → Unicode (portada de st-lang v1 format.ts) ─────
 
 function collectAssociativeArgs(
   f: Formula,
@@ -156,8 +152,6 @@ function formulaToUnicode(f: Formula): string {
   }
 }
 
-// ── Selector de modo ────────────────────────────────────────
-
 interface ViewModeToggleProps {
   mode: OutputViewMode;
   onChange: (mode: OutputViewMode) => void;
@@ -190,8 +184,6 @@ function ViewModeToggle({ mode, onChange }: ViewModeToggleProps) {
     </div>
   );
 }
-
-// ── Vista Step-by-step (texto plano coloreado) ──────────────
 
 function OutputLine({ line }: { line: string }) {
   let color = 'text-slate-300';
@@ -236,8 +228,6 @@ function StepsView({ stdout, stderr }: { stdout: string; stderr: string }) {
   );
 }
 
-// ── Vista JSON (syntax highlighted) ─────────────────────────
-
 function JsonView({ result }: { result: STEvalResult }) {
   const highlighted = useMemo(() => {
     const json = JSON.stringify(result, null, 2);
@@ -275,8 +265,6 @@ function JsonView({ result }: { result: STEvalResult }) {
     />
   );
 }
-
-// ── Subcomponentes Gráficos ─────────────────────────────────
 
 /** Indicador de estado lógico */
 function StatusChip({ status }: { status: string }) {
@@ -769,8 +757,6 @@ function ConsoleBlock({ title, text, tone = 'neutral' }: { title: string; text: 
   );
 }
 
-// ── RunResult individual (tarjeta gráfica) ──────────────────
-
 function RunResultCard({ result, index }: { result: RunResult; index: number }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -891,8 +877,6 @@ function RunResultCard({ result, index }: { result: RunResult; index: number }) 
   );
 }
 
-// ── Vista gráfica completa de un STEvalResult ───────────────
-
 function GraphicView({ result }: { result: STEvalResult }) {
   const { results, stderr, stdout } = result;
 
@@ -929,8 +913,6 @@ function GraphicView({ result }: { result: STEvalResult }) {
   );
 }
 
-// ── Componente principal: OutputViewer ───────────────────────
-
 interface OutputViewerProps {
   result: STEvalResult;
   mode: OutputViewMode;
@@ -946,7 +928,5 @@ export function OutputViewer({ result, mode }: OutputViewerProps) {
       return <GraphicView result={result} />;
   }
 }
-
-// ── Export del toggle ───────────────────────────────────────
 
 export { ViewModeToggle };

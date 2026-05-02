@@ -99,7 +99,6 @@ export const MarkdownPreview = React.memo(function MarkdownPreview({
             const className: string = String(childProps.className || '');
             const code = extractTextFromChildren(childProps.children as React.ReactNode).trim();
 
-            // ── Mermaid diagrams ──
             if (/language-mermaid/.test(className)) {
               return (
                 <DiagramErrorBoundary fallback={code}>
@@ -108,7 +107,6 @@ export const MarkdownPreview = React.memo(function MarkdownPreview({
               );
             }
 
-            // ── ASCII-art diagrams: render with special mono styling ──
             const hasNoLang = !className || className === 'language-' || className === 'language-text';
             if (hasNoLang && code && looksLikeAsciiDiagram(code)) {
               return (
@@ -118,7 +116,6 @@ export const MarkdownPreview = React.memo(function MarkdownPreview({
               );
             }
 
-            // ── Regular code blocks ──
             return <pre className={className}>{children}</pre>;
           },
           code({ className, children, ...props }) {

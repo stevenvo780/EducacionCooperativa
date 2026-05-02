@@ -10,8 +10,6 @@
 
 import { type LinterRule, type LinterDiagnostic, getCodeBlockLines } from './types';
 
-// ── Helpers ──────────────────────────────────────────────────
-
 /**
  * Detecta la línea donde empieza una sección de bibliografía/referencias.
  * Acepta variantes en español e inglés.
@@ -66,9 +64,7 @@ function parseBibEntry(line: string): string | null {
   return `${firstAuthor.toLowerCase()}_${match[2]}`;
 }
 
-// ═══════════════════════════════════════════════════════════
 // 1. CITAS APA MAL FORMADAS
-// ═══════════════════════════════════════════════════════════
 
 export const apaMalformedRule: LinterRule = {
   id: 'citation_apa_malformed',
@@ -139,9 +135,7 @@ export const apaMalformedRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 2. CITAS EN TEXTO SIN ENTRADA EN BIBLIOGRAFÍA
-// ═══════════════════════════════════════════════════════════
 
 export const missingBibliographyRule: LinterRule = {
   id: 'citation_missing_bibliography',
@@ -197,9 +191,7 @@ export const missingBibliographyRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 3. ENTRADAS BIBLIOGRÁFICAS SIN CITA EN TEXTO
-// ═══════════════════════════════════════════════════════════
 
 export const orphanBibliographyRule: LinterRule = {
   id: 'citation_orphan_bibliography',
@@ -258,9 +250,7 @@ export const orphanBibliographyRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 4. FORMATO DOI
-// ═══════════════════════════════════════════════════════════
 
 export const doiFormatRule: LinterRule = {
   id: 'citation_doi_format',
@@ -318,9 +308,7 @@ export const doiFormatRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 5. SECCIÓN DE REFERENCIAS FALTANTE
-// ═══════════════════════════════════════════════════════════
 
 export const missingReferenceSectionRule: LinterRule = {
   id: 'citation_missing_reference_section',
@@ -359,9 +347,7 @@ export const missingReferenceSectionRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 6. CITAS IBID / OP. CIT. (obsoletas en APA)
-// ═══════════════════════════════════════════════════════════
 
 export const ibidOpCitRule: LinterRule = {
   id: 'citation_ibid_op_cit',

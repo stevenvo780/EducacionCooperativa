@@ -40,11 +40,9 @@
 
 import { markInternalDragStart, markInternalDragEnd } from './internal-drag-flag';
 
-// ── Configuration ───────────────────────────────────────────────
 const MOVE_THRESHOLD = 10; // px before drag is confirmed
 const LONG_PRESS_DELAY = 180; // ms hold before drag activates (vs tap)
 
-// ── State ───────────────────────────────────────────────────────
 let _initialized = false;
 let _dragging = false;
 let _dragDocId: string | null = null;
@@ -64,8 +62,6 @@ let _dragConfirmed = false;
 let _sourceEl: HTMLElement | null = null;
 let _dataTransfer: DataTransfer | null = null;
 let _sourceTouchActionNone = false; // true when source element has touch-action:none
-
-// ── Public API ──────────────────────────────────────────────────
 
 /** Initialize once at app level. Safe to call multiple times. */
 export function initTouchDragPolyfill(): void {
@@ -92,8 +88,6 @@ export function destroyTouchDragPolyfill(): void {
   cleanup();
   _initialized = false;
 }
-
-// ── Touch handlers ──────────────────────────────────────────────
 
 function hasTouchActionNone(el: HTMLElement): boolean {
   // Fast path: check for Tailwind `touch-none` class
@@ -143,7 +137,6 @@ function onTouchStart(e: TouchEvent): void {
 function onTouchMove(e: TouchEvent): void {
   if (!_sourceEl || e.touches.length !== 1) return;
 
-  // ── CRITICAL: Prevent browser from hijacking the touch stream ────────
   // Once the long-press timer has elapsed (or the source has touch-action:none),
   // we MUST call preventDefault() on EVERY touchmove, including the very first
   // one, BEFORE any threshold checks. Otherwise the browser starts a scroll/pan
@@ -434,8 +427,6 @@ function withHiddenDragArtifacts<T>(fn: () => T): T {
   }
 }
 
-// ── Drag artifacts ──────────────────────────────────────────────
-
 function createShield(): void {
   _shieldEl = document.createElement('div');
   _shieldEl.setAttribute('data-touch-drag-shield', 'true');
@@ -499,8 +490,6 @@ function moveGhost(x: number, y: number): void {
   _ghostEl.style.top = `${y - 20}px`;
 }
 
-// ── Position calculation (mirrors MosaicLayout.calcDropPosition) ─
-
 function calcDropPosition(
   clientX: number,
   clientY: number,
@@ -515,8 +504,6 @@ function calcDropPosition(
   if (y > 1 - edge) return 'bottom';
   return 'replace';
 }
-
-// ── Cleanup ─────────────────────────────────────────────────────
 
 function cleanup(): void {
   if (_shieldEl) {

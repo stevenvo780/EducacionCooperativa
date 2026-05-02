@@ -28,8 +28,6 @@ function groupDiagnosticsByRange(diagnostics: GenericDiagnostic[]) {
   return Array.from(groups.values()).map((group) => group.sort(compareDiagnosticsByPriority));
 }
 
-// ── Quick-fix definitions ───────────────────────────────────
-
 interface QuickFix {
   label: string;
   /** Text to insert/replace */
@@ -89,8 +87,6 @@ function generateQuickFixes(d: GenericDiagnostic, content: string): QuickFix[] {
 
   return fixes;
 }
-
-// ── Props ───────────────────────────────────────────────────
 
 interface LinterOverlayProps {
   diagnostics: GenericDiagnostic[];

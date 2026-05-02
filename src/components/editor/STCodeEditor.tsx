@@ -30,8 +30,6 @@ import {
   isTouchDeviceProfile
 } from './codemirror';
 
-// ── Props ───────────────────────────────────────────────────
-
 interface STCodeEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -42,8 +40,6 @@ interface STCodeEditorProps {
   diagnostics?: Diagnostic[];
   editorConfig?: EditorConfig;
 }
-
-// ── Component ───────────────────────────────────────────────
 
 export default function STCodeEditor({
   value,
@@ -68,7 +64,6 @@ export default function STCodeEditor({
   onChangeRef.current = onChange;
   onKeyDownRef.current = onKeyDown;
 
-  // ── Ctrl+Enter → run, Ctrl+S → save (via fake events to parent) ──
   const handleRun = useCallback(() => {
     const handler = onKeyDownRef.current;
     if (!handler) return;
@@ -94,7 +89,6 @@ export default function STCodeEditor({
   onRunRef.current = handleRun;
   onSaveRef.current = handleSave;
 
-  // ── Create fixed (non-togglable) extensions ──
   const fixedExtensions = useMemo(() => [
     drawSelection(),
     dropCursor(),
@@ -124,7 +118,6 @@ export default function STCodeEditor({
     })
   ], [isTouchDevice, placeholder, readOnly]);
 
-  // ── Initialize EditorView ──
   useEffect(() => {
     if (isTouchDevice || !containerRef.current) return;
 
@@ -152,7 +145,6 @@ export default function STCodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Sync config changes → reconfigure compartments ──
   useEffect(() => {
     if (isTouchDevice) return;
     const view = viewRef.current;
@@ -171,7 +163,6 @@ export default function STCodeEditor({
     prevConfigRef.current = config;
   }, [editorConfig, isTouchDevice]);
 
-  // ── Sync value from parent → CM ──
   useEffect(() => {
     if (isTouchDevice) return;
     const view = viewRef.current;
@@ -184,7 +175,6 @@ export default function STCodeEditor({
     }
   }, [isTouchDevice, value]);
 
-  // ── Sync diagnostics → CM lint ──
   useEffect(() => {
     if (isTouchDevice) return;
     const view = viewRef.current;

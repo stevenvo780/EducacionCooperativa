@@ -6,8 +6,6 @@ import { ST_RUNTIME_KEYWORDS, ST_RUNTIME_PROFILE_IDS } from '@/lib/st-runtime-ma
  * Extraído de STCodeEditor para modularidad.
  */
 
-// ── Categorías de tokens ────────────────────────────────────
-
 export type TokenCategory =
   | 'keyword'
   | 'builtin'
@@ -29,8 +27,6 @@ export interface HighlightToken {
   depth?: number;
 }
 
-// ── Conjuntos léxicos ───────────────────────────────────────
-
 export const KEYWORDS = new Set([...ST_RUNTIME_KEYWORDS, ...ST_COMPAT_KEYWORDS]);
 
 export const BUILTINS = new Set([
@@ -40,8 +36,6 @@ export const BUILTINS = new Set([
 ]);
 
 export const PROFILES = new Set(ST_RUNTIME_PROFILE_IDS);
-
-// ── Helpers ─────────────────────────────────────────────────
 
 export function escapeHtml(str: string): string {
   return str
@@ -58,8 +52,6 @@ function classifyWord(word: string): HighlightToken {
   if (/^[A-Z]$/.test(word)) return { text: word, category: 'atom' };
   return { text: word, category: 'identifier' };
 }
-
-// ── Tokenizador principal ───────────────────────────────────
 
 const OPEN_PARENS = new Set(['(', '{']);
 const CLOSE_PARENS = new Set([')', '}']);
@@ -79,13 +71,11 @@ export function tokenizeLine(
   let depth = parenDepth;
 
   while (i < line.length) {
-    // ── 1. Comentario de línea ──
     if (line[i] === '/' && line[i + 1] === '/') {
       tokens.push({ text: line.slice(i), category: 'comment' });
       return { tokens, parenDepth: depth };
     }
 
-    // ── 1b. Comentario de bloque ──
     if (line[i] === '/' && line[i + 1] === '*') {
       let j = i + 2;
       while (j < line.length - 1 && !(line[j] === '*' && line[j + 1] === '/')) j++;
@@ -95,7 +85,6 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 2. String literal ──
     if (line[i] === '"') {
       let j = i + 1;
       while (j < line.length && line[j] !== '"') j++;
@@ -105,7 +94,6 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 3. Double bracket literal ──
     if (line[i] === '[' && line[i + 1] === '[') {
       let j = i + 2;
       while (j < line.length - 1 && !(line[j] === ']' && line[j + 1] === ']')) j++;
@@ -115,7 +103,6 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 4. Rainbow parens ──
     if (OPEN_PARENS.has(line[i])) {
       tokens.push({ text: line[i], category: 'paren', depth });
       depth++;
@@ -129,7 +116,6 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 5. Operators (multi-char first) ──
     if (line[i] === '[' && line[i + 1] === ']') {
       tokens.push({ text: '[]', category: 'operator' });
       i += 2;
@@ -196,14 +182,12 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 6. Punctuation ──
     if ('[],:;#'.includes(line[i])) {
       tokens.push({ text: line[i], category: 'punctuation' });
       i++;
       continue;
     }
 
-    // ── 7. Number ──
     if (/\d/.test(line[i])) {
       let j = i;
       while (j < line.length && /[\d.]/.test(line[j])) j++;
@@ -212,7 +196,6 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 8. Word ──
     if (/[a-zA-Z_]/.test(line[i])) {
       let j = i;
       while (j < line.length && /[a-zA-Z0-9_.]/.test(line[j])) j++;
@@ -235,7 +218,6 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 9. Whitespace ──
     if (/\s/.test(line[i])) {
       let j = i;
       while (j < line.length && /\s/.test(line[j])) j++;
@@ -244,15 +226,12 @@ export function tokenizeLine(
       continue;
     }
 
-    // ── 10. Anything else ──
     tokens.push({ text: line[i], category: 'plain' });
     i++;
   }
 
   return { tokens, parenDepth: depth };
 }
-
-// ── CSS class mapping ───────────────────────────────────────
 
 const TOKEN_CLASSES: Record<TokenCategory, string> = {
   keyword: 'st-keyword',
@@ -281,8 +260,6 @@ function tokenToHtml(t: HighlightToken): string {
   return cls ? `<span class="${cls}">${escaped}</span>` : escaped;
 }
 
-// ── Highlight completo ──────────────────────────────────────
-
 export function highlightCode(code: string): string {
   const lines = code.split('\n');
   let parenDepth = 0;
@@ -301,8 +278,6 @@ export function highlightCode(code: string): string {
 
   return parts.join('');
 }
-
-// ── Extract dynamic completions del código ──────────────────
 
 export interface CompletionItem {
   label: string;
@@ -351,8 +326,6 @@ export function extractDynamicCompletions(code: string): CompletionItem[] {
   }
   return items;
 }
-
-// ── Token-at-position (para hover info) ─────────────────────
 
 export interface TokenAtPosition {
   text: string;

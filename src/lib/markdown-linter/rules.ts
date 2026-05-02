@@ -33,9 +33,7 @@ export { ALL_ACADEMIC_RULES } from './academic-rules';
 export { ALL_CITATION_RULES } from './citation-rules';
 export { ALL_THESIS_RULES } from './thesis-rules';
 
-// ═══════════════════════════════════════════════════════════
 // 2. STRUCTURE — Estructura Markdown
-// ═══════════════════════════════════════════════════════════
 
 export const headingSpaceRule: LinterRule = {
   id: 'structure_heading_space',
@@ -172,9 +170,7 @@ export const emptyHeadingRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 3. LINKS — Validación de enlaces
-// ═══════════════════════════════════════════════════════════
 
 export const linkSpacesRule: LinterRule = {
   id: 'links_url_spaces',
@@ -301,9 +297,7 @@ export const bareUrlRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 4. READABILITY — Legibilidad
-// ═══════════════════════════════════════════════════════════
 
 export const longParagraphRule: LinterRule = {
   id: 'readability_long_paragraph',
@@ -403,9 +397,7 @@ export const longSentenceRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 5. ACCESSIBILITY — Accesibilidad
-// ═══════════════════════════════════════════════════════════
 
 export const imageAltTextRule: LinterRule = {
   id: 'accessibility_image_alt',
@@ -443,9 +435,7 @@ export const imageAltTextRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 6. CONSISTENCY — Consistencia de estilo
-// ═══════════════════════════════════════════════════════════
 
 export const mixedListMarkersRule: LinterRule = {
   id: 'consistency_list_markers',
@@ -494,9 +484,7 @@ export const mixedListMarkersRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 7. WHITESPACE — Espacios en blanco
-// ═══════════════════════════════════════════════════════════
 
 export const trailingWhitespaceRule: LinterRule = {
   id: 'whitespace_trailing',
@@ -571,9 +559,7 @@ export const consecutiveBlankLinesRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 8. ACADEMIC — Escritura académica
-// ═══════════════════════════════════════════════════════════
 
 export const unclosedBracketsRule: LinterRule = {
   id: 'academic_unclosed_brackets',
@@ -658,9 +644,7 @@ export const todoMarkersRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // ESTRUCTURA — Nuevas reglas
-// ═══════════════════════════════════════════════════════════
 
 export const malformedTableRule: LinterRule = {
   id: 'structure_malformed_table',
@@ -905,9 +889,7 @@ export const frontmatterRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // LEGIBILIDAD — Nuevas reglas
-// ═══════════════════════════════════════════════════════════
 
 export const fleschKincaidEsRule: LinterRule = {
   id: 'readability_flesch_kincaid_es',
@@ -959,9 +941,7 @@ export const fleschKincaidEsRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // CONSISTENCIA — Nuevas reglas
-// ═══════════════════════════════════════════════════════════
 
 export const quoteStyleRule: LinterRule = {
   id: 'consistency_quote_style',
@@ -1069,9 +1049,7 @@ export const numberStyleRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 10. STRUCTURE — Reglas adicionales de estructura
-// ═══════════════════════════════════════════════════════════
 
 export const duplicateHeadingsRule: LinterRule = {
   id: 'structure_duplicate_headings',
@@ -1147,9 +1125,7 @@ export const emptyListItemRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 11. ACCESSIBILITY — Reglas adicionales
-// ═══════════════════════════════════════════════════════════
 
 export const linkTextQualityRule: LinterRule = {
   id: 'accessibility_link_text_quality',
@@ -1230,9 +1206,7 @@ export const htmlInMarkdownRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 12. READABILITY — Reglas adicionales
-// ═══════════════════════════════════════════════════════════
 
 export const excessiveExclamationRule: LinterRule = {
   id: 'readability_excessive_exclamation',
@@ -1311,9 +1285,7 @@ export const sentenceStartConjunctionRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 13. CONSISTENCY — Reglas adicionales
-// ═══════════════════════════════════════════════════════════
 
 const TERMINOLOGY_PAIRS: Array<[RegExp, RegExp, string, string]> = [
   [/\bcap\.\s/gi, /\bcapítulo\s/gi, 'cap.', 'capítulo'],
@@ -1369,9 +1341,7 @@ export const inconsistentTerminologyRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // 14. LINKS — Reglas adicionales
-// ═══════════════════════════════════════════════════════════
 
 export const brokenInternalLinkRule: LinterRule = {
   id: 'links_broken_internal',
@@ -1426,9 +1396,7 @@ export const brokenInternalLinkRule: LinterRule = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
 // EXPORTACIÓN — Todas las reglas built-in
-// ═══════════════════════════════════════════════════════════
 
 export const ALL_BUILTIN_RULES: LinterRule[] = [
   // Spelling

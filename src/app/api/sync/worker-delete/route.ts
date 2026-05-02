@@ -18,20 +18,7 @@ import { deleteObject, isNasConfigured } from '@/lib/nas-storage';
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { emitPing } from '@/lib/nas-events';
 import { getErrorMessage } from '@/lib/error-utils';
-
-const sanitizeRepoPath = (input: unknown): string | null => {
-    if (typeof input !== 'string') return null;
-    const cleaned = input.replace(/^\/+/, '').trim();
-    if (!cleaned) return null;
-    if (cleaned.split('/').some((seg) => seg === '..' || seg === '')) return null;
-    return cleaned;
-};
-
-const splitRepoPath = (repoPath: string): { folder: string; name: string } => {
-    const idx = repoPath.lastIndexOf('/');
-    if (idx === -1) return { folder: 'No estructurado', name: repoPath };
-    return { folder: repoPath.slice(0, idx), name: repoPath.slice(idx + 1) };
-};
+import { sanitizeRepoPath, splitRepoPath } from '@/lib/contracts';
 
 export async function POST(req: NextRequest) {
     try {

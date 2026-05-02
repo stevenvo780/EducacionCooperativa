@@ -436,7 +436,6 @@ async function writeAuditLog(ctx: AgentExecutionContext, call: AgentToolCall, re
   }
 }
 
-// ── Timestamp helpers ──────────────────────────────────────────────
 function toEpoch(v: unknown): number {
   if (!v) return 0;
   if (typeof v === 'number') return v;

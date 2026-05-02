@@ -14,8 +14,6 @@ import { DialogKind, type DocItem, type FolderItem, type Workspace, type DialogC
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { TerminalSession } from '@/context/TerminalContext';
 
-// ── ST Guide content for agents and users ───────────────────
-
 const ST_GUIDE_CONTENT = `# ST — Guía actualizada del lenguaje
 
 > Intérprete CLI: \\\`st\\\`

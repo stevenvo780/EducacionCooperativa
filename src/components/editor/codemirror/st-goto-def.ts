@@ -10,8 +10,6 @@ import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@
 import { EditorSelection } from '@codemirror/state';
 import { getSemanticDefinition, getSemanticSymbols } from './st-semantic';
 
-// ── Regex para encontrar definiciones ───────────────────────
-
 interface SymbolDef {
   name: string;
   from: number;
@@ -164,8 +162,6 @@ function jumpToDefinition(view: EditorView, pos: number = view.state.selection.m
 
   return true;
 }
-
-// ── Ctrl+hover underline for clickable symbols ──────────────
 
 export const ctrlHoverPlugin = ViewPlugin.fromClass(
   class {

@@ -10,8 +10,6 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
 
-// ── Color palette type ──────────────────────────────────────
-
 interface ColorPalette {
   bg: string;
   bgEditor: string;
@@ -57,8 +55,6 @@ interface ColorPalette {
   panelButtonBorder?: string;
 }
 
-// ── Dark palette ────────────────────────────────────────────
-
 const darkColors: ColorPalette = {
   bg:          '#020617',
   bgEditor:    '#0f172a',
@@ -103,8 +99,6 @@ const darkColors: ColorPalette = {
   panelButtonBorder: 'rgba(99, 102, 241, 0.4)'
 };
 
-// ── Light palette ───────────────────────────────────────────
-
 const lightColors: ColorPalette = {
   bg:          '#ffffff',
   bgEditor:    '#f8fafc',
@@ -148,8 +142,6 @@ const lightColors: ColorPalette = {
   panelButtonBg: 'rgba(99, 102, 241, 0.1)',
   panelButtonBorder: 'rgba(99, 102, 241, 0.3)'
 };
-
-// ── Theme factory ───────────────────────────────────────────
 
 function buildEditorTheme(c: ColorPalette, isDark: boolean) {
   return EditorView.theme({
@@ -216,7 +208,6 @@ function buildEditorTheme(c: ColorPalette, isDark: boolean) {
       fontFamily: 'inherit',
       lineHeight: '20px'
     },
-    // ── Minimap styles ──
     '.cm-minimap-gutter': {
       backgroundColor: c.bg,
       borderLeft: `1px solid ${c.border}`,
@@ -262,7 +253,6 @@ function buildEditorTheme(c: ColorPalette, isDark: boolean) {
       padding: '2px 8px',
       cursor: 'pointer'
     },
-    // ── Tooltips (hover, autocomplete, lint) ──
     '.cm-tooltip': {
       backgroundColor: c.tooltipBg,
       border: `1px solid ${c.tooltipBorder}`,
@@ -333,7 +323,6 @@ function buildEditorTheme(c: ColorPalette, isDark: boolean) {
       fontStyle: 'italic',
       marginLeft: 'auto'
     },
-    // ── Lint diagnostics ──
     '.cm-diagnostic': {
       padding: '4px 8px',
       borderRadius: '4px',
@@ -366,12 +355,10 @@ function buildEditorTheme(c: ColorPalette, isDark: boolean) {
       textDecoration: `underline wavy ${c.diagInfo}`,
       textUnderlineOffset: '3px'
     },
-    // ── Rainbow parens (via custom tags) ──
     '.cm-st-paren-0': { color: c.paren0, fontWeight: '600' },
     '.cm-st-paren-1': { color: c.paren1, fontWeight: '600' },
     '.cm-st-paren-2': { color: c.paren2, fontWeight: '600' },
     '.cm-st-paren-3': { color: c.paren3, fontWeight: '600' },
-    // ── Hover tooltip custom ──
     '.cm-st-hover-tooltip': {
       padding: '8px 12px',
       maxWidth: '360px'
@@ -405,7 +392,6 @@ function buildEditorTheme(c: ColorPalette, isDark: boolean) {
       textTransform: 'uppercase',
       letterSpacing: '0.5px'
     },
-    // ── Go-to-definition link ──
     '.cm-st-goto-link': {
       textDecoration: 'underline',
       textDecorationColor: c.builtin,
@@ -433,8 +419,6 @@ function buildHighlightStyle(c: ColorPalette) {
     { tag: t.brace, color: c.paren0 }
   ]);
 }
-
-// ── Pre-built themes ────────────────────────────────────────
 
 export const stEditorTheme = buildEditorTheme(darkColors, true);
 export const stHighlightStyle = buildHighlightStyle(darkColors);

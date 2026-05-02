@@ -6,8 +6,6 @@
  * desde la UI sin recompilar.
  */
 
-// ── Severidades y diagnósticos ──────────────────────────────
-
 export type LinterSeverity = 'error' | 'warning' | 'info';
 
 export interface LinterDiagnostic {
@@ -26,8 +24,6 @@ export interface LinterDiagnostic {
   /** Rule ID that generated this diagnostic (injected at aggregation level) */
   ruleId?: string;
 }
-
-// ── Categorías de regla ─────────────────────────────────────
 
 export type RuleCategory =
   | 'spelling'
@@ -56,8 +52,6 @@ export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   thesis: 'Formato de tesis'
 };
 
-// ── Perfiles de reglas ──────────────────────────────────────
-
 export type ProfileId = 'default' | 'academic' | 'blog' | 'technical' | 'st-heavy' | 'thesis';
 
 export interface LinterProfile {
@@ -65,8 +59,6 @@ export interface LinterProfile {
   name: string;
   description: string;
 }
-
-// ── Definición de regla (plugin) ────────────────────────────
 
 export interface LinterRuleMeta {
   /** Identificador único (snake_case) */
@@ -90,8 +82,6 @@ export interface LinterRule extends LinterRuleMeta {
   /** Función pura: recibe texto markdown, devuelve diagnósticos */
   check: (text: string) => LinterDiagnostic[];
 }
-
-// ── Helpers de línea ────────────────────────────────────────
 
 /**
  * Detecta si una línea está dentro de un bloque de código fenced.

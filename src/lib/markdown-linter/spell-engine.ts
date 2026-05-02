@@ -18,7 +18,6 @@ interface SpellInstance {
   remove(word: string): void;
 }
 
-// ── Estado singleton ──────────────────────────────────────
 let _nspell: SpellInstance | null = null;
 let _loading: Promise<SpellInstance> | null = null;
 let _ready = false;
@@ -50,8 +49,6 @@ function resetSpellCaches(): void {
   _correctCache.clear();
   _suggestCache.clear();
 }
-
-// ── Carga del diccionario ────────────────────────────────
 
 function loadPersonalDict(): Set<string> {
   if (typeof localStorage === 'undefined') return new Set();
@@ -136,8 +133,6 @@ export function initSpellEngine(): Promise<void> {
 
   return _loading.then(() => {});
 }
-
-// ── API pública ──────────────────────────────────────────
 
 /** ¿El motor está listo para usar? */
 export function isSpellEngineReady(): boolean {
