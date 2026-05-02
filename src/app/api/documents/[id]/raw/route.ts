@@ -3,6 +3,7 @@
  * Sirve el contenido del documento desde MinIO. Sin fallback Firebase Storage:
  * tras la migración stamp, todos los docs viven en MinIO.
  */
+import { env } from '@/lib/env';
 import { adminDb } from '@/lib/firebase-admin';
 import { NextRequest, NextResponse } from 'next/server';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -12,7 +13,7 @@ import { mockGetDoc } from '@/lib/insecure-mock-store';
 import { isNasConfigured, getObjectBuffer } from '@/lib/nas-storage';
 
 type StoredDocumentRecord = Record<string, unknown>;
-const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+const isInsecure = env.ALLOW_INSECURE_AUTH();
 type RouteContext = { params: Promise<{ id: string }> };
 
 const checkAccess = async (workspaceId: unknown, ownerId: unknown, uid: string): Promise<boolean> => {

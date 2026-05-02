@@ -5,9 +5,10 @@ import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { PLANS, SubscriptionStatus, isPlanId } from '@/types/subscription';
 import { MercadoPagoAutoReturn } from '@/types/payments';
+import { env } from '@/lib/env';
 
-const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
-const isSandbox = process.env.MERCADOPAGO_SANDBOX === 'true';
+const mpAccessToken = env.MERCADOPAGO_ACCESS_TOKEN();
+const isSandbox = env.MERCADOPAGO_SANDBOX();
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
     const preferenceClient = new Preference(client);
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://agora.elenxos.com').replace(/\/+$/, '');
+    const appUrl = env.APP_BASE_URL();
 
     const preference = await preferenceClient.create({
       body: {

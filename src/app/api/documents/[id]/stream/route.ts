@@ -1,3 +1,4 @@
+import { env } from '@/lib/env';
 import { adminDb } from '@/lib/firebase-admin';
 import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest } from 'next/server';
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
 
-    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    if (env.ALLOW_INSECURE_AUTH()) {
         const encoder = new TextEncoder();
         const stream = new ReadableStream<Uint8Array>({
             start(controller) {

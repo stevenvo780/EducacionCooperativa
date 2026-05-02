@@ -6,15 +6,16 @@ import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
 import { parsePaymentExternalReference } from '@/app/api/payments/payment-reference';
 import { MercadoPagoPaymentStatus, PaymentRedirectStatus } from '@/types/payments';
+import { env } from '@/lib/env';
 
-const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
+const mpAccessToken = env.MERCADOPAGO_ACCESS_TOKEN();
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const paymentId = searchParams.get('payment_id') || searchParams.get('collection_id') || '';
   const queryReference = parsePaymentExternalReference(searchParams.get('external_reference') || '');
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://agora.elenxos.com').replace(/\/+$/, '');
+  const appUrl = env.APP_BASE_URL();
   const redirectUrl = new URL(`${appUrl}/dashboard`);
   redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Pending);
 

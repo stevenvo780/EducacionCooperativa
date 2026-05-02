@@ -1,3 +1,4 @@
+import { env } from '@/lib/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -128,14 +129,14 @@ export async function POST(req: NextRequest) {
                 password
             });
         } catch (error) {
-            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true' && !shouldUseLocalDevAuthFallback(error)) {
+            if (!env.ALLOW_INSECURE_AUTH() && !shouldUseLocalDevAuthFallback(error)) {
                 await Promise.allSettled([
                     userDocRef.delete(),
                     emailIndexRef.delete()
                 ]);
                 throw error;
             }
-            localDevFallback = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true';
+            localDevFallback = !env.ALLOW_INSECURE_AUTH();
             console.warn(
                 localDevFallback
                     ? 'Firebase Admin ensureAuthUser failed (local dev signed session):'
@@ -151,10 +152,10 @@ export async function POST(req: NextRequest) {
                 userEmail: normalizedEmail
             });
         } catch (tokenError) {
-            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH !== 'true' && !shouldUseLocalDevAuthFallback(tokenError)) {
+            if (!env.ALLOW_INSECURE_AUTH() && !shouldUseLocalDevAuthFallback(tokenError)) {
                 throw tokenError;
             }
-            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+            if (env.ALLOW_INSECURE_AUTH()) {
                 console.warn('Firebase Admin createCustomToken failed (insecure mode, continuing):', getErrorMessage(tokenError));
             } else {
                 console.warn('Firebase Admin createCustomToken failed (local dev signed session):', getErrorMessage(tokenError));

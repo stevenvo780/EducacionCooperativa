@@ -8,6 +8,7 @@
  */
 
 const trim = (k: string): string => (process.env[k] ?? '').trim();
+const flag = (k: string): boolean => trim(k) === 'true';
 
 const isProd = (): boolean => process.env.NODE_ENV === 'production';
 
@@ -26,7 +27,12 @@ export const env = {
   MERCADOPAGO_ACCESS_TOKEN: () => trim('MERCADOPAGO_ACCESS_TOKEN'),
   MERCADOPAGO_WEBHOOK_SECRET: () => trim('MERCADOPAGO_WEBHOOK_SECRET'),
   ADMIN_PASSWORD: () => trim('APP_PASSWORD'),
-  APP_BASE_URL: () => trim('NEXT_PUBLIC_APP_URL') || trim('APP_BASE_URL')
+  APP_BASE_URL: () => (trim('NEXT_PUBLIC_APP_URL') || trim('APP_BASE_URL') || 'https://agora.elenxos.com').replace(/\/+$/, ''),
+
+  ALLOW_INSECURE_AUTH: () => flag('NEXT_PUBLIC_ALLOW_INSECURE_AUTH'),
+  AGORA_USE_NAS: () => flag('AGORA_USE_NAS'),
+  MERCADOPAGO_SANDBOX: () => flag('MERCADOPAGO_SANDBOX'),
+  ENABLE_ADMIN_ENDPOINTS: () => flag('ENABLE_ADMIN_ENDPOINTS')
 } as const;
 
 export interface EnvCheck {

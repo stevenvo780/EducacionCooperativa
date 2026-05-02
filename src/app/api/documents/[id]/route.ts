@@ -3,6 +3,7 @@
  * GET / PUT / DELETE — usa Firestore (metadata) + MinIO (blobs).
  * El campo `content` ya NO se persiste; la verdad vive en MinIO bajo `storagePath`.
  */
+import { env } from '@/lib/env';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,7 +19,7 @@ import { isNasConfigured, putObject, moveObject, deleteObject, presignGet, getOb
 import { emitPing } from '@/lib/nas-events';
 import { isDotfileName } from '@/lib/contracts';
 
-const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+const isInsecure = env.ALLOW_INSECURE_AUTH();
 
 type StoredDocumentRecord = Record<string, unknown>;
 type RouteContext = { params: Promise<{ id: string }> };

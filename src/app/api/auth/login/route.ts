@@ -1,3 +1,4 @@
+import { env } from '@/lib/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
             // Sync workspace membership into custom claims (non-blocking)
             syncWorkspaceClaims(userLookup.id).catch(() => {});
         } catch (tokenError: unknown) {
-            if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+            if (env.ALLOW_INSECURE_AUTH()) {
                 console.warn('Firebase Admin token creation failed (insecure mode, continuing):', getErrorMessage(tokenError));
             } else if (shouldUseLocalDevAuthFallback(tokenError)) {
                 console.warn('Firebase Admin token creation failed (local dev signed session):', getErrorMessage(tokenError));
