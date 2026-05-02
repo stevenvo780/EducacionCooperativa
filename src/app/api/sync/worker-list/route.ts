@@ -19,18 +19,7 @@ import { verifyWorkerAuth } from '@/lib/worker-auth';
 import { presignGet, isNasConfigured } from '@/lib/nas-storage';
 import { buildRepoPath } from '@/lib/forgejo-path';
 import { getErrorMessage } from '@/lib/error-utils';
-
-interface DocLite {
-  name?: string;
-  folder?: string;
-  type?: string;
-  storagePath?: string;
-  contentHash?: string;
-  size?: number;
-  version?: number;
-  updatedAt?: { toMillis?: () => number };
-  ownerId?: string;
-}
+import { parseDocumentRecord } from '@/lib/contracts';
 
 const SIGNED_TTL = 30 * 60; // 30 min — alcanza para descargar muchos blobs.
 
@@ -79,31 +68,34 @@ export async function GET(req: NextRequest) {
         }> = [];
 
         for (const d of snap.docs) {
-            const data = d.data() as DocLite;
-            if (data.type === 'folder') continue;
-            if (typeof data.storagePath !== 'string' || !data.storagePath) continue;
+            const parsed = parseDocumentRecord(d.id, d.data());
+            if (!parsed.ok) {
+                console.warn('[sync/worker-list] skipping invalid doc', d.id, parsed.error);
+                continue;
+            }
+            const doc = parsed.value;
+            if (doc.type === 'folder') continue;
+            if (!doc.storagePath) continue;
+            if (since > 0 && doc.updatedAtMs !== null && doc.updatedAtMs < since) continue;
 
-            const updatedAtMs = typeof data.updatedAt?.toMillis === 'function' ? data.updatedAt.toMillis() : null;
-            if (since > 0 && updatedAtMs !== null && updatedAtMs < since) continue;
-
-            const repoPath = buildRepoPath(data.folder, data.name);
+            const repoPath = buildRepoPath(doc.folder, doc.name);
             let signedUrl: string | null = null;
             try {
-                signedUrl = await presignGet(data.storagePath, SIGNED_TTL);
+                signedUrl = await presignGet(doc.storagePath, SIGNED_TTL);
             } catch (e) {
-                console.warn('[sync/worker-list] presignGet failed for', data.storagePath, getErrorMessage(e));
+                console.warn('[sync/worker-list] presignGet failed for', doc.storagePath, getErrorMessage(e));
             }
 
             items.push({
-                docId: d.id,
-                name: data.name ?? null,
-                folder: data.folder ?? null,
-                type: data.type ?? null,
+                docId: doc.id,
+                name: doc.name,
+                folder: doc.folder,
+                type: doc.type,
                 repoPath,
-                contentHash: data.contentHash ?? null,
-                size: data.size ?? null,
-                version: data.version ?? null,
-                updatedAt: updatedAtMs,
+                contentHash: doc.contentHash,
+                size: doc.size,
+                version: doc.version,
+                updatedAt: doc.updatedAtMs,
                 signedUrl
             });
         }
@@ -126,6 +118,7 @@ export async function HEAD() {
         status: 200,
         headers: {
             // Sin exponer el valor: sólo si el secret está configurado.
+            // eslint-disable-next-line no-restricted-syntax -- truthy check, no se compara como HMAC.
             'X-Worker-Secret-Set': process.env.WORKER_SECRET ? '1' : '0'
         }
     });

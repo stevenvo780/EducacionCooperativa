@@ -10,7 +10,7 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getDatabase } from 'firebase-admin/database';
-import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { resolveSyncChannel, parseSyncEventPayload } from '@/lib/contracts';
 
 export type SyncPingOp = 'created' | 'updated' | 'deleted' | 'refresh';
 
@@ -36,29 +36,14 @@ const getRtdb = () => {
   return _rtdb;
 };
 
-/**
- * Resuelve el canal RTDB. Para workspace personal el cliente escucha
- * `sync-events/personal_<uid>`; reescribimos cuando llega un ping con
- * `workspaceId` en forma `personal` o `personal:<uid>`.
- */
-const channelFor = (ping: SyncPing): string => {
-  const ws = ping.workspaceId ?? null;
-  if (ws && isPersonalWorkspaceId(ws)) {
-    // Aceptamos tanto '__personal__' como 'personal:<uid>'.
-    const uid = ws === PERSONAL_WORKSPACE_ID ? ping.userId : ws.replace(/^personal:/, '');
-    if (uid) return `sync-events/personal_${uid}`;
-  }
-  if (ws) return `sync-events/${ws}`;
-  if (ping.userId) return `sync-events/personal_${ping.userId}`;
-  return 'sync-events/global';
-};
-
 export const emitPing = async (ping: SyncPing): Promise<{ outboxId: string; rtdbPath: string }> => {
   const ts = Date.now();
-  const rtdbPath = channelFor(ping);
-  const type: SyncPingOp = ping.op ?? 'updated';
-  const payload = {
-    type,
+  const channel = resolveSyncChannel({ workspaceId: ping.workspaceId, userId: ping.userId });
+  if (!channel.ok) throw new Error(`[nas-events] ${channel.error}`);
+  const rtdbPath = channel.value;
+
+  const rawPayload = {
+    type: ping.op ?? 'updated',
     path: ping.path ?? '',
     folder: ping.folder ?? 'No estructurado',
     docId: ping.docId ?? null,
@@ -72,6 +57,9 @@ export const emitPing = async (ping: SyncPing): Promise<{ outboxId: string; rtdb
     sender: ping.sender ?? 'hub',
     ts
   };
+  const validated = parseSyncEventPayload(rawPayload);
+  if (!validated.ok) throw new Error(`[nas-events] payload invalid: ${validated.error}`);
+  const payload = validated.value;
 
   const outboxRef = await adminDb.collection('syncEventsOutbox').add({
     ...payload,

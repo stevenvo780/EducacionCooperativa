@@ -25,14 +25,7 @@ import { enforceStorageQuota } from '@/lib/plan-guard';
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { emitPing } from '@/lib/nas-events';
 import { getErrorMessage } from '@/lib/error-utils';
-
-const sanitizeRepoPath = (input: unknown): string | null => {
-    if (typeof input !== 'string') return null;
-    const cleaned = input.replace(/^\/+/, '').trim();
-    if (!cleaned) return null;
-    if (cleaned.split('/').some((seg) => seg === '..' || seg === '')) return null;
-    return cleaned;
-};
+import { parseWorkerCommitPayload } from '@/lib/contracts';
 
 const splitRepoPath = (repoPath: string): { folder: string; name: string } => {
     const idx = repoPath.lastIndexOf('/');
@@ -72,13 +65,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Personal workspace requires X-Worker-Uid' }, { status: 400 });
         }
 
-        const body = await req.json() as { repoPath?: unknown; contentHash?: unknown; size?: unknown; mimeType?: unknown };
-        const repoPath = sanitizeRepoPath(body.repoPath);
-        const contentHash = typeof body.contentHash === 'string' ? body.contentHash : null;
-        const size = typeof body.size === 'number' ? body.size : null;
-        if (!repoPath || !contentHash) {
-            return NextResponse.json({ error: 'repoPath and contentHash required' }, { status: 400 });
+        const body = await req.json().catch(() => null);
+        const parsed = parseWorkerCommitPayload(body);
+        if (!parsed.ok) {
+            return NextResponse.json({ error: parsed.error }, { status: 400 });
         }
+        const { repoPath, contentHash, size, mimeType } = parsed.value;
 
         const storagePath = isPersonal
             ? `users/${ctx.userId}/${repoPath}`
@@ -88,7 +80,7 @@ export async function POST(req: NextRequest) {
         }
 
         const { folder, name } = splitRepoPath(repoPath);
-        const { type: inferredType, mimeType: inferredMime } = inferType(name, typeof body.mimeType === 'string' ? body.mimeType : undefined);
+        const { type: inferredType, mimeType: inferredMime } = inferType(name, mimeType ?? undefined);
 
         // Buscar doc existente. Personal: por (ownerId, name, folder); Shared: por (workspaceId, name, folder).
         const existingQuery = isPersonal

@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
     const auth = req.headers.get('authorization') ?? '';
+    // eslint-disable-next-line no-restricted-syntax -- selector AST no detecta .trim() en el padre.
     const expected = `Bearer ${(process.env.WORKER_SECRET ?? '').trim()}`;
     if (!auth || auth !== expected) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 

@@ -13,6 +13,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { getDatabase } from 'firebase-admin/database';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getErrorMessage } from '@/lib/error-utils';
+import { parseOutboxRecord } from '@/lib/contracts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,8 +24,9 @@ const MAX_RETRIES = 5;
 
 export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization') ?? '';
-    const cronSecret = process.env.CRON_SECRET;
-    const workerSecret = process.env.WORKER_SECRET;
+    const cronSecret = (process.env.CRON_SECRET ?? '').trim();
+    // eslint-disable-next-line no-restricted-syntax -- selector AST no detecta .trim() en el padre.
+    const workerSecret = (process.env.WORKER_SECRET ?? '').trim();
     const ok =
         (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
         (workerSecret && authHeader === `Bearer ${workerSecret}`);
@@ -42,30 +44,28 @@ export async function GET(req: NextRequest) {
 
         let drained = 0, expired = 0, failed = 0;
         for (const d of snap.docs) {
-            const data = d.data() as {
-                rtdbPath?: string;
-                ts?: number;
-                retryCount?: number;
-                [k: string]: unknown;
-            };
-            const path = data.rtdbPath;
-            const ts = typeof data.ts === 'number' ? data.ts : 0;
-            const retryCount = typeof data.retryCount === 'number' ? data.retryCount : 0;
-
-            if (!path || ts < cutoff || retryCount >= MAX_RETRIES) {
+            const parsed = parseOutboxRecord(d.id, d.data());
+            if (!parsed.ok) {
                 await d.ref.update({
-                    published: false,
                     expiredAt: FieldValue.serverTimestamp(),
-                    expiredReason: !path ? 'no-path' : ts < cutoff ? 'too-old' : 'max-retries'
+                    expiredReason: `parse:${parsed.error.slice(0, 80)}`
+                }).catch(() => undefined);
+                expired++;
+                continue;
+            }
+            const rec = parsed.value;
+
+            if (rec.ts < cutoff || rec.retryCount >= MAX_RETRIES) {
+                await d.ref.update({
+                    expiredAt: FieldValue.serverTimestamp(),
+                    expiredReason: rec.ts < cutoff ? 'too-old' : 'max-retries'
                 }).catch(() => undefined);
                 expired++;
                 continue;
             }
 
             try {
-                const { rtdbPath: _omit, published: _o2, createdAt: _o3, publishedAt: _o4, ...payload } = data;
-                void _omit; void _o2; void _o3; void _o4;
-                await getDatabase().ref(path).push().set(payload);
+                await getDatabase().ref(rec.rtdbPath).push().set(rec.payload);
                 await d.ref.update({
                     published: true,
                     publishedAt: FieldValue.serverTimestamp()
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
             } catch (e) {
                 failed++;
                 await d.ref.update({
-                    retryCount: retryCount + 1,
+                    retryCount: rec.retryCount + 1,
                     lastRetryAt: FieldValue.serverTimestamp(),
                     lastError: getErrorMessage(e).slice(0, 200)
                 }).catch(() => undefined);
