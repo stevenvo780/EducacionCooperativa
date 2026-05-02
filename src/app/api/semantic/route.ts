@@ -1,3 +1,4 @@
+import { env } from '@/lib/env';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
 
     const storageId = resolveWorkspaceStorageId(workspaceId, auth.uid);
 
-    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    if (env.ALLOW_INSECURE_AUTH()) {
       return NextResponse.json({ state: getMockState(storageId) });
     }
 
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
     const storageId = resolveWorkspaceStorageId(workspaceId, auth.uid);
     const nextUpdatedAt = Date.now();
 
-    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    if (env.ALLOW_INSECURE_AUTH()) {
       const mergedState = {
         ...incomingState,
         updatedAt: nextUpdatedAt

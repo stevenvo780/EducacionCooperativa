@@ -1,3 +1,4 @@
+import { env } from '@/lib/env';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, type CollectionReference, type DocumentReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
@@ -131,7 +132,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    if (env.ALLOW_INSECURE_AUTH()) {
       const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
       const mock = getMockBoard(resolvedWorkspaceId);
       return NextResponse.json({
@@ -187,7 +188,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    if (env.ALLOW_INSECURE_AUTH()) {
       const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
       const mock = getMockBoard(resolvedWorkspaceId);
 
@@ -306,7 +307,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    if (env.ALLOW_INSECURE_AUTH()) {
       const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
       const mock = getMockBoard(resolvedWorkspaceId);
 
@@ -397,7 +398,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true') {
+    if (env.ALLOW_INSECURE_AUTH()) {
       const resolvedWorkspaceId = resolveWorkspaceId(workspaceId, auth.uid);
       const mock = getMockBoard(resolvedWorkspaceId);
 

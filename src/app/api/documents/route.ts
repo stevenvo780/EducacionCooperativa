@@ -3,6 +3,7 @@
  * GET (list) / POST (create) — Firestore metadata + MinIO blobs.
  * `documents.content` ya no se persiste.
  */
+import { env } from '@/lib/env';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,7 +19,7 @@ import { isNasConfigured, putObject } from '@/lib/nas-storage';
 import { emitPing } from '@/lib/nas-events';
 import { normalizeDotfileLegacy } from '@/lib/contracts';
 
-const isInsecure = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
+const isInsecure = env.ALLOW_INSECURE_AUTH();
 
 export async function POST(req: NextRequest) {
     try {

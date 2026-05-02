@@ -10,8 +10,9 @@ import {
   PaymentRedirectStatus,
   isPendingMercadoPagoPaymentStatus
 } from '@/types/payments';
+import { env } from '@/lib/env';
 
-const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
+const mpAccessToken = env.MERCADOPAGO_ACCESS_TOKEN();
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   const collectionStatus = searchParams.get('collection_status') || searchParams.get('status') || '';
   const queryReference = parsePaymentExternalReference(searchParams.get('external_reference') || '');
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://agora.elenxos.com').replace(/\/+$/, '');
+  const appUrl = env.APP_BASE_URL();
   const redirectUrl = new URL(`${appUrl}/dashboard`);
   redirectUrl.searchParams.set('payment', PaymentRedirectStatus.Success);
 

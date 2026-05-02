@@ -7,8 +7,9 @@ import { SubscriptionStatus, type PlanId } from '@/types/subscription';
 import { calculateSmartEndDate } from '@/app/api/payments/helpers';
 import { parsePaymentExternalReference } from '@/app/api/payments/payment-reference';
 import { MercadoPagoPaymentStatus } from '@/types/payments';
+import { env } from '@/lib/env';
 
-const mpAccessToken = (process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim();
+const mpAccessToken = env.MERCADOPAGO_ACCESS_TOKEN();
 
 /**
  * POST /api/payments/verify

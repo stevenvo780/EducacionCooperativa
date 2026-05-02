@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { getErrorMessage } from '@/lib/error-utils';
 import { PLAN_IDS, Plan, SubscriptionStatus, isPlanId, type PlanId } from '@/types/subscription';
+import { env } from '@/lib/env';
 
-const ADMIN_PASSWORD = process.env.APP_PASSWORD || '';
-const ENABLE_ADMIN_ENDPOINTS = process.env.ENABLE_ADMIN_ENDPOINTS === 'true';
+const ADMIN_PASSWORD = env.ADMIN_PASSWORD();
+const ENABLE_ADMIN_ENDPOINTS = env.ENABLE_ADMIN_ENDPOINTS();
 
 /**
  * POST /api/admin/activate-subscription
