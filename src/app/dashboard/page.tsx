@@ -431,7 +431,7 @@ function DashboardContent() {
         handleQuickSearchSelect,
         handleQuickSearchKeyDown
     } = useQuickSearch({
-        showQuickSearch,
+        showQuickSearch: showQuickSearch || activityView === 'search',
         quickSearchQuery,
         quickSearchIndex,
         currentWorkspaceId: currentWorkspace?.id,
@@ -1865,10 +1865,6 @@ function DashboardContent() {
                       <ActivityBar
                         active={activityView}
                         onChange={(v) => {
-                          if (v === 'search') {
-                            setShowQuickSearch(true);
-                            return;
-                          }
                           if (v === 'terminals') {
                             setActivityView(v);
                             setBottomDockOpen(true);
@@ -1957,7 +1953,18 @@ function DashboardContent() {
                             view={activityView}
                             currentWorkspace={currentWorkspace}
                             userUid={user?.uid}
-                            onOpenQuickSearch={() => setShowQuickSearch(true)}
+                            searchQuery={quickSearchQuery}
+                            onSearchQueryChange={setQuickSearchQuery}
+                            searchResults={semanticSearchResults}
+                            searchLoading={semanticSearchLoading}
+                            searchError={semanticSearchError}
+                            searchFilter={quickSearchFilter}
+                            onSearchFilterChange={setQuickSearchFilter}
+                            searchSelectedIndex={quickSearchIndex}
+                            onSearchSelectIndex={setQuickSearchIndex}
+                            onSearchSelect={(r) => { void handleQuickSearchSelect(r); }}
+                            onSearchKeyDown={handleQuickSearchKeyDown}
+                            searchInputRef={quickSearchInputRef}
                             onOpenBoard={openBoard}
                             onOpenStRunner={openStRunner}
                             onOpenSemanticBrowser={openSemanticBrowser}

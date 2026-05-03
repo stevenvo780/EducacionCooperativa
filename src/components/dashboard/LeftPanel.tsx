@@ -1,14 +1,16 @@
 'use client';
 
-import { type ReactNode } from 'react';
+import { type ReactNode, type Ref } from 'react';
 import dynamic from 'next/dynamic';
-import { GitBranch, Sparkles, Search } from 'lucide-react';
+import { GitBranch, Sparkles } from 'lucide-react';
 import type { ActivityView } from './ActivityBar';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
+import type { SearchResultFilter, SearchResultItem } from '@/lib/search/types';
 import ToolsGallery from './ToolsGallery';
 import TerminalsList from './TerminalsList';
+import SearchPanel from './SearchPanel';
 
 const GitWorkbench = dynamic(() => import('@/components/dashboard/GitWorkbench'), { ssr: false });
 
@@ -17,7 +19,20 @@ interface LeftPanelProps {
   filesContent: ReactNode;
   currentWorkspace: Workspace | null;
   userUid?: string;
-  onOpenQuickSearch: () => void;
+
+  // search inline
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  searchResults: SearchResultItem[];
+  searchLoading: boolean;
+  searchError?: string | null;
+  searchFilter: SearchResultFilter;
+  onSearchFilterChange: (value: SearchResultFilter) => void;
+  searchSelectedIndex: number;
+  onSearchSelectIndex: (index: number) => void;
+  onSearchSelect: (result: SearchResultItem) => void;
+  onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  searchInputRef: Ref<HTMLInputElement>;
 
   // tools
   onOpenBoard: () => void;
@@ -44,7 +59,7 @@ interface LeftPanelProps {
 }
 
 export default function LeftPanel(props: LeftPanelProps) {
-  const { view, filesContent, currentWorkspace, userUid, onOpenQuickSearch } = props;
+  const { view, filesContent, currentWorkspace, userUid } = props;
 
   if (view === 'files') {
     return <>{filesContent}</>;
@@ -52,24 +67,20 @@ export default function LeftPanel(props: LeftPanelProps) {
 
   if (view === 'search') {
     return (
-      <PanelShell title="Buscar">
-        <div className="px-3 py-4 space-y-3 text-xs text-surface-400">
-          <p className="leading-relaxed">
-            Búsqueda global de documentos, conceptos, fragmentos y autores.
-          </p>
-          <button
-            type="button"
-            onClick={onOpenQuickSearch}
-            className="flex w-full items-center gap-2 rounded border border-surface-700 bg-surface-900 px-3 py-2 text-left text-surface-200 transition hover:border-mandy-500/50 hover:bg-surface-800"
-          >
-            <Search className="h-3.5 w-3.5" />
-            <span className="flex-1">Abrir búsqueda…</span>
-            <kbd className="rounded border border-surface-700 bg-surface-950 px-1.5 py-0.5 font-mono text-[10px] text-surface-300">
-              Ctrl+K
-            </kbd>
-          </button>
-        </div>
-      </PanelShell>
+      <SearchPanel
+        query={props.searchQuery}
+        onQueryChange={props.onSearchQueryChange}
+        results={props.searchResults}
+        loading={props.searchLoading}
+        errorMessage={props.searchError}
+        activeFilter={props.searchFilter}
+        onFilterChange={props.onSearchFilterChange}
+        selectedIndex={props.searchSelectedIndex}
+        onSelectIndex={props.onSearchSelectIndex}
+        onSelect={props.onSearchSelect}
+        onKeyDown={props.onSearchKeyDown}
+        inputRef={props.searchInputRef}
+      />
     );
   }
 
