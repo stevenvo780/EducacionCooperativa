@@ -450,6 +450,29 @@ body {
   line-height: 24px !important;
 }
 
+/* Focus visible globalmente — accesibilidad teclado.
+   Solo visible cuando se usa teclado (focus-visible), no en clicks. */
+*:focus {
+  outline: none;
+}
+*:focus-visible {
+  outline: 2px solid rgb(244 114 182 / 0.6); /* mandy-400 */
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* Reduced motion para usuarios con esa preferencia */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* RightPanel (Agora AI) — container queries para que el chat se
    adapte al ancho disponible sin reescribirlo. Usa el data-shell
    para scopear las reglas y evitar afectar otros chats. */
