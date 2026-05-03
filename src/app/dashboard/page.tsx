@@ -2212,7 +2212,7 @@ function DashboardContent() {
                       <PanelGroup orientation="vertical" id="agora-shell-vertical" className="flex h-full w-full flex-col">
                         <Panel id="editor-area" defaultSize="70%" minSize="20%">
                           <PanelGroup orientation="horizontal" id="agora-shell-horizontal" className="flex h-full w-full">
-                            <Panel id="editor-main" defaultSize="100%" minSize="30%">
+                            <Panel id="editor-main" minSize="30%">
                               <div className="relative h-full w-full flex flex-col">
                         {effectiveMosaicNode ? (
                             <div className="flex-1 min-h-0 relative">
@@ -2285,8 +2285,12 @@ function DashboardContent() {
                             </Panel>
                             {rightPanelOpen && !isCompact && (
                               <>
-                                <PanelResizeHandle className="w-1 bg-surface-800 hover:bg-mandy-500/40 transition-colors" />
-                                <Panel id="right-panel" defaultSize="35%" minSize="28%" maxSize="65%" collapsible>
+                                <PanelResizeHandle
+                                    aria-label="Redimensionar panel Agora AI"
+                                    style={{ width: 5, cursor: 'col-resize' }}
+                                    className="bg-surface-800 hover:bg-mandy-500/50 active:bg-mandy-500/70 transition-colors shrink-0"
+                                />
+                                <Panel id="right-panel" defaultSize="35%" minSize="20%" maxSize="65%">
                                   <RightPanel
                                     open
                                     onToggle={() => setRightPanelOpen(false)}

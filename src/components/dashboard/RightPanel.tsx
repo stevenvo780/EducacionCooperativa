@@ -26,7 +26,7 @@ export default function RightPanel({ open, onToggle, currentWorkspace }: RightPa
 
   return (
     <aside
-      className="flex h-full w-full flex-col bg-surface-900 border-l border-surface-700/60"
+      className="relative flex h-full w-full flex-col bg-surface-900 border-l border-surface-700/60"
       aria-label="Panel Agora AI"
       data-shell="copilot"
     >
