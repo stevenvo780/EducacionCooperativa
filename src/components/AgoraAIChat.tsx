@@ -1153,11 +1153,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 min-h-0">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-surface-500 gap-3 select-none">
+          <div className="flex flex-col items-center justify-center h-full text-center text-surface-500 gap-4 select-none px-4">
             <Bot className="w-10 h-10 text-surface-700" />
             <div>
-              <p className="text-sm text-surface-400">{mode === 'agent' ? 'Dale una tarea al agente' : `Pregúntale a ${meta.label}`}</p>
-              <p className="text-xs mt-1 max-w-md">
+              <p className="text-sm text-surface-300">{mode === 'agent' ? 'Dale una tarea al agente' : `Pregúntale a ${meta.label}`}</p>
+              <p className="text-xs mt-1 max-w-md text-surface-500">
                 {mode === 'agent'
                   ? 'El agente puede trabajar con documentos, snippets, glosario semántico, tablero Kanban, formalización y ejecución ST, además de resumir y comparar contenido.'
                   : 'En modo chat responderá con contexto del workspace, sin ejecutar acciones de escritura.'}
@@ -1168,6 +1168,36 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                   Configura tu API key primero
                 </p>
               )}
+            </div>
+            {/* Quick prompts estilo Copilot — sugerencias contextuales */}
+            <div className="grid grid-cols-1 gap-1.5 w-full max-w-sm select-text">
+              {(mode === 'agent'
+                ? [
+                    { icon: '📋', label: 'Resume el documento abierto' },
+                    { icon: '🗂️', label: 'Organiza los archivos por tema' },
+                    { icon: '🧮', label: 'Formaliza la última sección a ST' },
+                    { icon: '↩️', label: 'Deshaz la última acción' }
+                  ]
+                : [
+                    { icon: '💡', label: '¿Cuáles son las ideas principales del workspace?' },
+                    { icon: '🔍', label: 'Busca menciones de un concepto específico' },
+                    { icon: '📚', label: 'Explica este glosario en términos simples' },
+                    { icon: '🧪', label: 'Revisa la lógica del documento' }
+                  ]
+              ).map((prompt) => (
+                <button
+                  key={prompt.label}
+                  type="button"
+                  onClick={() => {
+                    setInput(prompt.label);
+                    requestAnimationFrame(() => textareaRef.current?.focus());
+                  }}
+                  className="flex items-center gap-2 rounded-md border border-surface-800 bg-surface-900 px-3 py-2 text-left text-xs text-surface-300 transition hover:border-sky-500/40 hover:bg-surface-800/60 hover:text-white"
+                >
+                  <span aria-hidden>{prompt.icon}</span>
+                  <span className="truncate">{prompt.label}</span>
+                </button>
+              ))}
             </div>
           </div>
         )}
