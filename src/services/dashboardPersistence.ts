@@ -27,6 +27,12 @@ interface PersistedState {
   sidebarWidth: number;
   activeFolder: string;
   isSidebarCollapsed?: boolean;
+  /** Vista activa de la activity bar (files/search/git/tools/snippets/outline). */
+  activityView?: string;
+  /** Estado del panel inferior (Terminal/Problemas). */
+  bottomDockOpen?: boolean;
+  /** Estado del panel derecho (Agora AI). */
+  rightPanelOpen?: boolean;
 }
 
 interface PersistedFavoritesState {
@@ -54,6 +60,9 @@ export function saveDashboardState(
     sidebarWidth: number;
     activeFolder: string;
     isSidebarCollapsed?: boolean;
+    activityView?: string;
+    bottomDockOpen?: boolean;
+    rightPanelOpen?: boolean;
   }
 ): void {
   if (!workspaceId || typeof window === 'undefined') return;
@@ -79,7 +88,10 @@ export function saveDashboardState(
       docModes: state.docModes,
       sidebarWidth: state.sidebarWidth,
       activeFolder: state.activeFolder,
-      isSidebarCollapsed: state.isSidebarCollapsed
+      isSidebarCollapsed: state.isSidebarCollapsed,
+      activityView: state.activityView,
+      bottomDockOpen: state.bottomDockOpen,
+      rightPanelOpen: state.rightPanelOpen
     };
 
     localStorage.setItem(getStorageKey(workspaceId), JSON.stringify(persistedState));
