@@ -481,16 +481,6 @@ body {
   container-name: aichat;
 }
 
-/* Cuando el panel es estrecho (<420px), reduce padding interno y
-   compacta el header del chat para ganar altura util. */
-@container aichat (max-width: 420px) {
-  [data-shell='copilot'] aside {
-    width: 0 !important;
-    border-right: 0 !important;
-    overflow: hidden !important;
-  }
-}
-
 @container aichat (max-width: 560px) {
   [data-shell='copilot'] textarea {
     font-size: 13px;
