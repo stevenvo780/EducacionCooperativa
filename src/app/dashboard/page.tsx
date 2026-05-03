@@ -63,6 +63,12 @@ import NewFileModal, { type FileKind } from '@/components/dashboard/NewFileModal
 import DragOverlay from '@/components/dashboard/DragOverlay';
 import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
+import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
+import LeftPanel from '@/components/dashboard/LeftPanel';
+import BottomDock from '@/components/dashboard/BottomDock';
+import CommandPalette, { type Command as PaletteCommand } from '@/components/dashboard/CommandPalette';
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
+import { useIsCompact } from '@/hooks/useMediaQuery';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
 import MembersModal from '@/components/dashboard/MembersModal';
 import ChangePasswordModal from '@/components/dashboard/ChangePasswordModal';
@@ -397,6 +403,19 @@ function DashboardContent() {
     const [folderDragOver, setFolderDragOver] = useState<string | null>(null);
     const [_dropPosition, setDropPosition] = useState<number | null>(null);
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
+    const [activityView, setActivityView] = useState<ActivityView>('files');
+    const [bottomDockOpen, setBottomDockOpen] = useState(false);
+    const [showCommandPalette, setShowCommandPalette] = useState(false);
+    const isCompact = useIsCompact();
+    // En mobile/tablet ignoramos el árbol Mosaic con splits — los tiles
+    // side-by-side dejaban el editor en ~140px e ilegible. Mostramos solo el
+    // doc activo a pantalla completa; el resto sigue accesible vía tabs.
+    const effectiveMosaicNode = useMemo<MosaicNode<string> | null>(() => {
+        if (!isCompact) return mosaicNode;
+        if (selectedDocId) return selectedDocId;
+        if (mosaicNode && typeof mosaicNode === 'string') return mosaicNode;
+        return mosaicNode;
+    }, [isCompact, mosaicNode, selectedDocId]);
 
     const {
         quickSearchInputRef,
@@ -1064,7 +1083,11 @@ function DashboardContent() {
             if (matchesShortcut('KeyP', 'p') && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
-                openQuickSearch();
+                if (e.shiftKey) {
+                    setShowCommandPalette(true);
+                } else {
+                    openQuickSearch();
+                }
                 return;
             }
 
@@ -1088,7 +1111,7 @@ function DashboardContent() {
                 if (e.shiftKey) {
                     handleRequestNewTerminal();
                 } else {
-                    void openTerminal();
+                    setBottomDockOpen((v) => !v);
                 }
             }
         };
@@ -1528,6 +1551,107 @@ function DashboardContent() {
         };
     }, [isResizingSidebar]);
 
+    const paletteCommands = useMemo<PaletteCommand[]>(() => [
+        {
+            id: 'file.new',
+            category: 'Archivos',
+            label: 'Nuevo archivo',
+            shortcut: 'Ctrl+N',
+            keywords: ['create', 'crear', 'nuevo', 'documento'],
+            run: () => openNewFileModalAt()
+        },
+        {
+            id: 'file.search',
+            category: 'Archivos',
+            label: 'Buscar archivos…',
+            shortcut: 'Ctrl+P',
+            keywords: ['find', 'buscar', 'encontrar'],
+            run: () => setShowQuickSearch(true)
+        },
+        {
+            id: 'view.toggleSidebar',
+            category: 'Vista',
+            label: 'Alternar barra lateral',
+            shortcut: 'Ctrl+B',
+            keywords: ['sidebar', 'panel', 'archivos'],
+            run: () => handleToggleSidebarCollapse()
+        },
+        {
+            id: 'view.toggleTerminal',
+            category: 'Vista',
+            label: 'Alternar terminal',
+            shortcut: 'Ctrl+`',
+            keywords: ['terminal', 'consola', 'shell', 'panel inferior', 'output'],
+            run: () => setBottomDockOpen((v) => !v)
+        },
+        {
+            id: 'view.zen',
+            category: 'Vista',
+            label: 'Modo Zen',
+            shortcut: 'Ctrl+K Z',
+            keywords: ['focus', 'concentración', 'pantalla limpia'],
+            run: () => handleToggleZenMode()
+        },
+        {
+            id: 'view.activity.files',
+            category: 'Vista',
+            label: 'Mostrar Archivos',
+            keywords: ['files', 'sidebar', 'explorer'],
+            run: () => setActivityView('files')
+        },
+        {
+            id: 'view.activity.git',
+            category: 'Vista',
+            label: 'Mostrar Control de versiones',
+            keywords: ['git', 'commits', 'changes', 'cambios'],
+            run: () => setActivityView('git')
+        },
+        {
+            id: 'view.activity.ai',
+            category: 'Vista',
+            label: 'Mostrar Agora AI',
+            keywords: ['ai', 'asistente', 'chat'],
+            run: () => setActivityView('ai')
+        },
+        {
+            id: 'workspace.manage',
+            category: 'Workspace',
+            label: 'Gestionar workspaces',
+            keywords: ['cambiar', 'switch', 'lista', 'workspaces'],
+            run: () => setShowWorkspaceManagerModal(true)
+        },
+        {
+            id: 'ai.open',
+            category: 'AI',
+            label: 'Abrir Agora AI en panel',
+            keywords: ['agora', 'chat', 'asistente'],
+            run: () => { void openAgoraAI(); }
+        },
+        {
+            id: 'terminal.new',
+            category: 'Terminal',
+            label: 'Nueva sesión de terminal',
+            shortcut: 'Ctrl+Shift+`',
+            keywords: ['terminal', 'shell', 'session'],
+            run: () => handleRequestNewTerminal()
+        },
+        {
+            id: 'terminal.tab',
+            category: 'Terminal',
+            label: 'Abrir terminal como tab',
+            keywords: ['terminal', 'shell', 'tab', 'pestaña'],
+            run: () => { void openTerminal(); }
+        }
+    ], [
+        handleToggleSidebarCollapse,
+        handleToggleZenMode,
+        handleRequestNewTerminal,
+        openAgoraAI,
+        openNewFileModalAt,
+        openTerminal,
+        setShowQuickSearch
+    ]);
+
     if (loading || !user) {
         return (
             <div className="flex h-screen items-center justify-center bg-surface-900">
@@ -1570,6 +1694,14 @@ function DashboardContent() {
                     onKeyDown={handleQuickSearchKeyDown}
                     inputRef={quickSearchInputRef}
                     getDocumentIcon={(doc) => getIcon(doc as DocItem)}
+                    modalFade={modalFade}
+                    modalPop={modalPop}
+                />
+
+                <CommandPalette
+                    open={showCommandPalette}
+                    onClose={() => setShowCommandPalette(false)}
+                    commands={paletteCommands}
                     modalFade={modalFade}
                     modalPop={modalPop}
                 />
@@ -1710,7 +1842,22 @@ function DashboardContent() {
                 )}
 
                 <div className="flex flex-1 overflow-hidden relative">
-                    <Sidebar
+                    {!isZenMode && (
+                      <ActivityBar
+                        active={activityView}
+                        onChange={(v) => {
+                          if (v === 'search') {
+                            setShowQuickSearch(true);
+                            return;
+                          }
+                          setActivityView(v);
+                          if (isSidebarCollapsed) setIsSidebarCollapsed(false);
+                        }}
+                      />
+                    )}
+
+                    {activityView === 'files' ? (
+                      <Sidebar
                         sidebarWidth={sidebarWidth}
                         isCollapsed={isSidebarCollapsed}
                         showMobileSidebar={showMobileSidebar}
@@ -1755,14 +1902,31 @@ function DashboardContent() {
                         onShowCurrentLocationProperties={() => { void showCurrentLocationProperties(); }}
                         onRenameFolder={(folder) => { void promptRenameFolder(folder); }}
                         onDeleteFolder={(folder) => { void deleteFolder(folder); }}
-                    />
+                      />
+                    ) : (
+                      !isSidebarCollapsed && (
+                        <aside
+                          className="shrink-0 border-r border-surface-700/60"
+                          style={{ width: sidebarWidth }}
+                        >
+                          <LeftPanel
+                            view={activityView}
+                            currentWorkspace={currentWorkspace}
+                            userUid={user?.uid}
+                            onOpenQuickSearch={() => setShowQuickSearch(true)}
+                            onOpenAgoraAI={() => { void openAgoraAI(); }}
+                            filesContent={null}
+                          />
+                        </aside>
+                      )
+                    )}
 
                     {/* Resize Handle */}
                     {!isSidebarCollapsed && (
                         <div
                             onMouseDown={startResizingSidebar}
                             className={`hidden md:block w-1.5 h-full cursor-col-resize absolute z-50 hover:bg-mandy-500/40 transition-colors ${isResizingSidebar ? 'bg-mandy-500' : 'bg-transparent'}`}
-                            style={{ left: sidebarWidth - 3 }}
+                            style={{ left: (isZenMode ? 0 : 48) + sidebarWidth - 3 }}
                         />
                     )}
 
@@ -1789,11 +1953,14 @@ function DashboardContent() {
                             }
                         }}
                     >
-                        {mosaicNode ? (
+                      <PanelGroup orientation="vertical" id="agora-shell-vertical" className="flex h-full w-full flex-col">
+                        <Panel id="editor-area" defaultSize="70%" minSize="20%">
+                          <div className="relative h-full w-full flex flex-col">
+                        {effectiveMosaicNode ? (
                             <div className="flex-1 min-h-0 relative">
                                 <MosaicLayout
-                                    value={mosaicNode}
-                                    onChange={setMosaicNode}
+                                    value={effectiveMosaicNode}
+                                    onChange={isCompact ? () => { /* readonly en mobile */ } : setMosaicNode}
                                     openTabs={openTabs}
                                     docs={docs}
                                     folders={folders}
@@ -1886,6 +2053,33 @@ function DashboardContent() {
                                 defaultFolderName={DEFAULT_FOLDER_NAME}
                             />
                         )}
+                          </div>
+                        </Panel>
+
+                        {bottomDockOpen && (
+                          <>
+                            <PanelResizeHandle className="h-1 bg-surface-800 hover:bg-mandy-500/40 transition-colors" />
+                            <Panel id="bottom-dock" defaultSize="30%" minSize="15%" maxSize="70%" collapsible>
+                              <BottomDock
+                                open
+                                onToggle={() => setBottomDockOpen(false)}
+                                workspaceId={currentWorkspace?.id}
+                                workspaceName={currentWorkspace?.name}
+                                workspaceType={currentWorkspace?.type}
+                                nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                              />
+                            </Panel>
+                          </>
+                        )}
+                      </PanelGroup>
+
+                      {!bottomDockOpen && (
+                        <BottomDock
+                          open={false}
+                          onToggle={() => setBottomDockOpen(true)}
+                          nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                        />
+                      )}
                     </div>
                 </div>
 
