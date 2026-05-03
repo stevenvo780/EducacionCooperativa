@@ -27,6 +27,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Loader2,
+  ListCollapse,
   Star,
   X,
   Code
@@ -166,6 +167,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const isCompact = containerWidth < 550;
   const isUltraCompact = containerWidth < 380;
   const touchHandleVisibilityClass = isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
+  const toolbarIconButtonClass = 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-surface-400 transition hover:bg-surface-700 hover:text-surface-200 active:bg-surface-700';
 
   // Auto-collapse sidebar when embedded in Mosaic and compact
   useEffect(() => {
@@ -1107,11 +1109,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-surface-700">
         {/* Sidebar toggle */}
         <button
+          type="button"
           onClick={() => setSidebarCollapsed(prev => !prev)}
-          className="p-1 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition shrink-0"
+          className={toolbarIconButtonClass}
           title={sidebarCollapsed ? 'Mostrar carpetas' : 'Ocultar carpetas'}
+          aria-label={sidebarCollapsed ? 'Mostrar carpetas' : 'Ocultar carpetas'}
         >
-          {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
         </button>
 
         {/* Workspace name — hide on ultracompact */}
@@ -1122,30 +1126,34 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           </div>
         )}
 
-        {!sidebarCollapsed && !isUltraCompact && (
-          <button
-            type="button"
-            onClick={collapseAllFolders}
-            className="px-2 py-1 rounded text-[11px] text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition shrink-0"
-            title="Contraer toda la jerarquia"
-          >
-            Contraer
-          </button>
-        )}
-
         {/* Search — collapsible in ultracompact */}
         {isUltraCompact && !searchExpanded ? (
-          <button
-            onClick={() => setSearchExpanded(true)}
-            className="p-1 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition shrink-0"
-            title="Buscar"
-          >
-            <Search className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSearchExpanded(true)}
+              className={toolbarIconButtonClass}
+              title="Buscar"
+              aria-label="Buscar"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+            {!sidebarCollapsed && (
+              <button
+                type="button"
+                onClick={collapseAllFolders}
+                className={toolbarIconButtonClass}
+                title="Contraer toda la jerarquia"
+                aria-label="Contraer toda la jerarquia"
+              >
+                <ListCollapse className="h-5 w-5" />
+              </button>
+            )}
+          </div>
         ) : (
-          <div className={`flex-1 min-w-0 ${isUltraCompact ? 'flex items-center gap-1' : ''}`}>
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 value={searchQuery}
@@ -1153,15 +1161,29 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 placeholder="Buscar..."
                 autoFocus={isUltraCompact && searchExpanded}
                 onBlur={() => { if (isUltraCompact && !searchQuery) setSearchExpanded(false); }}
-                className="w-full pl-7 pr-3 py-1 bg-surface-800 border border-surface-700 rounded text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50"
+                className="w-full rounded border border-surface-700 bg-surface-800 py-2 pl-8 pr-3 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500/50 focus:outline-none"
               />
             </div>
+            {!sidebarCollapsed && (
+              <button
+                type="button"
+                onClick={collapseAllFolders}
+                className={toolbarIconButtonClass}
+                title="Contraer toda la jerarquia"
+                aria-label="Contraer toda la jerarquia"
+              >
+                <ListCollapse className="h-5 w-5" />
+              </button>
+            )}
             {isUltraCompact && searchExpanded && (
               <button
+                type="button"
                 onClick={() => { setSearchQuery(''); setSearchExpanded(false); }}
-                className="p-0.5 rounded text-surface-400 hover:text-surface-200 shrink-0"
+                className={toolbarIconButtonClass}
+                title="Cerrar busqueda"
+                aria-label="Cerrar busqueda"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="h-5 w-5" />
               </button>
             )}
           </div>
@@ -1171,15 +1193,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         {isCompact ? (
           <div className="relative shrink-0" ref={toolbarMenuRef}>
             <button
+              type="button"
               onClick={() => setToolbarMenuOpen(prev => !prev)}
-              className={`p-1 rounded transition shrink-0 ${
+              className={`${toolbarIconButtonClass} ${
                 toolbarMenuOpen
                   ? 'bg-surface-700 text-surface-200'
-                  : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700'
+                  : ''
               }`}
               title="Acciones"
+              aria-label="Acciones"
             >
-              <MoreHorizontal className="w-4 h-4" />
+              <MoreHorizontal className="h-5 w-5" />
             </button>
             {toolbarMenuOpen && (
               <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface-800 border border-surface-600/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
@@ -1242,56 +1266,68 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           <div className="flex items-center gap-0.5 shrink-0">
             {onCreateFile && (
               <button
+                type="button"
                 onClick={onCreateFile}
-                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                className={toolbarIconButtonClass}
                 title="Nuevo archivo"
+                aria-label="Nuevo archivo"
               >
-                <Plus className="w-4 h-4 text-slate-400" />
+                <Plus className="h-5 w-5 text-slate-400" />
               </button>
             )}
             {onCreateStFile && (
               <button
+                type="button"
                 onClick={onCreateStFile}
-                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                className={toolbarIconButtonClass}
                 title="Nuevo archivo ST"
+                aria-label="Nuevo archivo ST"
               >
-                <Code className="w-4 h-4 text-emerald-400" />
+                <Code className="h-5 w-5 text-emerald-400" />
               </button>
             )}
             {onCreateFolder && (
               <button
+                type="button"
                 onClick={onCreateFolder}
-                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                className={toolbarIconButtonClass}
                 title="Nueva carpeta"
+                aria-label="Nueva carpeta"
               >
-                <FolderPlus className="w-4 h-4 text-slate-400" />
+                <FolderPlus className="h-5 w-5 text-slate-400" />
               </button>
             )}
             {onUploadFile && (
               <button
+                type="button"
                 onClick={onUploadFile}
-                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                className={toolbarIconButtonClass}
                 title="Subir archivo"
+                aria-label="Subir archivo"
               >
-                <Upload className="w-4 h-4 text-slate-400" />
+                <Upload className="h-5 w-5 text-slate-400" />
               </button>
             )}
             {onUploadFolder && (
               <button
+                type="button"
                 onClick={onUploadFolder}
-                className="p-1.5 hover:bg-surface-700 rounded transition-colors"
+                className={toolbarIconButtonClass}
                 title="Subir carpeta"
+                aria-label="Subir carpeta"
               >
-                <FolderInput className="w-4 h-4 text-slate-400" />
+                <FolderInput className="h-5 w-5 text-slate-400" />
               </button>
             )}
             {currentWorkspaceId && currentWorkspaceId !== PERSONAL_WORKSPACE_ID && (
               <button
+                type="button"
                 onClick={() => navigator.clipboard.writeText(currentWorkspaceId)}
-                className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono bg-surface-700/50 text-surface-400 rounded hover:bg-surface-600 hover:text-surface-200 transition"
+                className={toolbarIconButtonClass}
                 title="Copiar ID del workspace"
+                aria-label="Copiar ID del workspace"
               >
-                <Copy className="w-2.5 h-2.5 shrink-0" />
+                <Copy className="h-5 w-5 shrink-0" />
               </button>
             )}
           </div>
