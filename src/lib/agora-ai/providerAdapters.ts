@@ -14,8 +14,8 @@ import type {
   ChatMessage
 } from '@/lib/agora-ai/types';
 
-const MAX_AGENT_ITERATIONS = 10;
-const BUDGET_SAFETY_MS = 18_000; // 1 round del modelo + tools antes del cutoff
+const MAX_AGENT_ITERATIONS = 25;
+const BUDGET_SAFETY_MS = 25_000; // 1 round del modelo + tools antes del cutoff
 
 function budgetWillExpire(ctx: AgentExecutionContext): boolean {
   if (!ctx.elapsedBudgetMs || !ctx.maxBudgetMs) return false;
@@ -319,7 +319,7 @@ async function executeToolsParallel(
   const blockedDestructive = destructiveBatch.length > 1
     ? new Set(destructiveBatch.slice(1).map((c) => c.id))
     : new Set<string>();
-  const concurrency = Math.min(4, Math.max(1, toolCalls.length));
+  const concurrency = Math.min(8, Math.max(1, toolCalls.length));
   const settled: Array<PromiseSettledResult<AgentToolExecutionResult> | undefined> = new Array(toolCalls.length);
   let nextIndex = 0;
 

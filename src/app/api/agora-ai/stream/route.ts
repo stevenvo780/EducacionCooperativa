@@ -8,8 +8,9 @@ import type { AgentMode, AgentRequestBody, AgentStreamEvent, AIProvider } from '
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 export const runtime = 'nodejs';
-export const maxDuration = 300;
-const SOFT_BUDGET_MS = 270_000; // 30s antes del cutoff Vercel
+// Vercel Pro permite hasta 900s; emitimos 'complete' 40s antes para evitar el cutoff.
+export const maxDuration = 800;
+const SOFT_BUDGET_MS = 760_000;
 
 const DEFAULT_MODELS: Record<Exclude<AIProvider, 'ollama'>, string> = {
   openai: 'gpt-4o-mini',
