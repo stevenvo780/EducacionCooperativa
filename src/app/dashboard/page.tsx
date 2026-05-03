@@ -1198,6 +1198,30 @@ function DashboardContent() {
                 return;
             }
 
+            if (matchesShortcut('KeyM', 'm') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                setDockInitialTab('problems');
+                setBottomDockOpen(true);
+                return;
+            }
+
+            if (matchesShortcut('KeyE', 'e') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                setActivityView('files');
+                if (isCompact) setShowMobileSidebar(true);
+                return;
+            }
+
+            if (matchesShortcut('KeyG', 'g') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                setActivityView('git');
+                if (isCompact) setShowMobileSidebar(true);
+                return;
+            }
+
             if ((e.code === 'Backquote' || normalizedKey === '`' || normalizedKey === 'dead') && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
@@ -1234,7 +1258,9 @@ function DashboardContent() {
         showWorkspaceManagerModal,
         showPasswordModal,
         showPricingModal,
-        showQuickSearch
+        showQuickSearch,
+        isCompact,
+        setShowMobileSidebar
     ]);
 
     const resolveDialog = (result: DialogResult) => {
@@ -2026,6 +2052,10 @@ function DashboardContent() {
                             isStRunnerOpen={isStRunnerOpen}
                             isSemanticBrowserOpen={isSemanticBrowserOpen}
                             isFormalizerOpen={isFormalizerOpen}
+                            selectedDoc={selectedDocId ? docs.find(d => d.id === selectedDocId) ?? null : null}
+                            onJumpToLine={(line) => {
+                              window.dispatchEvent(new CustomEvent('agora:jump-to-line', { detail: { line } }));
+                            }}
                             filesContent={null}
                           />
                         </aside>
@@ -2141,7 +2171,7 @@ function DashboardContent() {
                             {rightPanelOpen && !isCompact && (
                               <>
                                 <PanelResizeHandle className="w-1 bg-surface-800 hover:bg-mandy-500/40 transition-colors" />
-                                <Panel id="right-panel" defaultSize="38%" minSize="25%" maxSize="65%" collapsible>
+                                <Panel id="right-panel" defaultSize="35%" minSize="28%" maxSize="65%" collapsible>
                                   <RightPanel
                                     open
                                     onToggle={() => setRightPanelOpen(false)}

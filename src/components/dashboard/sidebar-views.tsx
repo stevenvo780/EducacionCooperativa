@@ -1,13 +1,14 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Files, Search, GitBranch, LayoutGrid, FileCode2, type LucideIcon } from 'lucide-react';
+import { Files, Search, GitBranch, LayoutGrid, FileCode2, ListTree, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
-import type { Workspace } from '@/components/dashboard/types';
+import type { Workspace, DocItem } from '@/components/dashboard/types';
 import type { SearchResultFilter, SearchResultItem } from '@/lib/search/types';
 import ToolsGallery from './ToolsGallery';
 import SearchPanel from './SearchPanel';
+import OutlineView from './OutlineView';
 
 const GitWorkbench = dynamic(() => import('@/components/dashboard/GitWorkbench'), { ssr: false });
 const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
@@ -45,6 +46,10 @@ export interface SidebarViewContext {
   isStRunnerOpen?: boolean;
   isSemanticBrowserOpen?: boolean;
   isFormalizerOpen?: boolean;
+
+  // outline
+  selectedDoc?: DocItem | null;
+  onJumpToLine?: (line: number) => void;
 }
 
 export interface SidebarView {
@@ -149,6 +154,14 @@ export const SIDEBAR_VIEWS: SidebarView[] = [
         isSemanticBrowserOpen={ctx.isSemanticBrowserOpen}
         isFormalizerOpen={ctx.isFormalizerOpen}
       />
+    )
+  },
+  {
+    id: 'outline',
+    label: 'Esquema',
+    icon: ListTree,
+    render: (ctx) => (
+      <OutlineView selectedDoc={ctx.selectedDoc ?? null} onJumpTo={ctx.onJumpToLine} />
     )
   },
   {
