@@ -2,55 +2,5 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "installCommand": "npm install",
-  "outputDirectory": ".next",
-  "crons": [
-    {
-      "path": "/api/cron/check-subscriptions",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/drain-outbox",
-      "schedule": "*/5 * * * *"
-    }
-  ],
-  "functions": {
-    "src/app/api/**/*.ts": {
-      "maxDuration": 60
-    }
-  },
-  "routes": [
-    {
-      "src": "/api/agora-ai/stream",
-      "methods": ["POST", "OPTIONS"],
-      "dest": "https://agora-backend-578238159459.us-central1.run.app/agora-ai/stream"
-    },
-    {
-      "src": "/api/upload",
-      "methods": ["POST"],
-      "headers": {
-        "x-vercel-proxy-request-body-size": "52428800"
-      }
-    },
-    {
-      "src": "/api/documents/convert",
-      "methods": ["POST"],
-      "headers": {
-        "x-vercel-proxy-request-body-size": "52428800"
-      }
-    },
-    {
-      "src": "/api/documents",
-      "methods": ["POST"],
-      "headers": {
-        "x-vercel-proxy-request-body-size": "52428800"
-      }
-    },
-    {
-      "src": "/api/documents/(.*)",
-      "methods": ["PUT", "PATCH"],
-      "headers": {
-        "x-vercel-proxy-request-body-size": "52428800"
-      }
-    }
-  ]
+  "outputDirectory": ".next"
 }

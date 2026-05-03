@@ -394,7 +394,8 @@ API documentos: `GET/POST /api/documents`, `GET/PUT/DELETE /api/documents/[id]`
 
 ### Sistema de pagos (MercadoPago)
 
-Integración completa con **MercadoPago** para suscripciones mensuales.
+Integración completa con **MercadoPago** para suscripciones mensuales. Las rutas
+HTTP viven en `AgoraBack` y el cliente las consume mediante `NEXT_PUBLIC_API_BASE_URL`.
 
 **Flujo de pago:**
 1. `POST /api/payments/create-preference` — crea preferencia de pago en MercadoPago
@@ -406,7 +407,8 @@ Integración completa con **MercadoPago** para suscripciones mensuales.
 7. Estado: `GET /api/payments/subscription-status`
 8. Uso de almacenamiento: `GET /api/payments/storage-usage`
 
-Cron job automático (`/api/cron/check-subscriptions`) verifica y expira suscripciones vencidas.
+El cron automático (`/api/cron/check-subscriptions`) se ejecuta desde Cloud Scheduler
+contra `AgoraBack`.
 
 Modo sandbox disponible via `MERCADOPAGO_SANDBOX=true`.
 
@@ -444,33 +446,15 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=   # opcional, Analytics
 
-# Firebase (servidor — Admin SDK)
-FIREBASE_SERVICE_ACCOUNT=              # JSON completo (o base64) de la service account
-FIREBASE_PROJECT_ID=                   # si no está en la service account
-FIREBASE_STORAGE_BUCKET=              # si no está en la service account
-GOOGLE_APPLICATION_CREDENTIALS=       # alternativa: ruta al archivo serviceAccountKey.json
-
 # Hub Socket.IO
 NEXT_PUBLIC_HUB_URL=http://localhost:3010
 NEXT_PUBLIC_NEXUS_URL=                 # alias de HUB_URL usado por el worker
 
+# API Cloud Run
+NEXT_PUBLIC_API_BASE_URL=https://agora-backend-xxxx.a.run.app
+
 # URL pública de la app
 NEXT_PUBLIC_APP_URL=https://agora.humanizar.cloud
-
-# MercadoPago
-MERCADOPAGO_ACCESS_TOKEN=              # token de acceso MP
-MERCADOPAGO_SANDBOX=false              # true para modo sandbox
-
-# Formalizador LLM (servidor)
-OPENWEBUI_ENDPOINT=                    # endpoint de Open WebUI (opcional)
-OPENWEBUI_API_KEY=                     # API key de Open WebUI (opcional)
-OLLAMA_ENDPOINT=http://localhost:11434/api/chat
-OLLAMA_MODEL=autologic-formalizer
-
-# Administración
-ENABLE_ADMIN_ENDPOINTS=false           # true para habilitar /api/admin/*
-CRON_SECRET=                           # secret para proteger /api/cron/*
-APP_PASSWORD=                          # contraseña de acceso adicional (si aplica)
 
 # Desarrollo
 NEXT_PUBLIC_ALLOW_INSECURE_AUTH=false  # NUNCA true en producción
@@ -614,14 +598,17 @@ Estados de suscripción: `active`, `pending`, `cancelled`, `expired`, `free`
 
 ---
 
-## API interna
+## API Cloud Run
+
+Estos endpoints ya no viven en `AgoraFront`; se sirven desde `AgoraBack` y el
+cliente los resuelve con `NEXT_PUBLIC_API_BASE_URL`.
 
 ### Endpoints principales
 
 | Método | Ruta | Descripción | Auth |
 |---|---|---|---|
 | POST | `/api/agora-ai` | Chat multi-IA con contexto de workspace | Firebase |
-| POST | `/api/formalize-llm` | Formalización de texto a lógica ST | Ninguna |
+| POST | `/api/formalize-llm` | Formalización de texto a lógica ST | Firebase |
 | GET/POST | `/api/semantic` | Estado semántico del workspace | Firebase |
 | GET | `/api/search` | Búsqueda de documentos | Firebase |
 | GET/POST | `/api/documents` | CRUD de documentos | Firebase |
@@ -633,15 +620,14 @@ Estados de suscripción: `active`, `pending`, `cancelled`, `expired`, `free`
 | POST | `/api/payments/create-preference` | Iniciar pago MercadoPago | Firebase |
 | POST | `/api/payments/webhook` | Webhook de confirmación MP | MP signature |
 | GET | `/api/payments/verify` | Verificar estado de pago | Firebase |
-| POST | `/api/payments/activate-subscription` | Activar suscripción | Firebase |
+| POST | `/api/admin/activate-subscription` | Activar suscripción | Admin |
 | GET | `/api/payments/subscription-status` | Estado de suscripción | Firebase |
 | GET | `/api/payments/storage-usage` | Uso de almacenamiento | Firebase |
 | GET | `/api/users/me` | Perfil del usuario autenticado | Firebase |
 | POST | `/api/users/register` | Registro de usuario | Ninguna |
 | GET | `/api/users/lookup` | Buscar usuario | Firebase |
-| GET | `/api/users/signed-url` | URL firmada para Storage | Firebase |
 | POST | `/api/upload` | Subida de archivos a Storage | Firebase |
-| POST | `/api/cron/check-subscriptions` | Cron de verificación de suscripciones | CRON_SECRET |
+| GET | `/api/cron/check-subscriptions` | Cron de verificación de suscripciones | CRON_SECRET |
 | POST | `/api/admin/activate-subscription` | Activación manual de suscripción | ENABLE_ADMIN_ENDPOINTS |
 
 ### Librerías propias usadas

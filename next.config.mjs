@@ -57,7 +57,6 @@ const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
 const nextConfig = {
   output: useStandaloneOutput ? 'standalone' : undefined,
   transpilePackages: ['react-mosaic-component', 'firebase', 'undici', '@stevenvo780/st-lang', '@stevenvo780/autologic'],
-  serverExternalPackages: ['firebase-admin'],
   experimental: {
     serverActions: {
       bodySizeLimit: '50mb'

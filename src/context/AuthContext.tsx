@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomToken } from '@/lib/firebase';
+import { apiUrl } from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -174,7 +175,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const loginWithEmail = async (email: string, pass: string) => {
         const normalizedEmail = email.toLowerCase().trim();
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(apiUrl('/api/auth/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: normalizedEmail, password: pass })
@@ -252,7 +253,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const registerWithEmail = async (email: string, pass: string) => {
         const normalizedEmail = email.toLowerCase().trim();
-        const res = await fetch('/api/auth/register', {
+        const res = await fetch(apiUrl('/api/auth/register'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: normalizedEmail, password: pass })
@@ -334,7 +335,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         const token = await user.getIdToken?.();
 
-        const res = await fetch('/api/auth/change-password', {
+        const res = await fetch(apiUrl('/api/auth/change-password'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -357,7 +358,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const resetPassword = async (email: string) => {
         try {
             const normalizedEmail = email.toLowerCase().trim();
-            const prepareRes = await fetch('/api/auth/prepare-reset', {
+            const prepareRes = await fetch(apiUrl('/api/auth/prepare-reset'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: normalizedEmail })

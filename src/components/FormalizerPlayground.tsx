@@ -10,6 +10,7 @@ import type { Snippet } from '@/services/snippetApi';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { FORMALIZATION_CONTRACT_VERSION, type FormalizationResultPayload } from '@/lib/formalization-contract';
 import { ST_RUNTIME_PROFILES } from '@/lib/st-runtime-manifest';
+import { apiUrl } from '@/services/apiClient';
 import {
   clearClientConfig,
   loadClientConfig,
@@ -206,7 +207,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
     const t0 = performance.now();
     let result: FormalizeResult;
     try {
-      const res = await fetch('/api/formalize-llm', {
+      const res = await fetch(apiUrl('/api/formalize-llm'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
