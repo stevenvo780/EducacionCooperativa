@@ -191,6 +191,26 @@ export default function STCodeEditor({
     }));
   }, [diagnostics]);
 
+  // Listener de jump-to-line desde Outline o Problems → centra el cursor
+  // en la línea pedida.
+  useEffect(() => {
+    if (isTouchDevice) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ line: number; column?: number }>).detail;
+      const view = viewRef.current;
+      if (!view || !detail) return;
+      const total = view.state.doc.lines;
+      const line = Math.max(1, Math.min(total, detail.line));
+      const lineInfo = view.state.doc.line(line);
+      const col = detail.column ? Math.min(lineInfo.length, Math.max(0, detail.column - 1)) : 0;
+      const pos = lineInfo.from + col;
+      view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+      view.focus();
+    };
+    window.addEventListener('agora:jump-to-line', handler);
+    return () => window.removeEventListener('agora:jump-to-line', handler);
+  }, [isTouchDevice]);
+
   // Android/tablet IMEs are much more reliable with a native textarea than a
   // contenteditable-based code editor. Keep touch-first devices on the stable path.
   if (isTouchDevice) {
