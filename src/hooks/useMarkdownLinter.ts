@@ -5,6 +5,7 @@ import { MarkdownLinterRegistry } from '@/lib/markdown-linter/registry';
 import { BUILTIN_RULE_IDS } from '@/lib/markdown-linter/rules';
 import { getPersonalDictionary, initSpellEngine, isSpellEngineReady } from '@/lib/markdown-linter/spell-engine';
 import { isSuppressed } from '@/lib/markdown-linter/suppressions';
+import { LinterRegistry } from '@/lib/linters/registry';
 import type { LinterDiagnostic, LinterRule } from '@/lib/markdown-linter/types';
 
 // Re-export types for backward compatibility
@@ -16,7 +17,9 @@ function getRegistrySnapshot(): LinterRule[] {
 }
 
 function subscribeRegistry(onStoreChange: () => void): () => void {
-  return MarkdownLinterRegistry.subscribe(onStoreChange);
+  const offRules = MarkdownLinterRegistry.subscribe(onStoreChange);
+  const offLinters = LinterRegistry.subscribe(onStoreChange);
+  return () => { offRules(); offLinters(); };
 }
 
 function diagnosticsEqual(a: LinterDiagnostic[], b: LinterDiagnostic[]): boolean {
@@ -237,6 +240,15 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   const runLint = useCallback((text: string) => {
     const requestId = latestRequestIdRef.current + 1;
     latestRequestIdRef.current = requestId;
+
+    // Si el linter Markdown está globalmente desactivado, descarta toda
+    // diagnóstico — vacía el estado y sale.
+    if (!LinterRegistry.isEnabled('markdown')) {
+      latestMainThreadDiagnosticsRef.current = [];
+      setDiagnostics((prev) => prev.length === 0 ? prev : []);
+      setLinterStatus('ready');
+      return;
+    }
 
     // Mark as linting (keep 'initializing' until first complete pass)
     setLinterStatus((prev) => prev === 'initializing' ? 'initializing' : 'linting');

@@ -6,7 +6,8 @@ import { fetchDocumentRawApi, updateDocumentApi } from '@/services/dashboardApi'
 import { useTerminal } from '@/context/TerminalContext';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
-import { Loader2 } from 'lucide-react';
+import { registerStatusSegment, forceUnregisterStatusSegment } from '@/lib/status-bus';
+import { Loader2, Cloud, Check } from 'lucide-react';
 
 interface STFileEditorProps {
   docId: string;
@@ -192,6 +193,34 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
       setSaving(false);
     }
   }, [docId]);
+
+  useEffect(() => {
+    const trimmed = content.trim();
+    const words = trimmed ? trimmed.split(/\s+/).length : 0;
+    const lines = content ? content.split('\n').length : 0;
+    registerStatusSegment({
+      id: 'editor-stats',
+      label: `${words} tokens · ${content.length} car. · ${lines} líneas`,
+      slot: 'left',
+      priority: 30,
+      tone: 'muted',
+      hideBelow: 'sm'
+    });
+    registerStatusSegment({
+      id: 'editor-save',
+      label: saving ? 'Guardando…' : dirty ? 'Guardar' : 'Guardado',
+      icon: saving ? Cloud : Check,
+      slot: 'right',
+      priority: 20,
+      tone: saving ? 'info' : dirty ? 'warning' : 'success',
+      title: dirty ? 'Guardar (Ctrl+S)' : 'Sin cambios pendientes',
+      onClick: dirty && !saving ? handleSave : undefined
+    });
+    return () => {
+      forceUnregisterStatusSegment('editor-stats');
+      forceUnregisterStatusSegment('editor-save');
+    };
+  }, [content, saving, dirty, handleSave]);
 
   if (loading) {
     return (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CreditCard, KeyRound, LogOut, Sparkles, Users, HardDrive, type LucideIcon } from 'lucide-react';
+import { CreditCard, KeyRound, LogOut, Settings, Sparkles, Users, HardDrive, type LucideIcon } from 'lucide-react';
 import { authFetch } from '@/services/apiClient';
 
 interface UserMenuProps {
@@ -14,6 +14,7 @@ interface UserMenuProps {
   onChangePassword: () => void;
   onShowMembers: () => void;
   onOpenPricing: () => void;
+  onOpenSettings: () => void;
   onLogout: () => void;
 }
 
@@ -36,6 +37,7 @@ export default function UserMenu({
   onChangePassword,
   onShowMembers,
   onOpenPricing,
+  onOpenSettings,
   onLogout
 }: UserMenuProps) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -81,6 +83,13 @@ export default function UserMenu({
   if (!open) return null;
 
   const items: Item[] = [
+    {
+      id: 'settings',
+      label: 'Configuración',
+      icon: Settings,
+      description: 'Editor, IA, linter, atajos…',
+      onClick: onOpenSettings
+    },
     {
       id: 'plan',
       label: planName ? `Plan: ${planName}` : 'Cambiar plan',

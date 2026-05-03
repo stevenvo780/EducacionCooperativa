@@ -75,7 +75,7 @@ const normalizeSession = (value: unknown): AgentChatSession | null => {
   if (typeof raw.id !== 'string' || typeof raw.workspaceId !== 'string') return null;
   const provider = raw.provider;
   const mode = raw.mode;
-  if (!provider || !['openai', 'anthropic', 'ollama', 'gemini'].includes(provider)) return null;
+  if (!provider || !['openai', 'anthropic', 'ollama', 'gemini', 'deepseek'].includes(provider)) return null;
   if (!mode || !['chat', 'agent'].includes(mode)) return null;
   const messages = Array.isArray(raw.messages)
     ? raw.messages.map(normalizeMessage).filter((item): item is AgentStoredChatMessage => item !== null)

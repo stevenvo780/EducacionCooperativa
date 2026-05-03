@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { STDefinitionsRegistry, type STDefinition } from '@/lib/st-definitions-registry';
+import { LinterRegistry } from '@/lib/linters/registry';
 import type { LinterRule, LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 
 const LONG_INTERPRETATION_CHAR_THRESHOLD = 280;
@@ -106,6 +107,7 @@ export function useSTDefinitionsLinter() {
     category: 'semantic' as const,
     defaultEnabled: true,
     check: (text: string): LinterDiagnostic[] => {
+      if (!LinterRegistry.isEnabled('st-definitions')) return [];
       if (definedNamesMap.size === 0 && naturalPhrases.length === 0) return [];
 
       const results: LinterDiagnostic[] = [];

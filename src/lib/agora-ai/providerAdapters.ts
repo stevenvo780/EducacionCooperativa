@@ -39,6 +39,28 @@ type OpenAIToolCall = {
   };
 };
 
+type OpenAICompatibleProviderConfig = {
+  endpoint: string;
+  label: string;
+  echoReasoningContent: boolean;
+  supportsToolChoice: boolean;
+};
+
+const OPENAI_COMPATIBLE_PROVIDERS: Record<'openai' | 'deepseek', OpenAICompatibleProviderConfig> = {
+  openai: {
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    label: 'OpenAI',
+    echoReasoningContent: false,
+    supportsToolChoice: true
+  },
+  deepseek: {
+    endpoint: 'https://api.deepseek.com/chat/completions',
+    label: 'DeepSeek',
+    echoReasoningContent: true,
+    supportsToolChoice: false
+  }
+};
+
 type AnthropicBlock =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
@@ -175,6 +197,9 @@ async function executeToolsParallel(
 }
 
 async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
+  const providerConfig = options.provider === 'deepseek'
+    ? OPENAI_COMPATIBLE_PROVIDERS.deepseek
+    : OPENAI_COMPATIBLE_PROVIDERS.openai;
   const steps: AgentTraceStep[] = [];
   const rollback: AgentRollbackAction[] = [];
   const { emitStatus, emitStep } = createEmitters(steps, options.callbacks);
@@ -198,7 +223,7 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetch(providerConfig.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -209,18 +234,21 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
         messages,
         max_tokens: 8192,
         ...(options.mode === 'agent'
-          ? { tools: toOpenAITools(), tool_choice: 'auto' }
+          ? {
+            tools: toOpenAITools(),
+            ...(providerConfig.supportsToolChoice ? { tool_choice: 'auto' } : {})
+          }
           : {})
       })
     });
 
     if (!res.ok) {
-      throw new Error(await parseProviderError('OpenAI', res.status, await res.text()));
+      throw new Error(await parseProviderError(providerConfig.label, res.status, await res.text()));
     }
 
     const data = await res.json() as {
       choices?: Array<{
-        message?: { content?: string | null; tool_calls?: OpenAIToolCall[] };
+        message?: { content?: string | null; reasoning_content?: string | null; tool_calls?: OpenAIToolCall[] };
         finish_reason?: string;
       }>;
     };
@@ -228,6 +256,15 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
     const choice = data.choices?.[0];
     const message = choice?.message;
     const rawContent = message?.content ?? '';
+    const rawReasoning = message?.reasoning_content;
+    if (typeof rawReasoning === 'string' && rawReasoning.trim()) {
+      await emitStep(createStep({
+        id: `thinking-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'thinking',
+        title: 'Razonamiento del agente',
+        content: rawReasoning
+      }));
+    }
     const visibleContent = await collectTextAndThinking(rawContent, emitStep);
     const toolCalls = (message?.tool_calls ?? []).map((call): AgentToolCall => ({
       id: call.id,
@@ -245,7 +282,7 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
     }
 
     // Push assistant turn (before executing tools)
-    messages.push({
+    const assistantTurn: Record<string, unknown> = {
       role: 'assistant',
       content: rawContent || null,
       tool_calls: toolCalls.map(call => ({
@@ -253,7 +290,11 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
         type: 'function',
         function: { name: call.name, arguments: JSON.stringify(call.args) }
       }))
-    });
+    };
+    if (providerConfig.echoReasoningContent && typeof rawReasoning === 'string') {
+      assistantTurn.reasoning_content = rawReasoning;
+    }
+    messages.push(assistantTurn);
 
     // Announce & execute all tools concurrently
     await emitStatus(toolExecutionStatus(toolCalls));
@@ -602,6 +643,7 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
 export async function runProviderConversation(options: ProviderRunOptions): Promise<AgentRun> {
   switch (options.provider) {
     case 'openai': return runOpenAI(options);
+    case 'deepseek': return runOpenAI(options);
     case 'anthropic': return runAnthropic(options);
     case 'gemini': return runGemini(options);
     default:

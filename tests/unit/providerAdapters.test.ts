@@ -130,6 +130,51 @@ describe('runProviderConversation', () => {
     })).rejects.toThrow('OpenAI 429: quota exceeded');
   });
 
+  it('soporta DeepSeek como proveedor OpenAI-compatible con tool calls', async () => {
+    const { runProviderConversation } = await import('@/lib/agora-ai/providerAdapters');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        choices: [{
+          message: {
+            reasoning_content: 'Necesito revisar documentos.',
+            content: '',
+            tool_calls: [{
+              id: 'deepseek-tool-1',
+              function: { name: 'list_documents', arguments: '{"limit":1}' }
+            }]
+          }
+        }]
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        choices: [{ message: { content: 'Respuesta DeepSeek final.' } }]
+      }));
+
+    const run = await runProviderConversation({
+      provider: 'deepseek',
+      apiKey: 'key',
+      model: 'deepseek-v4-flash',
+      messages: [{ role: 'user', content: 'lista docs' }],
+      mode: 'agent',
+      executionContext: ctx
+    });
+
+    const firstRequest = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const secondRequest = fetchMock.mock.calls[1]?.[1] as RequestInit | undefined;
+    const firstBody = JSON.parse(String(firstRequest?.body));
+    const secondBody = JSON.parse(String(secondRequest?.body));
+    const assistantTurn = secondBody.messages.find((message: Record<string, unknown>) => message.role === 'assistant');
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.deepseek.com/chat/completions');
+    expect(firstBody.tool_choice).toBeUndefined();
+    expect(assistantTurn.reasoning_content).toBe('Necesito revisar documentos.');
+    expect(executorMocks.executeAgentTool).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'deepseek-tool-1', name: 'list_documents', args: { limit: 1 } }),
+      ctx
+    );
+    expect(run.steps.some((step) => step.type === 'thinking')).toBe(true);
+    expect(run.finalReply).toBe('Respuesta DeepSeek final.');
+  });
+
   it('soporta tool loop de Anthropic', async () => {
     const { runProviderConversation } = await import('@/lib/agora-ai/providerAdapters');
     fetchMock

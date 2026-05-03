@@ -28,6 +28,7 @@ export interface EditorProps {
     url?: string;
     storagePath?: string;
   };
+  hideInlineStatus?: boolean;
 }
 
 export default function Editor(props: EditorProps) {

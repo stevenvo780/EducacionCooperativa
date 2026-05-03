@@ -103,6 +103,7 @@ import {
   saveSemanticWorkspaceStateApi
 } from '@/services/semanticStateApi';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
+import { registerStatusSegment, forceUnregisterStatusSegment } from '@/lib/status-bus';
 
 export default function MosaicEditor({
   initialContent = '',
@@ -111,7 +112,8 @@ export default function MosaicEditor({
   embedded = false,
   externalSearchTerm,
   onSearchStateChange,
-  searchNavRef
+  searchNavRef,
+  hideInlineStatus = false
 }: EditorProps) {
   // MDXEditor is UNCONTROLLED: `markdown` prop is only read on mount.
   // We use `initialMarkdown` + `editorKey` for mount/remount,
@@ -751,8 +753,33 @@ export default function MosaicEditor({
   const stats = useMemo(() => {
     const trimmed = statsContent.trim();
     const words = trimmed ? trimmed.split(/\s+/).length : 0;
-    return { words, chars: statsContent.length };
+    const lines = statsContent ? statsContent.split('\n').length : 0;
+    return { words, chars: statsContent.length, lines };
   }, [statsContent]);
+
+  useEffect(() => {
+    if (!hideInlineStatus) return;
+    registerStatusSegment({
+      id: 'editor-stats',
+      label: `${stats.words} palabras · ${stats.chars} car. · ${stats.lines} líneas`,
+      slot: 'left',
+      priority: 30,
+      tone: 'muted',
+      hideBelow: 'sm'
+    });
+    registerStatusSegment({
+      id: 'editor-save',
+      label: saving ? 'Guardando…' : 'Guardado',
+      icon: saving ? Cloud : Check,
+      slot: 'right',
+      priority: 20,
+      tone: saving ? 'info' : 'success'
+    });
+    return () => {
+      forceUnregisterStatusSegment('editor-stats');
+      forceUnregisterStatusSegment('editor-save');
+    };
+  }, [hideInlineStatus, stats.words, stats.chars, stats.lines, saving]);
 
   const setViewModeWithSync = useCallback((nextMode: ViewMode) => {
     const editor = mdxEditorRef.current;
@@ -1582,15 +1609,19 @@ export default function MosaicEditor({
               <BookMarked className="h-3.5 w-3.5" />
             </button>
             <LinterConfigPanel linterStatus={linterStatus} />
-            <span className="w-px h-3 bg-slate-700 mx-1" />
-            <span>{stats.words} palabras</span>
-            <span>·</span>
-            <span>{stats.chars} car.</span>
-            <span className="w-px h-3 bg-slate-700 mx-1" />
-            {saving ? (
-              <span className="text-blue-400 flex items-center gap-1"><Cloud className="w-3 h-3" /> Guardando</span>
-            ) : (
-              <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3" /> Guardado</span>
+            {!hideInlineStatus && (
+              <>
+                <span className="w-px h-3 bg-slate-700 mx-1" />
+                <span>{stats.words} palabras</span>
+                <span>·</span>
+                <span>{stats.chars} car.</span>
+                <span className="w-px h-3 bg-slate-700 mx-1" />
+                {saving ? (
+                  <span className="text-blue-400 flex items-center gap-1"><Cloud className="w-3 h-3" /> Guardando</span>
+                ) : (
+                  <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3" /> Guardado</span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1945,7 +1976,7 @@ export default function MosaicEditor({
       )}
 
       {/* Status bar for embedded mode */}
-      {embedded && (
+      {embedded && !hideInlineStatus && (
         <div className="shrink-0 h-7 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-3 text-[11px] text-slate-400">
           <div className="flex items-center gap-3">
             <span>Markdown</span>

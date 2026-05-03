@@ -1,4 +1,4 @@
-export type AIProvider = 'openai' | 'anthropic' | 'ollama' | 'gemini';
+export type AIProvider = 'openai' | 'anthropic' | 'ollama' | 'gemini' | 'deepseek';
 export type AgentMode = 'chat' | 'agent';
 
 export interface ChatMessage {
@@ -105,6 +105,60 @@ export interface AgentDocumentsMutatedEventDetail {
   source: 'agora-ai';
 }
 
+export interface AgentToolResultEventDetail {
+  workspaceId: string;
+  result: AgentToolExecutionResult;
+  source: 'agora-ai';
+}
+
+export interface AgentWorkerCommandEventDetail {
+  workspaceId: string;
+  command: string;
+  cwd?: string;
+  ok: boolean;
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  source: 'agora-ai';
+}
+
+export type AgentUiPanel =
+  | 'files'
+  | 'search'
+  | 'git'
+  | 'snippets'
+  | 'board'
+  | 'semantic'
+  | 'st'
+  | 'formalizer'
+  | 'ai'
+  | 'ai-config'
+  | 'linter-config'
+  | 'terminal'
+  | 'problems'
+  | 'settings';
+
+export interface AgentUiCommand {
+  type: 'open_panel' | 'focus_folder' | 'open_terminal' | 'open_problems' | 'open_ai_config' | 'open_linter_config';
+  panel?: AgentUiPanel;
+  folder?: string;
+}
+
+export interface AgentUiCommandEventDetail {
+  workspaceId: string;
+  command: AgentUiCommand;
+  source: 'agora-ai';
+}
+
+export interface AgentDiagnosticEventDetail {
+  workspaceId: string;
+  severity: 'error' | 'warning' | 'info' | 'hint';
+  message: string;
+  detail?: string;
+  code?: string;
+  source: 'agora-ai';
+}
+
 export type AgentStreamEvent =
   | { type: 'connected' }
   | { type: 'status'; status: string }
@@ -147,4 +201,5 @@ export interface AgentExecutionContext {
   origin?: string;
   llmEndpoint?: string;
   llmModel?: string;
+  authToken?: string;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import type { Workspace } from '@/components/dashboard/types';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
 
@@ -9,19 +9,14 @@ const AgoraAIChat = dynamic(() => import('@/components/AgoraAIChat'), { ssr: fal
 
 interface RightPanelProps {
   open: boolean;
-  onToggle: () => void;
   currentWorkspace: Workspace | null;
 }
 
 /**
- * Panel secundario a la derecha del editor (estilo VS Code secondary
- * sidebar). Aloja Agora AI con su propio chrome — el chat ya incluye
- * sidebar de historial, modo agente/chat, quick prompts y rollback.
- *
- * Diseñado para aceptar futuras vistas (Outline, Backlinks, Debug)
- * cuando se introduzca un selector tipo SIDEBAR_VIEWS.
+ * Panel secundario a la derecha del editor. Para cerrarlo el usuario
+ * usa el toggle PanelRight de la WorkspaceTopBar (Ctrl+Shift+I).
  */
-export default function RightPanel({ open, onToggle, currentWorkspace }: RightPanelProps) {
+export default function RightPanel({ open, currentWorkspace }: RightPanelProps) {
   if (!open) return null;
 
   return (
@@ -30,17 +25,6 @@ export default function RightPanel({ open, onToggle, currentWorkspace }: RightPa
       aria-label="Panel Agora AI"
       data-shell="copilot"
     >
-      {/* Botón cerrar flotante (top right) — el chrome del chat queda visible */}
-      <button
-        type="button"
-        onClick={onToggle}
-        title="Cerrar panel (Ctrl+Shift+I)"
-        aria-label="Cerrar panel"
-        className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded text-surface-400 transition hover:bg-surface-800 hover:text-white"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-
       <div className="flex-1 min-h-0">
         <PanelErrorBoundary name="Agora AI">
           {currentWorkspace ? (

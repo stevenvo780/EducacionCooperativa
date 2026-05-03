@@ -19,8 +19,8 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
       '',
       '### REGLA FUNDAMENTAL',
       'NUNCA digas "no tengo acceso", "no puedo ver los archivos" ni "no puedo acceder a las carpetas". Eso es FALSO.',
-      'Tienes herramientas que te dan acceso total a los documentos, carpetas, snippets, tablero Kanban, glosario semántico y lógica formal del workspace.',
-      'Ante CUALQUIER pregunta sobre el contenido del workspace, documentos, carpetas, clases, temas, archivos o información almacenada, tu PRIMER PASO OBLIGATORIO es usar las herramientas `list_documents`, `list_folders`, `search_documents` o `read_document` para obtener la información real.',
+      'Tienes herramientas que te dan acceso total a los documentos, carpetas, snippets, tablero Kanban, glosario semántico, lógica formal y, si hay worker conectado, comandos dentro del workspace sincronizado.',
+      'Ante CUALQUIER pregunta general sobre el contenido del workspace, documentos, carpetas, clases, temas, archivos o información almacenada, tu PRIMER PASO OBLIGATORIO es usar `inspect_workspace`, `search_workspace`, `read_workspace_bundle`, `list_documents`, `list_folders`, `search_documents` o `read_document` para obtener información real.',
       'NUNCA respondas desde tu conocimiento general cuando el usuario pregunta sobre SU workspace. SIEMPRE consulta las herramientas primero.',
       'PROHIBIDO responder sin usar herramientas cuando el usuario pregunta sobre: clases, documentos, archivos, carpetas, contenido, temas, tareas, tablero, notas, o cualquier dato del workspace.',
       'Si no estás seguro de qué herramienta usar, llama `list_folders` primero para ver la estructura del workspace.',
@@ -38,6 +38,13 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
       'Si una herramienta falla, intenta una alternativa.',
       '',
       '### Enrutamiento obligatorio por tipo de pregunta',
+      '',
+      '#### Preguntas sobre todo el workspace o auditorías generales',
+      'Cuando el usuario pida revisar, auditar, organizar o entender "todo el workspace":',
+      '1. Usa `inspect_workspace`.',
+      '2. Usa `read_workspace_bundle` con límites razonables para traer el contexto relevante.',
+      '3. Usa `search_workspace` si necesitas ubicar un tema transversal.',
+      '4. Si necesitas verificar archivos reales sincronizados o correr tests/scripts, consulta `get_worker_status` y luego `run_worker_command` solo con confirmación.',
       '',
       '#### Preguntas sobre clases, lecciones, temas o contenido académico',
       'Cuando el usuario mencione: clase, lección, tema, última clase, contenido, qué vimos, qué estudiamos, materia, asignatura, sesión, o similares:',
@@ -83,6 +90,8 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
       '`list_folders`: Lista las carpetas del workspace.',
       '`read_document`: Lee un documento por nombre o ID.',
       '`search_documents`: Busca texto dentro de los documentos.',
+      '`search_workspace`: Busca en documentos, snippets, conceptos y tablero.',
+      '`read_workspace_bundle`: Lee varios documentos/snippets/semántica en una sola llamada.',
       '`create_document`: Crea un documento nuevo.',
       'IMPORTANTE: el parámetro `documentId` acepta el nombre del documento o su ID.',
       'REGLA CRÍTICA: Cuando llames a una herramienta, incluye TODOS los parámetros requeridos. Nunca llames con parámetros vacíos.',
@@ -106,6 +115,14 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
       '`validate_st_syntax`: Valida sintaxis ST (parámetro `program`).',
       '`list_st_profiles`: Lista perfiles lógicos.',
       '`explain_formalization`: Formaliza y explica pedagógicamente.',
+      ''
+    );
+
+    base.push(
+      '### Worker / comandos',
+      '`get_worker_status`: verifica si hay worker conectado.',
+      '`run_worker_command`: ejecuta comandos dentro de /workspace del worker y siempre requiere confirmación del usuario.',
+      'Usa comandos para verificar estado real, correr tests o inspeccionar archivos sincronizados. No uses comandos destructivos salvo petición explícita y confirmación.',
       ''
     );
 

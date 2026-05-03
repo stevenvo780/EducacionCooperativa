@@ -51,6 +51,11 @@ describe('agora ai tools', () => {
       'move_document',
       'delete_document',
       'search_documents',
+      'inspect_workspace',
+      'search_workspace',
+      'read_workspace_bundle',
+      'get_worker_status',
+      'run_worker_command',
       'create_snippet',
       'formalize_text',
       'get_board',
@@ -115,6 +120,46 @@ describe('agora ai workspace ui events', () => {
     expect(effects.openDocumentsEvent?.focusFolder).toBe('clase-1');
     expect(effects.mutatedEvent?.mutations).toHaveLength(1);
     expect(effects.mutatedEvent?.mutations[0]?.action).toBe('create_document');
+    expect(effects.toolEvents).toHaveLength(1);
+    expect(effects.shouldRefreshDocuments).toBe(true);
+  });
+
+  it('emite eventos de comando worker y marca refresh si pudo cambiar archivos', () => {
+    const effects = collectAgentWorkspaceEffects({
+      mode: 'agent',
+      provider: 'openai',
+      iterations: 1,
+      finalReply: 'Comando listo',
+      rollback: [],
+      steps: [
+        {
+          id: 'worker-result',
+          type: 'tool_result',
+          title: 'Worker',
+          startedAt: Date.now(),
+          result: {
+            ok: true,
+            name: 'run_worker_command',
+            callId: 'call-worker',
+            summary: 'ok',
+            data: {
+              command: 'npm test',
+              cwd: '.',
+              commandOk: true,
+              stdout: 'pass',
+              stderr: '',
+              exitCode: 0,
+              mayHaveChangedWorkspace: true
+            }
+          }
+        }
+      ]
+    }, 'workspace-1');
+
+    expect(effects.workerCommandEvents).toHaveLength(1);
+    expect(effects.workerCommandEvents[0]?.command).toBe('npm test');
+    expect(effects.workerCommandEvents[0]?.ok).toBe(true);
+    expect(effects.shouldRefreshDocuments).toBe(true);
   });
 
   it('no intenta abrir carpetas, pero sí enfoca la ruta creada', () => {

@@ -40,13 +40,11 @@ export const mosaicEditorStyles = `
         .mdx-editor-dark [class*="_toolbar"] {
           background: #1e293b !important;
           border-bottom: 1px solid #334155 !important;
-          padding: 2px 4px !important;
+          padding: 4px 6px !important;
           min-height: 0 !important;
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
-          scrollbar-width: thin !important;
-          scrollbar-color: rgba(148, 163, 184, 0.45) transparent !important;
-          -ms-overflow-style: auto !important;
+          overflow: visible !important;
+          flex-wrap: wrap !important;
+          row-gap: 2px !important;
           justify-content: flex-start !important;
         }
 
@@ -70,36 +68,23 @@ export const mosaicEditorStyles = `
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] {
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
+          overflow: visible !important;
           width: 100% !important;
           max-width: 100% !important;
-          scrollbar-width: thin !important;
-          scrollbar-color: rgba(148, 163, 184, 0.45) transparent !important;
-          -ms-overflow-style: auto !important;
+          flex-direction: row !important;
+          flex-wrap: wrap !important;
+          row-gap: 2px !important;
+          column-gap: 2px !important;
           justify-content: flex-start !important;
-          scrollbar-gutter: stable !important;
-        }
-        .mdx-editor-dark [class*="_toolbarRoot"]::-webkit-scrollbar {
-          height: 8px !important;
-        }
-        .mdx-editor-dark [class*="_toolbarRoot"]::-webkit-scrollbar-thumb {
-          background: rgba(148, 163, 184, 0.45) !important;
-          border-radius: 999px !important;
-        }
-        .mdx-editor-dark [class*="_toolbarRoot"] > div {
-          flex-wrap: nowrap !important;
           align-items: center !important;
-          width: max-content !important;
-          min-width: max-content !important;
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] button,
         .mdx-editor-dark [class*="_toolbarRoot"] [role="button"] {
-          padding: 2px 3px !important;
-          min-width: 24px !important;
-          min-height: 24px !important;
-          height: 24px !important;
+          padding: 4px 5px !important;
+          min-width: 30px !important;
+          min-height: 30px !important;
+          height: 30px !important;
           border: none !important;
           border-bottom: none !important;
           box-shadow: none !important;
@@ -121,8 +106,8 @@ export const mosaicEditorStyles = `
           outline: none !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"] svg {
-          width: 14px !important;
-          height: 14px !important;
+          width: 17px !important;
+          height: 17px !important;
         }
 
         .mdx-editor-dark .lucide {
@@ -132,9 +117,9 @@ export const mosaicEditorStyles = `
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_selectTrigger"] {
-          padding: 1px 5px !important;
-          height: 24px !important;
-          font-size: 11px !important;
+          padding: 2px 6px !important;
+          height: 30px !important;
+          font-size: 12px !important;
         }
         .mdx-editor-dark [class*="_toolbarRoot"] [class*="_separator"],
         .mdx-editor-dark [class*="_toolbarRoot"] [role="separator"] {

@@ -102,6 +102,13 @@ const PROVIDER_META: Record<AIProvider, { label: string; color: string; defaultM
     defaultModel: 'gemini-2.0-flash',
     needsKey: true,
     modelPlaceholder: 'gemini-2.0-flash, gemini-1.5-pro…'
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    color: 'text-cyan-400',
+    defaultModel: 'deepseek-v4-flash',
+    needsKey: true,
+    modelPlaceholder: 'deepseek-v4-flash, deepseek-v4-pro, deepseek-chat…'
   }
 };
 
@@ -201,6 +208,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [config, setConfig] = useState<AIProviderConfig>(loadConfig);
   const [mode, setMode] = useState<AgentMode>(loadMode);
   const [showConfig, setShowConfig] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setShowConfig(true);
+    window.addEventListener('agora:open-ai-config', handler);
+    return () => window.removeEventListener('agora:open-ai-config', handler);
+  }, []);
   // Historial cerrado por defecto: el RightPanel es solo chat. El usuario
   // abre el historial como overlay clickeando el botón "Historial".
   const [showHistory, setShowHistory] = useState(false);
@@ -350,9 +363,18 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   const emitAgentWorkspaceEvents = useCallback((agentRun?: AgentRun) => {
     if (typeof window === 'undefined' || !agentRun) return;
-    const { openDocumentsEvent, mutatedEvent } = collectAgentWorkspaceEffects(agentRun, resolvedWorkspaceId);
+    const { openDocumentsEvent, mutatedEvent, toolEvents, workerCommandEvents, shouldRefreshDocuments } = collectAgentWorkspaceEffects(agentRun, resolvedWorkspaceId);
+    toolEvents.forEach((event) => {
+      window.dispatchEvent(new CustomEvent('agora:agent-tool-result', { detail: event }));
+    });
+    workerCommandEvents.forEach((event) => {
+      window.dispatchEvent(new CustomEvent('agora:worker-command-result', { detail: event }));
+    });
     if (mutatedEvent) {
       window.dispatchEvent(new CustomEvent('agora:documents-mutated', { detail: mutatedEvent }));
+    }
+    if (shouldRefreshDocuments) {
+      window.dispatchEvent(new Event('agora:docs-changed'));
     }
     if (openDocumentsEvent) {
       window.dispatchEvent(new CustomEvent('agora:open-documents', { detail: openDocumentsEvent }));
@@ -1072,7 +1094,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
             {(Object.keys(PROVIDER_META) as AIProvider[]).map(p => (
               <button
                 key={p}
@@ -1095,7 +1117,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               <p className="text-violet-200 font-medium">Modo {mode === 'agent' ? 'agente' : 'chat'}</p>
               <p className="text-violet-100/80 text-[11px] leading-relaxed">
                 {mode === 'agent'
-                  ? 'El modelo puede planificar, usar tools, modificar documentos y deshacer cambios.'
+                  ? 'El modelo puede planificar, usar tools, modificar documentos, consultar workers, ejecutar comandos con confirmación y deshacer cambios.'
                   : 'El modelo responde y asesora, pero no modifica el workspace.'}
               </p>
             </div>
@@ -1158,7 +1180,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               <p className="text-sm text-surface-300">{mode === 'agent' ? 'Dale una tarea al agente' : `Pregúntale a ${meta.label}`}</p>
               <p className="text-xs mt-1 max-w-md text-surface-500">
                 {mode === 'agent'
-                  ? 'El agente puede trabajar con documentos, snippets, glosario semántico, tablero Kanban, formalización y ejecución ST, además de resumir y comparar contenido.'
+                  ? 'El agente puede trabajar con documentos, snippets, glosario semántico, tablero Kanban, formalización, ST y worker/terminal cuando esté conectado.'
                   : 'En modo chat responderá con contexto del workspace, sin ejecutar acciones de escritura.'}
               </p>
               {!meta.needsKey || config.apiKey ? null : (
