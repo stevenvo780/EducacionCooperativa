@@ -7,7 +7,7 @@ import FileDocumentViewer from '@/components/file-viewers/FileDocumentViewer';
 import { authFetch } from '@/services/apiClient';
 import { getErrorMessage } from '@/lib/error-utils';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
-import { isMarkdownDocument, isSpreadsheetDocument } from '@/lib/document-format';
+import { isMarkdownDocument, isPlainTextDocument, isSpreadsheetDocument } from '@/lib/document-format';
 
 type ViewMode = 'edit' | 'preview' | 'raw';
 
@@ -48,6 +48,7 @@ const canResolveWithoutFetch = (meta: ResolvedDocumentMeta | null) => {
   if (meta.type !== DocumentType.File) return true;
   if (isMarkdownDocument(meta.name, meta.mimeType)) return true;
   if (isSpreadsheetDocument(meta.name, meta.mimeType)) return true;
+  if (isPlainTextDocument(meta.name, meta.mimeType)) return true;
   return Boolean(meta.url);
 };
 
@@ -128,8 +129,12 @@ export default function DocumentSurface({
   const docMeta = useMemo(() => resolvedMeta ?? normalizedInitialDocument ?? null, [normalizedInitialDocument, resolvedMeta]);
   const docName = docMeta?.name || 'Documento';
   const mimeType = docMeta?.mimeType || '';
-  const isBinaryFile = docMeta?.type === DocumentType.File && !isMarkdownDocument(docName, mimeType);
-  const needsRemoteUrl = isBinaryFile && !isSpreadsheetDocument(docName, mimeType) && !docMeta?.url;
+  const isSpreadsheet = isSpreadsheetDocument(docName, mimeType);
+  const isEditablePlainText = isPlainTextDocument(docName, mimeType) && !isSpreadsheet;
+  const isBinaryFile = docMeta?.type === DocumentType.File
+    && !isMarkdownDocument(docName, mimeType)
+    && !isEditablePlainText;
+  const needsRemoteUrl = isBinaryFile && !isSpreadsheet && !docMeta?.url;
 
   if (loading && (!docMeta || needsRemoteUrl)) {
     return (
@@ -150,7 +155,7 @@ export default function DocumentSurface({
     );
   }
 
-  if (isBinaryFile && isSpreadsheetDocument(docName, mimeType)) {
+  if (isBinaryFile && isSpreadsheet) {
     return (
       <SpreadsheetViewer
         docId={roomId}

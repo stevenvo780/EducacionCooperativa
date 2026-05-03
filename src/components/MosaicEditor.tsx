@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import Image from 'next/image';
 import {
   AdmonitionDirectiveDescriptor,
   headingsPlugin,
@@ -31,7 +30,7 @@ import { useTerminal } from '@/context/TerminalContext';
 import type { ViewMode, EditorProps, MarkdownDocMeta } from '@/components/mosaic-editor/types';
 import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS, SAVE_DEBOUNCE_MS, ST_DEBOUNCE_MS, SEMANTIC_NOTICE_TIMEOUT_MS } from '@/components/mosaic-editor/constants';
 import {
-  isMarkdownName, isMarkdownMime, isImageMime, isVideoMime, isAudioMime, isPdfMime,
+  isMarkdownName, isMarkdownMime,
   stripQueryAndHash, isExternalMarkdownHref, isBrowserNavigationHref,
   normalizeRelativeMarkdownPath, ensureMarkdownCandidateNames,
   buildWorkspaceAwarePathCandidates, extractWorkspaceSegments, generateId
@@ -55,6 +54,7 @@ import {
 import { useMosaicSemanticActions } from '@/components/mosaic-editor/useMosaicSemanticActions';
 import { SemanticPanelColumn } from '@/components/mosaic-editor/SemanticPanelColumn';
 import { MosaicToolbarContents, type ToolbarGroupKey } from '@/components/mosaic-editor/MosaicToolbarContents';
+import { FilePreviewPane } from '@/components/mosaic-editor/FilePreviewPane';
 import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 
@@ -102,7 +102,6 @@ import {
   fetchSemanticWorkspaceStateApi,
   saveSemanticWorkspaceStateApi
 } from '@/services/semanticStateApi';
-import PdfViewer from '@/components/PdfViewer';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
 
 export default function MosaicEditor({
@@ -1094,8 +1093,8 @@ export default function MosaicEditor({
     const lines = content.split('\n');
     const pendings = lines
       .map(line => line.trim())
-      .filter(line => line.startsWith('- [ ]'))
-      .map(line => line.substring(5).trim())
+      .filter(line => /^[-*]\s+\[\s\]/.test(line))
+      .map(line => line.replace(/^[-*]\s+\[\s\]\s*/, '').trim())
       .filter(Boolean);
 
     if (pendings.length === 0) return;
@@ -1507,70 +1506,14 @@ export default function MosaicEditor({
   }, [handleContentChange]);
 
   if (docType === 'file') {
-    const safeName = fileName || 'Archivo';
-    const lowerName = safeName.toLowerCase();
-    const isImage = isImageMime(fileMime) || /\.(png|jpe?g|gif|webp|svg)$/.test(lowerName);
-    const isPdf = isPdfMime(fileMime) || lowerName.endsWith('.pdf');
-    const isVideo = isVideoMime(fileMime);
-    const isAudio = isAudioMime(fileMime);
-
     return (
-      <div className="flex flex-col h-full bg-slate-950 text-white">
-        <div className="h-12 shrink-0 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-4">
-          <div className="flex items-center gap-3 min-w-0">
-            {onClose && (
-              <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider">
-                <ChevronLeft className="w-4 h-4" /> Volver
-              </button>
-            )}
-            <div className="h-4 w-px bg-slate-700" />
-            <span className="text-xs font-medium text-slate-400 truncate">{safeName}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {fileUrl && (
-              <>
-                <a href={fileUrl} target="_blank" rel="noreferrer" className="text-xs bg-slate-800 border border-slate-700 px-2 py-1 rounded hover:bg-slate-700">
-                  Abrir
-                </a>
-                <a href={fileUrl} download className="text-xs bg-blue-600 px-2 py-1 rounded hover:bg-blue-500">
-                  Descargar
-                </a>
-              </>
-            )}
-          </div>
-        </div>
-        <div className={clsx(
-          'flex-1 bg-slate-900',
-          isPdf ? 'min-h-0' : 'flex items-center justify-center p-4'
-        )}>
-          {!fileUrl && <div className="text-sm text-slate-400">No se pudo cargar el archivo.</div>}
-          {fileUrl && isImage && (
-            <div className="relative h-full w-full">
-              <Image
-                src={fileUrl}
-                alt={safeName}
-                fill
-                unoptimized
-                sizes="100vw"
-                className="object-contain rounded shadow"
-              />
-            </div>
-          )}
-          {fileUrl && isVideo && <video src={fileUrl} controls className="max-h-full max-w-full rounded shadow" />}
-          {fileUrl && isAudio && <audio src={fileUrl} controls className="w-full max-w-xl" />}
-          {fileUrl && isPdf && (
-            <PdfViewer
-              fileUrl={fileUrl}
-              fileName={safeName}
-              docId={roomId ?? undefined}
-              storageKey={roomId ? `${roomId}:${fileUrl}` : fileUrl}
-            />
-          )}
-          {fileUrl && !isPdf && !isImage && !isVideo && !isAudio && (
-            <iframe src={fileUrl} className="w-full h-full min-h-[70vh] rounded border border-slate-700 bg-white" title={safeName} />
-          )}
-        </div>
-      </div>
+      <FilePreviewPane
+        fileName={fileName}
+        fileMime={fileMime}
+        fileUrl={fileUrl}
+        docId={roomId}
+        onClose={onClose}
+      />
     );
   }
 

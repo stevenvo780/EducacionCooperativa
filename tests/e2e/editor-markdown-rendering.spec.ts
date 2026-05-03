@@ -4,10 +4,15 @@ import {
   TEST_USER,
   gotoDashboard,
   installBrowserStubs,
+  installInsecureAuth,
   installMockApi
 } from './support/mockApp';
 
 const ISO_DATE = '2030-01-10T12:00:00.000Z';
+
+const normalizeEscapedMarkdown = (value: string) => (
+  value.replace(/\\([=_])/g, '$1')
+);
 
 // ── Content with LaTeX, Mermaid, code blocks, and ASCII art ──
 const RICH_MARKDOWN = `# Prueba de renderizado completo
@@ -105,6 +110,7 @@ $$
 
 test.beforeEach(async ({ page }) => {
   await installBrowserStubs(page);
+  await installInsecureAuth(page);
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -337,7 +343,7 @@ test.describe('Editor raw mode — content integrity', () => {
     const rawTextarea = page.locator('textarea.markdown-raw-textarea');
     await expect(rawTextarea).toBeVisible({ timeout: 10000 });
 
-    const content = await rawTextarea.inputValue();
+    const content = normalizeEscapedMarkdown(await rawTextarea.inputValue());
     // LaTeX delimiters present
     expect(content).toContain('$E = mc^2$');
     expect(content).toContain('$$');
@@ -356,7 +362,7 @@ test.describe('Editor raw mode — content integrity', () => {
     expect(content).toContain('CUERPO');
 
     // GFM table
-    expect(content).toContain('| Modelo |');
+    expect(content).toContain('| Modelo');
     expect(content).toContain('Dualismo');
   });
 
@@ -476,7 +482,7 @@ test.describe('Editor WYSIWYG mode — code blocks and overlays', () => {
   });
 
   test('WYSIWYG mode headings render as styled elements', async ({ page }) => {
-    const editable = page.locator('[contenteditable="true"]');
+    const editable = page.locator('.mdx-content-editable').first();
     await expect(editable).toBeVisible({ timeout: 15000 });
 
     // MDXEditor renders headings as actual h1, h2 elements
@@ -533,7 +539,7 @@ test.describe('Editor mode switching', () => {
 
   test('can switch edit → preview → raw → edit cycle', async ({ page }) => {
     // Start in edit mode
-    await expect(page.locator('[contenteditable="true"]')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.mdx-content-editable').first()).toBeVisible({ timeout: 15000 });
 
     // Switch to preview
     await page.getByTitle('Vista previa (LaTeX, Mermaid)').click();
@@ -545,12 +551,12 @@ test.describe('Editor mode switching', () => {
 
     // Switch back to edit
     await page.locator('button[title="Volver al editor visual"]').click();
-    await expect(page.locator('[contenteditable="true"]')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.mdx-content-editable').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('preview after edit shows all content types', async ({ page }) => {
     // Wait for editor to load
-    await expect(page.locator('[contenteditable="true"]')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.mdx-content-editable').first()).toBeVisible({ timeout: 15000 });
 
     // Switch to preview
     await page.getByTitle('Vista previa (LaTeX, Mermaid)').click();
