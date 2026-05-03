@@ -6,6 +6,9 @@ import { GitBranch, Sparkles, Search } from 'lucide-react';
 import type { ActivityView } from './ActivityBar';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { Workspace } from '@/components/dashboard/types';
+import type { TerminalSession } from '@/context/TerminalContext';
+import ToolsGallery from './ToolsGallery';
+import TerminalsList from './TerminalsList';
 
 const GitWorkbench = dynamic(() => import('@/components/dashboard/GitWorkbench'), { ssr: false });
 
@@ -15,17 +18,34 @@ interface LeftPanelProps {
   currentWorkspace: Workspace | null;
   userUid?: string;
   onOpenQuickSearch: () => void;
+
+  // tools
+  onOpenBoard: () => void;
+  onOpenStRunner: () => void;
+  onOpenSemanticBrowser: () => void;
+  onOpenFormalizer: () => void;
+  onOpenSnippetsGallery: () => void;
   onOpenAgoraAI: () => void;
+  isBoardOpen?: boolean;
+  isStRunnerOpen?: boolean;
+  isSemanticBrowserOpen?: boolean;
+  isFormalizerOpen?: boolean;
+  isAgoraAIOpen?: boolean;
+
+  // terminals
+  terminalSessions: TerminalSession[];
+  activeSessionId: string | null;
+  isCreatingSession: boolean;
+  workerStatus: 'online' | 'offline' | 'unknown';
+  onCreateTerminal: () => void;
+  onSelectTerminal: (sessionId: string) => void;
+  onDestroyTerminal: (sessionId: string) => void;
+  onRenameTerminal: (sessionId: string) => void;
 }
 
-export default function LeftPanel({
-  view,
-  filesContent,
-  currentWorkspace,
-  userUid,
-  onOpenQuickSearch,
-  onOpenAgoraAI
-}: LeftPanelProps) {
+export default function LeftPanel(props: LeftPanelProps) {
+  const { view, filesContent, currentWorkspace, userUid, onOpenQuickSearch } = props;
+
   if (view === 'files') {
     return <>{filesContent}</>;
   }
@@ -74,6 +94,39 @@ export default function LeftPanel({
     );
   }
 
+  if (view === 'tools') {
+    return (
+      <ToolsGallery
+        onOpenBoard={props.onOpenBoard}
+        onOpenStRunner={props.onOpenStRunner}
+        onOpenSemanticBrowser={props.onOpenSemanticBrowser}
+        onOpenFormalizer={props.onOpenFormalizer}
+        onOpenSnippetsGallery={props.onOpenSnippetsGallery}
+        onOpenAgoraAI={props.onOpenAgoraAI}
+        isBoardOpen={props.isBoardOpen}
+        isStRunnerOpen={props.isStRunnerOpen}
+        isSemanticBrowserOpen={props.isSemanticBrowserOpen}
+        isFormalizerOpen={props.isFormalizerOpen}
+        isAgoraAIOpen={props.isAgoraAIOpen}
+      />
+    );
+  }
+
+  if (view === 'terminals') {
+    return (
+      <TerminalsList
+        sessions={props.terminalSessions}
+        activeSessionId={props.activeSessionId}
+        isCreatingSession={props.isCreatingSession}
+        workerStatus={props.workerStatus}
+        onCreate={props.onCreateTerminal}
+        onSelect={props.onSelectTerminal}
+        onDestroy={props.onDestroyTerminal}
+        onRename={props.onRenameTerminal}
+      />
+    );
+  }
+
   if (view === 'ai') {
     return (
       <PanelShell title="Agora AI">
@@ -83,7 +136,7 @@ export default function LeftPanel({
           </p>
           <button
             type="button"
-            onClick={onOpenAgoraAI}
+            onClick={props.onOpenAgoraAI}
             className="flex w-full items-center gap-2 rounded border border-surface-700 bg-surface-900 px-3 py-2 text-left text-surface-200 transition hover:border-mandy-500/50 hover:bg-surface-800"
           >
             <Sparkles className="h-3.5 w-3.5" />

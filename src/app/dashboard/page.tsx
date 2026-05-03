@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, PanelLeftOpen, Terminal as TerminalIcon } from 'lucide-react';
+import { FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, PanelLeftOpen, Terminal as TerminalIcon } from 'lucide-react';
 import { LazyMotion, domAnimation, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -61,12 +61,12 @@ import StatusToasts from '@/components/dashboard/StatusToasts';
 import DialogModal from '@/components/dashboard/DialogModal';
 import NewFileModal, { type FileKind } from '@/components/dashboard/NewFileModal';
 import DragOverlay from '@/components/dashboard/DragOverlay';
-import HeaderBar from '@/components/dashboard/HeaderBar';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
 import LeftPanel from '@/components/dashboard/LeftPanel';
 import BottomDock from '@/components/dashboard/BottomDock';
 import CommandPalette, { type Command as PaletteCommand } from '@/components/dashboard/CommandPalette';
+import UserMenu from '@/components/dashboard/UserMenu';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { useIsCompact } from '@/hooks/useMediaQuery';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
@@ -105,7 +105,7 @@ function DashboardContent() {
         createSession,
         destroySession,
         renameSession,
-        status: connectionStatus,
+        status: _connectionStatus,
         initialize,
         isCreatingSession,
         getSessionsForWorkspace,
@@ -188,7 +188,7 @@ function DashboardContent() {
     const workspaces = useAppSelector(state => state.dashboard.workspaces);
     const invites = useAppSelector(state => state.dashboard.invites);
     const currentWorkspace = useAppSelector(state => state.dashboard.currentWorkspace);
-    const showWorkspaceMenu = useAppSelector(state => state.dashboard.showWorkspaceMenu);
+    const _showWorkspaceMenu = useAppSelector(state => state.dashboard.showWorkspaceMenu);
     const showNewWorkspaceModal = useAppSelector(state => state.dashboard.showNewWorkspaceModal);
     const showMembersModal = useAppSelector(state => state.dashboard.showMembersModal);
     const showPasswordModal = useAppSelector(state => state.dashboard.showPasswordModal);
@@ -376,7 +376,7 @@ function DashboardContent() {
         }
         setIsSidebarCollapsed(prev => !prev);
     }, [showMobileSidebar, setShowMobileSidebar]);
-    const handleToggleHeaderCollapse = useCallback(() => {
+    const _handleToggleHeaderCollapse = useCallback(() => {
         setShowWorkspaceMenu(false);
         setIsHeaderCollapsed(prev => !prev);
     }, [setShowWorkspaceMenu]);
@@ -406,6 +406,8 @@ function DashboardContent() {
     const [activityView, setActivityView] = useState<ActivityView>('files');
     const [bottomDockOpen, setBottomDockOpen] = useState(false);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
+    const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
     // En mobile/tablet ignoramos el árbol Mosaic con splits — los tiles
     // side-by-side dejaban el editor en ~140px e ilegible. Mostramos solo el
@@ -462,7 +464,7 @@ function DashboardContent() {
     const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
-    const folderInputProps = { webkitdirectory: 'true', directory: 'true' } as InputHTMLAttributes<HTMLInputElement>;
+    const _folderInputProps = { webkitdirectory: 'true', directory: 'true' } as InputHTMLAttributes<HTMLInputElement>;
 
     useEffect(() => {
         docsRef.current = docs;
@@ -829,7 +831,7 @@ function DashboardContent() {
         openSemanticBrowser,
         openFormalizer,
         openAgoraAI,
-        openFilesTab,
+        openFilesTab: _openFilesTab,
         openSnippetsGallery,
         closeTabById,
         openDocument,
@@ -980,8 +982,8 @@ function DashboardContent() {
         isDragActive,
         dismissDragOverlay,
         setUploadTargetFolder,
-        handleFileUpload,
-        handleFolderUpload,
+        handleFileUpload: _handleFileUpload,
+        handleFolderUpload: _handleFolderUpload,
         handleDragEnter,
         handleDragLeave,
         handleDragOver,
@@ -1026,7 +1028,7 @@ function DashboardContent() {
         folderInputRef.current?.click();
     }, [activeFolder, resolveActiveFolder, setActiveFolderSafe, setUploadTargetFolder]);
 
-    const handleAddStInstructions = useCallback(async () => {
+    const _handleAddStInstructions = useCallback(async () => {
         setActiveFolderSafe(DEFAULT_FOLDER_NAME);
         await createStGuide();
     }, [createStGuide, setActiveFolderSafe]);
@@ -1621,6 +1623,41 @@ function DashboardContent() {
             run: () => setShowWorkspaceManagerModal(true)
         },
         {
+            id: 'tools.board',
+            category: 'Herramientas',
+            label: 'Tablero (Kanban)',
+            keywords: ['kanban', 'tablero', 'tareas'],
+            run: () => openBoard()
+        },
+        {
+            id: 'tools.st',
+            category: 'Herramientas',
+            label: 'ST Logic',
+            keywords: ['logic', 'pruebas', 'formal'],
+            run: () => openStRunner()
+        },
+        {
+            id: 'tools.semantic',
+            category: 'Herramientas',
+            label: 'Mesa semántica',
+            keywords: ['semántica', 'concepts'],
+            run: () => openSemanticBrowser()
+        },
+        {
+            id: 'tools.formalizer',
+            category: 'Herramientas',
+            label: 'Formalizador',
+            keywords: ['nl2st', 'formalizar'],
+            run: () => openFormalizer()
+        },
+        {
+            id: 'tools.snippets',
+            category: 'Herramientas',
+            label: 'Galería de snippets',
+            keywords: ['snippets', 'galería'],
+            run: () => openSnippetsGallery()
+        },
+        {
             id: 'ai.open',
             category: 'AI',
             label: 'Abrir Agora AI en panel',
@@ -1641,14 +1678,59 @@ function DashboardContent() {
             label: 'Abrir terminal como tab',
             keywords: ['terminal', 'shell', 'tab', 'pestaña'],
             run: () => { void openTerminal(); }
+        },
+        {
+            id: 'workspace.members',
+            category: 'Workspace',
+            label: 'Miembros del workspace',
+            keywords: ['team', 'miembros'],
+            run: () => setShowMembersModal(true)
+        },
+        {
+            id: 'account.password',
+            category: 'Cuenta',
+            label: 'Cambiar contraseña',
+            keywords: ['password', 'contraseña'],
+            run: () => {
+                setPasswordForm({ current: '', new: '', confirm: '' });
+                setPasswordError('');
+                setPasswordSuccess(false);
+                setShowPasswordModal(true);
+            }
+        },
+        {
+            id: 'account.pricing',
+            category: 'Cuenta',
+            label: 'Plan y suscripción',
+            keywords: ['plan', 'pricing', 'pagar'],
+            run: () => setShowPricingModal(true)
+        },
+        {
+            id: 'account.logout',
+            category: 'Cuenta',
+            label: 'Cerrar sesión',
+            keywords: ['logout', 'salir'],
+            run: () => logout()
         }
     ], [
         handleToggleSidebarCollapse,
         handleToggleZenMode,
         handleRequestNewTerminal,
+        logout,
         openAgoraAI,
+        openBoard,
+        openFormalizer,
         openNewFileModalAt,
+        openSemanticBrowser,
+        openSnippetsGallery,
+        openStRunner,
         openTerminal,
+        setPasswordError,
+        setPasswordForm,
+        setPasswordSuccess,
+        setShowMembersModal,
+        setShowPasswordModal,
+        setShowPricingModal,
         setShowQuickSearch
     ]);
 
@@ -1706,6 +1788,24 @@ function DashboardContent() {
                     modalPop={modalPop}
                 />
 
+                <UserMenu
+                    open={userMenuOpen}
+                    onClose={() => setUserMenuOpen(false)}
+                    anchorRef={userMenuButtonRef}
+                    email={userEmail || user?.email || ''}
+                    displayName={user?.displayName}
+                    planName={PLANS[currentPlan]?.name}
+                    onChangePassword={() => {
+                        setPasswordForm({ current: '', new: '', confirm: '' });
+                        setPasswordError('');
+                        setPasswordSuccess(false);
+                        setShowPasswordModal(true);
+                    }}
+                    onShowMembers={() => setShowMembersModal(true)}
+                    onOpenPricing={() => setShowPricingModal(true)}
+                    onLogout={() => logout()}
+                />
+
                 <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} activeFolder={activeFolder} onDismiss={dismissDragOverlay} />
                 <StatusToasts uploadStatus={uploadStatus} deleteStatus={deleteStatus} />
                 <DialogModal
@@ -1732,88 +1832,7 @@ function DashboardContent() {
                     modalPop={modalPop}
                 />
 
-                {!isHeaderCollapsed && (
-                    <HeaderBar
-                        onToggleMobileSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
-                        onClearSelectedDoc={() => setSelectedDocId(null)}
-                        isZenMode={isZenMode}
-                        onToggleHeaderCollapse={handleToggleHeaderCollapse}
-                        onToggleZenMode={handleToggleZenMode}
-                        showWorkspaceMenu={showWorkspaceMenu}
-                        setShowWorkspaceMenu={setShowWorkspaceMenu}
-                        currentWorkspace={currentWorkspace}
-                        invites={invites}
-                        workspaces={workspaces}
-                        user={user}
-                        isOnline={isOnline}
-                        deletingWorkspaceId={deletingWorkspaceId}
-                        personalWorkspaceId={PERSONAL_WORKSPACE_ID}
-                        isAdmin={isAdmin}
-                        isBoardOpen={isBoardOpen}
-                        onOpenBoard={openBoard}
-                        isStRunnerOpen={isStRunnerOpen}
-                        onOpenStRunner={openStRunner}
-                        isSemanticBrowserOpen={isSemanticBrowserOpen}
-                        onOpenSemanticBrowser={openSemanticBrowser}
-                        isFormalizerOpen={isFormalizerOpen}
-                        onOpenFormalizer={openFormalizer}
-                        formalizerTileId={formalizerTabId}
-                        isAgoraAIOpen={isAgoraAIOpen}
-                        onOpenAgoraAI={openAgoraAI}
-                        onOpenSnippetsGallery={openSnippetsGallery}
-                        onOpenQuickSearch={openQuickSearch}
-                        onAcceptInvite={acceptInvite}
-                        onSelectWorkspace={selectWorkspace}
-                        onRenameWorkspace={renameWorkspace}
-                        onDuplicateWorkspace={duplicateWorkspace}
-                        onMergeWorkspace={mergeWorkspaceIntoCurrent}
-                        onDeleteWorkspace={deleteWorkspace}
-                        onNewWorkspace={() => setShowNewWorkspaceModal(true)}
-                        onOpenWorkspaceManager={() => setShowWorkspaceManagerModal(true)}
-                        onShowMembers={() => setShowMembersModal(true)}
-                        onOpenPassword={() => {
-                            setPasswordForm({ current: '', new: '', confirm: '' });
-                            setPasswordError('');
-                            setPasswordSuccess(false);
-                            setShowPasswordModal(true);
-                        }}
-                        onLogout={() => logout()}
-                        connectionStatus={connectionStatus}
-                        isCreatingSession={isCreatingSession}
-                        activeSessionId={activeSessionId}
-                        getWorkerStatusForWorkspace={getWorkerStatusForWorkspace}
-                        getSessionsForWorkspace={getSessionsForWorkspace}
-                        createSession={createSession}
-                        selectSession={selectSession}
-                        destroySession={destroySession}
-                        onRenameSession={promptRenameTerminalSession}
-                        onAddStInstructions={() => { void handleAddStInstructions(); }}
-                        openTerminal={openTerminal}
-                        openTabs={openTabs}
-                        closeTabById={closeTabById}
-                        fileInputRef={fileInputRef}
-                        folderInputRef={folderInputRef}
-                        handleFileUpload={handleFileUpload}
-                        handleFolderUpload={handleFolderUpload}
-                        folderInputProps={folderInputProps}
-                        openFilesTab={openFilesTab}
-                        onOpenPricing={() => setShowPricingModal(true)}
-                        currentPlanName={PLANS[currentPlan]?.name}
-                    />
-                )}
-
-                {isHeaderCollapsed && !isZenMode && (
-                    <div className="absolute top-2 left-2 z-50">
-                        <button
-                            onClick={handleToggleHeaderCollapse}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-surface-800/90 border border-surface-600/60 rounded-full text-xs text-surface-200 hover:text-white hover:border-mandy-500/40 hover:bg-surface-700/80 transition shadow-xl shadow-black/30 backdrop-blur"
-                            title="Mostrar barra superior"
-                        >
-                            <ChevronDown className="w-4 h-4" />
-                            <span className="hidden sm:inline">Mostrar barra superior</span>
-                        </button>
-                    </div>
-                )}
+                {/* HeaderBar eliminada: workspace, tools, terminales y user menu viven ahora en ActivityBar/LeftPanel. */}
 
                 {isSidebarCollapsed && !isZenMode && (
                     <div className="absolute bottom-3 left-2 z-50">
@@ -1850,9 +1869,34 @@ function DashboardContent() {
                             setShowQuickSearch(true);
                             return;
                           }
+                          if (v === 'terminals') {
+                            setActivityView(v);
+                            setBottomDockOpen(true);
+                            if (isSidebarCollapsed) setIsSidebarCollapsed(false);
+                            return;
+                          }
                           setActivityView(v);
                           if (isSidebarCollapsed) setIsSidebarCollapsed(false);
                         }}
+                        workspaceLabel={currentWorkspace?.name ?? 'Sin workspace'}
+                        workspaceInitial={(currentWorkspace?.name ?? 'A').slice(0, 1)}
+                        hasInvites={invites.length > 0}
+                        onOpenWorkspaceManager={() => setShowWorkspaceManagerModal(true)}
+                        isZenMode={isZenMode}
+                        onToggleZenMode={handleToggleZenMode}
+                        workerStatus={(() => {
+                          if (!currentWorkspace || !user) return 'unknown';
+                          const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
+                            ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
+                            : currentWorkspace.id;
+                          const s = getWorkerStatusForWorkspace(tok);
+                          return s === 'online' ? 'online' : s === 'offline' ? 'offline' : 'unknown';
+                        })()}
+                        isOnline={isOnline}
+                        userInitial={(userEmail || user?.email || 'U').slice(0, 1)}
+                        userMenuOpen={userMenuOpen}
+                        onToggleUserMenu={() => setUserMenuOpen((v) => !v)}
+                        userMenuButtonRef={userMenuButtonRef}
                       />
                     )}
 
@@ -1914,7 +1958,43 @@ function DashboardContent() {
                             currentWorkspace={currentWorkspace}
                             userUid={user?.uid}
                             onOpenQuickSearch={() => setShowQuickSearch(true)}
+                            onOpenBoard={openBoard}
+                            onOpenStRunner={openStRunner}
+                            onOpenSemanticBrowser={openSemanticBrowser}
+                            onOpenFormalizer={openFormalizer}
+                            onOpenSnippetsGallery={openSnippetsGallery}
                             onOpenAgoraAI={() => { void openAgoraAI(); }}
+                            isBoardOpen={isBoardOpen}
+                            isStRunnerOpen={isStRunnerOpen}
+                            isSemanticBrowserOpen={isSemanticBrowserOpen}
+                            isFormalizerOpen={isFormalizerOpen}
+                            isAgoraAIOpen={isAgoraAIOpen}
+                            terminalSessions={terminalSessions}
+                            activeSessionId={activeSessionId}
+                            isCreatingSession={isCreatingSession}
+                            workerStatus={(() => {
+                              if (!currentWorkspace || !user) return 'unknown';
+                              const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
+                                ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
+                                : currentWorkspace.id;
+                              const s = getWorkerStatusForWorkspace(tok);
+                              return s === 'online' ? 'online' : s === 'offline' ? 'offline' : 'unknown';
+                            })()}
+                            onCreateTerminal={() => {
+                              if (!currentWorkspace || !user) return;
+                              const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
+                                ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
+                                : currentWorkspace.id;
+                              const ws = currentWorkspace;
+                              createSession(tok, ws.type, ws.name);
+                              setBottomDockOpen(true);
+                            }}
+                            onSelectTerminal={(id) => { selectSession(id); setBottomDockOpen(true); }}
+                            onDestroyTerminal={(id) => destroySession(id)}
+                            onRenameTerminal={(id) => {
+                              const session = terminalSessions.find(s => s.id === id);
+                              if (session) void promptRenameTerminalSession(session);
+                            }}
                             filesContent={null}
                           />
                         </aside>
