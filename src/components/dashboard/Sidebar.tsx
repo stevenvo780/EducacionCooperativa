@@ -53,7 +53,6 @@ interface SidebarProps {
   sidebarWidth: number;
   isCollapsed: boolean;
   showMobileSidebar: boolean;
-  onCloseMobileSidebar: () => void;
   onToggleSidebarCollapse: () => void;
   currentWorkspace: Workspace | null;
   activeFolder: string;
@@ -100,7 +99,6 @@ const Sidebar = ({
   sidebarWidth,
   isCollapsed,
   showMobileSidebar,
-  onCloseMobileSidebar,
   onToggleSidebarCollapse,
   currentWorkspace,
   activeFolder,
@@ -535,15 +533,10 @@ const Sidebar = ({
 
   return (
     <>
-      {showMobileSidebar && (
-        <div className="absolute inset-0 z-30 bg-black/40 md:hidden" onClick={onCloseMobileSidebar} />
-      )}
-
       <div
         style={{ width: effectiveWidth }}
         className={`
-          bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 transition-transform duration-150 absolute md:relative z-40 h-full
-          ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 h-full
           ${isCollapsedView ? 'overflow-hidden border-r-0 pointer-events-none' : ''}
         `}
         aria-hidden={isCollapsedView}
