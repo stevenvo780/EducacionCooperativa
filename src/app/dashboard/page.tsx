@@ -68,6 +68,7 @@ import CommandPalette, { type Command as PaletteCommand } from '@/components/das
 import UserMenu from '@/components/dashboard/UserMenu';
 import MobileTopBar from '@/components/dashboard/MobileTopBar';
 import RightPanel from '@/components/dashboard/RightPanel';
+import StatusBar from '@/components/dashboard/StatusBar';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { useIsCompact } from '@/hooks/useMediaQuery';
 import WelcomeView from '@/components/dashboard/WelcomeView';
@@ -1869,8 +1870,6 @@ function DashboardContent() {
                         onOpenWorkspaceManager={() => setShowWorkspaceManagerModal(true)}
                         isZenMode={isZenMode}
                         onToggleZenMode={handleToggleZenMode}
-                        workerStatus={workerStatus}
-                        isOnline={isOnline}
                         userInitial={(userEmail || user?.email || 'U').slice(0, 1)}
                         userMenuOpen={userMenuOpen}
                         onToggleUserMenu={() => setUserMenuOpen((v) => !v)}
@@ -2056,6 +2055,7 @@ function DashboardContent() {
                                 onCreateFolder={() => { void createFolderAtPath(); }}
                                 onUploadFile={() => openUploadFilePickerAt(activeFolder)}
                                 onOpenSearch={() => { setActivityView('search'); if (isCompact) setShowMobileSidebar(true); }}
+                                onOpenFiles={() => { setActivityView('files'); if (isCompact) setShowMobileSidebar(true); }}
                                 onOpenTerminal={() => setBottomDockOpen(true)}
                                 onOpenGit={() => { setActivityView('git'); if (isCompact) setShowMobileSidebar(true); }}
                                 onOpenBoard={openBoard}
@@ -2065,7 +2065,7 @@ function DashboardContent() {
                         )}
                               </div>
                             </Panel>
-                            {rightPanelOpen && (
+                            {rightPanelOpen && !isCompact && (
                               <>
                                 <PanelResizeHandle className="w-1 bg-surface-800 hover:bg-mandy-500/40 transition-colors" />
                                 <Panel id="right-panel" defaultSize="30%" minSize="20%" maxSize="60%" collapsible>
@@ -2078,12 +2078,14 @@ function DashboardContent() {
                               </>
                             )}
                           </PanelGroup>
-                          {!rightPanelOpen && !isCompact && currentWorkspace && (
-                            <RightPanel
-                              open={false}
-                              onToggle={() => setRightPanelOpen(true)}
-                              currentWorkspace={currentWorkspace}
-                            />
+                          {rightPanelOpen && isCompact && (
+                            <div className="fixed inset-0 z-50 flex bg-surface-900">
+                              <RightPanel
+                                open
+                                onToggle={() => setRightPanelOpen(false)}
+                                currentWorkspace={currentWorkspace}
+                              />
+                            </div>
                           )}
                         </Panel>
 
@@ -2115,26 +2117,21 @@ function DashboardContent() {
                         )}
                       </PanelGroup>
 
-                      {!bottomDockOpen && (
-                        <BottomDock
-                          open={false}
-                          onToggle={() => setBottomDockOpen(true)}
-                          nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
-                          sessions={terminalSessions}
-                          activeSessionId={activeSessionId}
-                          isCreatingSession={isCreatingSession}
-                          workerStatus={workerStatus}
-                          onCreateSession={createWorkspaceTerminal}
-                          onSelectSession={(id) => selectSession(id)}
-                          onDestroySession={(id) => destroySession(id)}
-                          onRenameSession={(id) => {
-                            const s = terminalSessions.find(t => t.id === id);
-                            if (s) void promptRenameTerminalSession(s);
-                          }}
-                        />
-                      )}
                     </div>
                 </div>
+
+                {!isZenMode && (
+                    <StatusBar
+                        workspaceLabel={currentWorkspace?.name ?? 'Sin workspace'}
+                        workerStatus={workerStatus}
+                        isOnline={isOnline}
+                        bottomDockOpen={bottomDockOpen}
+                        onToggleDock={() => setBottomDockOpen((v) => !v)}
+                        onOpenProblems={() => setBottomDockOpen(true)}
+                        rightPanelOpen={rightPanelOpen}
+                        onToggleRightPanel={() => setRightPanelOpen((v) => !v)}
+                    />
+                )}
 
                 <WorkspaceManagerModal
                     isOpen={showWorkspaceManagerModal}

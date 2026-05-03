@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, EyeOff, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { SIDEBAR_VIEWS, type ActivityView } from './sidebar-views';
 
 export type { ActivityView } from './sidebar-views';
@@ -16,9 +16,6 @@ interface ActivityBarProps {
 
   isZenMode: boolean;
   onToggleZenMode: () => void;
-
-  workerStatus: 'online' | 'offline' | 'unknown';
-  isOnline: boolean;
 
   userInitial: string;
   userMenuOpen: boolean;
@@ -37,8 +34,6 @@ export default function ActivityBar({
   onOpenWorkspaceManager,
   isZenMode,
   onToggleZenMode,
-  workerStatus,
-  isOnline,
   userInitial,
   userMenuOpen,
   onToggleUserMenu,
@@ -99,9 +94,6 @@ export default function ActivityBar({
       </div>
 
       <div className="flex flex-col items-center gap-0.5">
-        <StatusDot status={workerStatus} />
-        <ConnectivityDot online={isOnline} />
-
         <button
           type="button"
           onClick={onToggleZenMode}
@@ -134,38 +126,5 @@ export default function ActivityBar({
         </button>
       </div>
     </nav>
-  );
-}
-
-function StatusDot({ status }: { status: 'online' | 'offline' | 'unknown' }) {
-  const config = {
-    online: { color: 'bg-emerald-400', label: 'Worker en línea' },
-    offline: { color: 'bg-rose-400', label: 'Worker sin conexión' },
-    unknown: { color: 'bg-surface-500', label: 'Worker desconocido' }
-  }[status];
-  return (
-    <div
-      className="flex h-7 w-10 items-center justify-center"
-      title={config.label}
-      aria-label={config.label}
-    >
-      {status === 'offline' ? (
-        <AlertTriangle className="h-3.5 w-3.5 text-rose-300" strokeWidth={2} />
-      ) : (
-        <span className={`h-2 w-2 rounded-full ${config.color}`} />
-      )}
-    </div>
-  );
-}
-
-function ConnectivityDot({ online }: { online: boolean }) {
-  return (
-    <div
-      className="flex h-7 w-10 items-center justify-center text-surface-400"
-      title={online ? 'Conectado' : 'Sin conexión a Internet'}
-      aria-label={online ? 'En línea' : 'Sin conexión'}
-    >
-      {online ? <Wifi className="h-3.5 w-3.5 text-emerald-400" strokeWidth={2} /> : <WifiOff className="h-3.5 w-3.5 text-rose-300" strokeWidth={2} />}
-    </div>
   );
 }

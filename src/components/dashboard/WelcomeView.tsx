@@ -6,6 +6,7 @@ import {
   FolderPlus,
   Upload,
   Search,
+  Files,
   Terminal as TerminalIcon,
   GitBranch,
   KanbanSquare,
@@ -27,6 +28,7 @@ interface WelcomeViewProps {
   onCreateFolder: () => void;
   onUploadFile: () => void;
   onOpenSearch: () => void;
+  onOpenFiles: () => void;
   onOpenTerminal: () => void;
   onOpenGit: () => void;
   onOpenBoard: () => void;
@@ -91,6 +93,7 @@ export default function WelcomeView({
   onCreateFolder,
   onUploadFile,
   onOpenSearch,
+  onOpenFiles,
   onOpenTerminal,
   onOpenGit,
   onOpenBoard,
@@ -130,6 +133,7 @@ export default function WelcomeView({
   ];
 
   const tools: QuickAction[] = [
+    { id: 'files', label: 'Explorador', icon: Files, shortcut: 'Ctrl+Shift+E', onClick: onOpenFiles, accent: 'text-surface-200' },
     { id: 'terminal', label: 'Terminal', icon: TerminalIcon, shortcut: 'Ctrl+`', onClick: onOpenTerminal, accent: 'text-emerald-300' },
     { id: 'git', label: 'Control de versiones', icon: GitBranch, onClick: onOpenGit, accent: 'text-orange-300' },
     { id: 'board', label: 'Tablero', icon: KanbanSquare, onClick: onOpenBoard, accent: 'text-mandy-300' },
