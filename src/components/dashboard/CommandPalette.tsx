@@ -39,6 +39,7 @@ export default function CommandPalette({ open, onClose, commands, modalFade, mod
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -59,6 +60,12 @@ export default function CommandPalette({ open, onClose, commands, modalFade, mod
   useEffect(() => {
     if (index >= ranked.length) setIndex(Math.max(0, ranked.length - 1));
   }, [index, ranked.length]);
+
+  useEffect(() => {
+    if (!listRef.current) return;
+    const item = listRef.current.querySelectorAll('button[role="option"]')[index] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: 'nearest' });
+  }, [index]);
 
   if (!open) return null;
 
@@ -120,7 +127,7 @@ export default function CommandPalette({ open, onClose, commands, modalFade, mod
             </kbd>
           </div>
 
-          <ul className="max-h-[55vh] overflow-y-auto py-1" role="listbox">
+          <ul ref={listRef} className="max-h-[55vh] overflow-y-auto py-1" role="listbox">
             {ranked.length === 0 && (
               <li className="px-4 py-6 text-center text-xs text-surface-500">Sin coincidencias</li>
             )}

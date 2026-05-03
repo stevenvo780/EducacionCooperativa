@@ -2238,6 +2238,7 @@ function DashboardContent() {
                             <WelcomeView
                                 workspaceName={currentWorkspace?.name}
                                 recentDocs={recentDocs}
+                                loadingRecents={loadingDocs}
                                 onOpenDoc={openDocument}
                                 onCreateDoc={() => openNewFileModalAt()}
                                 onCreateFolder={() => { void createFolderAtPath(); }}
