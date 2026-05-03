@@ -770,6 +770,12 @@ function DashboardContent() {
 
     useDashboardPersistence({
         currentWorkspaceId,
+        activityView,
+        bottomDockOpen,
+        rightPanelOpen,
+        setActivityView: (v) => setActivityView(v as ActivityView),
+        setBottomDockOpen,
+        setRightPanelOpen,
         docs,
         loadingDocs,
         openTabs,

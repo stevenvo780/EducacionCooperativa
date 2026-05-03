@@ -16,6 +16,9 @@ interface UseDashboardPersistenceParams {
   sidebarWidth: number;
   activeFolder: string;
   isSidebarCollapsed: boolean;
+  activityView?: string;
+  bottomDockOpen?: boolean;
+  rightPanelOpen?: boolean;
   closedFilesTabByWorkspace: Record<string, boolean>;
   rootFolderPath: string;
   zenRestoreRef: MutableRefObject<{ sidebar: boolean }>;
@@ -28,6 +31,9 @@ interface UseDashboardPersistenceParams {
   setMosaicNode: Dispatch<SetStateAction<MosaicNode<string> | null>>;
   setSelectedDocId: (value: string | null) => void;
   setClosedFilesTabByWorkspace: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setActivityView?: (value: string) => void;
+  setBottomDockOpen?: (value: boolean) => void;
+  setRightPanelOpen?: (value: boolean) => void;
   clearActiveSession: () => void;
 }
 
@@ -42,6 +48,9 @@ export const useDashboardPersistence = ({
   sidebarWidth,
   activeFolder,
   isSidebarCollapsed,
+  activityView,
+  bottomDockOpen,
+  rightPanelOpen,
   closedFilesTabByWorkspace,
   rootFolderPath,
   zenRestoreRef,
@@ -50,6 +59,9 @@ export const useDashboardPersistence = ({
   setDocModes,
   setIsSidebarCollapsed,
   setIsZenMode,
+  setActivityView,
+  setBottomDockOpen,
+  setRightPanelOpen,
   setOpenTabs,
   setMosaicNode,
   setSelectedDocId,
@@ -73,6 +85,9 @@ export const useDashboardPersistence = ({
         setDocModes(persisted.docModes);
       }
       setIsSidebarCollapsed(Boolean(persisted.isSidebarCollapsed));
+      if (persisted.activityView && setActivityView) setActivityView(persisted.activityView);
+      if (typeof persisted.bottomDockOpen === 'boolean' && setBottomDockOpen) setBottomDockOpen(persisted.bottomDockOpen);
+      if (typeof persisted.rightPanelOpen === 'boolean' && setRightPanelOpen) setRightPanelOpen(persisted.rightPanelOpen);
     } else {
       setDocModes({});
       setIsSidebarCollapsed(false);
@@ -98,6 +113,9 @@ export const useDashboardPersistence = ({
     setOpenTabs,
     setSelectedDocId,
     setSidebarWidth,
+    setActivityView,
+    setBottomDockOpen,
+    setRightPanelOpen,
     zenRestoreRef
   ]);
 
@@ -157,7 +175,10 @@ export const useDashboardPersistence = ({
         docModes,
         sidebarWidth,
         activeFolder,
-        isSidebarCollapsed
+        isSidebarCollapsed,
+        activityView,
+        bottomDockOpen,
+        rightPanelOpen
       });
     }, 500);
 
@@ -171,7 +192,10 @@ export const useDashboardPersistence = ({
     docModes,
     sidebarWidth,
     activeFolder,
-    isSidebarCollapsed
+    isSidebarCollapsed,
+    activityView,
+    bottomDockOpen,
+    rightPanelOpen
   ]);
 
   useEffect(() => {
