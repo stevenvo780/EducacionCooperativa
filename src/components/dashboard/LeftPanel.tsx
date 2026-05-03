@@ -6,10 +6,8 @@ import { GitBranch, Sparkles } from 'lucide-react';
 import type { ActivityView } from './ActivityBar';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { Workspace } from '@/components/dashboard/types';
-import type { TerminalSession } from '@/context/TerminalContext';
 import type { SearchResultFilter, SearchResultItem } from '@/lib/search/types';
 import ToolsGallery from './ToolsGallery';
-import TerminalsList from './TerminalsList';
 import SearchPanel from './SearchPanel';
 
 const GitWorkbench = dynamic(() => import('@/components/dashboard/GitWorkbench'), { ssr: false });
@@ -46,16 +44,6 @@ interface LeftPanelProps {
   isSemanticBrowserOpen?: boolean;
   isFormalizerOpen?: boolean;
   isAgoraAIOpen?: boolean;
-
-  // terminals
-  terminalSessions: TerminalSession[];
-  activeSessionId: string | null;
-  isCreatingSession: boolean;
-  workerStatus: 'online' | 'offline' | 'unknown';
-  onCreateTerminal: () => void;
-  onSelectTerminal: (sessionId: string) => void;
-  onDestroyTerminal: (sessionId: string) => void;
-  onRenameTerminal: (sessionId: string) => void;
 }
 
 export default function LeftPanel(props: LeftPanelProps) {
@@ -119,21 +107,6 @@ export default function LeftPanel(props: LeftPanelProps) {
         isSemanticBrowserOpen={props.isSemanticBrowserOpen}
         isFormalizerOpen={props.isFormalizerOpen}
         isAgoraAIOpen={props.isAgoraAIOpen}
-      />
-    );
-  }
-
-  if (view === 'terminals') {
-    return (
-      <TerminalsList
-        sessions={props.terminalSessions}
-        activeSessionId={props.activeSessionId}
-        isCreatingSession={props.isCreatingSession}
-        workerStatus={props.workerStatus}
-        onCreate={props.onCreateTerminal}
-        onSelect={props.onSelectTerminal}
-        onDestroy={props.onDestroyTerminal}
-        onRename={props.onRenameTerminal}
       />
     );
   }

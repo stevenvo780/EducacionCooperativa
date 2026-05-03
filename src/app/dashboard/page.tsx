@@ -11,7 +11,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type InputHTMLAttributes,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode
@@ -105,7 +104,6 @@ function DashboardContent() {
         createSession,
         destroySession,
         renameSession,
-        status: _connectionStatus,
         initialize,
         isCreatingSession,
         getSessionsForWorkspace,
@@ -149,6 +147,7 @@ function DashboardContent() {
 
     // Initialize touch drag polyfill for tablet/mobile support
     useEffect(() => { initTouchDragPolyfill(); }, []);
+    useEffect(() => { void import('@/lib/console-bus').then(m => m.installConsoleBus()); }, []);
 
     useEffect(() => {
         if (!user) return;
@@ -188,7 +187,6 @@ function DashboardContent() {
     const workspaces = useAppSelector(state => state.dashboard.workspaces);
     const invites = useAppSelector(state => state.dashboard.invites);
     const currentWorkspace = useAppSelector(state => state.dashboard.currentWorkspace);
-    const _showWorkspaceMenu = useAppSelector(state => state.dashboard.showWorkspaceMenu);
     const showNewWorkspaceModal = useAppSelector(state => state.dashboard.showNewWorkspaceModal);
     const showMembersModal = useAppSelector(state => state.dashboard.showMembersModal);
     const showPasswordModal = useAppSelector(state => state.dashboard.showPasswordModal);
@@ -355,9 +353,8 @@ function DashboardContent() {
         };
     }, [isResizingSidebar, resizeSidebar, stopResizingSidebar]);
 
-    const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
     const [isZenMode, setIsZenMode] = useState(false);
-    const zenRestoreRef = useRef({ sidebar: false, header: false });
+    const zenRestoreRef = useRef({ sidebar: false });
     const shortcutChordDeadlineRef = useRef(0);
     const openBoardRef = useRef<() => Promise<void> | void>(() => {});
     const openDocumentRef = useRef<(doc: DocItem) => Promise<void> | void>(() => {});
@@ -376,21 +373,15 @@ function DashboardContent() {
         }
         setIsSidebarCollapsed(prev => !prev);
     }, [showMobileSidebar, setShowMobileSidebar]);
-    const _handleToggleHeaderCollapse = useCallback(() => {
-        setShowWorkspaceMenu(false);
-        setIsHeaderCollapsed(prev => !prev);
-    }, [setShowWorkspaceMenu]);
     const enterZenMode = useCallback(() => {
-        zenRestoreRef.current = { sidebar: isSidebarCollapsed, header: isHeaderCollapsed };
+        zenRestoreRef.current = { sidebar: isSidebarCollapsed };
         setShowWorkspaceMenu(false);
         setShowMobileSidebar(false);
         setIsSidebarCollapsed(true);
-        setIsHeaderCollapsed(true);
         setIsZenMode(true);
-    }, [isHeaderCollapsed, isSidebarCollapsed, setShowMobileSidebar, setShowWorkspaceMenu]);
+    }, [isSidebarCollapsed, setShowMobileSidebar, setShowWorkspaceMenu]);
     const exitZenMode = useCallback(() => {
         setIsSidebarCollapsed(zenRestoreRef.current.sidebar);
-        setIsHeaderCollapsed(zenRestoreRef.current.header);
         setIsZenMode(false);
     }, []);
     const handleToggleZenMode = useCallback(() => {
@@ -409,6 +400,21 @@ function DashboardContent() {
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
+    const workerStatus: 'online' | 'offline' | 'unknown' = useMemo(() => {
+        if (!currentWorkspace || !user) return 'unknown';
+        const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
+            ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
+            : currentWorkspace.id;
+        const s = getWorkerStatusForWorkspace(tok);
+        return s === 'online' ? 'online' : s === 'offline' ? 'offline' : 'unknown';
+    }, [currentWorkspace, user, getWorkerStatusForWorkspace]);
+    const createWorkspaceTerminal = useCallback(() => {
+        if (!currentWorkspace || !user || workerStatus !== 'online') return;
+        const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
+            ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
+            : currentWorkspace.id;
+        createSession(tok, currentWorkspace.type, currentWorkspace.name);
+    }, [currentWorkspace, user, workerStatus, createSession]);
     // En mobile/tablet ignoramos el árbol Mosaic con splits — los tiles
     // side-by-side dejaban el editor en ~140px e ilegible. Mostramos solo el
     // doc activo a pantalla completa; el resto sigue accesible vía tabs.
@@ -464,7 +470,6 @@ function DashboardContent() {
     const foldersRef = useRef<FolderItem[]>([]);
     const currentWorkspaceRef = useRef<Workspace | null>(null);
     const dialogResolverRef = useRef<((result: DialogResult) => void) | null>(null);
-    const _folderInputProps = { webkitdirectory: 'true', directory: 'true' } as InputHTMLAttributes<HTMLInputElement>;
 
     useEffect(() => {
         docsRef.current = docs;
@@ -666,9 +671,7 @@ function DashboardContent() {
     }, [user, loading, router, fetchWorkspaces]);
 
     useDashboardPersistence({
-        currentWorkspace,
         currentWorkspaceId,
-        userUid: user?.uid,
         docs,
         loadingDocs,
         openTabs,
@@ -678,7 +681,6 @@ function DashboardContent() {
         sidebarWidth,
         activeFolder,
         isSidebarCollapsed,
-        isHeaderCollapsed,
         closedFilesTabByWorkspace,
         rootFolderPath: ROOT_FOLDER_PATH,
         zenRestoreRef,
@@ -686,7 +688,6 @@ function DashboardContent() {
         setActiveFolderSafe,
         setDocModes,
         setIsSidebarCollapsed,
-        setIsHeaderCollapsed,
         setIsZenMode,
         setOpenTabs,
         setMosaicNode,
@@ -831,7 +832,6 @@ function DashboardContent() {
         openSemanticBrowser,
         openFormalizer,
         openAgoraAI,
-        openFilesTab: _openFilesTab,
         openSnippetsGallery,
         closeTabById,
         openDocument,
@@ -895,7 +895,6 @@ function DashboardContent() {
         promptMoveDocument,
         createDoc,
         createStDoc,
-        createStGuide,
         handleDownloadDoc,
         handleDownloadFolder
     } = useDocumentActions({
@@ -982,8 +981,6 @@ function DashboardContent() {
         isDragActive,
         dismissDragOverlay,
         setUploadTargetFolder,
-        handleFileUpload: _handleFileUpload,
-        handleFolderUpload: _handleFolderUpload,
         handleDragEnter,
         handleDragLeave,
         handleDragOver,
@@ -1027,11 +1024,6 @@ function DashboardContent() {
         setUploadTargetFolder(targetFolder);
         folderInputRef.current?.click();
     }, [activeFolder, resolveActiveFolder, setActiveFolderSafe, setUploadTargetFolder]);
-
-    const _handleAddStInstructions = useCallback(async () => {
-        setActiveFolderSafe(DEFAULT_FOLDER_NAME);
-        await createStGuide();
-    }, [createStGuide, setActiveFolderSafe]);
 
     useEffect(() => {
         const clearShortcutChord = () => {
@@ -1865,12 +1857,6 @@ function DashboardContent() {
                       <ActivityBar
                         active={activityView}
                         onChange={(v) => {
-                          if (v === 'terminals') {
-                            setActivityView(v);
-                            setBottomDockOpen(true);
-                            if (isSidebarCollapsed) setIsSidebarCollapsed(false);
-                            return;
-                          }
                           setActivityView(v);
                           if (isSidebarCollapsed) setIsSidebarCollapsed(false);
                         }}
@@ -1880,14 +1866,7 @@ function DashboardContent() {
                         onOpenWorkspaceManager={() => setShowWorkspaceManagerModal(true)}
                         isZenMode={isZenMode}
                         onToggleZenMode={handleToggleZenMode}
-                        workerStatus={(() => {
-                          if (!currentWorkspace || !user) return 'unknown';
-                          const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
-                            ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
-                            : currentWorkspace.id;
-                          const s = getWorkerStatusForWorkspace(tok);
-                          return s === 'online' ? 'online' : s === 'offline' ? 'offline' : 'unknown';
-                        })()}
+                        workerStatus={workerStatus}
                         isOnline={isOnline}
                         userInitial={(userEmail || user?.email || 'U').slice(0, 1)}
                         userMenuOpen={userMenuOpen}
@@ -1976,32 +1955,6 @@ function DashboardContent() {
                             isSemanticBrowserOpen={isSemanticBrowserOpen}
                             isFormalizerOpen={isFormalizerOpen}
                             isAgoraAIOpen={isAgoraAIOpen}
-                            terminalSessions={terminalSessions}
-                            activeSessionId={activeSessionId}
-                            isCreatingSession={isCreatingSession}
-                            workerStatus={(() => {
-                              if (!currentWorkspace || !user) return 'unknown';
-                              const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
-                                ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
-                                : currentWorkspace.id;
-                              const s = getWorkerStatusForWorkspace(tok);
-                              return s === 'online' ? 'online' : s === 'offline' ? 'offline' : 'unknown';
-                            })()}
-                            onCreateTerminal={() => {
-                              if (!currentWorkspace || !user) return;
-                              const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
-                                ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
-                                : currentWorkspace.id;
-                              const ws = currentWorkspace;
-                              createSession(tok, ws.type, ws.name);
-                              setBottomDockOpen(true);
-                            }}
-                            onSelectTerminal={(id) => { selectSession(id); setBottomDockOpen(true); }}
-                            onDestroyTerminal={(id) => destroySession(id)}
-                            onRenameTerminal={(id) => {
-                              const session = terminalSessions.find(s => s.id === id);
-                              if (session) void promptRenameTerminalSession(session);
-                            }}
                             filesContent={null}
                           />
                         </aside>
@@ -2154,6 +2107,17 @@ function DashboardContent() {
                                 workspaceName={currentWorkspace?.name}
                                 workspaceType={currentWorkspace?.type}
                                 nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                                sessions={terminalSessions}
+                                activeSessionId={activeSessionId}
+                                isCreatingSession={isCreatingSession}
+                                workerStatus={workerStatus}
+                                onCreateSession={createWorkspaceTerminal}
+                                onSelectSession={(id) => selectSession(id)}
+                                onDestroySession={(id) => destroySession(id)}
+                                onRenameSession={(id) => {
+                                  const s = terminalSessions.find(t => t.id === id);
+                                  if (s) void promptRenameTerminalSession(s);
+                                }}
                               />
                             </Panel>
                           </>
@@ -2165,6 +2129,17 @@ function DashboardContent() {
                           open={false}
                           onToggle={() => setBottomDockOpen(true)}
                           nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                          sessions={terminalSessions}
+                          activeSessionId={activeSessionId}
+                          isCreatingSession={isCreatingSession}
+                          workerStatus={workerStatus}
+                          onCreateSession={createWorkspaceTerminal}
+                          onSelectSession={(id) => selectSession(id)}
+                          onDestroySession={(id) => destroySession(id)}
+                          onRenameSession={(id) => {
+                            const s = terminalSessions.find(t => t.id === id);
+                            if (s) void promptRenameTerminalSession(s);
+                          }}
                         />
                       )}
                     </div>

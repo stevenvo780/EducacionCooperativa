@@ -27,7 +27,6 @@ interface PersistedState {
   sidebarWidth: number;
   activeFolder: string;
   isSidebarCollapsed?: boolean;
-  isHeaderCollapsed?: boolean;
 }
 
 interface PersistedFavoritesState {
@@ -55,7 +54,6 @@ export function saveDashboardState(
     sidebarWidth: number;
     activeFolder: string;
     isSidebarCollapsed?: boolean;
-    isHeaderCollapsed?: boolean;
   }
 ): void {
   if (!workspaceId || typeof window === 'undefined') return;
@@ -81,8 +79,7 @@ export function saveDashboardState(
       docModes: state.docModes,
       sidebarWidth: state.sidebarWidth,
       activeFolder: state.activeFolder,
-      isSidebarCollapsed: state.isSidebarCollapsed,
-      isHeaderCollapsed: state.isHeaderCollapsed
+      isSidebarCollapsed: state.isSidebarCollapsed
     };
 
     localStorage.setItem(getStorageKey(workspaceId), JSON.stringify(persistedState));

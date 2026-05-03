@@ -2,15 +2,11 @@
 
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type { MosaicNode } from 'react-mosaic-component';
-import type { DocItem, ViewMode, Workspace } from '@/components/dashboard/types';
+import type { DocItem, ViewMode } from '@/components/dashboard/types';
 import { loadDashboardState, restoreOpenTabs, saveDashboardState, validateMosaicNode } from '@/services/dashboardPersistence';
 
 interface UseDashboardPersistenceParams {
-  /** @deprecated retained for call-site stability; el auto-inject del tile Files se removió. */
-  currentWorkspace?: Workspace | null;
   currentWorkspaceId: string | undefined;
-  /** @deprecated retained for call-site stability. */
-  userUid?: string;
   docs: DocItem[];
   loadingDocs: boolean;
   openTabs: DocItem[];
@@ -20,15 +16,13 @@ interface UseDashboardPersistenceParams {
   sidebarWidth: number;
   activeFolder: string;
   isSidebarCollapsed: boolean;
-  isHeaderCollapsed: boolean;
   closedFilesTabByWorkspace: Record<string, boolean>;
   rootFolderPath: string;
-  zenRestoreRef: MutableRefObject<{ sidebar: boolean; header: boolean }>;
+  zenRestoreRef: MutableRefObject<{ sidebar: boolean }>;
   setSidebarWidth: (value: number) => void;
   setActiveFolderSafe: (path: string) => void;
   setDocModes: (value: Record<string, ViewMode>) => void;
   setIsSidebarCollapsed: (value: boolean) => void;
-  setIsHeaderCollapsed: (value: boolean) => void;
   setIsZenMode: (value: boolean) => void;
   setOpenTabs: Dispatch<SetStateAction<DocItem[]>>;
   setMosaicNode: Dispatch<SetStateAction<MosaicNode<string> | null>>;
@@ -38,9 +32,7 @@ interface UseDashboardPersistenceParams {
 }
 
 export const useDashboardPersistence = ({
-  currentWorkspace: _currentWorkspace,
   currentWorkspaceId,
-  userUid: _userUid,
   docs,
   loadingDocs,
   openTabs,
@@ -50,7 +42,6 @@ export const useDashboardPersistence = ({
   sidebarWidth,
   activeFolder,
   isSidebarCollapsed,
-  isHeaderCollapsed,
   closedFilesTabByWorkspace,
   rootFolderPath,
   zenRestoreRef,
@@ -58,7 +49,6 @@ export const useDashboardPersistence = ({
   setActiveFolderSafe,
   setDocModes,
   setIsSidebarCollapsed,
-  setIsHeaderCollapsed,
   setIsZenMode,
   setOpenTabs,
   setMosaicNode,
@@ -83,15 +73,13 @@ export const useDashboardPersistence = ({
         setDocModes(persisted.docModes);
       }
       setIsSidebarCollapsed(Boolean(persisted.isSidebarCollapsed));
-      setIsHeaderCollapsed(Boolean(persisted.isHeaderCollapsed));
     } else {
       setDocModes({});
       setIsSidebarCollapsed(false);
-      setIsHeaderCollapsed(false);
     }
 
     setIsZenMode(false);
-    zenRestoreRef.current = { sidebar: false, header: false };
+    zenRestoreRef.current = { sidebar: false };
     setOpenTabs([]);
     setMosaicNode(null);
     setSelectedDocId(null);
@@ -104,7 +92,6 @@ export const useDashboardPersistence = ({
     setActiveFolderSafe,
     setClosedFilesTabByWorkspace,
     setDocModes,
-    setIsHeaderCollapsed,
     setIsSidebarCollapsed,
     setIsZenMode,
     setMosaicNode,
@@ -114,10 +101,6 @@ export const useDashboardPersistence = ({
     zenRestoreRef
   ]);
 
-  // El sidebar izquierdo ya muestra el árbol de archivos completo. El tile
-  // "Archivos" del Mosaic se mantiene como vista opcional (botón en HeaderBar)
-  // y NO se auto-inyecta al abrir un workspace — antes lo hacía y dejaba al
-  // editor compitiendo por ancho con un explorador duplicado.
   void closedFilesTabByWorkspace;
 
   useEffect(() => {
@@ -174,8 +157,7 @@ export const useDashboardPersistence = ({
         docModes,
         sidebarWidth,
         activeFolder,
-        isSidebarCollapsed,
-        isHeaderCollapsed
+        isSidebarCollapsed
       });
     }, 500);
 
@@ -189,8 +171,7 @@ export const useDashboardPersistence = ({
     docModes,
     sidebarWidth,
     activeFolder,
-    isSidebarCollapsed,
-    isHeaderCollapsed
+    isSidebarCollapsed
   ]);
 
   useEffect(() => {
