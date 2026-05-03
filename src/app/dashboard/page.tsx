@@ -67,6 +67,7 @@ import { SIDEBAR_VIEWS } from '@/components/dashboard/sidebar-views';
 import BottomDock from '@/components/dashboard/BottomDock';
 import CommandPalette, { type Command as PaletteCommand } from '@/components/dashboard/CommandPalette';
 import UserMenu from '@/components/dashboard/UserMenu';
+import MobileTopBar from '@/components/dashboard/MobileTopBar';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { useIsCompact } from '@/hooks/useMediaQuery';
 import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
@@ -399,6 +400,20 @@ function DashboardContent() {
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
+    // En mobile el sidebar se reajusta para que el conjunto activity+sidebar
+    // quepa en el viewport sin overflow horizontal.
+    const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024);
+    useEffect(() => {
+        const onResize = () => setViewportWidth(window.innerWidth);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+    const effectiveSidebarWidth = useMemo(() => {
+        if (!isCompact) return sidebarWidth;
+        const ACTIVITY = 48;
+        const max = Math.max(220, viewportWidth - ACTIVITY - 16);
+        return Math.min(sidebarWidth, max);
+    }, [isCompact, sidebarWidth, viewportWidth]);
     const workerStatus: 'online' | 'offline' | 'unknown' = useMemo(() => {
         if (!currentWorkspace || !user) return 'unknown';
         const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
@@ -1808,6 +1823,18 @@ function DashboardContent() {
                 />
 
                 {/* HeaderBar eliminada: workspace, tools, terminales y user menu viven ahora en ActivityBar/LeftPanel. */}
+                {!isZenMode && (
+                    <MobileTopBar
+                        workspaceLabel={currentWorkspace?.name ?? 'Sin workspace'}
+                        workspaceInitial={(currentWorkspace?.name ?? 'A').slice(0, 1)}
+                        userInitial={(userEmail || user?.email || 'U').slice(0, 1)}
+                        hasInvites={invites.length > 0}
+                        workerStatus={workerStatus}
+                        onOpenDrawer={() => setShowMobileSidebar(true)}
+                        onOpenSearch={() => { setActivityView('search'); setShowMobileSidebar(true); }}
+                        onOpenUserMenu={() => setUserMenuOpen(true)}
+                    />
+                )}
 
                 {isSidebarCollapsed && !isZenMode && (
                     <div className="absolute bottom-3 left-2 z-50">
@@ -1836,6 +1863,23 @@ function DashboardContent() {
                 )}
 
                 <div className="flex flex-1 overflow-hidden relative">
+                    {showMobileSidebar && !isZenMode && (
+                      <div
+                        className="md:hidden fixed inset-0 z-30 bg-black/40"
+                        onClick={() => setShowMobileSidebar(false)}
+                        aria-hidden
+                      />
+                    )}
+
+                    <div
+                      className={`
+                        flex shrink-0 z-40 h-full bg-surface-900
+                        md:relative md:translate-x-0 md:transform-none
+                        fixed inset-y-0 left-0 transform transition-transform duration-150
+                        ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
+                        ${isZenMode ? 'hidden md:hidden' : ''}
+                      `}
+                    >
                     {!isZenMode && (
                       <ActivityBar
                         active={activityView}
@@ -1860,10 +1904,9 @@ function DashboardContent() {
 
                     {activityView === 'files' ? (
                       <Sidebar
-                        sidebarWidth={sidebarWidth}
+                        sidebarWidth={effectiveSidebarWidth}
                         isCollapsed={isSidebarCollapsed}
                         showMobileSidebar={showMobileSidebar}
-                        onCloseMobileSidebar={() => setShowMobileSidebar(false)}
                         onToggleSidebarCollapse={handleToggleSidebarCollapse}
                         currentWorkspace={currentWorkspace}
                         activeFolder={activeFolder}
@@ -1909,7 +1952,7 @@ function DashboardContent() {
                       !isSidebarCollapsed && (
                         <aside
                           className="shrink-0 border-r border-surface-700/60"
-                          style={{ width: sidebarWidth }}
+                          style={{ width: effectiveSidebarWidth }}
                         >
                           <LeftPanel
                             view={activityView}
@@ -1940,6 +1983,7 @@ function DashboardContent() {
                         </aside>
                       )
                     )}
+                    </div>
 
                     {/* Resize Handle */}
                     {!isSidebarCollapsed && (

@@ -48,7 +48,7 @@ export default function ActivityBar({
   return (
     <nav
       aria-label="Barra de actividad"
-      className={`hidden md:flex w-12 shrink-0 flex-col items-center justify-between border-r border-surface-700/40 bg-surface-900 py-2 ${className}`}
+      className={`flex w-12 shrink-0 flex-col items-center justify-between border-r border-surface-700/40 bg-surface-900 py-2 ${className}`}
     >
       <div className="flex flex-col items-center gap-1">
         <button
