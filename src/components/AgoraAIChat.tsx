@@ -6,9 +6,9 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
-  Bot, Send, Settings, X, ChevronDown,
+  Bot, Send, Settings, ChevronDown,
   Loader2, Trash2, Copy, Check, AlertCircle, Sparkles, Undo2,
-  History, MessageSquarePlus
+  History, MessageSquarePlus, Shield
 } from 'lucide-react';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import {
@@ -18,14 +18,26 @@ import {
   saveChatSessions,
   upsertChatSession
 } from '@/lib/agora-ai/chatHistory';
-import { loadClientConfig, saveClientConfig } from '@/lib/clientConfigStorage';
 import { AgentThinkingBlock } from '@/components/chat/AgentThinkingBlock';
 import { ToolCallBlock } from '@/components/chat/ToolCallBlock';
 import { InlineConfirmation } from '@/components/chat/InlineConfirmation';
 import { buildAgoraSystemPrompt, extractThinkingSegments } from '@/lib/agora-ai/systemPrompt';
 import { toOllamaTools } from '@/lib/agora-ai/toolDefinitions';
 import { collectAgentWorkspaceEffects } from '@/lib/agora-ai/uiEvents';
+import {
+  AI_SETTINGS_CHANGED_EVENT,
+  PROVIDER_META,
+  loadAIProviderConfig,
+  loadAgentAccessPolicy,
+  saveAgentAccessProfile,
+  loadAgentMode,
+  saveAgentMode,
+  type AIProviderConfig
+} from '@/lib/agora-ai/clientSettings';
+import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy } from '@/lib/agora-ai/accessPolicy';
 import type {
+  AgentAccessPolicy,
+  AgentAccessProfileId,
   AgentChatSession,
   AgentDocumentsMutatedEventDetail,
   AgentMode,
@@ -36,18 +48,12 @@ import type {
   AgentStoredChatMessage,
   AgentStreamEvent,
   AgentToolCall,
+  AgentDiagnosticEventDetail,
   AgentToolExecutionResult,
   AgentTraceStep,
-  AIProvider
+  AgentUiCommandEventDetail
 } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
-
-interface AIProviderConfig {
-  provider: AIProvider;
-  apiKey: string;
-  model: string;
-  endpoint: string;
-}
 
 type UIChatMessage = AgentStoredChatMessage;
 
@@ -70,79 +76,7 @@ interface OllamaChatResponse {
   };
 }
 
-const CONFIG_KEY = 'agoraAIConfig';
-const AGENT_MODE_KEY = 'agoraAIMode';
 const UNDO_COMMAND = /^\s*(deshaz|undo|revierte|rollback)/i;
-
-const PROVIDER_META: Record<AIProvider, { label: string; color: string; defaultModel: string; needsKey: boolean; modelPlaceholder: string }> = {
-  openai: {
-    label: 'ChatGPT (OpenAI)',
-    color: 'text-emerald-400',
-    defaultModel: 'gpt-4o-mini',
-    needsKey: true,
-    modelPlaceholder: 'gpt-4o-mini, gpt-4o, o1-mini…'
-  },
-  anthropic: {
-    label: 'Claude (Anthropic)',
-    color: 'text-amber-400',
-    defaultModel: 'claude-haiku-4-5-20251001',
-    needsKey: true,
-    modelPlaceholder: 'claude-haiku-4-5-20251001, claude-sonnet-4-6, claude-opus-4-6…'
-  },
-  ollama: {
-    label: 'Ollama',
-    color: 'text-sky-400',
-    defaultModel: 'llama3.2',
-    needsKey: false,
-    modelPlaceholder: 'llama3.2, mistral, gemma3…'
-  },
-  gemini: {
-    label: 'Gemini (Google)',
-    color: 'text-violet-400',
-    defaultModel: 'gemini-2.0-flash',
-    needsKey: true,
-    modelPlaceholder: 'gemini-2.0-flash, gemini-1.5-pro…'
-  },
-  deepseek: {
-    label: 'DeepSeek',
-    color: 'text-cyan-400',
-    defaultModel: 'deepseek-v4-flash',
-    needsKey: true,
-    modelPlaceholder: 'deepseek-v4-flash, deepseek-v4-pro, deepseek-chat…'
-  }
-};
-
-const DEFAULT_CONFIG: AIProviderConfig = {
-  provider: 'ollama',
-  apiKey: '',
-  model: '',
-  endpoint: ''
-};
-
-const CONFIG_STORAGE = {
-  storageKey: CONFIG_KEY,
-  defaults: DEFAULT_CONFIG,
-  sensitiveKeys: ['apiKey'] as const
-};
-
-function loadConfig(): AIProviderConfig {
-  return loadClientConfig(CONFIG_STORAGE);
-}
-
-function saveConfig(cfg: AIProviderConfig) {
-  saveClientConfig(CONFIG_STORAGE, cfg);
-}
-
-function loadMode(): AgentMode {
-  if (typeof window === 'undefined') return 'agent';
-  const raw = window.localStorage.getItem(AGENT_MODE_KEY);
-  return raw === 'chat' ? 'chat' : 'agent';
-}
-
-function saveMode(mode: AgentMode) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(AGENT_MODE_KEY, mode);
-}
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -167,6 +101,52 @@ function createStep(step: Omit<AgentTraceStep, 'startedAt'>): AgentTraceStep {
     startedAt: Date.now(),
     finishedAt: Date.now()
   };
+}
+
+function truncateDebug(value: string | undefined, max = 3000) {
+  if (!value) return undefined;
+  return value.length > max ? `${value.slice(0, max)}\n\n[...truncado por Agora AI...]` : value;
+}
+
+function publishAgentProblem(detail: {
+  severity?: 'error' | 'warning' | 'info' | 'hint';
+  message: string;
+  detail?: string;
+  code?: string;
+}) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('agora:problem', {
+    detail: {
+      source: 'agora-ai',
+      uri: 'global',
+      severity: detail.severity ?? 'warning',
+      message: detail.message,
+      detail: truncateDebug(detail.detail),
+      code: detail.code
+    }
+  }));
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>
+) {
+  const results: Array<PromiseSettledResult<R> | undefined> = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(limit, Math.max(1, items.length)) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
+      if (item === undefined) continue;
+      results[index] = await task(item, index)
+        .then((value): PromiseSettledResult<R> => ({ status: 'fulfilled', value }))
+        .catch((reason): PromiseSettledResult<R> => ({ status: 'rejected', reason }));
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function toAssistantMessage(reply: string, agentRun?: AgentRun, error = false): UIChatMessage {
@@ -205,14 +185,18 @@ const markdownComponents = {
 } as const;
 
 export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
-  const [config, setConfig] = useState<AIProviderConfig>(loadConfig);
-  const [mode, setMode] = useState<AgentMode>(loadMode);
-  const [showConfig, setShowConfig] = useState(false);
+  const [config, setConfig] = useState<AIProviderConfig>(loadAIProviderConfig);
+  const [mode, setMode] = useState<AgentMode>(loadAgentMode);
+  const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(loadAgentAccessPolicy);
 
   useEffect(() => {
-    const handler = () => setShowConfig(true);
-    window.addEventListener('agora:open-ai-config', handler);
-    return () => window.removeEventListener('agora:open-ai-config', handler);
+    const handler = () => {
+      setConfig(loadAIProviderConfig());
+      setMode(loadAgentMode());
+      setAccessPolicy(loadAgentAccessPolicy());
+    };
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, handler);
   }, []);
   // Historial cerrado por defecto: el RightPanel es solo chat. El usuario
   // abre el historial como overlay clickeando el botón "Historial".
@@ -231,6 +215,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const abortRef = useRef<AbortController | null>(null);
   const historyHydratedRef = useRef(false);
   const sessionDefaultsRef = useRef({ provider: config.provider, mode });
+  const sendingRef = useRef(false);
+  const lastSendAtRef = useRef(0);
 
   const meta = PROVIDER_META[config.provider];
   const resolvedWorkspaceId = workspaceId || PERSONAL_WORKSPACE_ID;
@@ -259,7 +245,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setRollbackQueue(firstSession.rollbackQueue || []);
       if (firstSession.mode !== sessionDefaultsRef.current.mode) {
         setMode(firstSession.mode);
-        saveMode(firstSession.mode);
+        saveAgentMode(firstSession.mode);
       }
     } else {
       const fresh = createEmptyChatSession({
@@ -296,17 +282,14 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     });
   }, [activeSessionId, config.provider, messages, mode, resolvedWorkspaceId, rollbackQueue]);
 
-  const updateConfig = useCallback((partial: Partial<AIProviderConfig>) => {
-    setConfig(prev => {
-      const next = { ...prev, ...partial };
-      saveConfig(next);
-      return next;
-    });
-  }, []);
-
   const updateMode = useCallback((nextMode: AgentMode) => {
     setMode(nextMode);
-    saveMode(nextMode);
+    saveAgentMode(nextMode);
+  }, []);
+
+  const updateAccessProfile = useCallback((profile: Exclude<AgentAccessProfileId, 'custom'>) => {
+    saveAgentAccessProfile(profile);
+    setAccessPolicy(loadAgentAccessPolicy());
   }, []);
 
   const fetchContext = useCallback(async (signal: AbortSignal): Promise<string> => {
@@ -337,10 +320,37 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         workspaceId: resolvedWorkspaceId,
         llmEndpoint: config.endpoint || undefined,
         llmModel: config.model || undefined,
+        accessPolicy,
         ...args
       })
     });
-    const result = await res.json() as AgentToolExecutionResult;
+    const raw = await res.text();
+    let result: AgentToolExecutionResult;
+    try {
+      result = raw ? JSON.parse(raw) as AgentToolExecutionResult : {
+        ok: false,
+        name: action,
+        callId: `client-${action}`,
+        summary: 'La tool no devolvió JSON',
+        error: 'Respuesta vacía'
+      };
+    } catch {
+      result = {
+        ok: false,
+        name: action,
+        callId: `client-${action}`,
+        summary: raw.slice(0, 500) || 'La tool no devolvió JSON válido',
+        error: raw.slice(0, 1000) || 'JSON inválido'
+      };
+    }
+    if (!res.ok || !result.ok) {
+      publishAgentProblem({
+        severity: res.status === 429 ? 'warning' : 'error',
+        message: `Tool ${action} falló`,
+        detail: result.error || result.summary,
+        code: action
+      });
+    }
     const writeActions = new Set([
       'create_document',
       'update_document',
@@ -359,16 +369,49 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       window.dispatchEvent(new CustomEvent('agora:documents-mutated', { detail }));
     }
     return result;
-  }, [resolvedWorkspaceId, config.endpoint, config.model]);
+  }, [resolvedWorkspaceId, config.endpoint, config.model, accessPolicy]);
 
   const emitAgentWorkspaceEvents = useCallback((agentRun?: AgentRun) => {
     if (typeof window === 'undefined' || !agentRun) return;
-    const { openDocumentsEvent, mutatedEvent, toolEvents, workerCommandEvents, shouldRefreshDocuments } = collectAgentWorkspaceEffects(agentRun, resolvedWorkspaceId);
+    const {
+      openDocumentsEvent,
+      mutatedEvent,
+      toolEvents,
+      workerCommandEvents,
+      uiCommandEvents,
+      diagnosticEvents,
+      shouldRefreshDocuments
+    } = collectAgentWorkspaceEffects(agentRun, resolvedWorkspaceId);
     toolEvents.forEach((event) => {
       window.dispatchEvent(new CustomEvent('agora:agent-tool-result', { detail: event }));
     });
     workerCommandEvents.forEach((event) => {
       window.dispatchEvent(new CustomEvent('agora:worker-command-result', { detail: event }));
+      if (!event.ok) {
+        publishAgentProblem({
+          severity: 'warning',
+          message: `Comando worker falló: ${event.command}`,
+          detail: [
+            event.cwd ? `cwd: ${event.cwd}` : null,
+            event.exitCode !== undefined ? `exitCode: ${event.exitCode ?? 'null'}` : null,
+            event.stderr ? `stderr:\n${event.stderr}` : null,
+            event.stdout ? `stdout:\n${event.stdout}` : null
+          ].filter(Boolean).join('\n\n'),
+          code: 'run_worker_command'
+        });
+      }
+    });
+    uiCommandEvents.forEach((event) => {
+      window.dispatchEvent(new CustomEvent<AgentUiCommandEventDetail>('agora:agent-ui-command', { detail: event }));
+    });
+    diagnosticEvents.forEach((event) => {
+      window.dispatchEvent(new CustomEvent<AgentDiagnosticEventDetail>('agora:agent-diagnostic', { detail: event }));
+      publishAgentProblem({
+        severity: event.severity,
+        message: event.message,
+        detail: event.detail,
+        code: event.code
+      });
     });
     if (mutatedEvent) {
       window.dispatchEvent(new CustomEvent('agora:documents-mutated', { detail: mutatedEvent }));
@@ -406,15 +449,27 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         provider: config.provider,
         apiKey: config.apiKey,
         model: config.model || meta.defaultModel,
-        mode
+        mode,
+        accessPolicy
       })
     });
 
     if (!res.ok) {
       const text = await res.text();
+      publishAgentProblem({
+        severity: res.status === 429 ? 'warning' : 'error',
+        message: `No se pudo iniciar Agora AI (${res.status})`,
+        detail: text,
+        code: 'agora-ai-stream'
+      });
       throw new Error(text || `Error ${res.status} al iniciar el stream del agente`);
     }
     if (!res.body) {
+      publishAgentProblem({
+        severity: 'error',
+        message: 'El stream de Agora AI no devolvió cuerpo',
+        code: 'agora-ai-stream'
+      });
       throw new Error('El servidor no devolvió un stream válido');
     }
 
@@ -461,6 +516,14 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         if (event.type === 'status') {
           latestStatus = event.status;
           setStreamStatus(event.status);
+          if (/reintento|fallo de red|respondió\s+\d+/i.test(event.status)) {
+            publishAgentProblem({
+              severity: 'warning',
+              message: 'Agora AI está reintentando una llamada al proveedor',
+              detail: event.status,
+              code: 'agora-ai-retry'
+            });
+          }
           updateMessageById(assistantMessageId, current => ({
             ...current,
             content: current.content || event.status
@@ -494,17 +557,29 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         }
 
         if (event.type === 'error') {
+          publishAgentProblem({
+            severity: 'error',
+            message: 'Error en stream de Agora AI',
+            detail: event.error,
+            code: 'agora-ai-stream'
+          });
           throw new Error(event.error);
         }
       }
     }
 
     if (!finalPayload) {
+      publishAgentProblem({
+        severity: 'error',
+        message: 'El stream de Agora AI terminó sin respuesta final',
+        detail: latestStatus,
+        code: 'agora-ai-stream'
+      });
       throw new Error('El stream terminó sin respuesta final del agente');
     }
 
     return finalPayload;
-  }, [config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
+  }, [accessPolicy, config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
 
   const callOllamaDirect = useCallback(async (
     msgs: Array<Record<string, unknown>>,
@@ -540,11 +615,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     history: UIChatMessage[],
     signal: AbortSignal
   ): Promise<AgentRun> => {
-    const context = await fetchContext(signal);
+    const normalizedPolicy = normalizeAgentAccessPolicy(accessPolicy);
+    const context = normalizedPolicy.capabilities.workspaceContext ? await fetchContext(signal) : '';
     const systemMsg = buildAgoraSystemPrompt({
       mode,
       contextPrompt: context,
-      workspaceId: resolvedWorkspaceId
+      workspaceId: resolvedWorkspaceId,
+      accessPolicy: normalizedPolicy
     });
     const steps: AgentTraceStep[] = [];
     const rollback: AgentRollbackAction[] = [];
@@ -643,24 +720,28 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         }));
       }
 
-      // Execute all tools concurrently
-      const settled = await Promise.allSettled(
-        toolCalls.map(async (toolCall) => ({
-          toolCall,
-          result: await executeAgoraTool(toolCall.name, toolCall.args, signal)
-        }))
-      );
+      // Execute tools with bounded concurrency so local/Ollama loops do not
+      // stampede the internal API when a model emits many tool calls at once.
+      const settled = await runWithConcurrency(toolCalls, 4, async (toolCall) => ({
+        toolCall,
+        result: await executeAgoraTool(toolCall.name, toolCall.args, signal)
+      }));
       const toolResults = settled.map((item, i) => {
-        if (item.status === 'fulfilled') return item.value;
-        const toolCall = toolCalls[i];
+        if (item?.status === 'fulfilled') return item.value;
+        const toolCall = toolCalls[i] ?? {
+          id: `missing-${iteration}-${i}`,
+          name: 'unknown_tool',
+          args: {}
+        };
+        const reason = item?.status === 'rejected' ? String(item.reason) : 'desconocido';
         return {
           toolCall,
           result: {
             ok: false,
             name: toolCall.name,
             callId: toolCall.id,
-            summary: `Error inesperado: ${String(item.reason)}`,
-            error: String(item.reason)
+            summary: `Error inesperado: ${reason}`,
+            error: reason
           } as AgentToolExecutionResult
         };
       });
@@ -716,7 +797,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       pendingConfirmation,
       rollback
     };
-  }, [callOllamaDirect, executeAgoraTool, fetchContext, mode, resolvedWorkspaceId]);
+  }, [accessPolicy, callOllamaDirect, executeAgoraTool, fetchContext, mode, resolvedWorkspaceId]);
 
   const copyMessage = useCallback(async (id: string, content: string) => {
     await navigator.clipboard.writeText(content);
@@ -806,7 +887,19 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
+    const now = Date.now();
     if (!text || loading || !canSend) return;
+    if (sendingRef.current || now - lastSendAtRef.current < 650) {
+      publishAgentProblem({
+        severity: 'warning',
+        message: 'Solicitud de Agora AI ignorada por envío demasiado rápido',
+        detail: 'Se evitó duplicar una llamada al proveedor/API porque ya había una solicitud en curso o acababa de enviarse otra.',
+        code: 'agora-ai-throttle'
+      });
+      return;
+    }
+    sendingRef.current = true;
+    lastSendAtRef.current = now;
 
     const userMsg: UIChatMessage = { id: uid(), role: 'user', content: text };
     const history = [...messages, userMsg];
@@ -868,12 +961,19 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             provider: config.provider,
             apiKey: config.apiKey,
             model: config.model || meta.defaultModel,
-            mode
+            mode,
+            accessPolicy
           })
         });
 
         const data = await res.json() as AgentResponseBody;
         if (!res.ok || data.error) {
+          publishAgentProblem({
+            severity: res.status === 429 ? 'warning' : 'error',
+            message: `Agora AI falló (${res.status})`,
+            detail: data.error ?? 'Error desconocido',
+            code: 'agora-ai-request'
+          });
           setMessages(prev => [...prev, toAssistantMessage(data.error ?? 'Error desconocido', undefined, true)]);
           return;
         }
@@ -891,6 +991,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Error de red';
+      publishAgentProblem({
+        severity: 'error',
+        message: 'Error enviando mensaje a Agora AI',
+        detail: msg,
+        code: 'agora-ai-send'
+      });
       if (assistantMessageId) {
         updateMessageById(assistantMessageId, current => ({
           ...current,
@@ -903,12 +1009,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         setMessages(prev => [...prev, toAssistantMessage(msg, undefined, true)]);
       }
     } finally {
+      sendingRef.current = false;
       abortRef.current = null;
       setLoading(false);
       setStreamStatus('');
       textareaRef.current?.focus();
     }
-  }, [input, loading, canSend, messages, mode, runRollback, config.provider, config.apiKey, config.model, meta.defaultModel, resolvedWorkspaceId, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById]);
+  }, [accessPolicy, input, loading, canSend, messages, mode, runRollback, config.provider, config.apiKey, config.model, meta.defaultModel, resolvedWorkspaceId, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -931,6 +1038,14 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setConfirmingId(messageId);
       const controller = new AbortController();
       const result = await executeAgoraTool(target.toolName, { ...target.args, confirmed: true }, controller.signal);
+      if (!result.ok) {
+        publishAgentProblem({
+          severity: 'error',
+          message: `Falló la confirmación de ${target.toolName}`,
+          detail: result.error || result.summary,
+          code: target.toolName
+        });
+      }
       if (result.rollback?.length) {
         setRollbackQueue(result.rollback);
       }
@@ -960,6 +1075,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setMessages(prev => [...prev, toAssistantMessage(result.summary, run, !result.ok)]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo completar la confirmación';
+      publishAgentProblem({
+        severity: 'error',
+        message: 'Error al confirmar acción del agente',
+        detail: message,
+        code: target.toolName
+      });
       setMessages(prev => [...prev, toAssistantMessage(message, undefined, true)]);
     } finally {
       setConfirmingId(null);
@@ -1069,8 +1190,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             </button>
           )}
           <button
-            onClick={() => setShowConfig(v => !v)}
-            className={`p-1 rounded transition ${showConfig ? 'text-sky-400 bg-sky-500/10' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
+            onClick={() => window.dispatchEvent(new CustomEvent('agora:open-ai-config'))}
+            className="p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
             title="Configuración de IA"
             aria-label="Configuración"
           >
@@ -1078,99 +1199,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           </button>
         </div>
       </div>
-
-      {showConfig && (
-        <>
-          <div
-            className="absolute inset-0 z-40 bg-black/40 backdrop-blur-sm"
-            onClick={() => setShowConfig(false)}
-            aria-hidden
-          />
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(28rem,calc(100%-2rem))] max-h-[80%] overflow-y-auto rounded-lg border border-surface-700 bg-surface-950 p-3 space-y-3 text-xs shadow-2xl shadow-black/40">
-          <div className="flex items-center justify-between">
-            <span className="text-surface-300 font-medium">Configuración de Agora AI</span>
-            <button onClick={() => setShowConfig(false)} className="text-surface-500 hover:text-surface-300" aria-label="Cerrar">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
-            {(Object.keys(PROVIDER_META) as AIProvider[]).map(p => (
-              <button
-                key={p}
-                onClick={() => updateConfig({ provider: p })}
-                className={`px-2 py-1.5 rounded border text-left transition ${
-                  config.provider === p
-                    ? 'border-sky-500/50 bg-sky-500/10 text-sky-300'
-                    : 'border-surface-600 bg-surface-800 text-surface-400 hover:border-surface-500 hover:text-surface-300'
-                }`}
-              >
-                <div className={`font-medium ${PROVIDER_META[p].color}`}>{PROVIDER_META[p].label.split('(')[0]?.trim() || p}</div>
-                <div className="text-[10px] text-surface-500 mt-0.5 truncate">{PROVIDER_META[p].label.split('(')[1]?.replace(')', '') ?? ''}</div>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 rounded-md border border-violet-500/20 bg-violet-500/5 px-2.5 py-2">
-            <Sparkles className="w-3.5 h-3.5 text-violet-300" />
-            <div className="flex-1 min-w-0">
-              <p className="text-violet-200 font-medium">Modo {mode === 'agent' ? 'agente' : 'chat'}</p>
-              <p className="text-violet-100/80 text-[11px] leading-relaxed">
-                {mode === 'agent'
-                  ? 'El modelo puede planificar, usar tools, modificar documentos, consultar workers, ejecutar comandos con confirmación y deshacer cambios.'
-                  : 'El modelo responde y asesora, pero no modifica el workspace.'}
-              </p>
-            </div>
-          </div>
-
-          {meta.needsKey && (
-            <div>
-              <label className="block text-surface-400 mb-1">API Key</label>
-              <input
-                type="password"
-                value={config.apiKey}
-                onChange={e => updateConfig({ apiKey: e.target.value })}
-                placeholder={`Pega tu ${meta.label} API key`}
-                className="w-full bg-surface-800 border border-surface-600 rounded px-2 py-1.5 text-surface-200 placeholder-surface-600 focus:outline-none focus:border-sky-500 transition font-mono"
-              />
-            </div>
-          )}
-
-          {config.provider === 'ollama' && (
-            <div>
-              <label className="block text-surface-400 mb-1">URL de Ollama</label>
-              <input
-                type="text"
-                value={config.endpoint}
-                onChange={e => updateConfig({ endpoint: e.target.value })}
-                placeholder="http://localhost:11434"
-                className="w-full bg-surface-800 border border-surface-600 rounded px-2 py-1.5 text-surface-200 placeholder-surface-600 focus:outline-none focus:border-sky-500 transition font-mono"
-              />
-              <p className="text-surface-600 mt-1">Local: <code className="text-sky-400/70">http://localhost:11434</code> · Remoto: <code className="text-sky-400/70">http://tu-ip:11434</code></p>
-              <p className="text-surface-600 mt-0.5">Ollama remoto necesita <code className="text-amber-400/70">OLLAMA_ORIGINS=*</code> para permitir requests del browser.</p>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-surface-400 mb-1">Modelo (opcional)</label>
-            <input
-              type="text"
-              value={config.model}
-              onChange={e => updateConfig({ model: e.target.value })}
-              placeholder={meta.modelPlaceholder}
-              className="w-full bg-surface-800 border border-surface-600 rounded px-2 py-1.5 text-surface-200 placeholder-surface-600 focus:outline-none focus:border-sky-500 transition font-mono"
-            />
-            <p className="text-surface-600 mt-1">Por defecto: {meta.defaultModel}</p>
-          </div>
-
-          <p className="text-surface-500 flex items-center gap-1 flex-wrap">
-            <Check className="w-3 h-3 text-emerald-500" />
-            Contexto del workspace incluido automáticamente.
-            {mode === 'agent' && <span>· Tools activas · Confirmación obligatoria para borrar.</span>}
-          </p>
-        </div>
-        </>
-      )}
 
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 min-h-0">
         {messages.length === 0 && (
@@ -1355,7 +1383,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           <div className="flex flex-wrap items-center gap-1">
             <button
               type="button"
-              onClick={() => setShowConfig(v => !v)}
+              onClick={() => window.dispatchEvent(new CustomEvent('agora:open-ai-config'))}
               title="Cambiar modelo / proveedor"
               className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-surface-300 transition hover:border-sky-500/40 hover:text-white"
             >
@@ -1376,11 +1404,35 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               {mode === 'agent' ? <Sparkles className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
               <span>{mode === 'agent' ? 'Agente' : 'Chat'}</span>
             </button>
+            <label
+              title="Nivel de permisos del agente"
+              className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-surface-300 transition hover:border-surface-600"
+            >
+              <Shield className="w-3 h-3 text-mandy-300" />
+              <select
+                value={accessPolicy.profile}
+                onChange={(event) => updateAccessProfile(event.target.value as Exclude<AgentAccessProfileId, 'custom'>)}
+                className="max-w-[6.5rem] bg-transparent text-[10px] text-surface-200 outline-none"
+              >
+                {AGENT_ACCESS_PROFILE_ORDER.map((profile) => (
+                  <option key={profile} value={profile} className="bg-surface-900 text-surface-100">
+                    {AGENT_ACCESS_PROFILES[profile].shortLabel}
+                  </option>
+                ))}
+                {accessPolicy.profile === 'custom' && (
+                  <option value="custom" disabled className="bg-surface-900 text-surface-100">
+                    Custom
+                  </option>
+                )}
+              </select>
+            </label>
             <span
-              title={resolvedWorkspaceId === PERSONAL_WORKSPACE_ID ? 'Contexto: workspace personal' : 'Contexto: workspace activo'}
+              title={accessPolicy.capabilities.workspaceContext
+                ? (resolvedWorkspaceId === PERSONAL_WORKSPACE_ID ? 'Contexto: workspace personal' : 'Contexto: workspace activo')
+                : 'Contexto automático desactivado'}
               className="hidden sm:flex items-center gap-1 rounded-md border border-surface-800 bg-surface-900/50 px-1.5 py-0.5 text-surface-400"
             >
-              <Check className="w-3 h-3 text-emerald-500" />
+              <Check className={`w-3 h-3 ${accessPolicy.capabilities.workspaceContext ? 'text-emerald-500' : 'text-surface-600'}`} />
               <span>Contexto</span>
             </span>
           </div>

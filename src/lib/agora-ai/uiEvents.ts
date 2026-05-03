@@ -128,6 +128,17 @@ export function collectAgentWorkspaceEffects(agentRun: AgentRun | undefined, wor
       diagnosticEvents.push(diagnostic);
     }
 
+    if (
+      DOCUMENT_REFRESH_ACTIONS.has(result.name)
+      && (
+        (result.name === 'run_worker_command' || result.name === 'git_commit_workspace')
+          ? result.data?.mayHaveChangedWorkspace === true
+          : true
+      )
+    ) {
+      shouldRefreshDocuments = true;
+    }
+
     if (!result.ok) continue;
 
     const uiCommand = toUiCommand(result.data?.uiCommand);
@@ -138,13 +149,6 @@ export function collectAgentWorkspaceEffects(agentRun: AgentRun | undefined, wor
     if (MUTATION_ACTIONS.has(result.name)) {
       mutations.push({ action: result.name, result });
     }
-    if (
-      DOCUMENT_REFRESH_ACTIONS.has(result.name)
-      && (result.name !== 'run_worker_command' || result.data?.mayHaveChangedWorkspace === true)
-    ) {
-      shouldRefreshDocuments = true;
-    }
-
     if (result.name === 'run_worker_command') {
       workerCommandEvents.push({
         workspaceId,

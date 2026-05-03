@@ -99,6 +99,68 @@ const toolExecutionStatus = (toolCalls: AgentToolCall[]) => {
   return firstToolCall ? `Ejecutando ${firstToolCall.name}…` : 'Sin herramientas para ejecutar…';
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function parseRetryAfterMs(headers: Headers): number | null {
+  const retryAfter = headers.get('retry-after');
+  if (!retryAfter) return null;
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const retryAt = Date.parse(retryAfter);
+  if (!Number.isNaN(retryAt)) return Math.max(0, retryAt - Date.now());
+  return null;
+}
+
+function shouldRetryProviderStatus(status: number) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+async function isNonRetryableRateLimit(response: Response) {
+  if (response.status !== 429) return false;
+  const body = await response.clone().text().catch(() => '');
+  return /\b(quota|billing|credits?|insufficient_quota|payment)\b/i.test(body);
+}
+
+function providerRetryDelayMs(attempt: number, response?: Response) {
+  const retryAfterMs = response ? parseRetryAfterMs(response.headers) : null;
+  if (retryAfterMs !== null) return Math.min(retryAfterMs, 10000);
+  const base = Math.min(800 * (2 ** (attempt - 1)), 8000);
+  return base + Math.floor(Math.random() * 350);
+}
+
+async function fetchProviderWithRetry(
+  provider: string,
+  input: RequestInfo | URL,
+  init: RequestInit,
+  emitStatus: (status: string) => Promise<void>,
+  maxAttempts = 4
+) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(input, init);
+      if (
+        !shouldRetryProviderStatus(response.status)
+        || attempt >= maxAttempts
+        || await isNonRetryableRateLimit(response)
+      ) {
+        return response;
+      }
+      const delay = providerRetryDelayMs(attempt, response);
+      await response.text().catch(() => undefined);
+      await emitStatus(`${provider} respondió ${response.status}; reintento ${attempt + 1}/${maxAttempts} en ${Math.round(delay / 1000)}s…`);
+      await sleep(delay);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) break;
+      const delay = providerRetryDelayMs(attempt);
+      await emitStatus(`${provider} tuvo un fallo de red; reintento ${attempt + 1}/${maxAttempts} en ${Math.round(delay / 1000)}s…`);
+      await sleep(delay);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError || `No se pudo contactar ${provider}`));
+}
+
 const firstToolResultSummary = (
   toolResults: Array<{ toolCall: AgentToolCall; result: AgentToolExecutionResult }>
 ) => toolResults[0]?.result.summary ?? '';
@@ -158,16 +220,29 @@ async function collectTextAndThinking(
 }
 
 /**
- * Execute all tool calls concurrently and return results in the original order.
- * Using Promise.allSettled so an individual tool failure never blocks the others.
+ * Execute tool calls with bounded concurrency and return results in original order.
+ * allSettled semantics keep one tool failure from blocking the rest.
  */
 async function executeToolsParallel(
   toolCalls: AgentToolCall[],
   executionContext: AgentExecutionContext
 ): Promise<Array<{ toolCall: AgentToolCall; result: AgentToolExecutionResult }>> {
-  const settled = await Promise.allSettled(
-    toolCalls.map(tc => executeAgentTool(tc, executionContext))
-  );
+  const concurrency = Math.min(4, Math.max(1, toolCalls.length));
+  const settled: Array<PromiseSettledResult<AgentToolExecutionResult> | undefined> = new Array(toolCalls.length);
+  let nextIndex = 0;
+
+  await Promise.all(Array.from({ length: concurrency }, async () => {
+    while (nextIndex < toolCalls.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const toolCall = toolCalls[index];
+      if (!toolCall) continue;
+      settled[index] = await Promise.resolve(executeAgentTool(toolCall, executionContext))
+        .then((value): PromiseSettledResult<AgentToolExecutionResult> => ({ status: 'fulfilled', value }))
+        .catch((reason): PromiseSettledResult<AgentToolExecutionResult> => ({ status: 'rejected', reason }));
+    }
+  }));
+
   return toolCalls.map((toolCall, i) => {
     const item = settled[i];
     if (!item) {
@@ -206,7 +281,8 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
   const systemPrompt = buildAgoraSystemPrompt({
     mode: options.mode,
     contextPrompt: options.contextPrompt,
-    workspaceId: options.executionContext.workspaceId
+    workspaceId: options.executionContext.workspaceId,
+    accessPolicy: options.executionContext.accessPolicy
   });
 
   const messages: Array<Record<string, unknown>> = [
@@ -223,7 +299,7 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
 
-    const res = await fetch(providerConfig.endpoint, {
+    const res = await fetchProviderWithRetry(providerConfig.label, providerConfig.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -240,7 +316,7 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
           }
           : {})
       })
-    });
+    }, emitStatus);
 
     if (!res.ok) {
       throw new Error(await parseProviderError(providerConfig.label, res.status, await res.text()));
@@ -359,7 +435,8 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
   const systemPrompt = buildAgoraSystemPrompt({
     mode: options.mode,
     contextPrompt: options.contextPrompt,
-    workspaceId: options.executionContext.workspaceId
+    workspaceId: options.executionContext.workspaceId,
+    accessPolicy: options.executionContext.accessPolicy
   });
 
   const useNativeThinking = supportsNativeThinking(options.model) && options.mode === 'agent';
@@ -378,7 +455,7 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetchProviderWithRetry('Anthropic', 'https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -396,7 +473,7 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
           ? { thinking: { type: 'enabled', budget_tokens: 10000 } }
           : {})
       })
-    });
+    }, emitStatus);
 
     if (!res.ok) {
       throw new Error(await parseProviderError('Anthropic', res.status, await res.text()));
@@ -520,7 +597,8 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
   const systemPrompt = buildAgoraSystemPrompt({
     mode: options.mode,
     contextPrompt: options.contextPrompt,
-    workspaceId: options.executionContext.workspaceId
+    workspaceId: options.executionContext.workspaceId,
+    accessPolicy: options.executionContext.accessPolicy
   });
 
   const contents: Array<{ role: 'user' | 'model'; parts: Array<Record<string, unknown>> }> =
@@ -538,7 +616,8 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
 
-    const res = await fetch(
+    const res = await fetchProviderWithRetry(
+      'Gemini',
       `https://generativelanguage.googleapis.com/v1beta/models/${options.model}:generateContent?key=${options.apiKey}`,
       {
         method: 'POST',
@@ -549,7 +628,8 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
           generationConfig: { maxOutputTokens: 8192 },
           ...(options.mode === 'agent' ? { tools: toGeminiTools() } : {})
         })
-      }
+      },
+      emitStatus
     );
 
     if (!res.ok) {

@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { requireAuth, isWorkspaceMember, getTokenFromRequest } from '@/lib/server-auth';
 import { buildAgoraWorkspaceContext } from '@/lib/agora-ai/context';
 import { runProviderConversation } from '@/lib/agora-ai/providerAdapters';
+import { claimAgoraAgentRequest } from '@/lib/agora-ai/rateLimit';
+import { normalizeAgentAccessPolicy } from '@/lib/agora-ai/accessPolicy';
 import type { AgentMode, AgentRequestBody, AgentStreamEvent, AIProvider } from '@/lib/agora-ai/types';
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
@@ -38,10 +40,12 @@ export async function POST(request: NextRequest) {
     provider,
     apiKey = '',
     model = '',
-    mode = 'agent'
+    mode = 'agent',
+    accessPolicy: rawAccessPolicy
   } = body;
 
   const effectiveMode: AgentMode = mode === 'chat' ? 'chat' : 'agent';
+  const accessPolicy = normalizeAgentAccessPolicy(rawAccessPolicy);
 
   if (!messages?.length) {
     return new Response('messages is required', { status: 400 });
@@ -63,6 +67,19 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const claim = claimAgoraAgentRequest(`${auth.uid}:${workspaceId}:${provider}:stream`, {
+    minIntervalMs: 900,
+    maxConcurrent: 2
+  });
+  if (!claim.ok) {
+    return new Response(`Demasiadas solicitudes seguidas a ${provider}. Intenta de nuevo en ${Math.ceil(claim.retryAfterMs / 1000)}s.`, {
+      status: 429,
+      headers: {
+        'Retry-After': String(Math.ceil(claim.retryAfterMs / 1000))
+      }
+    });
+  }
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -81,6 +98,7 @@ export async function POST(request: NextRequest) {
         if (closed) return;
         closed = true;
         clearInterval(keepAlive);
+        claim.release();
         controller.close();
       };
 
@@ -91,7 +109,9 @@ export async function POST(request: NextRequest) {
           send({ type: 'connected' });
           send({ type: 'status', status: 'Preparando contexto del workspace…' });
 
-          const contextPrompt = workspaceId ? await buildAgoraWorkspaceContext(workspaceId) : '';
+          const contextPrompt = workspaceId && accessPolicy.capabilities.workspaceContext
+            ? await buildAgoraWorkspaceContext(workspaceId)
+            : '';
           const agentRun = await runProviderConversation({
             provider,
             apiKey,
@@ -104,7 +124,8 @@ export async function POST(request: NextRequest) {
               uid: auth.uid,
               email: auth.email,
               origin: request.nextUrl.origin,
-              authToken: getTokenFromRequest(request) ?? undefined
+              authToken: getTokenFromRequest(request) ?? undefined,
+              accessPolicy
             },
             callbacks: {
               onStatus: async (status) => send({ type: 'status', status }),

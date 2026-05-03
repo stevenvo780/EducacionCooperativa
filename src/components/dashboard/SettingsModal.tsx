@@ -17,11 +17,29 @@ import {
 import { LinterRegistry } from '@/lib/linters/registry';
 import { MarkdownLinterRegistry, type RuleState } from '@/lib/markdown-linter/registry';
 import { RULE_CATEGORY_LABELS, type RuleCategory } from '@/lib/markdown-linter/types';
+import {
+  AGENT_ACCESS_CAPABILITIES,
+  AGENT_ACCESS_PROFILE_ORDER,
+  AGENT_ACCESS_PROFILES,
+  DEFAULT_CLIENT_AGENT_ACCESS_POLICY,
+  normalizeAgentAccessPolicy
+} from '@/lib/agora-ai/accessPolicy';
+import {
+  PROVIDER_META,
+  loadAIProviderConfig,
+  saveAIProviderConfig,
+  loadAgentAccessPolicy,
+  saveAgentAccessPolicy,
+  loadAgentMode,
+  saveAgentMode,
+  type AIProviderConfig
+} from '@/lib/agora-ai/clientSettings';
+import type { AgentAccessCapability, AgentAccessPolicy, AgentMode, AIProvider } from '@/lib/agora-ai/types';
 
-type SectionId = 'editor-md' | 'editor-st' | 'ai' | 'linter' | 'cuenta';
+export type SettingsSectionId = 'editor-md' | 'editor-st' | 'ai' | 'linter' | 'cuenta';
 
 interface Section {
-  id: SectionId;
+  id: SettingsSectionId;
   label: string;
   icon: LucideIcon;
   description: string;
@@ -30,7 +48,7 @@ interface Section {
 const SECTIONS: Section[] = [
   { id: 'editor-md', label: 'Editor Markdown', icon: Wrench, description: 'Toolbar y módulos visibles' },
   { id: 'editor-st', label: 'Editor ST', icon: Code2, description: 'Comportamiento del editor de código' },
-  { id: 'ai', label: 'Agora IA', icon: Sparkles, description: 'Proveedor, modelo y API key' },
+  { id: 'ai', label: 'Agora IA', icon: Sparkles, description: 'Proveedor, modelo, permisos' },
   { id: 'linter', label: 'Linter Markdown', icon: Shield, description: 'Reglas activas y diccionario personal' },
   { id: 'cuenta', label: 'Cuenta y permisos', icon: KeyRound, description: 'Contraseña, miembros, acceso Git' }
 ];
@@ -38,11 +56,10 @@ const SECTIONS: Section[] = [
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
-  initialSection?: SectionId;
+  initialSection?: SettingsSectionId;
   onOpenChangePassword: () => void;
   onOpenMembers: () => void;
   onOpenGitAccess: () => void;
-  onOpenAIConfig: () => void;
 }
 
 export default function SettingsModal({
@@ -51,10 +68,9 @@ export default function SettingsModal({
   initialSection = 'editor-md',
   onOpenChangePassword,
   onOpenMembers,
-  onOpenGitAccess,
-  onOpenAIConfig
+  onOpenGitAccess
 }: SettingsModalProps) {
-  const [section, setSection] = useState<SectionId>(initialSection);
+  const [section, setSection] = useState<SettingsSectionId>(initialSection);
 
   useEffect(() => {
     if (open) setSection(initialSection);
@@ -135,12 +151,7 @@ export default function SettingsModal({
             {section === 'editor-md' && <EditorMdSection />}
             {section === 'editor-st' && <EditorStSection />}
             {section === 'ai' && (
-              <ExternalSection
-                title="Configuración de Agora IA"
-                description="Provider, modelo, API key y temperatura. Por su tamaño se gestiona en su propio modal."
-                buttonLabel="Abrir configuración de IA"
-                onOpen={() => { onOpenAIConfig(); onClose(); }}
-              />
+              <AISection />
             )}
             {section === 'linter' && <LintersSection />}
             {section === 'cuenta' && (
@@ -152,6 +163,235 @@ export default function SettingsModal({
             )}
           </div>
         </main>
+      </div>
+    </div>
+  );
+}
+
+const CAPABILITY_LABELS: Record<AgentAccessCapability, { label: string; description: string }> = {
+  workspaceContext: {
+    label: 'Contexto automático',
+    description: 'Incluye resumen del workspace en cada conversación.'
+  },
+  documentsRead: {
+    label: 'Leer documentos',
+    description: 'Listar, buscar, resumir y analizar documentos.'
+  },
+  documentsWrite: {
+    label: 'Editar documentos',
+    description: 'Crear, actualizar, renombrar, mover y restaurar documentos.'
+  },
+  documentsDelete: {
+    label: 'Eliminar documentos',
+    description: 'Permite borrar documentos, siempre con confirmación.'
+  },
+  snippets: {
+    label: 'Snippets',
+    description: 'Leer y modificar snippets reutilizables.'
+  },
+  board: {
+    label: 'Tablero Kanban',
+    description: 'Leer y modificar columnas y tarjetas.'
+  },
+  semantic: {
+    label: 'Glosario semántico',
+    description: 'Leer y editar conceptos y relaciones.'
+  },
+  logic: {
+    label: 'Lógica formal / ST',
+    description: 'Formalizar, validar y ejecutar programas ST.'
+  },
+  gitRead: {
+    label: 'Git lectura',
+    description: 'Consultar status e historial de commits.'
+  },
+  gitWrite: {
+    label: 'Git commit',
+    description: 'Crear commits del workspace, con confirmación.'
+  },
+  workerRead: {
+    label: 'Worker lectura',
+    description: 'Ver estado y listar archivos reales del worker.'
+  },
+  workerCommand: {
+    label: 'Comandos worker',
+    description: 'Ejecutar comandos shell en /workspace, con confirmación.'
+  },
+  uiControl: {
+    label: 'Control de interfaz',
+    description: 'Abrir paneles como Git, Terminal, Problemas o Board.'
+  },
+  debug: {
+    label: 'Debug a Problemas',
+    description: 'Publicar diagnósticos del agente en el bus de Problemas.'
+  }
+};
+
+function AISection() {
+  const [config, setConfig] = useState<AIProviderConfig>(() => loadAIProviderConfig());
+  const [mode, setMode] = useState<AgentMode>(() => loadAgentMode());
+  const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(() => loadAgentAccessPolicy());
+  const meta = PROVIDER_META[config.provider];
+
+  const updateConfig = (partial: Partial<AIProviderConfig>) => {
+    setConfig((prev) => {
+      const next = { ...prev, ...partial };
+      saveAIProviderConfig(next);
+      return next;
+    });
+  };
+
+  const updateMode = (nextMode: AgentMode) => {
+    setMode(nextMode);
+    saveAgentMode(nextMode);
+  };
+
+  const updatePolicy = (nextPolicy: AgentAccessPolicy) => {
+    const normalized = normalizeAgentAccessPolicy(nextPolicy, DEFAULT_CLIENT_AGENT_ACCESS_POLICY);
+    setAccessPolicy(normalized);
+    saveAgentAccessPolicy(normalized);
+  };
+
+  const applyProfile = (profile: Exclude<AgentAccessPolicy['profile'], 'custom'>) => {
+    updatePolicy({
+      profile,
+      capabilities: { ...AGENT_ACCESS_PROFILES[profile].capabilities }
+    });
+  };
+
+  const toggleCapability = (capability: AgentAccessCapability, enabled: boolean) => {
+    updatePolicy({
+      profile: 'custom',
+      capabilities: {
+        ...accessPolicy.capabilities,
+        [capability]: enabled
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <SectionHelper>
+          Configuración local del asistente. La API key se guarda solo en sessionStorage del navegador.
+        </SectionHelper>
+        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+          {(Object.keys(PROVIDER_META) as AIProvider[]).map((provider) => (
+            <button
+              key={provider}
+              type="button"
+              onClick={() => updateConfig({ provider })}
+              className={`rounded-md border px-2 py-1.5 text-left text-xs transition ${
+                config.provider === provider
+                  ? 'border-mandy-400/50 bg-mandy-500/10 text-mandy-100'
+                  : 'border-surface-700/50 bg-surface-925/50 text-surface-400 hover:border-surface-600 hover:text-surface-200'
+              }`}
+            >
+              <div className={`font-medium ${PROVIDER_META[provider].color}`}>{PROVIDER_META[provider].label.split('(')[0]?.trim() || provider}</div>
+              <div className="mt-0.5 truncate text-[10px] text-surface-500">{PROVIDER_META[provider].label.split('(')[1]?.replace(')', '') ?? ''}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {meta.needsKey && (
+          <label className="block text-xs">
+            <span className="mb-1 block text-surface-400">API Key</span>
+            <input
+              type="password"
+              value={config.apiKey}
+              onChange={(e) => updateConfig({ apiKey: e.target.value })}
+              placeholder={`Pega tu ${meta.label} API key`}
+              className="w-full rounded-md border border-surface-700/50 bg-surface-925 px-2 py-1.5 font-mono text-xs text-surface-100 placeholder:text-surface-500 focus:border-mandy-400/50 focus:outline-none"
+            />
+          </label>
+        )}
+
+        {config.provider === 'ollama' && (
+          <label className="block text-xs">
+            <span className="mb-1 block text-surface-400">URL de Ollama</span>
+            <input
+              type="text"
+              value={config.endpoint}
+              onChange={(e) => updateConfig({ endpoint: e.target.value })}
+              placeholder="http://localhost:11434"
+              className="w-full rounded-md border border-surface-700/50 bg-surface-925 px-2 py-1.5 font-mono text-xs text-surface-100 placeholder:text-surface-500 focus:border-mandy-400/50 focus:outline-none"
+            />
+          </label>
+        )}
+
+        <label className="block text-xs">
+          <span className="mb-1 block text-surface-400">Modelo</span>
+          <input
+            type="text"
+            value={config.model}
+            onChange={(e) => updateConfig({ model: e.target.value })}
+            placeholder={meta.modelPlaceholder}
+            className="w-full rounded-md border border-surface-700/50 bg-surface-925 px-2 py-1.5 font-mono text-xs text-surface-100 placeholder:text-surface-500 focus:border-mandy-400/50 focus:outline-none"
+          />
+          <span className="mt-1 block text-[10px] text-surface-500">Por defecto: {meta.defaultModel}</span>
+        </label>
+      </div>
+
+      <div className="border-t border-surface-700/40 pt-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h4 className="text-xs font-semibold text-surface-200">Modo y perfil de acceso</h4>
+          <button
+            type="button"
+            onClick={() => updateMode(mode === 'agent' ? 'chat' : 'agent')}
+            className={`rounded-md border px-2 py-1 text-[10px] transition ${
+              mode === 'agent'
+                ? 'border-violet-400/40 bg-violet-500/10 text-violet-200'
+                : 'border-surface-700 bg-surface-925 text-surface-300'
+            }`}
+          >
+            {mode === 'agent' ? 'Modo agente' : 'Modo chat'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+          {AGENT_ACCESS_PROFILE_ORDER.map((profile) => (
+            <button
+              key={profile}
+              type="button"
+              onClick={() => applyProfile(profile)}
+              title={AGENT_ACCESS_PROFILES[profile].description}
+              className={`rounded-md border px-2 py-2 text-left text-xs transition ${
+                accessPolicy.profile === profile
+                  ? 'border-mandy-400/50 bg-mandy-500/10 text-mandy-100'
+                  : 'border-surface-700/50 bg-surface-925/50 text-surface-400 hover:border-surface-600 hover:text-surface-200'
+              }`}
+            >
+              <div className="font-medium">{AGENT_ACCESS_PROFILES[profile].label}</div>
+              <div className="mt-1 line-clamp-2 text-[10px] leading-tight text-surface-500">{AGENT_ACCESS_PROFILES[profile].description}</div>
+            </button>
+          ))}
+        </div>
+
+        {accessPolicy.profile === 'custom' && (
+          <p className="mt-2 text-[11px] text-amber-300">Perfil personalizado activo por cambios manuales.</p>
+        )}
+      </div>
+
+      <div className="border-t border-surface-700/40 pt-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h4 className="text-xs font-semibold text-surface-200">Capacidades del agente</h4>
+          <span className="text-[10px] text-surface-500">
+            {AGENT_ACCESS_CAPABILITIES.filter((capability) => accessPolicy.capabilities[capability]).length}/{AGENT_ACCESS_CAPABILITIES.length} activas
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {AGENT_ACCESS_CAPABILITIES.map((capability) => (
+            <ToggleRow
+              key={capability}
+              label={CAPABILITY_LABELS[capability].label}
+              description={CAPABILITY_LABELS[capability].description}
+              checked={accessPolicy.capabilities[capability]}
+              onChange={(enabled) => toggleCapability(capability, enabled)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -431,35 +671,6 @@ function CuentaSection({
         description="Genera tokens y revoca credenciales del repo del workspace."
         onClick={onOpenGitAccess}
       />
-    </div>
-  );
-}
-
-function ExternalSection({
-  title,
-  description,
-  buttonLabel,
-  onOpen,
-  hint
-}: {
-  title: string;
-  description: string;
-  buttonLabel: string;
-  onOpen: () => void;
-  hint?: string;
-}) {
-  return (
-    <div className="space-y-3">
-      <h4 className="text-sm font-semibold text-surface-100">{title}</h4>
-      <p className="text-xs text-surface-400 leading-relaxed">{description}</p>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="rounded-md bg-mandy-500/15 px-3 py-1.5 text-xs font-medium text-mandy-200 hover:bg-mandy-500/25 transition"
-      >
-        {buttonLabel}
-      </button>
-      {hint && <p className="text-[11px] text-surface-500">{hint}</p>}
     </div>
   );
 }

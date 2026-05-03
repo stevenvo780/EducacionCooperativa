@@ -11,6 +11,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, isWorkspaceMember, getTokenFromRequest } from '@/lib/server-auth';
 import { runProviderConversation } from '@/lib/agora-ai/providerAdapters';
 import { buildAgoraWorkspaceContext } from '@/lib/agora-ai/context';
+import { claimAgoraAgentRequest } from '@/lib/agora-ai/rateLimit';
+import { normalizeAgentAccessPolicy } from '@/lib/agora-ai/accessPolicy';
 import type { AgentMode, AgentRequestBody, AIProvider } from '@/lib/agora-ai/types';
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
@@ -31,9 +33,11 @@ export async function POST(request: NextRequest) {
       provider,
       apiKey = '',
       model = '',
-      mode = 'agent'
+      mode = 'agent',
+      accessPolicy: rawAccessPolicy
     } = body;
     const effectiveMode: AgentMode = mode === 'chat' ? 'chat' : 'agent';
+    const accessPolicy = normalizeAgentAccessPolicy(rawAccessPolicy);
 
     if (!messages?.length) {
       return NextResponse.json({ error: 'messages is required' }, { status: 400 });
@@ -53,7 +57,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const contextPrompt = workspaceId ? await buildAgoraWorkspaceContext(workspaceId) : '';
     const defaults: Record<Exclude<AIProvider, 'ollama'>, string> = {
       openai: 'gpt-4o-mini',
       anthropic: 'claude-haiku-4-5-20251001',
@@ -65,23 +68,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `API key requerida para ${provider}` }, { status: 400 });
     }
 
-    const agentRun = await runProviderConversation({
-      provider,
-      apiKey,
-      model: model || defaults[provider],
-      messages: messages.filter(message => message.role !== 'system'),
-      contextPrompt,
-      mode: effectiveMode,
-      executionContext: {
-        workspaceId,
-        uid: auth.uid,
-        email: auth.email,
-        origin: request.nextUrl.origin,
-        authToken: getTokenFromRequest(request) ?? undefined
-      }
+    const claim = claimAgoraAgentRequest(`${auth.uid}:${workspaceId}:${provider}`, {
+      minIntervalMs: 900,
+      maxConcurrent: 2
     });
+    if (!claim.ok) {
+      return NextResponse.json({
+        error: `Demasiadas solicitudes seguidas a ${provider}. Intenta de nuevo en ${Math.ceil(claim.retryAfterMs / 1000)}s.`,
+        retryAfterMs: claim.retryAfterMs,
+        reason: claim.reason
+      }, { status: 429 });
+    }
 
-    return NextResponse.json({ reply: agentRun.finalReply, agentRun });
+    try {
+      const contextPrompt = workspaceId && accessPolicy.capabilities.workspaceContext
+        ? await buildAgoraWorkspaceContext(workspaceId)
+        : '';
+      const agentRun = await runProviderConversation({
+        provider,
+        apiKey,
+        model: model || defaults[provider],
+        messages: messages.filter(message => message.role !== 'system'),
+        contextPrompt,
+        mode: effectiveMode,
+        executionContext: {
+          workspaceId,
+          uid: auth.uid,
+          email: auth.email,
+          origin: request.nextUrl.origin,
+          authToken: getTokenFromRequest(request) ?? undefined,
+          accessPolicy
+        }
+      });
+
+      return NextResponse.json({ reply: agentRun.finalReply, agentRun });
+    } finally {
+      claim.release();
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });

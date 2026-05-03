@@ -62,7 +62,7 @@ import DragOverlay from '@/components/dashboard/DragOverlay';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
 import WorkspaceTopBar from '@/components/dashboard/WorkspaceTopBar';
-import SettingsModal from '@/components/dashboard/SettingsModal';
+import SettingsModal, { type SettingsSectionId } from '@/components/dashboard/SettingsModal';
 import LeftPanel from '@/components/dashboard/LeftPanel';
 import { SIDEBAR_VIEWS } from '@/components/dashboard/sidebar-views';
 import BottomDock from '@/components/dashboard/BottomDock';
@@ -93,7 +93,7 @@ import { useMosaicTabs } from '@/hooks/dashboard/useMosaicTabs';
 import { useDocumentActions } from '@/hooks/dashboard/useDocumentActions';
 import { useWorkspaceActions } from '@/hooks/dashboard/useWorkspaceActions';
 import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
-import type { AgentDocumentTarget, AgentOpenDocumentsEventDetail } from '@/lib/agora-ai/types';
+import type { AgentDocumentTarget, AgentOpenDocumentsEventDetail, AgentUiCommandEventDetail } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
@@ -504,7 +504,12 @@ function DashboardContent() {
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSectionId>('editor-md');
     const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+    const openSettings = useCallback((section: SettingsSectionId = 'editor-md') => {
+        setSettingsInitialSection(section);
+        setSettingsOpen(true);
+    }, []);
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
     // En mobile el sidebar se reajusta para que el conjunto activity+sidebar
@@ -997,6 +1002,105 @@ function DashboardContent() {
             void openSemanticBrowser();
         });
     }, [openSemanticBrowser]);
+
+    useEffect(() => {
+        const handler = () => openSettings('ai');
+        window.addEventListener('agora:open-ai-config', handler);
+        return () => window.removeEventListener('agora:open-ai-config', handler);
+    }, [openSettings]);
+
+    useEffect(() => {
+        const workspaceMatches = (workspaceId?: string) => {
+            if (!workspaceId || !currentWorkspaceId) return false;
+            return workspaceId === currentWorkspaceId
+                || (workspaceId === PERSONAL_WORKSPACE_ID && currentWorkspaceId === PERSONAL_WORKSPACE_ID);
+        };
+
+        const openSidebarView = (view: ActivityView) => {
+            setActivityView(view);
+            if (isCompact) setShowMobileSidebar(true);
+        };
+
+        const handler = (event: Event) => {
+            const detail = (event as CustomEvent<AgentUiCommandEventDetail>).detail;
+            if (!workspaceMatches(detail?.workspaceId)) return;
+
+            const panel = detail.command.panel;
+            const type = detail.command.type;
+            if (detail.command.folder) {
+                setActiveFolderSafe(detail.command.folder);
+            }
+
+            if (type === 'open_terminal' || panel === 'terminal') {
+                setDockInitialTab('terminal');
+                setBottomDockOpen(true);
+                return;
+            }
+            if (type === 'open_problems' || panel === 'problems') {
+                setDockInitialTab('problems');
+                setBottomDockOpen(true);
+                return;
+            }
+            if (type === 'open_ai_config' || panel === 'ai-config') {
+                openSettings('ai');
+                return;
+            }
+            if (type === 'open_linter_config' || panel === 'linter-config') {
+                window.dispatchEvent(new CustomEvent('agora:open-linter-config'));
+                return;
+            }
+
+            switch (panel) {
+                case 'files':
+                    openSidebarView('files');
+                    break;
+                case 'search':
+                    openSidebarView('search');
+                    setShowQuickSearch(true);
+                    break;
+                case 'git':
+                    openSidebarView('git');
+                    break;
+                case 'snippets':
+                    openSidebarView('snippets');
+                    break;
+                case 'board':
+                    void openBoard();
+                    break;
+                case 'semantic':
+                    void openSemanticBrowser();
+                    break;
+                case 'st':
+                    void openStRunner();
+                    break;
+                case 'formalizer':
+                    void openFormalizer();
+                    break;
+                case 'ai':
+                    setRightPanelOpen(true);
+                    break;
+                case 'settings':
+                    openSettings();
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        window.addEventListener('agora:agent-ui-command', handler as EventListener);
+        return () => window.removeEventListener('agora:agent-ui-command', handler as EventListener);
+    }, [
+        currentWorkspaceId,
+        isCompact,
+        openBoard,
+        openFormalizer,
+        openSemanticBrowser,
+        openSettings,
+        openStRunner,
+        setActiveFolderSafe,
+        setShowMobileSidebar,
+        setShowQuickSearch
+    ]);
 
     const showDialog = useCallback((config: DialogConfig) => {
         return new Promise<DialogResult>((resolve) => {
@@ -1986,13 +2090,14 @@ function DashboardContent() {
                     }}
                     onShowMembers={() => setShowMembersModal(true)}
                     onOpenPricing={() => setShowPricingModal(true)}
-                    onOpenSettings={() => setSettingsOpen(true)}
+                    onOpenSettings={() => openSettings()}
                     onLogout={() => logout()}
                 />
 
                 <SettingsModal
                     open={settingsOpen}
                     onClose={() => setSettingsOpen(false)}
+                    initialSection={settingsInitialSection}
                     onOpenChangePassword={() => {
                         setPasswordForm({ current: '', new: '', confirm: '' });
                         setPasswordError('');
@@ -2003,12 +2108,6 @@ function DashboardContent() {
                     onOpenGitAccess={() => {
                         setActivityView('git');
                         if (isSidebarCollapsed) setIsSidebarCollapsed(false);
-                    }}
-                    onOpenAIConfig={() => {
-                        setRightPanelOpen(true);
-                        if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new CustomEvent('agora:open-ai-config'));
-                        }
                     }}
                 />
 

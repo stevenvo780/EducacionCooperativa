@@ -28,6 +28,7 @@ import type {
   AgentRollbackAction
 } from '@/lib/agora-ai/types';
 import { isWorkspaceMember } from '@/lib/server-auth';
+import { getAgentAccessDenial } from '@/lib/agora-ai/accessPolicy';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
 import {
@@ -2648,6 +2649,30 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
 
 export async function executeAgentTool(call: AgentToolCall, ctx: AgentExecutionContext): Promise<AgentToolExecutionResult> {
   try {
+    const denial = getAgentAccessDenial(call, ctx.accessPolicy);
+    if (denial) {
+      const result: AgentToolExecutionResult = {
+        ok: false,
+        name: call.name,
+        callId: call.id,
+        summary: denial.message,
+        error: denial.message,
+        data: {
+          accessDenied: true,
+          requiredCapability: denial.capability,
+          profile: denial.profile,
+          diagnostic: {
+            severity: 'warning',
+            message: `Tool bloqueada: ${call.name}`,
+            detail: denial.message,
+            code: 'agent-access-policy'
+          }
+        }
+      };
+      await writeAuditLog(ctx, call, result);
+      return result;
+    }
+
     const handler = TOOL_HANDLERS[call.name];
     if (!handler) throw new Error(`Tool desconocida: ${call.name}`);
     const result = await handler(call, ctx);

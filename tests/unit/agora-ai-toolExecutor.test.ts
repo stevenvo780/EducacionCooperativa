@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentExecutionContext, AgentToolCall } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { DocumentType } from '@/types/documents';
+import { createAgentAccessPolicyFromProfile } from '@/lib/agora-ai/accessPolicy';
 
 type FirestoreData = Record<string, unknown>;
 type WhereClause = { field: string; op: '==' | '!='; value: unknown };
@@ -364,6 +365,22 @@ describe('executeAgentTool', () => {
     expect(pending.requiresConfirmation).toBe(true);
     expect(pending.pendingConfirmation?.toolName).toBe('run_worker_command');
     expect(pending.summary).toContain('npm test');
+  });
+
+  it('bloquea tools que el perfil de acceso no permite', async () => {
+    const { executeAgentTool } = await import('@/lib/agora-ai/toolExecutor');
+
+    const denied = await executeAgentTool(call('run_worker_command', {
+      command: 'pwd',
+      confirmed: true
+    }), {
+      ...ctx,
+      accessPolicy: createAgentAccessPolicyFromProfile('read_only')
+    });
+
+    expect(denied.ok).toBe(false);
+    expect(denied.data?.accessDenied).toBe(true);
+    expect(denied.data?.requiredCapability).toBe('workerCommand');
   });
 
   it('crea snippets y tarjetas de tablero', async () => {
