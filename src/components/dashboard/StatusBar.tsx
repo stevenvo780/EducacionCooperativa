@@ -9,7 +9,7 @@ import {
   WifiOff,
   AlertTriangle
 } from 'lucide-react';
-import { subscribeProblems, type ProblemEntry } from '@/lib/console-bus';
+import { subscribeDiagnostics, type ResolvedDiagnostic } from '@/lib/diagnostics-bus';
 
 interface StatusBarProps {
   workspaceLabel: string;
@@ -40,10 +40,10 @@ export default function StatusBar({
   rightPanelOpen,
   onToggleRightPanel
 }: StatusBarProps) {
-  const [problems, setProblems] = useState<ProblemEntry[]>([]);
-  useEffect(() => subscribeProblems(setProblems), []);
-  const errors = problems.filter((p) => p.severity === 'error').length;
-  const warns = problems.filter((p) => p.severity === 'warning').length;
+  const [diagnostics, setDiagnostics] = useState<ResolvedDiagnostic[]>([]);
+  useEffect(() => subscribeDiagnostics(setDiagnostics), []);
+  const errors = diagnostics.filter((p) => p.severity === 'error').length;
+  const warns = diagnostics.filter((p) => p.severity === 'warning').length;
 
   return (
     <div className="flex h-6 shrink-0 items-center justify-between gap-2 border-t border-surface-700/40 bg-surface-925/80 px-2 text-[11px] text-surface-300">

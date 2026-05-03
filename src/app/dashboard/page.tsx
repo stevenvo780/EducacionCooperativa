@@ -150,7 +150,7 @@ function DashboardContent() {
 
     // Initialize touch drag polyfill for tablet/mobile support
     useEffect(() => { initTouchDragPolyfill(); }, []);
-    useEffect(() => { void import('@/lib/console-bus').then(m => m.installConsoleBus()); }, []);
+    useEffect(() => { void import('@/lib/diagnostics-bus').then(m => m.installDiagnosticsBus()); }, []);
 
     useEffect(() => {
         if (!user) return;
@@ -397,6 +397,7 @@ function DashboardContent() {
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
     const [activityView, setActivityView] = useState<ActivityView>('files');
     const [bottomDockOpen, setBottomDockOpen] = useState(false);
+    const [dockInitialTab, setDockInitialTab] = useState<'terminal' | 'problems'>('terminal');
     const [rightPanelOpen, setRightPanelOpen] = useState(false);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -2068,7 +2069,7 @@ function DashboardContent() {
                             {rightPanelOpen && !isCompact && (
                               <>
                                 <PanelResizeHandle className="w-1 bg-surface-800 hover:bg-mandy-500/40 transition-colors" />
-                                <Panel id="right-panel" defaultSize="30%" minSize="20%" maxSize="60%" collapsible>
+                                <Panel id="right-panel" defaultSize="38%" minSize="25%" maxSize="65%" collapsible>
                                   <RightPanel
                                     open
                                     onToggle={() => setRightPanelOpen(false)}
@@ -2095,6 +2096,7 @@ function DashboardContent() {
                             <Panel id="bottom-dock" defaultSize="30%" minSize="15%" maxSize="70%" collapsible>
                               <BottomDock
                                 open
+                                initialTab={dockInitialTab}
                                 onToggle={() => setBottomDockOpen(false)}
                                 workspaceId={currentWorkspace?.id}
                                 workspaceName={currentWorkspace?.name}
@@ -2111,6 +2113,11 @@ function DashboardContent() {
                                   const s = terminalSessions.find(t => t.id === id);
                                   if (s) void promptRenameTerminalSession(s);
                                 }}
+                                resolveDocName={(uri) => docs.find(d => d.id === uri)?.name ?? null}
+                                onOpenDocument={(uri) => {
+                                  const doc = docs.find(d => d.id === uri);
+                                  if (doc) void openDocument(doc);
+                                }}
                               />
                             </Panel>
                           </>
@@ -2126,8 +2133,8 @@ function DashboardContent() {
                         workerStatus={workerStatus}
                         isOnline={isOnline}
                         bottomDockOpen={bottomDockOpen}
-                        onToggleDock={() => setBottomDockOpen((v) => !v)}
-                        onOpenProblems={() => setBottomDockOpen(true)}
+                        onToggleDock={() => { setDockInitialTab('terminal'); setBottomDockOpen((v) => !v); }}
+                        onOpenProblems={() => { setDockInitialTab('problems'); setBottomDockOpen(true); }}
                         rightPanelOpen={rightPanelOpen}
                         onToggleRightPanel={() => setRightPanelOpen((v) => !v)}
                     />
