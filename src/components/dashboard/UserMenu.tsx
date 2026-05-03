@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { CreditCard, KeyRound, LogOut, Sparkles, Users, type LucideIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CreditCard, KeyRound, LogOut, Sparkles, Users, HardDrive, type LucideIcon } from 'lucide-react';
+import { authFetch } from '@/services/apiClient';
 
 interface UserMenuProps {
   open: boolean;
@@ -38,6 +39,23 @@ export default function UserMenu({
   onLogout
 }: UserMenuProps) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const [storage, setStorage] = useState<{ usedBytes: number; limitBytes: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void (async () => {
+      try {
+        const res = await authFetch('/api/payments/storage-usage');
+        if (!res.ok) return;
+        const data = await res.json() as { usedBytes?: number; limitBytes?: number };
+        if (active && typeof data.usedBytes === 'number' && typeof data.limitBytes === 'number') {
+          setStorage({ usedBytes: data.usedBytes, limitBytes: data.limitBytes });
+        }
+      } catch { /* sin storage info */ }
+    })();
+    return () => { active = false; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -91,6 +109,13 @@ export default function UserMenu({
     }
   ];
 
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  }
+
   return (
     <div
       ref={ref}
@@ -104,6 +129,27 @@ export default function UserMenu({
           <span className="truncate font-medium">{displayName || email}</span>
         </div>
         <p className="mt-0.5 truncate text-[11px] text-surface-500">{email}</p>
+        {storage && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-[10px] text-surface-500">
+              <span className="flex items-center gap-1">
+                <HardDrive className="h-2.5 w-2.5" />
+                {formatBytes(storage.usedBytes)} de {formatBytes(storage.limitBytes)}
+              </span>
+              <span className="text-surface-400">{Math.round((storage.usedBytes / storage.limitBytes) * 100)}%</span>
+            </div>
+            <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-800">
+              <div
+                className={`h-full transition-[width] ${
+                  storage.usedBytes / storage.limitBytes > 0.9 ? 'bg-rose-400' :
+                  storage.usedBytes / storage.limitBytes > 0.7 ? 'bg-amber-300' :
+                  'bg-emerald-400'
+                }`}
+                style={{ width: `${Math.min(100, (storage.usedBytes / storage.limitBytes) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <ul className="py-1">
