@@ -6,8 +6,10 @@ import type { DocItem, ViewMode, Workspace } from '@/components/dashboard/types'
 import { loadDashboardState, restoreOpenTabs, saveDashboardState, validateMosaicNode } from '@/services/dashboardPersistence';
 
 interface UseDashboardPersistenceParams {
-  currentWorkspace: Workspace | null;
+  /** @deprecated retained for call-site stability; el auto-inject del tile Files se removió. */
+  currentWorkspace?: Workspace | null;
   currentWorkspaceId: string | undefined;
+  /** @deprecated retained for call-site stability. */
   userUid?: string;
   docs: DocItem[];
   loadingDocs: boolean;
@@ -36,9 +38,9 @@ interface UseDashboardPersistenceParams {
 }
 
 export const useDashboardPersistence = ({
-  currentWorkspace,
+  currentWorkspace: _currentWorkspace,
   currentWorkspaceId,
-  userUid,
+  userUid: _userUid,
   docs,
   loadingDocs,
   openTabs,
@@ -112,35 +114,11 @@ export const useDashboardPersistence = ({
     zenRestoreRef
   ]);
 
-  useEffect(() => {
-    if (!currentWorkspace || !userUid) return;
-
-    const filesTabId = `files-${currentWorkspace.id}`;
-    const hasFilesTab = openTabs.some(tab => tab.id === filesTabId);
-    const isClosedForWorkspace = closedFilesTabByWorkspace[currentWorkspace.id];
-    if (hasFilesTab || isClosedForWorkspace) return;
-
-    void (async () => {
-      const newFilesItem: DocItem = {
-        id: filesTabId,
-        name: 'Archivos',
-        type: 'files',
-        updatedAt: new Date(),
-        ownerId: userUid
-      };
-
-      // Dedupe dentro del setter — el effect puede dispararse 2x y ambas
-      // pasadas ven `hasFilesTab=false` antes de que la primera commit.
-      setOpenTabs(prev => prev.some(t => t.id === filesTabId) ? prev : [...prev, newFilesItem]);
-      const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-      setMosaicNode(current => {
-        const leaves = getLeaves(current);
-        if (leaves.includes(filesTabId)) return current;
-        return createBalancedTreeFromLeaves([...leaves, filesTabId]);
-      });
-      setSelectedDocId(filesTabId);
-    })();
-  }, [currentWorkspace, userUid, openTabs, closedFilesTabByWorkspace, setMosaicNode, setOpenTabs, setSelectedDocId]);
+  // El sidebar izquierdo ya muestra el árbol de archivos completo. El tile
+  // "Archivos" del Mosaic se mantiene como vista opcional (botón en HeaderBar)
+  // y NO se auto-inyecta al abrir un workspace — antes lo hacía y dejaba al
+  // editor compitiendo por ancho con un explorador duplicado.
+  void closedFilesTabByWorkspace;
 
   useEffect(() => {
     if (!currentWorkspaceId || loadingDocs) return;
