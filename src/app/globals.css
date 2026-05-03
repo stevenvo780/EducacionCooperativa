@@ -450,6 +450,30 @@ body {
   line-height: 24px !important;
 }
 
+/* RightPanel (Agora AI) — container queries para que el chat se
+   adapte al ancho disponible sin reescribirlo. Usa el data-shell
+   para scopear las reglas y evitar afectar otros chats. */
+[data-shell='copilot'] {
+  container-type: inline-size;
+  container-name: aichat;
+}
+
+/* Cuando el panel es estrecho (<420px), reduce padding interno y
+   compacta el header del chat para ganar altura util. */
+@container aichat (max-width: 420px) {
+  [data-shell='copilot'] aside {
+    width: 0 !important;
+    border-right: 0 !important;
+    overflow: hidden !important;
+  }
+}
+
+@container aichat (max-width: 560px) {
+  [data-shell='copilot'] textarea {
+    font-size: 13px;
+  }
+}
+
 /* MDX editor toolbar — responsive overflow para tablet y mobile.
    Filosofia "Material/Google": en pantallas pequenas la toolbar
    permite scroll horizontal en lugar de cortar; en muy pequenas
