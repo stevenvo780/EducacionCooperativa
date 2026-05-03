@@ -101,6 +101,13 @@ export const useDashboardPersistence = ({
     setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspaceId]: false }));
     stateRestoredForWorkspaceRef.current = null;
     clearActiveSession();
+    // Al cambiar de workspace los diagnostics de los linters por documento
+    // se vuelven irrelevantes — pertenecen al doc anterior. Limpiamos los
+    // sources que sabemos que son por-documento.
+    void import('@/lib/diagnostics-bus').then((m) => {
+      m.clearDiagnostics('markdown-linter');
+      m.clearDiagnostics('st-linter');
+    });
   }, [
     currentWorkspaceId,
     clearActiveSession,

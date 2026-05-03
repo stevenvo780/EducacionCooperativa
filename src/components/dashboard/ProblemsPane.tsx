@@ -189,7 +189,7 @@ export default function ProblemsPane({ resolveDocName, onOpenDocument, onRunActi
                   {list.map((d) => (
                     <li
                       key={d.id}
-                      className="group flex items-start gap-2 px-3 py-1.5 transition hover:bg-surface-800/40"
+                      className="group flex items-start gap-2 px-3 py-1.5 transition hover:bg-surface-800/40 focus-within:bg-surface-800/40"
                     >
                       <span className="mt-0.5 shrink-0">{severityIcon(d.severity)}</span>
                       <button
