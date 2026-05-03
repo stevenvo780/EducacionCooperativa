@@ -4,29 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Hash, Heading1, Heading2, Heading3, FileQuestion } from 'lucide-react';
 import type { DocItem } from '@/components/dashboard/types';
 import { authFetch } from '@/services/apiClient';
-
-interface OutlineItem {
-  level: number;
-  text: string;
-  line: number;
-  id: string;
-}
-
-function parseHeadings(content: string): OutlineItem[] {
-  const items: OutlineItem[] = [];
-  const lines = content.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const m = line.match(/^(#{1,6})\s+(.+?)\s*#*$/);
-    if (m) {
-      const level = m[1].length;
-      const text = m[2].trim();
-      const id = `${i}-${text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')}`;
-      items.push({ level, text, line: i + 1, id });
-    }
-  }
-  return items;
-}
+import { parseMarkdownOutline } from '@/lib/markdown-outline';
 
 interface OutlineViewProps {
   selectedDoc: DocItem | null;
@@ -62,7 +40,7 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
     return () => { active = false; };
   }, [selectedDoc]);
 
-  const headings = useMemo(() => parseHeadings(content), [content]);
+  const headings = useMemo(() => parseMarkdownOutline(content), [content]);
 
   return (
     <div className="flex h-full w-full flex-col bg-surface-900">
