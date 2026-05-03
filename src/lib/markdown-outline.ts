@@ -38,8 +38,9 @@ export function parseMarkdownOutline(content: string): OutlineHeading[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (typeof line !== 'string') continue;
     const fenceMatch = line.match(/^(```|~~~)/);
-    if (fenceMatch) {
+    if (fenceMatch && fenceMatch[1]) {
       const marker = fenceMatch[1];
       if (!inFence) {
         inFence = true;
@@ -53,7 +54,7 @@ export function parseMarkdownOutline(content: string): OutlineHeading[] {
     if (inFence) continue;
 
     const m = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
-    if (m) {
+    if (m && m[1] && m[2]) {
       const level = m[1].length;
       const text = m[2].trim();
       if (text.length === 0) continue;
