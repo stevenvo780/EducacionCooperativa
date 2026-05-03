@@ -1,8 +1,33 @@
-# Agora — Plataforma Educativa Cooperativa
+# Agora — Frontend (Next.js)
 
-Plataforma web colaborativa orientada a investigación, educación y lógica formal. Combina un editor de documentos avanzado, terminales Linux en la nube, un chat multi-IA, un motor de formalización lógica, un linter académico y herramientas de gestión de proyectos.
+Frontend Next.js 15 desplegado en Vercel (`agora.elenxos.com`). Es el repo
+principal con auto-deploy de Vercel — por eso conserva el historial completo
+del proyecto. Los servicios backend viven en repos hermanos (ver más abajo).
 
-**URL de producción:** `https://agora.humanizar.cloud`
+**URL de producción:** `https://agora.elenxos.com`
+
+## Repos hermanos (poly-repo)
+
+Cada componente vive en su propio repo en GitHub con su historial completo
+(extraído del monorepo original con `git filter-repo`). Esto permite que cada
+pieza tenga su CI, sus permisos y su versionado independiente.
+
+| Repo | Rol | Deploy |
+|------|-----|--------|
+| **stevenvo780/EducacionCooperativa** (este) | Frontend Next.js 15 (UI, auth, Firestore, MinIO, Forgejo SDK) | Vercel auto-deploy desde master |
+| [stevenvo780/agora-backend](https://github.com/stevenvo780/agora-backend) | Streaming del agente IA (Express en Cloud Run, sin cap de tiempo) | `gcloud run deploy agora-backend --source .` |
+| [stevenvo780/agora-hub](https://github.com/stevenvo780/agora-hub) | TermiCoop Hub: socket.io que coordina workers y agente | systemd `edu-hub.service` en stev-server |
+| [stevenvo780/agora-worker](https://github.com/stevenvo780/agora-worker) | Worker Docker (terminal por workspace) + daemon `agora-host-sync` | `docker push stevenvo780/edu-worker:latest` + `edu-worker-manager update all` |
+| [stevenvo780/agora-cli](https://github.com/stevenvo780/agora-cli) | CLI de terminal para Agora fuera de la web | npm publish (pendiente) |
+
+**Antes de tocar uno de los servicios** clona su repo correspondiente:
+
+```bash
+git clone git@github.com:stevenvo780/agora-backend.git
+git clone git@github.com:stevenvo780/agora-hub.git
+git clone git@github.com:stevenvo780/agora-worker.git
+git clone git@github.com:stevenvo780/agora-cli.git
+```
 
 ---
 
