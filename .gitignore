@@ -105,3 +105,9 @@ scripts
 # Notas privadas para Claude (credenciales de infraestructura) — NUNCA commitear.
 .claude/secrets.md
 .claude/scheduled_tasks.lock
+
+# AgoraBackend
+AgoraBackend/node_modules/
+AgoraBackend/dist/
+AgoraBackend/.env
+AgoraBackend/.env.local
