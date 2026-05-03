@@ -1030,8 +1030,10 @@ export const verifyTheoryGraph = (graph: TheoryGraph): TheoryGraphDiagnostic[] =
   const formulaClaims = claimNodes.filter((node) => node.formula && node.logicProfile);
   for (let index = 0; index < formulaClaims.length; index += 1) {
     const left = formulaClaims[index];
+    if (!left) continue;
     for (let next = index + 1; next < formulaClaims.length; next += 1) {
       const right = formulaClaims[next];
+      if (!right) continue;
       if (!left.logicProfile || left.logicProfile !== right.logicProfile || !left.formula || !right.formula) continue;
       try {
         const leftFormula = canonicalizeSTFormula(left.formula, left.logicProfile);

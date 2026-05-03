@@ -10,15 +10,17 @@
  * con los requisitos estructurales y estilísticos institucionales.
  */
 
-import { type LinterRule, type LinterDiagnostic, getCodeBlockLines } from './types';
+import { type LinterRule, type LinterDiagnostic, getCodeBlockLines, lineAt } from './types';
 
 /** Extrae todos los encabezados del documento con su nivel y línea. */
 function extractHeadings(lines: string[], codeLines: Set<number>): Array<{ level: number; text: string; lineIdx: number }> {
   const headings: Array<{ level: number; text: string; lineIdx: number }> = [];
   for (let i = 0; i < lines.length; i++) {
     if (codeLines.has(i)) continue;
-    const match = lines[i].match(/^(#{1,6})\s+(.+)/);
-    if (match) headings.push({ level: match[1].length, text: match[2].trim(), lineIdx: i });
+    const match = lineAt(lines, i).match(/^(#{1,6})\s+(.+)/);
+    const hashes = match?.[1];
+    const headingText = match?.[2];
+    if (hashes && headingText) headings.push({ level: hashes.length, text: headingText.trim(), lineIdx: i });
   }
   return headings;
 }
@@ -133,7 +135,7 @@ export const thesisFirstPersonRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (/^[#>]/.test(line.trim())) continue;
 
       let match;
@@ -184,7 +186,7 @@ export const thesisWeakAssertionRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (/^[#>]/.test(line.trim())) continue;
 
       for (const [phrase, suggestion] of WEAK_ASSERTIONS) {
@@ -230,9 +232,8 @@ export const thesisHypothesisRule: LinterRule = {
 
     // Buscar la siguiente sección (o fin de documento)
     const introIdx = headings.indexOf(introHeading);
-    const nextHeadingLine = introIdx + 1 < headings.length
-      ? headings[introIdx + 1].lineIdx
-      : lines.length;
+    const nextIntroHeading = headings[introIdx + 1];
+    const nextHeadingLine = nextIntroHeading ? nextIntroHeading.lineIdx : lines.length;
 
     // Extraer texto de la introducción
     const introText = lines
@@ -258,7 +259,7 @@ export const thesisHypothesisRule: LinterRule = {
         line: introHeading.lineIdx + 1,
         column: 1,
         endLine: introHeading.lineIdx + 1,
-        endColumn: lines[introHeading.lineIdx].length + 1,
+        endColumn: lineAt(lines, introHeading.lineIdx).length + 1,
         source: 'Thesis'
       }];
     }
@@ -286,9 +287,8 @@ export const thesisAbstractLengthRule: LinterRule = {
     if (!abstractHeading) return [];
 
     const headingIdx = headings.indexOf(abstractHeading);
-    const nextLine = headingIdx + 1 < headings.length
-      ? headings[headingIdx + 1].lineIdx
-      : lines.length;
+    const nextHeading = headings[headingIdx + 1];
+    const nextLine = nextHeading ? nextHeading.lineIdx : lines.length;
 
     const abstractText = lines
       .slice(abstractHeading.lineIdx + 1, nextLine)
@@ -306,7 +306,7 @@ export const thesisAbstractLengthRule: LinterRule = {
         line: abstractHeading.lineIdx + 1,
         column: 1,
         endLine: abstractHeading.lineIdx + 1,
-        endColumn: lines[abstractHeading.lineIdx].length + 1,
+        endColumn: lineAt(lines, abstractHeading.lineIdx).length + 1,
         source: 'Thesis'
       }];
     }
@@ -319,7 +319,7 @@ export const thesisAbstractLengthRule: LinterRule = {
         line: abstractHeading.lineIdx + 1,
         column: 1,
         endLine: abstractHeading.lineIdx + 1,
-        endColumn: lines[abstractHeading.lineIdx].length + 1,
+        endColumn: lineAt(lines, abstractHeading.lineIdx).length + 1,
         source: 'Thesis'
       }];
     }
@@ -348,9 +348,8 @@ export const thesisKeywordsRule: LinterRule = {
     if (!abstractHeading) return [];
 
     const headingIdx = headings.indexOf(abstractHeading);
-    const nextLine = headingIdx + 1 < headings.length
-      ? headings[headingIdx + 1].lineIdx
-      : lines.length;
+    const nextHeading = headings[headingIdx + 1];
+    const nextLine = nextHeading ? nextHeading.lineIdx : lines.length;
 
     const abstractLines = lines.slice(abstractHeading.lineIdx + 1, nextLine);
     const keywordPattern = /^\s*\*{0,2}(?:palabras?\s+clave|keywords?)\s*[:*]/i;
@@ -364,7 +363,7 @@ export const thesisKeywordsRule: LinterRule = {
         line: abstractHeading.lineIdx + 1,
         column: 1,
         endLine: abstractHeading.lineIdx + 1,
-        endColumn: lines[abstractHeading.lineIdx].length + 1,
+        endColumn: lineAt(lines, abstractHeading.lineIdx).length + 1,
         source: 'Thesis'
       }];
     }
@@ -402,8 +401,9 @@ export const thesisSectionOrderRule: LinterRule = {
     const foundOrder: Array<{ orderIdx: number; label: string; lineIdx: number }> = [];
     for (const heading of headings) {
       for (let oi = 0; oi < ORDER.length; oi++) {
-        if (headingMatchesPattern(heading.text, ORDER[oi].patterns)) {
-          foundOrder.push({ orderIdx: oi, label: ORDER[oi].label, lineIdx: heading.lineIdx });
+        const orderedSection = ORDER[oi];
+        if (orderedSection && headingMatchesPattern(heading.text, orderedSection.patterns)) {
+          foundOrder.push({ orderIdx: oi, label: orderedSection.label, lineIdx: heading.lineIdx });
           break;
         }
       }
@@ -411,15 +411,18 @@ export const thesisSectionOrderRule: LinterRule = {
 
     // Detectar secciones fuera de orden
     for (let i = 1; i < foundOrder.length; i++) {
-      if (foundOrder[i].orderIdx < foundOrder[i - 1].orderIdx) {
+      const current = foundOrder[i];
+      const previous = foundOrder[i - 1];
+      if (!current || !previous) continue;
+      if (current.orderIdx < previous.orderIdx) {
         results.push({
-          message: `Sección fuera de orden: "${foundOrder[i].label}" aparece antes de "${foundOrder[i - 1].label}".`,
+          message: `Sección fuera de orden: "${current.label}" aparece antes de "${previous.label}".`,
           suggestion: `El orden canónico es: ${ORDER.map((s) => s.label).join(' → ')}`,
           severity: 'info',
-          line: foundOrder[i].lineIdx + 1,
+          line: current.lineIdx + 1,
           column: 1,
-          endLine: foundOrder[i].lineIdx + 1,
-          endColumn: lines[foundOrder[i].lineIdx].length + 1,
+          endLine: current.lineIdx + 1,
+          endColumn: lineAt(lines, current.lineIdx).length + 1,
           source: 'Thesis'
         });
       }

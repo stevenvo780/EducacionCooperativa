@@ -350,6 +350,7 @@ const buildChecksSection = (projections: ConceptProjection[]) => {
   for (let index = 0; index < Math.min(projections.length, 5); index += 1) {
     const current = projections[index];
     const next = projections[index + 1];
+    if (!current) break;
     if (!next) break;
     lines.push(`check satisfiable ${toClaimExpression(`(${current.formula}) & (${next.formula})`)}`);
   }

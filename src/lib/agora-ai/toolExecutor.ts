@@ -143,7 +143,10 @@ async function resolveDocumentId(rawId: string, ctx: AgentExecutionContext): Pro
     return name === nameNorm;
   });
 
-  if (matches.length === 1) return matches[0].id;
+  if (matches.length === 1) {
+    const match = matches[0];
+    if (match) return match.id;
+  }
 
   // Try partial / includes match if exact match failed
   if (matches.length === 0) {
@@ -151,7 +154,10 @@ async function resolveDocumentId(rawId: string, ctx: AgentExecutionContext): Pro
       const name = (d.data().name || '').trim().toLowerCase();
       return name.includes(nameNorm) || nameNorm.includes(name);
     });
-    if (partial.length === 1) return partial[0].id;
+    if (partial.length === 1) {
+      const match = partial[0];
+      if (match) return match.id;
+    }
     if (partial.length > 1) {
       const names = partial.slice(0, 5).map(d => `"${d.data().name}" (${d.id})`).join(', ');
       throw new Error(`Múltiples documentos coinciden con "${rawId}": ${names}. Usa el ID exacto.`);
@@ -206,7 +212,10 @@ async function resolveSnippetId(rawId: string, ctx: AgentExecutionContext): Prom
   const key = normalizeLookupKey(rawId);
   const snippets = await listWorkspaceSnippets(ctx);
   const exact = snippets.filter((snippet) => normalizeLookupKey(String(snippet.title || '')) === key);
-  if (exact.length === 1) return exact[0].id;
+  if (exact.length === 1) {
+    const match = exact[0];
+    if (match) return match.id;
+  }
   if (exact.length > 1) {
     throw new Error(`Múltiples snippets coinciden con "${rawId}". Usa el ID exacto.`);
   }
@@ -215,7 +224,10 @@ async function resolveSnippetId(rawId: string, ctx: AgentExecutionContext): Prom
     const title = normalizeLookupKey(String(snippet.title || ''));
     return title.includes(key) || key.includes(title);
   });
-  if (partial.length === 1) return partial[0].id;
+  if (partial.length === 1) {
+    const match = partial[0];
+    if (match) return match.id;
+  }
   if (partial.length > 1) {
     throw new Error(`Múltiples snippets coinciden parcialmente con "${rawId}". Usa el ID exacto.`);
   }
@@ -293,10 +305,16 @@ async function resolveBoardColumn(boardRef: FirebaseFirestore.DocumentReference,
   const snap = await boardRef.collection('columns').orderBy('order').get();
   const columns = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredBoardColumn));
   const exact = columns.filter((column) => normalizeLookupKey(String(column.name || '')) === key);
-  if (exact.length === 1) return exact[0];
+  if (exact.length === 1) {
+    const match = exact[0];
+    if (match) return match;
+  }
   if (exact.length > 1) throw new Error(`Múltiples columnas coinciden con "${rawId}".`);
   const partial = columns.filter((column) => normalizeLookupKey(String(column.name || '')).includes(key));
-  if (partial.length === 1) return partial[0];
+  if (partial.length === 1) {
+    const match = partial[0];
+    if (match) return match;
+  }
   if (partial.length > 1) throw new Error(`Múltiples columnas coinciden parcialmente con "${rawId}".`);
   throw new Error(`Columna no encontrada: "${rawId}".`);
 }
@@ -311,10 +329,16 @@ async function resolveBoardCard(boardRef: FirebaseFirestore.DocumentReference, r
   const snap = await boardRef.collection('cards').orderBy('order').get();
   const cards = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredBoardCard));
   const exact = cards.filter((card) => normalizeLookupKey(String(card.title || '')) === key);
-  if (exact.length === 1) return exact[0];
+  if (exact.length === 1) {
+    const match = exact[0];
+    if (match) return match;
+  }
   if (exact.length > 1) throw new Error(`Múltiples tarjetas coinciden con "${rawId}".`);
   const partial = cards.filter((card) => normalizeLookupKey(String(card.title || '')).includes(key));
-  if (partial.length === 1) return partial[0];
+  if (partial.length === 1) {
+    const match = partial[0];
+    if (match) return match;
+  }
   if (partial.length > 1) throw new Error(`Múltiples tarjetas coinciden parcialmente con "${rawId}".`);
   throw new Error(`Tarjeta no encontrada: "${rawId}".`);
 }
@@ -353,10 +377,16 @@ function resolveConcept(state: SemanticWorkspaceState, rawId: string): SemanticC
   if (direct) return direct;
   const key = normalizeLookupKey(rawId);
   const exact = state.concepts.filter((concept) => normalizeLookupKey(concept.title) === key);
-  if (exact.length === 1) return exact[0];
+  if (exact.length === 1) {
+    const match = exact[0];
+    if (match) return match;
+  }
   if (exact.length > 1) throw new Error(`Múltiples conceptos coinciden con "${rawId}".`);
   const partial = state.concepts.filter((concept) => normalizeLookupKey(concept.title).includes(key));
-  if (partial.length === 1) return partial[0];
+  if (partial.length === 1) {
+    const match = partial[0];
+    if (match) return match;
+  }
   if (partial.length > 1) throw new Error(`Múltiples conceptos coinciden parcialmente con "${rawId}".`);
   throw new Error(`Concepto no encontrado: "${rawId}".`);
 }

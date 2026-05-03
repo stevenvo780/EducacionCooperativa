@@ -83,6 +83,10 @@ export interface LinterRule extends LinterRuleMeta {
   check: (text: string) => LinterDiagnostic[];
 }
 
+export function lineAt(lines: readonly string[], index: number): string {
+  return lines[index] ?? '';
+}
+
 /**
  * Detecta si una línea está dentro de un bloque de código fenced.
  * Devuelve un Set con los índices de línea que están en code blocks.
@@ -91,7 +95,7 @@ export function getCodeBlockLines(lines: string[]): Set<number> {
   const inCode = new Set<number>();
   let inside = false;
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = lineAt(lines, i).trim();
     if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
       inCode.add(i);
       inside = !inside;

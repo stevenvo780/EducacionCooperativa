@@ -265,17 +265,20 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
   const lines = code.split('\n');
 
   for (let index = 0; index < lines.length; index += 1) {
-    const trimmed = lines[index].trim();
+    const trimmed = (lines[index] ?? '').trim();
     const lineNum = index + 1;
 
     const defineMatch = trimmed.match(
       /^(?:(?:export|exportar)\s+)?(?:define|definir)\s+(\w+)(?:\([^)]*\))?\s*=?\s*(.+?)(?:\s*(?:@|description)\s*"([^"]*)")?$/
     );
     if (defineMatch) {
+      const name = defineMatch[1];
+      const detail = defineMatch[2];
+      if (!name || !detail) continue;
       defs.push({
-        name: defineMatch[1],
+        name,
         kind: 'define',
-        detail: defineMatch[2].trim(),
+        detail: detail.trim(),
         description: defineMatch[3],
         file: fileId,
         line: lineNum
@@ -285,10 +288,13 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const axiomMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:axiom|axioma)\s+(\w+)\s*[:=](.+)/i);
     if (axiomMatch) {
+      const name = axiomMatch[1];
+      const detail = axiomMatch[2];
+      if (!name || !detail) continue;
       defs.push({
-        name: axiomMatch[1],
+        name,
         kind: 'axiom',
-        detail: axiomMatch[2].trim(),
+        detail: detail.trim(),
         file: fileId,
         line: lineNum
       });
@@ -297,10 +303,13 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const theoremMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:theorem|teorema)\s+(\w+)\s*[:=](.+)/i);
     if (theoremMatch) {
+      const name = theoremMatch[1];
+      const detail = theoremMatch[2];
+      if (!name || !detail) continue;
       defs.push({
-        name: theoremMatch[1],
+        name,
         kind: 'theorem',
-        detail: theoremMatch[2].trim(),
+        detail: detail.trim(),
         file: fileId,
         line: lineNum
       });
@@ -309,10 +318,13 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const claimMatch = trimmed.match(/^(?:claim|afirmacion)\s+(\w+)\s*=\s*(.+)$/i);
     if (claimMatch) {
+      const name = claimMatch[1];
+      const detail = claimMatch[2];
+      if (!name || !detail) continue;
       defs.push({
-        name: claimMatch[1],
+        name,
         kind: 'claim',
-        detail: claimMatch[2].trim(),
+        detail: detail.trim(),
         file: fileId,
         line: lineNum
       });
@@ -321,10 +333,13 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const letMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:let|sea)\s+(\w+)\s*=(.+)/i);
     if (letMatch) {
+      const name = letMatch[1];
+      const detail = letMatch[2];
+      if (!name || !detail) continue;
       defs.push({
-        name: letMatch[1],
+        name,
         kind: 'let',
-        detail: letMatch[2].trim(),
+        detail: detail.trim(),
         file: fileId,
         line: lineNum
       });
@@ -333,8 +348,10 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const theoryMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:theory|teoria)\s+(\w+)/i);
     if (theoryMatch) {
+      const name = theoryMatch[1];
+      if (!name) continue;
       defs.push({
-        name: theoryMatch[1],
+        name,
         kind: 'theory',
         file: fileId,
         line: lineNum
@@ -344,10 +361,12 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const fnMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:fn|funcion)\s+(\w+)\s*\(([^)]*)\)/i);
     if (fnMatch) {
+      const name = fnMatch[1];
+      if (!name) continue;
       defs.push({
-        name: fnMatch[1],
+        name,
         kind: 'function',
-        detail: `(${fnMatch[2]})`,
+        detail: `(${fnMatch[2] ?? ''})`,
         file: fileId,
         line: lineNum
       });
@@ -356,8 +375,10 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const sourceMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:source|fuente)\s+(\w+)/i);
     if (sourceMatch) {
+      const name = sourceMatch[1];
+      if (!name) continue;
       defs.push({
-        name: sourceMatch[1],
+        name,
         kind: 'source',
         file: fileId,
         line: lineNum
@@ -367,11 +388,14 @@ function extractWithRegexFallback(code: string, fileId: string): STDefinition[] 
 
     const interpretMatch = trimmed.match(/^(?:interpret|interpretar)\s+"((?:\\.|[^"\\])*)"\s+(?:as|como)\s+(.+)/i);
     if (interpretMatch) {
-      const fullText = unescapeSTString(interpretMatch[1]);
+      const rawText = interpretMatch[1];
+      const detail = interpretMatch[2];
+      if (!rawText || !detail) continue;
+      const fullText = unescapeSTString(rawText);
       defs.push({
         name: fullText.slice(0, 64),
         kind: 'interpretation',
-        detail: interpretMatch[2].trim(),
+        detail: detail.trim(),
         naturalName: fullText,
         file: fileId,
         line: lineNum

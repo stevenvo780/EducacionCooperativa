@@ -97,10 +97,17 @@ function hasTouchActionNone(el: HTMLElement): boolean {
   return ta === 'none';
 }
 
+function getTouchAt(touches: TouchList, index: number): Touch | undefined {
+  return typeof touches.item === 'function'
+    ? touches.item(index) ?? undefined
+    : touches[index];
+}
+
 function onTouchStart(e: TouchEvent): void {
   if (e.touches.length !== 1) return;
 
-  const touch = e.touches[0];
+  const touch = getTouchAt(e.touches, 0);
+  if (!touch) return;
   const target = touch.target as HTMLElement;
 
   // Native draggable elements cover most dashboard DnD flows.
@@ -145,7 +152,8 @@ function onTouchMove(e: TouchEvent): void {
     e.preventDefault();
   }
 
-  const touch = e.touches[0];
+  const touch = getTouchAt(e.touches, 0);
+  if (!touch) return;
   const dx = touch.clientX - _startX;
   const dy = touch.clientY - _startY;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -244,7 +252,11 @@ function onTouchEnd(e: TouchEvent): void {
   }
 
   // Find the final drop target
-  const touch = e.changedTouches[0];
+  const touch = getTouchAt(e.changedTouches, 0);
+  if (!touch) {
+    cleanup();
+    return;
+  }
   const elUnder = getElementUnderPoint(touch.clientX, touch.clientY);
   const directDropZone = getDropZoneAtPoint(touch.clientX, touch.clientY)
     ?? elUnder?.closest<HTMLElement>('[data-drop-zone]')

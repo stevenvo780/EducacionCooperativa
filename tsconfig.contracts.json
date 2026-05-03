@@ -5,27 +5,7 @@
     "exactOptionalPropertyTypes": false
   },
   "include": [
-    "src/lib/contracts/**/*.ts",
-    "src/lib/env.ts",
-    "src/lib/folder-utils.ts",
-    "src/lib/error-utils.ts",
-    "src/lib/document-format.ts",
-    "src/lib/internal-drag-flag.ts",
-    "src/lib/device-input.ts",
-    "src/lib/custom-auth.ts",
-    "src/lib/storage-path.ts",
-    "src/lib/server-auth.ts",
-    "src/lib/forgejo-path.ts",
-    "src/lib/plan-guard.ts",
-    "src/lib/storage-usage.ts",
-    "src/lib/firebase-admin.ts",
-    "src/lib/nas-storage.ts",
-    "src/lib/worker-auth.ts",
-    "src/lib/nas-events.ts",
-    "src/lib/local-dev-auth.ts",
-    "src/types/documents.ts",
-    "src/types/workspace.ts",
-    "src/types/sync.ts",
-    "src/types/document-item.ts"
+    "src/lib/**/*.ts",
+    "src/types/**/*.ts"
   ]
 }

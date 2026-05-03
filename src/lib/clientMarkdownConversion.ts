@@ -76,6 +76,7 @@ async function extractPdfText(file: File, onProgress?: (progress: number) => voi
         if ('str' in item) {
           const textItem = item as PDFTextItem;
           const currentY = textItem.transform[5];
+          if (typeof currentY !== 'number') continue;
 
           if (lastY !== null && Math.abs(currentY - lastY) > 5) {
             pageText += '\n';
@@ -188,7 +189,9 @@ function escapeTableCell(value: string): string {
 function arrayToMarkdownTable(rows: string[][]): string {
   if (rows.length === 0) return '';
 
-  const header = rows[0].map(escapeTableCell);
+  const firstRow = rows[0];
+  if (!firstRow) return '';
+  const header = firstRow.map(escapeTableCell);
   const separator = header.map(() => '---');
   const body = rows.slice(1).map(row => row.map(escapeTableCell));
 
@@ -316,10 +319,10 @@ export function detectDelimiter(text: string): string {
   const firstLines = text.split('\n').slice(0, 5).join('\n');
   const counts: Record<string, number> = { ',': 0, ';': 0, '\t': 0 };
   for (const ch of firstLines) {
-    if (ch in counts) counts[ch]++;
+    if (ch in counts) counts[ch] = (counts[ch] ?? 0) + 1;
   }
   // Return the delimiter with highest count, default to comma
-  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? ',';
 }
 
 /**
