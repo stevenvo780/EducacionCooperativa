@@ -63,6 +63,7 @@ import DragOverlay from '@/components/dashboard/DragOverlay';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
 import LeftPanel from '@/components/dashboard/LeftPanel';
+import { SIDEBAR_VIEWS } from '@/components/dashboard/sidebar-views';
 import BottomDock from '@/components/dashboard/BottomDock';
 import CommandPalette, { type Command as PaletteCommand } from '@/components/dashboard/CommandPalette';
 import UserMenu from '@/components/dashboard/UserMenu';
@@ -309,8 +310,6 @@ function DashboardContent() {
     const isSemanticBrowserOpen = semanticBrowserTabId ? openTabs.some(tab => tab.id === semanticBrowserTabId) : false;
     const formalizerTabId = currentWorkspaceId ? `formalizer-${currentWorkspaceId}` : null;
     const isFormalizerOpen = formalizerTabId ? openTabs.some(tab => tab.id === formalizerTabId) : false;
-    const agoraAITabId = currentWorkspaceId ? `agora-ai-${currentWorkspaceId}` : null;
-    const isAgoraAIOpen = agoraAITabId ? openTabs.some(tab => tab.id === agoraAITabId) : false;
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [showNewFileModal, setShowNewFileModal] = useState(false);
@@ -831,8 +830,6 @@ function DashboardContent() {
         openStRunner,
         openSemanticBrowser,
         openFormalizer,
-        openAgoraAI,
-        openSnippetsGallery,
         closeTabById,
         openDocument,
         openDocumentInTile,
@@ -1586,27 +1583,15 @@ function DashboardContent() {
             keywords: ['focus', 'concentración', 'pantalla limpia'],
             run: () => handleToggleZenMode()
         },
-        {
-            id: 'view.activity.files',
+        // Comandos auto-generados para cada vista del sidebar.
+        ...SIDEBAR_VIEWS.map((v) => ({
+            id: `view.${v.id}`,
             category: 'Vista',
-            label: 'Mostrar Archivos',
-            keywords: ['files', 'sidebar', 'explorer'],
-            run: () => setActivityView('files')
-        },
-        {
-            id: 'view.activity.git',
-            category: 'Vista',
-            label: 'Mostrar Control de versiones',
-            keywords: ['git', 'commits', 'changes', 'cambios'],
-            run: () => setActivityView('git')
-        },
-        {
-            id: 'view.activity.ai',
-            category: 'Vista',
-            label: 'Mostrar Agora AI',
-            keywords: ['ai', 'asistente', 'chat'],
-            run: () => setActivityView('ai')
-        },
+            label: v.label,
+            shortcut: v.shortcut,
+            keywords: [v.id, v.label.toLowerCase()],
+            run: () => setActivityView(v.id)
+        })),
         {
             id: 'workspace.manage',
             category: 'Workspace',
@@ -1643,18 +1628,18 @@ function DashboardContent() {
             run: () => openFormalizer()
         },
         {
-            id: 'tools.snippets',
-            category: 'Herramientas',
-            label: 'Galería de snippets',
+            id: 'view.snippets',
+            category: 'Vista',
+            label: 'Snippets',
             keywords: ['snippets', 'galería'],
-            run: () => openSnippetsGallery()
+            run: () => setActivityView('snippets')
         },
         {
-            id: 'ai.open',
-            category: 'AI',
-            label: 'Abrir Agora AI en panel',
-            keywords: ['agora', 'chat', 'asistente'],
-            run: () => { void openAgoraAI(); }
+            id: 'view.ai',
+            category: 'Vista',
+            label: 'Agora AI',
+            keywords: ['agora', 'chat', 'asistente', 'ai'],
+            run: () => setActivityView('ai')
         },
         {
             id: 'terminal.new',
@@ -1709,12 +1694,10 @@ function DashboardContent() {
         handleToggleZenMode,
         handleRequestNewTerminal,
         logout,
-        openAgoraAI,
         openBoard,
         openFormalizer,
         openNewFileModalAt,
         openSemanticBrowser,
-        openSnippetsGallery,
         openStRunner,
         openTerminal,
         setPasswordError,
@@ -1948,13 +1931,10 @@ function DashboardContent() {
                             onOpenStRunner={openStRunner}
                             onOpenSemanticBrowser={openSemanticBrowser}
                             onOpenFormalizer={openFormalizer}
-                            onOpenSnippetsGallery={openSnippetsGallery}
-                            onOpenAgoraAI={() => { void openAgoraAI(); }}
                             isBoardOpen={isBoardOpen}
                             isStRunnerOpen={isStRunnerOpen}
                             isSemanticBrowserOpen={isSemanticBrowserOpen}
                             isFormalizerOpen={isFormalizerOpen}
-                            isAgoraAIOpen={isAgoraAIOpen}
                             filesContent={null}
                           />
                         </aside>
