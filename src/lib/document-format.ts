@@ -45,3 +45,18 @@ export const isPowerPointDocument = (name?: string, mime?: string) => (
 export const isMarkdownDocument = (name?: string, mime?: string) => (
   isMarkdownName(name) || isMarkdownMime(mime)
 );
+
+export const isDotfilePlainTextName = (name?: string) => {
+  const trimmed = (name ?? '').trim();
+  return trimmed.startsWith('.') && trimmed.indexOf('.', 1) === -1;
+};
+
+export const isPlainTextDocument = (name?: string, mime?: string) => {
+  const lowerMime = (mime ?? '').toLowerCase();
+  return isDotfilePlainTextName(name)
+    || lowerMime.startsWith('text/')
+    || lowerMime === 'application/json'
+    || lowerMime === 'application/x-json'
+    || lowerMime === 'application/yaml'
+    || lowerMime === 'application/x-yaml';
+};

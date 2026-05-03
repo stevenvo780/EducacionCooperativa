@@ -22,6 +22,7 @@ type MockDoc = {
   type: 'text' | 'file' | 'folder' | 'board';
   folder?: string;
   content?: string;
+  rawContent?: string;
   ownerId: string;
   workspaceId: string;
   mimeType?: string;
@@ -78,6 +79,14 @@ type MockBoardState = {
   cards: MockBoardCard[];
 };
 
+type MockSemanticState = {
+  concepts: Array<Record<string, unknown>>;
+  fragments: Array<Record<string, unknown>>;
+  relations: Array<Record<string, unknown>>;
+  updatedAt?: number | string;
+  [key: string]: unknown;
+};
+
 type MockVerifyPaymentResult = {
   status: 'active' | 'free' | 'pending' | 'cancelled' | 'expired';
   planId?: 'basic' | 'free' | 'pro';
@@ -94,6 +103,7 @@ type MockAppState = {
   docsByWorkspace: Record<string, MockDoc[]>;
   boardsByWorkspace: Record<string, MockBoardState>;
   snippetsByWorkspace: Record<string, MockSnippet[]>;
+  semanticStatesByWorkspace: Record<string, MockSemanticState>;
   userProfiles: Record<string, MockProfile>;
   subscription: {
     userId: string;
@@ -127,6 +137,7 @@ type MockOptions = Partial<Pick<MockAppState, 'loginShouldFail' | 'registerShoul
   invites?: MockWorkspace[];
   docsByWorkspace?: Record<string, MockDoc[]>;
   snippetsByWorkspace?: Record<string, MockSnippet[]>;
+  semanticStatesByWorkspace?: Record<string, MockSemanticState>;
   subscription?: Partial<MockAppState['subscription']>;
   storageUsage?: Partial<MockAppState['storageUsage']>;
   verifyPaymentResult?: MockVerifyPaymentResult;
@@ -134,6 +145,25 @@ type MockOptions = Partial<Pick<MockAppState, 'loginShouldFail' | 'registerShoul
 
 const ISO_DATE = '2030-01-10T12:00:00.000Z';
 const PERSONAL_WORKSPACE_ID = 'personal';
+const EMPTY_SEMANTIC_STATE: MockSemanticState = {
+  concepts: [],
+  fragments: [],
+  relations: []
+};
+
+const normalizeSemanticState = (value: unknown): MockSemanticState => {
+  if (!value || typeof value !== 'object') {
+    return { ...EMPTY_SEMANTIC_STATE };
+  }
+
+  const raw = value as Record<string, unknown>;
+  return {
+    ...raw,
+    concepts: Array.isArray(raw.concepts) ? raw.concepts as Array<Record<string, unknown>> : [],
+    fragments: Array.isArray(raw.fragments) ? raw.fragments as Array<Record<string, unknown>> : [],
+    relations: Array.isArray(raw.relations) ? raw.relations as Array<Record<string, unknown>> : []
+  };
+};
 
 const createBaseState = (options: MockOptions = {}): MockAppState => ({
   user: TEST_USER,
@@ -217,6 +247,7 @@ const createBaseState = (options: MockOptions = {}): MockAppState => ({
   },
   boardsByWorkspace: {},
   snippetsByWorkspace: options.snippetsByWorkspace ?? {},
+  semanticStatesByWorkspace: options.semanticStatesByWorkspace ?? {},
   userProfiles: {
     [TEST_USER.uid]: {
       uid: TEST_USER.uid,
@@ -704,6 +735,7 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       };
       state.workspaces.push(workspace);
       state.docsByWorkspace[id] = [];
+      state.semanticStatesByWorkspace[id] = { ...EMPTY_SEMANTIC_STATE };
       ensureBoard(state, id);
       await json(route, workspace);
       return;
@@ -764,6 +796,9 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
         if (!state.docsByWorkspace[acceptedWorkspace.id]) {
           state.docsByWorkspace[acceptedWorkspace.id] = [];
         }
+        if (!state.semanticStatesByWorkspace[acceptedWorkspace.id]) {
+          state.semanticStatesByWorkspace[acceptedWorkspace.id] = { ...EMPTY_SEMANTIC_STATE };
+        }
         ensureBoard(state, acceptedWorkspace.id);
         await json(route, { ok: true });
         return;
@@ -775,6 +810,7 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       state.workspaces = state.workspaces.filter((item) => item.id !== workspaceId);
       delete state.docsByWorkspace[workspaceId];
       delete state.boardsByWorkspace[workspaceId];
+      delete state.semanticStatesByWorkspace[workspaceId];
       await json(route, { ok: true });
       return;
     }
@@ -1002,7 +1038,7 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
       await route.fulfill({
         status: 200,
         contentType: doc.mimeType ?? 'text/markdown',
-        body: doc.content ?? ''
+        body: doc.rawContent ?? doc.content ?? ''
       });
       return;
     }
@@ -1037,6 +1073,29 @@ export const installMockApi = async (page: Page, options: MockOptions = {}) => {
         state.docsByWorkspace[workspaceId] = state.docsByWorkspace[workspaceId].filter((doc) => doc.id !== docId);
       }
       await json(route, { ok: true });
+      return;
+    }
+
+    if (pathname === '/api/semantic' && method === 'GET') {
+      const workspaceId = searchParams.get('workspaceId') ?? PERSONAL_WORKSPACE_ID;
+      await json(route, {
+        state: state.semanticStatesByWorkspace[workspaceId] ?? { ...EMPTY_SEMANTIC_STATE }
+      });
+      return;
+    }
+
+    if (pathname === '/api/semantic' && method === 'POST') {
+      const body = parseBody(route);
+      const workspaceId = typeof body.workspaceId === 'string' && body.workspaceId.trim()
+        ? body.workspaceId.trim()
+        : PERSONAL_WORKSPACE_ID;
+      const semanticState = normalizeSemanticState(body.state);
+      const nextState = {
+        ...semanticState,
+        updatedAt: ISO_DATE
+      };
+      state.semanticStatesByWorkspace[workspaceId] = nextState;
+      await json(route, { state: nextState });
       return;
     }
 
