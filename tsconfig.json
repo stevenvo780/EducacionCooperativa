@@ -39,6 +39,7 @@
     "old",
     "services",
     "tests",
-    "coverage"
+    "coverage",
+    "AgoraBackend"
   ]
 }
