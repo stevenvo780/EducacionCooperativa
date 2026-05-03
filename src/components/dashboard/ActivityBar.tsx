@@ -1,35 +1,9 @@
 'use client';
 
-import {
-  Files,
-  Search,
-  GitBranch,
-  Sparkles,
-  LayoutGrid,
-  Eye,
-  EyeOff,
-  Wifi,
-  WifiOff,
-  AlertTriangle,
-  type LucideIcon
-} from 'lucide-react';
+import { Eye, EyeOff, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { SIDEBAR_VIEWS, type ActivityView } from './sidebar-views';
 
-export type ActivityView = 'files' | 'search' | 'git' | 'tools' | 'ai';
-
-interface ViewItem {
-  id: ActivityView;
-  label: string;
-  icon: LucideIcon;
-  shortcut?: string;
-}
-
-const VIEWS: ViewItem[] = [
-  { id: 'files', label: 'Archivos', icon: Files, shortcut: 'Ctrl+Shift+E' },
-  { id: 'search', label: 'Buscar', icon: Search, shortcut: 'Ctrl+K' },
-  { id: 'git', label: 'Control de versiones', icon: GitBranch, shortcut: 'Ctrl+Shift+G' },
-  { id: 'tools', label: 'Herramientas', icon: LayoutGrid },
-  { id: 'ai', label: 'Agora AI', icon: Sparkles }
-];
+export type { ActivityView } from './sidebar-views';
 
 interface ActivityBarProps {
   active: ActivityView;
@@ -76,7 +50,6 @@ export default function ActivityBar({
       aria-label="Barra de actividad"
       className={`hidden md:flex w-12 shrink-0 flex-col items-center justify-between border-r border-surface-700/40 bg-surface-900 py-2 ${className}`}
     >
-      {/* TOP: workspace switcher */}
       <div className="flex flex-col items-center gap-1">
         <button
           type="button"
@@ -96,9 +69,8 @@ export default function ActivityBar({
 
         <div className="my-1 h-px w-6 bg-surface-700/60" aria-hidden />
 
-        {/* MIDDLE: views */}
         <ul className="flex flex-col items-center gap-0.5">
-          {VIEWS.map((item) => {
+          {SIDEBAR_VIEWS.map((item) => {
             const Icon = item.icon;
             const isActive = active === item.id;
             return (
@@ -126,7 +98,6 @@ export default function ActivityBar({
         </ul>
       </div>
 
-      {/* BOTTOM: status + zen + user */}
       <div className="flex flex-col items-center gap-0.5">
         <StatusDot status={workerStatus} />
         <ConnectivityDot online={isOnline} />

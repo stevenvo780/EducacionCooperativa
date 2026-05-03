@@ -5,8 +5,6 @@ import {
   FlaskConical,
   BookMarked,
   Zap,
-  Plus,
-  Bot,
   BookOpen,
   Globe,
   type LucideIcon
@@ -28,13 +26,10 @@ interface ToolsGalleryProps {
   onOpenStRunner: () => void;
   onOpenSemanticBrowser: () => void;
   onOpenFormalizer: () => void;
-  onOpenSnippetsGallery: () => void;
-  onOpenAgoraAI: () => void;
   isBoardOpen?: boolean;
   isStRunnerOpen?: boolean;
   isSemanticBrowserOpen?: boolean;
   isFormalizerOpen?: boolean;
-  isAgoraAIOpen?: boolean;
 }
 
 export default function ToolsGallery({
@@ -42,13 +37,10 @@ export default function ToolsGallery({
   onOpenStRunner,
   onOpenSemanticBrowser,
   onOpenFormalizer,
-  onOpenSnippetsGallery,
-  onOpenAgoraAI,
   isBoardOpen,
   isStRunnerOpen,
   isSemanticBrowserOpen,
-  isFormalizerOpen,
-  isAgoraAIOpen
+  isFormalizerOpen
 }: ToolsGalleryProps) {
   const tools: ToolItem[] = [
     {
@@ -86,23 +78,6 @@ export default function ToolsGallery({
       accentClass: 'text-cyan-300',
       onClick: onOpenFormalizer,
       active: isFormalizerOpen
-    },
-    {
-      id: 'snippets',
-      label: 'Snippets',
-      description: 'Galería reusable',
-      icon: Plus,
-      accentClass: 'text-amber-300',
-      onClick: onOpenSnippetsGallery
-    },
-    {
-      id: 'agora-ai',
-      label: 'Agora AI',
-      description: 'Chat con contexto',
-      icon: Bot,
-      accentClass: 'text-sky-300',
-      onClick: onOpenAgoraAI,
-      active: isAgoraAIOpen
     }
   ];
 
