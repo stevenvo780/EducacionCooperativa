@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { processSyncQueue, type SyncProgress } from '@/lib/offlineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { apiUrl } from '@/services/apiClient';
 import {
   clearCompletedSync,
   getFailedSyncItems,
@@ -53,7 +54,7 @@ export function useOfflineSync() {
     const checkRealConnectivity = async (): Promise<boolean> => {
       if (navigator.onLine) return true;
       try {
-        const res = await fetch('/api/auth', { method: 'HEAD', cache: 'no-store' });
+        const res = await fetch(apiUrl('/api/auth'), { method: 'HEAD', cache: 'no-store' });
         return res.ok || res.status === 405 || res.status === 401;
       } catch {
         return false;

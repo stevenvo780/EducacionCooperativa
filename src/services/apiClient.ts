@@ -4,6 +4,32 @@ import { toast } from 'sonner';
 
 const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
 
+const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
+
+export const apiUrl = (input: RequestInfo | URL): RequestInfo | URL => {
+  if (!apiBaseUrl) return input;
+
+  if (typeof input === 'string') {
+    return input.startsWith('/api/') || input === '/api'
+      ? `${apiBaseUrl}${input}`
+      : input;
+  }
+
+  if (input instanceof URL) {
+    return input.pathname.startsWith('/api/')
+      ? new URL(`${apiBaseUrl}${input.pathname}${input.search}${input.hash}`)
+      : input;
+  }
+
+  if (typeof Request !== 'undefined' && input instanceof Request) {
+    const url = new URL(input.url);
+    if (!url.pathname.startsWith('/api/')) return input;
+    return new Request(`${apiBaseUrl}${url.pathname}${url.search}${url.hash}`, input);
+  }
+
+  return input;
+};
+
 // Shared promise so concurrent calls while auth is loading share the same wait
 let authWaiter: Promise<User | null> | null = null;
 
@@ -86,12 +112,13 @@ const doFetch = async (input: RequestInfo | URL, init: RequestInit, forceRefresh
 
 export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   try {
-    let response = await doFetch(input, init, false);
+    const resolvedInput = apiUrl(input);
+    let response = await doFetch(resolvedInput, init, false);
     // Si el server rechaza por auth, reintenta una vez forzando refresh del
     // ID token. Cubre el caso clásico: token expirado a las 1h pero el user
     // sigue siendo válido en Firebase.
     if (response.status === 401) {
-      response = await doFetch(input, init, true);
+      response = await doFetch(resolvedInput, init, true);
     }
     if (!response.ok) {
       let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;

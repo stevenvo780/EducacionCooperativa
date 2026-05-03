@@ -45,7 +45,7 @@ export default function WorkspaceTopBar({
   return (
     <div
       style={{ width: totalWidth }}
-      className="shrink-0 flex items-center gap-1 border-b border-surface-700/40 bg-surface-925/80 px-1.5 h-9"
+      className="shrink-0 flex h-10 items-center gap-1 border-b border-surface-700/40 bg-surface-925/80 px-1.5"
     >
       {!sidebarCollapsed && (
         <button
@@ -53,9 +53,9 @@ export default function WorkspaceTopBar({
           onClick={onOpenWorkspaceManager}
           title={`Workspace: ${workspaceLabel}\nClick para gestionar`}
           aria-label={`Workspace ${workspaceLabel}. Gestionar workspaces`}
-          className="relative flex items-center gap-1.5 min-w-0 flex-1 rounded px-1 py-0.5 hover:bg-surface-800/60 transition"
+          className="relative flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-1 transition hover:bg-surface-800/60"
         >
-          <span className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded bg-gradient-mandy text-white text-[10px] font-bold ring-1 ring-mandy-400/30">
+          <span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded bg-gradient-mandy text-xs font-bold text-white ring-1 ring-mandy-400/30">
             {workspaceInitial.toUpperCase()}
             {hasInvites && (
               <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-mandy-300 ring-1 ring-surface-900" aria-label="Invitaciones pendientes" />
@@ -118,13 +118,13 @@ function Toggle({
       title={shortcut ? `${label} (${shortcut})` : label}
       aria-label={label}
       aria-pressed={active}
-      className={`flex h-6 w-6 items-center justify-center rounded transition ${
+      className={`flex h-8 w-8 items-center justify-center rounded transition ${
         active
           ? 'text-mandy-300 bg-mandy-500/10'
           : 'text-surface-500 hover:text-surface-200 hover:bg-surface-800/60'
       }`}
     >
-      <Icon className="h-3.5 w-3.5" strokeWidth={1.7} />
+      <Icon className="h-5 w-5" strokeWidth={1.7} />
     </button>
   );
 }

@@ -10,7 +10,7 @@ import {
   Loader2, Trash2, Copy, Check, AlertCircle, Sparkles, Undo2,
   History, MessageSquarePlus, Shield
 } from 'lucide-react';
-import { authFetch, getAuthToken } from '@/services/apiClient';
+import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
 import {
   createEmptyChatSession,
   deriveChatSessionTitle,
@@ -436,7 +436,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     signal: AbortSignal
   ): Promise<AgentResponseBody> => {
     const token = await getAuthToken();
-    const res = await fetch('/api/agora-ai/stream', {
+    const res = await fetch(apiUrl('/api/agora-ai/stream'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
