@@ -1318,6 +1318,27 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                         Puedes escribir <code className="font-mono">deshaz eso</code> para revertir el último turno.
                       </div>
                     ) : null}
+
+                    {msg.agentRun.truncated ? (
+                      <div className="mt-2 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/15 rounded-md px-2 py-1.5 inline-flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Respuesta truncada por presupuesto de tiempo. Pídela en pasos más pequeños.
+                      </div>
+                    ) : null}
+
+                    {msg.agentRun.usage ? (
+                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-surface-500">
+                        {typeof msg.agentRun.usage.totalTokens === 'number' && (
+                          <span>{msg.agentRun.usage.totalTokens.toLocaleString()} tokens</span>
+                        )}
+                        {typeof msg.agentRun.usage.estimatedCostUsd === 'number' && msg.agentRun.usage.estimatedCostUsd > 0 && (
+                          <span>· ${msg.agentRun.usage.estimatedCostUsd.toFixed(4)}</span>
+                        )}
+                        {typeof msg.agentRun.iterations === 'number' && msg.agentRun.iterations > 0 && (
+                          <span>· {msg.agentRun.iterations} {msg.agentRun.iterations === 1 ? 'iter' : 'iters'}</span>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 )}
 
