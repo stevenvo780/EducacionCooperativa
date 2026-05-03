@@ -6,7 +6,6 @@ import {
   Terminal as TerminalIcon,
   X,
   ChevronDown,
-  ChevronUp,
   AlertCircle,
   Plus,
   Trash2,
@@ -65,26 +64,7 @@ export default function BottomDock({
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
   const workerDisabled = workerStatus !== 'online';
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={onToggle}
-        title="Abrir panel inferior (Ctrl+`)"
-        aria-label="Abrir panel inferior"
-        className="absolute bottom-3 right-3 z-30 flex h-8 items-center gap-1.5 rounded-md border border-surface-700/60 bg-surface-900/90 px-2.5 text-xs text-surface-300 shadow-xl shadow-black/30 backdrop-blur transition hover:border-mandy-500/40 hover:text-white"
-      >
-        <TerminalIcon className="h-3.5 w-3.5" />
-        Terminal
-        {errorCount + warnCount > 0 && (
-          <span className="rounded-full bg-rose-500/20 px-1.5 text-[10px] text-rose-200">
-            {errorCount + warnCount}
-          </span>
-        )}
-        <ChevronUp className="h-3.5 w-3.5" />
-      </button>
-    );
-  }
+  if (!open) return null;
 
   return (
     <div className="flex h-full w-full flex-col bg-surface-950 border-t border-surface-700/60">

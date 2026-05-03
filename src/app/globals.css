@@ -449,3 +449,61 @@ body {
   font-size: 13px !important;
   line-height: 24px !important;
 }
+
+/* MDX editor toolbar — responsive overflow para tablet y mobile.
+   Filosofia "Material/Google": en pantallas pequenas la toolbar
+   permite scroll horizontal en lugar de cortar; en muy pequenas
+   reduce padding y oculta separadores/selectores anchos. */
+[class*='_toolbarRoot_'] {
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+[class*='_toolbarRoot_']::-webkit-scrollbar {
+  height: 4px;
+}
+
+[class*='_toolbarRoot_']::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 2px;
+}
+
+[class*='_toolbarRoot_'] > * {
+  flex-shrink: 0 !important;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 1023px) {
+  [class*='_toolbarRoot_'] {
+    padding: 4px 6px !important;
+    gap: 2px !important;
+  }
+  [class*='_toolbarRoot_'] [role='separator'] {
+    margin: 0 2px !important;
+  }
+  [class*='_toolbarRoot_'] button,
+  [class*='_toolbarRoot_'] [class*='_toolbarToggleItem_'] {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    padding: 6px !important;
+  }
+  [class*='_toolbarRoot_'] [class*='_selectTrigger_'] {
+    max-width: 7rem;
+  }
+}
+
+@media (max-width: 639px) {
+  [class*='_toolbarRoot_'] [class*='_selectTrigger_'],
+  [class*='_toolbarRoot_'] [role='separator'] {
+    display: none !important;
+  }
+  [class*='_toolbarRoot_'] button,
+  [class*='_toolbarRoot_'] [class*='_toolbarToggleItem_'] {
+    min-width: 40px !important;
+    min-height: 40px !important;
+  }
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Sparkles, X, ChevronRight } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import type { Workspace } from '@/components/dashboard/types';
 
 const AgoraAIChat = dynamic(() => import('@/components/AgoraAIChat'), { ssr: false });
@@ -19,21 +19,7 @@ interface RightPanelProps {
  * Backlinks, Debug, etc.) extendiendo `tab` localmente.
  */
 export default function RightPanel({ open, onToggle, currentWorkspace }: RightPanelProps) {
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={onToggle}
-        title="Abrir Agora AI (Ctrl+Shift+I)"
-        aria-label="Abrir panel Agora AI"
-        className="absolute top-3 right-3 z-30 flex h-8 items-center gap-1.5 rounded-md border border-surface-700/60 bg-surface-900/90 px-2.5 text-xs text-surface-300 shadow-xl shadow-black/30 backdrop-blur transition hover:border-mandy-500/40 hover:text-white"
-      >
-        <Sparkles className="h-3.5 w-3.5 text-sky-300" />
-        Agora AI
-        <ChevronRight className="h-3.5 w-3.5 rotate-180" />
-      </button>
-    );
-  }
+  if (!open) return null;
 
   return (
     <aside
