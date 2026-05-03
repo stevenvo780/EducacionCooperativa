@@ -810,7 +810,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         ownerId={doc.ownerId ?? currentUserId}
                       />
                   ) : isStRunner ? (
-                      <STRunner height="100%" workspaceId={currentWorkspaceId} />
+                      <STRunner height="100%" workspaceId={currentWorkspaceId} dockToWorkspace />
                   ) : isSemanticBrowser ? (
                       <GlobalSemanticBrowser
                         workspaceId={currentWorkspaceId}

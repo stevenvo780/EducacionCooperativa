@@ -207,6 +207,7 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
       initialCode={content}
       workspaceId={workspaceId}
       className="h-full border-0 rounded-none"
+      dockToWorkspace
       fileMode={{
         docName,
         isDirty: dirty,

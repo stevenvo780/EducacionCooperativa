@@ -497,7 +497,7 @@ function DashboardContent() {
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
     const [activityView, setActivityView] = useState<ActivityView>('files');
     const [bottomDockOpen, setBottomDockOpen] = useState(false);
-    const [dockInitialTab, setDockInitialTab] = useState<'terminal' | 'problems'>('terminal');
+    const [dockInitialTab, setDockInitialTab] = useState<string>('terminal');
     const [rightPanelOpen, setRightPanelOpen] = useState(false);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -2209,10 +2209,10 @@ function DashboardContent() {
                             }
                         }}
                     >
-                      <PanelGroup orientation="vertical" id="agora-shell-vertical" className="flex h-full w-full flex-col">
-                        <Panel id="editor-area" defaultSize="70%" minSize="20%">
-                          <PanelGroup orientation="horizontal" id="agora-shell-horizontal" className="flex h-full w-full">
-                            <Panel id="editor-main" minSize="30%">
+                      <PanelGroup orientation="horizontal" id="agora-shell-horizontal" className="flex h-full w-full">
+                        <Panel id="editor-column" minSize="30%">
+                          <PanelGroup orientation="vertical" id="agora-shell-vertical" className="flex h-full w-full flex-col">
+                            <Panel id="editor-main" minSize="20%">
                               <div className="relative h-full w-full flex flex-col">
                         {effectiveMosaicNode ? (
                             <div className="flex-1 min-h-0 relative">
@@ -2283,67 +2283,72 @@ function DashboardContent() {
                         )}
                               </div>
                             </Panel>
-                            {rightPanelOpen && !isCompact && (
+
+                            {bottomDockOpen && (
                               <>
                                 <PanelResizeHandle
-                                    aria-label="Redimensionar panel Agora AI"
-                                    style={{ width: 5, cursor: 'col-resize' }}
+                                    aria-label="Redimensionar panel inferior"
+                                    style={{ height: 5, cursor: 'row-resize' }}
                                     className="bg-surface-800 hover:bg-mandy-500/50 active:bg-mandy-500/70 transition-colors shrink-0"
                                 />
-                                <Panel id="right-panel" defaultSize="35%" minSize="20%" maxSize="65%">
-                                  <RightPanel
+                                <Panel id="bottom-dock" defaultSize="30%" minSize="15%" maxSize="70%">
+                                  <BottomDock
                                     open
-                                    onToggle={() => setRightPanelOpen(false)}
-                                    currentWorkspace={currentWorkspace}
+                                    initialTab={dockInitialTab}
+                                    onToggle={() => setBottomDockOpen(false)}
+                                    workspaceId={currentWorkspace?.id}
+                                    workspaceName={currentWorkspace?.name}
+                                    workspaceType={currentWorkspace?.type}
+                                    nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
+                                    sessions={terminalSessions}
+                                    activeSessionId={activeSessionId}
+                                    isCreatingSession={isCreatingSession}
+                                    workerStatus={workerStatus}
+                                    onCreateSession={createWorkspaceTerminal}
+                                    onSelectSession={(id) => selectSession(id)}
+                                    onDestroySession={(id) => destroySession(id)}
+                                    onRenameSession={(id) => {
+                                      const s = terminalSessions.find(t => t.id === id);
+                                      if (s) void promptRenameTerminalSession(s);
+                                    }}
+                                    resolveDocName={(uri) => docs.find(d => d.id === uri)?.name ?? null}
+                                    onOpenDocument={(uri) => {
+                                      const doc = docs.find(d => d.id === uri);
+                                      if (doc) void openDocument(doc);
+                                    }}
                                   />
                                 </Panel>
                               </>
                             )}
                           </PanelGroup>
-                          {rightPanelOpen && isCompact && (
-                            <div className="fixed inset-0 z-50 flex bg-surface-900">
+                        </Panel>
+
+                        {rightPanelOpen && !isCompact && (
+                          <>
+                            <PanelResizeHandle
+                                aria-label="Redimensionar panel Agora AI"
+                                style={{ width: 5, cursor: 'col-resize' }}
+                                className="bg-surface-800 hover:bg-mandy-500/50 active:bg-mandy-500/70 transition-colors shrink-0"
+                            />
+                            <Panel id="right-panel" defaultSize="35%" minSize="20%" maxSize="65%">
                               <RightPanel
                                 open
                                 onToggle={() => setRightPanelOpen(false)}
                                 currentWorkspace={currentWorkspace}
                               />
-                            </div>
-                          )}
-                        </Panel>
-
-                        {bottomDockOpen && (
-                          <>
-                            <PanelResizeHandle className="h-1 bg-surface-800 hover:bg-mandy-500/40 transition-colors" />
-                            <Panel id="bottom-dock" defaultSize="30%" minSize="15%" maxSize="70%" collapsible>
-                              <BottomDock
-                                open
-                                initialTab={dockInitialTab}
-                                onToggle={() => setBottomDockOpen(false)}
-                                workspaceId={currentWorkspace?.id}
-                                workspaceName={currentWorkspace?.name}
-                                workspaceType={currentWorkspace?.type}
-                                nexusUrl={process.env.NEXT_PUBLIC_NEXUS_URL || 'http://localhost:3002'}
-                                sessions={terminalSessions}
-                                activeSessionId={activeSessionId}
-                                isCreatingSession={isCreatingSession}
-                                workerStatus={workerStatus}
-                                onCreateSession={createWorkspaceTerminal}
-                                onSelectSession={(id) => selectSession(id)}
-                                onDestroySession={(id) => destroySession(id)}
-                                onRenameSession={(id) => {
-                                  const s = terminalSessions.find(t => t.id === id);
-                                  if (s) void promptRenameTerminalSession(s);
-                                }}
-                                resolveDocName={(uri) => docs.find(d => d.id === uri)?.name ?? null}
-                                onOpenDocument={(uri) => {
-                                  const doc = docs.find(d => d.id === uri);
-                                  if (doc) void openDocument(doc);
-                                }}
-                              />
                             </Panel>
                           </>
                         )}
                       </PanelGroup>
+                      {rightPanelOpen && isCompact && (
+                        <div className="fixed inset-0 z-50 flex bg-surface-900">
+                          <RightPanel
+                            open
+                            onToggle={() => setRightPanelOpen(false)}
+                            currentWorkspace={currentWorkspace}
+                          />
+                        </div>
+                      )}
 
                     </div>
                 </div>
