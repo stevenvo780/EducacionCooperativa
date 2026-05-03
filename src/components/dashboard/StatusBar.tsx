@@ -46,7 +46,11 @@ export default function StatusBar({
   const warns = diagnostics.filter((p) => p.severity === 'warning').length;
 
   return (
-    <div className="flex h-6 shrink-0 items-center justify-between gap-2 border-t border-surface-700/40 bg-surface-925/80 px-2 text-[11px] text-surface-300">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="false"
+      className="flex h-6 shrink-0 items-center justify-between gap-2 border-t border-surface-700/40 bg-surface-925/80 px-2 text-[11px] text-surface-300">
       <div className="flex min-w-0 items-center gap-1.5">
         <span className="truncate text-surface-400">{workspaceLabel}</span>
         <WorkerDot status={workerStatus} />
