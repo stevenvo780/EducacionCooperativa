@@ -31,17 +31,22 @@ export class PanelErrorBoundary extends React.Component<PanelErrorBoundaryProps,
     return { hasError: true, error };
   }
 
+  private alreadyReported = false;
+
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     void info;
-    if (typeof window !== 'undefined') {
-      void import('@/lib/diagnostics-bus').then((m) => {
-        m.publishDiagnostics(`panel:${this.props.name}`, 'global', [{
-          severity: 'error',
-          message: `Falló el panel ${this.props.name}: ${error.message}`,
-          detail: error.stack
-        }]);
-      });
-    }
+    // Reporta una sola vez. Sin este guard, si el panel se re-renderiza
+    // tras el error y vuelve a fallar, publicaríamos infinitamente al
+    // bus → notify → re-render del listener → … loop hasta OOM.
+    if (this.alreadyReported || typeof window === 'undefined') return;
+    this.alreadyReported = true;
+    void import('@/lib/diagnostics-bus').then((m) => {
+      m.publishDiagnostics(`panel:${this.props.name}`, 'global', [{
+        severity: 'error',
+        message: `Falló el panel ${this.props.name}: ${error.message}`,
+        detail: error.stack
+      }]);
+    }).catch(() => { /* swallow: el reporte es best-effort */ });
   }
 
   reset = () => {
