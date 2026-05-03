@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { AnimatePresence, m, type Transition } from 'framer-motion';
+import { rankCommands } from '@/lib/command-search';
 
 export interface Command {
   id: string;
@@ -21,20 +22,6 @@ interface CommandPaletteProps {
   modalPop?: Transition;
 }
 
-function score(cmd: Command, q: string): number {
-  if (!q) return 1;
-  const haystack = `${cmd.category ?? ''} ${cmd.label} ${(cmd.keywords ?? []).join(' ')}`.toLowerCase();
-  const needle = q.toLowerCase();
-  if (haystack.includes(needle)) return 100 + (haystack.startsWith(needle) ? 50 : 0);
-  // subsequence match: walk needle through haystack
-  let i = 0;
-  for (const ch of haystack) {
-    if (ch === needle[i]) i += 1;
-    if (i >= needle.length) return 10;
-  }
-  return 0;
-}
-
 export default function CommandPalette({ open, onClose, commands, modalFade, modalPop }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
@@ -49,13 +36,7 @@ export default function CommandPalette({ open, onClose, commands, modalFade, mod
     }
   }, [open]);
 
-  const ranked = useMemo(() => {
-    return commands
-      .map((c) => ({ cmd: c, s: score(c, query) }))
-      .filter((x) => x.s > 0)
-      .sort((a, b) => b.s - a.s)
-      .map((x) => x.cmd);
-  }, [commands, query]);
+  const ranked = useMemo(() => rankCommands(commands, query), [commands, query]);
 
   useEffect(() => {
     if (index >= ranked.length) setIndex(Math.max(0, ranked.length - 1));
