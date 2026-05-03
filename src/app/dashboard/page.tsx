@@ -69,6 +69,7 @@ import UserMenu from '@/components/dashboard/UserMenu';
 import MobileTopBar from '@/components/dashboard/MobileTopBar';
 import RightPanel from '@/components/dashboard/RightPanel';
 import StatusBar from '@/components/dashboard/StatusBar';
+import KeyboardShortcuts from '@/components/dashboard/KeyboardShortcuts';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { useIsCompact } from '@/hooks/useMediaQuery';
 import WelcomeView from '@/components/dashboard/WelcomeView';
@@ -473,6 +474,7 @@ function DashboardContent() {
     const [rightPanelOpen, setRightPanelOpen] = useState(false);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
     // En mobile el sidebar se reajusta para que el conjunto activity+sidebar
@@ -1663,7 +1665,38 @@ function DashboardContent() {
             label: 'Alternar terminal',
             shortcut: 'Ctrl+`',
             keywords: ['terminal', 'consola', 'shell', 'panel inferior', 'output'],
-            run: () => setBottomDockOpen((v) => !v)
+            run: () => { setDockInitialTab('terminal'); setBottomDockOpen((v) => !v); }
+        },
+        {
+            id: 'view.toggleProblems',
+            category: 'Vista',
+            label: 'Alternar Problemas',
+            shortcut: 'Ctrl+Shift+M',
+            keywords: ['problemas', 'errores', 'lint', 'diagnostics'],
+            run: () => { setDockInitialTab('problems'); setBottomDockOpen((v) => !v); }
+        },
+        {
+            id: 'view.toggleAI',
+            category: 'Vista',
+            label: 'Alternar Agora AI',
+            shortcut: 'Ctrl+Shift+I',
+            keywords: ['ai', 'copilot', 'chat', 'asistente'],
+            run: () => setRightPanelOpen((v) => !v)
+        },
+        {
+            id: 'diagnostics.clear',
+            category: 'Diagnóstico',
+            label: 'Limpiar todos los problemas',
+            keywords: ['clear', 'limpiar', 'errores', 'problemas'],
+            run: () => { void import('@/lib/diagnostics-bus').then((m) => m.clearDiagnostics()); }
+        },
+        {
+            id: 'help.shortcuts',
+            category: 'Ayuda',
+            label: 'Atajos de teclado',
+            shortcut: '?',
+            keywords: ['shortcuts', 'atajos', 'teclado', 'help', 'ayuda'],
+            run: () => setShowKeyboardHelp(true)
         },
         {
             id: 'view.zen',
@@ -1850,6 +1883,13 @@ function DashboardContent() {
                     open={showCommandPalette}
                     onClose={() => setShowCommandPalette(false)}
                     commands={paletteCommands}
+                    modalFade={modalFade}
+                    modalPop={modalPop}
+                />
+
+                <KeyboardShortcuts
+                    open={showKeyboardHelp}
+                    onClose={() => setShowKeyboardHelp(false)}
                     modalFade={modalFade}
                     modalPop={modalPop}
                 />
