@@ -1,6 +1,31 @@
 export type AIProvider = 'openai' | 'anthropic' | 'ollama' | 'gemini' | 'deepseek';
 export type AgentMode = 'chat' | 'agent';
 
+export type AgentAccessProfileId = 'read_only' | 'editor' | 'workspace' | 'developer' | 'custom';
+
+export type AgentAccessCapability =
+  | 'workspaceContext'
+  | 'documentsRead'
+  | 'documentsWrite'
+  | 'documentsDelete'
+  | 'snippets'
+  | 'board'
+  | 'semantic'
+  | 'logic'
+  | 'gitRead'
+  | 'gitWrite'
+  | 'workerRead'
+  | 'workerCommand'
+  | 'uiControl'
+  | 'debug';
+
+export type AgentAccessCapabilities = Record<AgentAccessCapability, boolean>;
+
+export interface AgentAccessPolicy {
+  profile: AgentAccessProfileId;
+  capabilities: AgentAccessCapabilities;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -186,6 +211,7 @@ export interface AgentRequestBody {
   apiKey?: string;
   model?: string;
   mode?: AgentMode;
+  accessPolicy?: Partial<AgentAccessPolicy>;
 }
 
 export interface AgentResponseBody {
@@ -202,4 +228,5 @@ export interface AgentExecutionContext {
   llmEndpoint?: string;
   llmModel?: string;
   authToken?: string;
+  accessPolicy?: Partial<AgentAccessPolicy>;
 }

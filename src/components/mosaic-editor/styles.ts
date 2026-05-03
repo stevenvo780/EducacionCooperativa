@@ -68,7 +68,6 @@ export const mosaicEditorStyles = `
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] {
-          overflow: visible !important;
           width: 100% !important;
           max-width: 100% !important;
           flex-direction: row !important;
@@ -77,6 +76,21 @@ export const mosaicEditorStyles = `
           column-gap: 2px !important;
           justify-content: flex-start !important;
           align-items: center !important;
+          /* Cap a 2 filas (~64px) para no comerse el espacio del editor.
+             Si los items no caben, scroll vertical interno discreto. */
+          max-height: 68px !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          scrollbar-width: thin !important;
+        }
+        /* En modo embebido (mosaic) preferimos scroll horizontal para
+           mantener una sola fila — el panel suele ser chico y wrap
+           multiplicaría las filas. */
+        .editor-embedded [class*="_toolbarRoot"] {
+          flex-wrap: nowrap !important;
+          max-height: none !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
         }
 
         .mdx-editor-dark [class*="_toolbarRoot"] button,

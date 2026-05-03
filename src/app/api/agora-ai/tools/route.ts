@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, isWorkspaceMember, getTokenFromRequest } from '@/lib/server-auth';
 import { isPersonalWorkspaceId } from '@/types/workspace';
 import { executeAgentTool } from '@/lib/agora-ai/toolExecutor';
+import type { AgentAccessPolicy } from '@/lib/agora-ai/types';
 
 export const maxDuration = 60;
 
@@ -124,11 +125,18 @@ export async function POST(request: NextRequest) {
     expectChanges?: boolean;
     reason?: string;
     documentIds?: string[];
+    path?: string;
+    maxDepth?: number;
+    message?: string;
+    panel?: string;
+    severity?: 'error' | 'warning' | 'info' | 'hint';
+    code?: string;
     includeContent?: boolean;
     includeSnippets?: boolean;
     includeSemantic?: boolean;
     maxDocuments?: number;
     maxCharsPerDocument?: number;
+    accessPolicy?: Partial<AgentAccessPolicy>;
   };
 
   const { action, workspaceId = '' } = body;
@@ -154,7 +162,8 @@ export async function POST(request: NextRequest) {
       origin: request.nextUrl.origin,
       llmEndpoint: typeof body.llmEndpoint === 'string' ? body.llmEndpoint : undefined,
       llmModel: typeof body.llmModel === 'string' ? body.llmModel : undefined,
-      authToken: getTokenFromRequest(request) ?? undefined
+      authToken: getTokenFromRequest(request) ?? undefined,
+      accessPolicy: body.accessPolicy
     });
 
     const status = result.ok ? 200 : 500;

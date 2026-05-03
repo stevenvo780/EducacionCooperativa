@@ -247,6 +247,35 @@ function pushConsole(level: 'error' | 'warning', message: string, detail?: strin
   }
 }
 
+function pushProblemEvent(detail: {
+  severity?: DiagnosticSeverity;
+  source?: string;
+  uri?: string;
+  message: string;
+  detail?: string;
+  code?: string;
+}) {
+  if (inEmit) return;
+  const source = detail.source ?? 'app';
+  const uri = detail.uri ?? 'global';
+  const key = bucketKey(source, uri);
+  const bucket = buckets.get(key);
+  const items: ResolvedDiagnostic[] = bucket ? bucket.items.slice() : [];
+  items.unshift({
+    id: genId(),
+    source,
+    uri,
+    severity: detail.severity ?? 'warning',
+    message: detail.message,
+    detail: detail.detail,
+    code: detail.code,
+    publishedAt: Date.now()
+  });
+  if (items.length > 200) items.length = 200;
+  buckets.set(key, { source, uri, items });
+  emit();
+}
+
 function formatArg(arg: unknown): string {
   if (arg instanceof Error) return arg.message;
   if (typeof arg === 'string') return arg;
@@ -290,13 +319,9 @@ export function installDiagnosticsBus() {
   // Compat con eventos legacy 'agora:problem' que ya emitían algunos
   // subsistemas (tratados como source=app, uri=global).
   window.addEventListener('agora:problem', ((e: Event) => {
-    const d = (e as CustomEvent<{ severity?: 'error' | 'warning' | 'info'; source?: string; message: string; detail?: string }>).detail;
+    const d = (e as CustomEvent<{ severity?: DiagnosticSeverity; source?: string; uri?: string; message: string; detail?: string; code?: string }>).detail;
     if (!d) return;
-    publishDiagnostics(d.source ?? 'app', 'global', [{
-      severity: (d.severity ?? 'warning') as DiagnosticSeverity,
-      message: d.message,
-      detail: d.detail
-    }]);
+    pushProblemEvent(d);
   }) as EventListener);
 }
 

@@ -1,12 +1,14 @@
-import type { AgentMode } from '@/lib/agora-ai/types';
+import { AGENT_ACCESS_CAPABILITIES, normalizeAgentAccessPolicy } from '@/lib/agora-ai/accessPolicy';
+import type { AgentAccessPolicy, AgentMode } from '@/lib/agora-ai/types';
 
 interface BuildSystemPromptOptions {
   mode: AgentMode;
   contextPrompt?: string;
   workspaceId?: string;
+  accessPolicy?: Partial<AgentAccessPolicy>;
 }
 
-export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }: BuildSystemPromptOptions): string {
+export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, accessPolicy }: BuildSystemPromptOptions): string {
   const base = [
     'Eres Agora AI, un asistente inteligente integrado en Agora, una plataforma educativa colaborativa con lógica formal.',
     'Responde en español con claridad y precisión.'
@@ -122,9 +124,36 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId }
       '### Worker / comandos',
       '`get_worker_status`: verifica si hay worker conectado.',
       '`run_worker_command`: ejecuta comandos dentro de /workspace del worker y siempre requiere confirmación del usuario.',
+      '`list_worker_files`: lista archivos reales del worker de forma segura y sin comando arbitrario.',
+      '`sync_status`: resume Firestore, storage, worker y Git para detectar desincronización.',
       'Usa comandos para verificar estado real, correr tests o inspeccionar archivos sincronizados. No uses comandos destructivos salvo petición explícita y confirmación.',
       ''
     );
+
+    base.push(
+      '### Git, UI y debug',
+      '`git_status`: revisa cambios pendientes del repo del workspace.',
+      '`git_log`: lee commits recientes.',
+      '`git_commit_workspace`: crea commit Git y siempre requiere confirmación.',
+      '`open_app_panel`: abre paneles de UI como files, git, terminal, problems, ai, board, semantic o settings.',
+      '`report_debug`: publica mensajes en el bus de Problemas cuando detectes fallos, warnings o pasos de diagnóstico importantes.',
+      'Si una tool falla o un comando devuelve exitCode distinto de 0, explica el problema y usa `report_debug` si necesitas que quede visible en Problemas.',
+      ''
+    );
+
+    if (accessPolicy) {
+      const normalizedPolicy = normalizeAgentAccessPolicy(accessPolicy);
+      const enabled = AGENT_ACCESS_CAPABILITIES.filter((capability) => normalizedPolicy.capabilities[capability]);
+      const disabled = AGENT_ACCESS_CAPABILITIES.filter((capability) => !normalizedPolicy.capabilities[capability]);
+      base.push(
+        '### Perfil de acceso activo',
+        `Perfil: ${normalizedPolicy.profile}.`,
+        `Capacidades habilitadas: ${enabled.join(', ') || 'ninguna'}.`,
+        `Capacidades bloqueadas: ${disabled.join(', ') || 'ninguna'}.`,
+        'No intentes usar tools bloqueadas por el perfil. Si necesitas más permisos, pide al usuario cambiar el nivel de acceso desde el selector del chat o Configuración > Agora IA.',
+        ''
+      );
+    }
 
   } else {
     base.push('Estás en MODO CHAT. Puedes aconsejar y responder, pero no ejecutes acciones que modifiquen documentos.');
