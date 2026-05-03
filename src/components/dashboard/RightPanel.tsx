@@ -14,9 +14,11 @@ interface RightPanelProps {
 
 /**
  * Panel secundario a la derecha del editor (estilo VS Code secondary
- * sidebar). Por defecto cerrado; al abrirlo aloja Agora AI como un chat
- * tipo Copilot. Diseñado para aceptar mas vistas en el futuro (Outline,
- * Backlinks, Debug, etc.) extendiendo `tab` localmente.
+ * sidebar). Aloja Agora AI con su propio chrome — el chat ya incluye
+ * sidebar de historial, modo agente/chat, quick prompts y rollback.
+ *
+ * Diseñado para aceptar futuras vistas (Outline, Backlinks, Debug)
+ * cuando se introduzca un selector tipo SIDEBAR_VIEWS.
  */
 export default function RightPanel({ open, onToggle, currentWorkspace }: RightPanelProps) {
   if (!open) return null;
@@ -25,28 +27,26 @@ export default function RightPanel({ open, onToggle, currentWorkspace }: RightPa
     <aside
       className="flex h-full w-full flex-col bg-surface-900 border-l border-surface-700/60"
       aria-label="Panel Agora AI"
+      data-shell="copilot"
     >
-      <header className="flex h-9 shrink-0 items-center justify-between border-b border-surface-700/60 px-2 text-[11px] font-semibold uppercase tracking-wider text-surface-400">
-        <span className="flex items-center gap-1.5 px-1">
-          <Sparkles className="h-3.5 w-3.5 text-sky-300" />
-          Agora AI
-        </span>
-        <button
-          type="button"
-          onClick={onToggle}
-          title="Cerrar (Ctrl+Shift+I)"
-          aria-label="Cerrar panel"
-          className="flex h-7 w-7 items-center justify-center rounded text-surface-400 transition hover:bg-surface-800 hover:text-white"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </header>
+      {/* Botón cerrar flotante (top right) — el chrome del chat queda visible */}
+      <button
+        type="button"
+        onClick={onToggle}
+        title="Cerrar panel (Ctrl+Shift+I)"
+        aria-label="Cerrar panel"
+        className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded text-surface-400 transition hover:bg-surface-800 hover:text-white"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+
       <div className="flex-1 min-h-0">
         {currentWorkspace ? (
           <AgoraAIChat workspaceId={currentWorkspace.id} />
         ) : (
-          <div className="flex h-full items-center justify-center px-6 text-center text-xs text-surface-500">
-            Selecciona un workspace para chatear con Agora AI.
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-xs text-surface-500">
+            <Sparkles className="h-5 w-5 text-sky-300" />
+            <p>Selecciona un workspace para chatear con Agora AI.</p>
           </div>
         )}
       </div>
