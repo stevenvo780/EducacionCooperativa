@@ -795,12 +795,15 @@ function DashboardContent() {
         }
     }, [user, loading, router, fetchWorkspaces]);
 
+    const setActivityViewSafe = useCallback((v: string) => {
+        setActivityView(v as ActivityView);
+    }, []);
     useDashboardPersistence({
         currentWorkspaceId,
         activityView,
         bottomDockOpen,
         rightPanelOpen,
-        setActivityView: (v) => setActivityView(v as ActivityView),
+        setActivityView: setActivityViewSafe,
         setBottomDockOpen,
         setRightPanelOpen,
         docs,
