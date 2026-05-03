@@ -1,46 +1,59 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Terminal as TerminalIcon,
   AlertCircle,
-  Sparkles,
   Wifi,
   WifiOff,
-  AlertTriangle
+  AlertTriangle,
+  PanelLeft
 } from 'lucide-react';
 import { subscribeDiagnostics } from '@/lib/diagnostics-bus';
+import { subscribeStatus, type StatusSegment, type StatusTone } from '@/lib/status-bus';
+import LintersStatusButton from './LintersStatusButton';
 
 interface StatusBarProps {
   workspaceLabel: string;
   workerStatus: 'online' | 'offline' | 'unknown';
   isOnline: boolean;
 
-  bottomDockOpen: boolean;
-  onToggleDock: () => void;
+  /** Toggle de Problemas: queda en el status bar porque es informativo
+   *  (cuenta errores+warnings) y no equivale a un panel completo. */
   onOpenProblems: () => void;
-  rightPanelOpen: boolean;
-  onToggleRightPanel: () => void;
+
+  /** Cuando la sidebar está colapsada, el status bar muestra un único
+   *  botón para reabrirla — así no necesitamos un FAB flotante. */
+  sidebarCollapsed: boolean;
+  onShowSidebar: () => void;
+
+  /** Extensión del archivo activo (sin punto, lowercase). Se usa para
+   *  filtrar qué linters aplican al archivo en foco. Null → ningún
+   *  archivo abierto (no se muestra el menú de linters). */
+  activeFileExt: string | null;
 }
 
 /**
- * Barra de estado global, anclada al pie de la app. Sustituye a los
- * botones flotantes de Terminal/AI: aqui viven los toggles de los
- * paneles inferiores y derechos junto con los indicadores de estado.
- * La idea es separar visualmente "altera la sidebar" (activity bar
- * arriba) de "altera vistas/paneles" (esta barra abajo).
+ * Status bar global. Se compone de:
+ * - Segmentos LEFT: (botón mostrar sidebar si colapsada) + workspace +
+ *   worker dot + online dot + segments del bus con slot=left.
+ * - Segmentos RIGHT: segments del bus con slot=right (Guardado, linter,
+ *   encoding…) + toggle de Problemas (informativo).
+ *
+ * Los toggles de Terminal / Agora AI / sidebar viven en la mini navbar
+ * horizontal de la cabecera de la sidebar (estilo Obsidian).
  */
 export default function StatusBar({
   workspaceLabel,
   workerStatus,
   isOnline,
-  bottomDockOpen,
-  onToggleDock,
   onOpenProblems,
-  rightPanelOpen,
-  onToggleRightPanel
+  sidebarCollapsed,
+  onShowSidebar,
+  activeFileExt
 }: StatusBarProps) {
   const [counts, setCounts] = useState({ errors: 0, warns: 0 });
+  const [segments, setSegments] = useState<StatusSegment[]>([]);
+
   useEffect(() => subscribeDiagnostics((items) => {
     let errors = 0, warns = 0;
     for (const i of items) {
@@ -49,6 +62,11 @@ export default function StatusBar({
     }
     setCounts((prev) => prev.errors === errors && prev.warns === warns ? prev : { errors, warns });
   }), []);
+
+  useEffect(() => subscribeStatus(setSegments), []);
+
+  const left = segments.filter((s) => (s.slot ?? 'left') === 'left');
+  const right = segments.filter((s) => s.slot === 'right');
   const { errors, warns } = counts;
 
   return (
@@ -56,46 +74,89 @@ export default function StatusBar({
       role="status"
       aria-live="polite"
       aria-atomic="false"
-      className="flex h-6 shrink-0 items-center justify-between gap-2 border-t border-surface-700/40 bg-surface-925/80 px-2 text-[11px] text-surface-300">
-      <div className="flex min-w-0 items-center gap-1.5">
+      className="flex h-6 shrink-0 items-center justify-between gap-2 border-t border-surface-700/40 bg-surface-925/80 px-2 text-[11px] text-surface-300"
+    >
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+        {sidebarCollapsed && (
+          <button
+            type="button"
+            onClick={onShowSidebar}
+            title="Mostrar barra lateral (Ctrl+B)"
+            aria-label="Mostrar barra lateral"
+            className="flex h-5 items-center gap-1 rounded px-1.5 text-surface-300 hover:bg-surface-800/60 hover:text-surface-100"
+          >
+            <PanelLeft className="h-3 w-3" />
+            <span className="hidden sm:inline">Mostrar barra</span>
+          </button>
+        )}
         <span className="truncate text-surface-400">{workspaceLabel}</span>
         <WorkerDot status={workerStatus} />
         <ConnectivityDot online={isOnline} />
+        {left.length > 0 && <Divider />}
+        {left.map((s) => <SegmentPill key={s.id} segment={s} />)}
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5">
-        <StatusButton
+        {right.map((s) => <SegmentPill key={s.id} segment={s} />)}
+        {right.length > 0 && <Divider />}
+        <LintersStatusButton activeFileExt={activeFileExt} />
+        <ToggleButton
           label={`Problemas${errors + warns > 0 ? ` ${errors + warns}` : ''}`}
           icon={<AlertCircle className="h-3 w-3" />}
           onClick={onOpenProblems}
           tone={errors > 0 ? 'error' : warns > 0 ? 'warning' : undefined}
-        />
-        <StatusButton
-          label="Terminal"
-          icon={<TerminalIcon className="h-3 w-3" />}
-          onClick={onToggleDock}
-          active={bottomDockOpen}
-          shortcut="Ctrl+`"
-        />
-        <StatusButton
-          label="Agora AI"
-          icon={<Sparkles className="h-3 w-3" />}
-          onClick={onToggleRightPanel}
-          active={rightPanelOpen}
-          shortcut="Ctrl+Shift+I"
         />
       </div>
     </div>
   );
 }
 
-function StatusButton({
-  label,
-  icon,
-  onClick,
-  active,
-  shortcut,
-  tone
+function Divider() {
+  return <span className="h-3 w-px bg-surface-700/60 mx-0.5" aria-hidden />;
+}
+
+function SegmentPill({ segment }: { segment: StatusSegment }) {
+  const Icon = segment.icon;
+  const toneClass = toneToClass(segment.tone);
+  const hideClass = segment.hideBelow === 'lg' ? 'hidden lg:flex'
+    : segment.hideBelow === 'md' ? 'hidden md:flex'
+    : segment.hideBelow === 'sm' ? 'hidden sm:flex'
+    : 'flex';
+  const interactive = Boolean(segment.onClick);
+  const baseClass = `${hideClass} h-5 items-center gap-1 rounded px-1.5 transition ${toneClass} ${
+    interactive ? 'hover:bg-surface-800/60 cursor-pointer' : ''
+  }`;
+
+  const inner: ReactNode = (
+    <>
+      {Icon && <Icon className="h-3 w-3" />}
+      <span className="truncate max-w-[12rem]">{segment.label}</span>
+    </>
+  );
+
+  if (interactive) {
+    return (
+      <button type="button" onClick={segment.onClick} title={segment.title} className={baseClass}>
+        {inner}
+      </button>
+    );
+  }
+  return <span title={segment.title} className={baseClass}>{inner}</span>;
+}
+
+function toneToClass(tone?: StatusTone): string {
+  switch (tone) {
+    case 'error': return 'text-rose-300';
+    case 'warning': return 'text-amber-300';
+    case 'info': return 'text-sky-300';
+    case 'success': return 'text-emerald-300';
+    case 'muted': return 'text-surface-500';
+    default: return 'text-surface-300';
+  }
+}
+
+function ToggleButton({
+  label, icon, onClick, active, shortcut, tone
 }: {
   label: string;
   icon: React.ReactNode;

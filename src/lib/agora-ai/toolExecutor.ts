@@ -460,6 +460,172 @@ function formatTimestamp(v: unknown): string | null {
   try { return new Date(ms).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }); } catch { return null; }
 }
 
+function truncateText(value: string, maxChars: number) {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(0, maxChars - 32))}\n\n[...truncado por Agora AI...]`;
+}
+
+const resolveWorkerWorkspaceId = (ctx: AgentExecutionContext) => {
+  if (!isPersonalWorkspaceId(ctx.workspaceId)) return ctx.workspaceId;
+  return ctx.workspaceId.startsWith(`${PERSONAL_WORKSPACE_ID}:`)
+    ? ctx.workspaceId
+    : `${PERSONAL_WORKSPACE_ID}:${ctx.uid}`;
+};
+
+const getNexusUrl = () => (
+  process.env.NEXUS_URL
+  || process.env.NEXT_PUBLIC_NEXUS_URL
+  || 'http://localhost:3002'
+).replace(/\/+$/, '');
+
+async function fetchNexusJson<T>(
+  path: string,
+  ctx: AgentExecutionContext,
+  init: RequestInit = {},
+  timeoutMs = 5000
+): Promise<T> {
+  if (!ctx.authToken) {
+    throw new Error('No hay token de usuario disponible para comunicarse con el Hub del worker.');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${getNexusUrl()}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ctx.authToken}`,
+        ...(init.headers || {})
+      }
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) as T & { error?: string } : {} as T & { error?: string };
+    if (!res.ok) {
+      throw new Error(data.error || `Hub ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return data as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchAppJson<T>(
+  path: string,
+  ctx: AgentExecutionContext,
+  init: RequestInit = {},
+  timeoutMs = 10000
+): Promise<T> {
+  if (!ctx.authToken) {
+    throw new Error('No hay token de usuario disponible para llamar APIs internas de Agora.');
+  }
+  if (!ctx.origin) {
+    throw new Error('No hay origin de la app disponible para llamar APIs internas de Agora.');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${ctx.origin}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ctx.authToken}`,
+        ...(init.headers || {})
+      }
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) as T & { error?: string; detail?: string } : {} as T & { error?: string; detail?: string };
+    if (!res.ok) {
+      throw new Error(data.error || data.detail || `Agora API ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return data as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchAppSseEvents(
+  path: string,
+  ctx: AgentExecutionContext,
+  init: RequestInit = {},
+  timeoutMs = 55000
+): Promise<Array<Record<string, unknown>>> {
+  if (!ctx.authToken) {
+    throw new Error('No hay token de usuario disponible para llamar APIs internas de Agora.');
+  }
+  if (!ctx.origin) {
+    throw new Error('No hay origin de la app disponible para llamar APIs internas de Agora.');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${ctx.origin}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ctx.authToken}`,
+        ...(init.headers || {})
+      }
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      try {
+        const data = JSON.parse(text) as { error?: string; detail?: string };
+        throw new Error(data.error || data.detail || `Agora API ${res.status}: ${text.slice(0, 200)}`);
+      } catch (error) {
+        if (error instanceof SyntaxError) throw new Error(`Agora API ${res.status}: ${text.slice(0, 200)}`);
+        throw error;
+      }
+    }
+
+    const events: Array<Record<string, unknown>> = [];
+    for (const block of text.split('\n\n')) {
+      const data = block
+        .split('\n')
+        .filter((line) => line.startsWith('data: '))
+        .map((line) => line.slice(6))
+        .join('\n')
+        .trim();
+      if (!data) continue;
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed && typeof parsed === 'object') events.push(parsed as Record<string, unknown>);
+      } catch {
+        events.push({ event: 'raw', data });
+      }
+    }
+    return events;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchWorkerStatus(ctx: AgentExecutionContext, timeoutMs = 5000) {
+  try {
+    return await fetchNexusJson<{
+      workspaceId: string;
+      worker: { online: boolean; socketId?: string | null; workspaceType?: string; ownerId?: string | null };
+      sessions: Array<{ sessionId: string; workspaceId: string; workspaceType?: string; ownerUid?: string; sessionName?: string }>;
+    }>(
+      `/agent/workspace-status?workspaceId=${encodeURIComponent(resolveWorkerWorkspaceId(ctx))}`,
+      ctx,
+      { method: 'GET' },
+      timeoutMs
+    );
+  } catch (error) {
+    return {
+      workspaceId: resolveWorkerWorkspaceId(ctx),
+      worker: { online: false, error: getErrorMessage(error) },
+      sessions: []
+    };
+  }
+}
+
 const ok = (
   call: AgentToolCall,
   summary: string,
@@ -500,6 +666,682 @@ const confirm = (
     args: call.args
   }
 });
+
+async function loadWorkspaceDocuments(ctx: AgentExecutionContext, limit = MAX_DOC_SCAN): Promise<StoredDocument[]> {
+  await ensureWorkspaceAccess(ctx.workspaceId, ctx.uid);
+  let query: FirebaseFirestore.Query = adminDb.collection('documents');
+  if (isPersonalWorkspaceId(ctx.workspaceId)) {
+    query = query.where('ownerId', '==', ctx.uid);
+    query = query.where('workspaceId', '==', PERSONAL_WORKSPACE_ID);
+  } else {
+    query = query.where('workspaceId', '==', ctx.workspaceId);
+  }
+  const snap = await query.limit(limit).get();
+  return snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredDocument));
+}
+
+async function loadBoardStateIfExists(ctx: AgentExecutionContext) {
+  await ensureWorkspaceAccess(ctx.workspaceId, ctx.uid);
+  const boardId = resolveBoardWorkspaceId(ctx.workspaceId, ctx.uid);
+  const boardRef = adminDb.collection('boards').doc(boardId);
+  const snap = await boardRef.get();
+  if (!snap.exists) {
+    return { boardRef, columns: [] as StoredBoardColumn[], cards: [] as StoredBoardCard[] };
+  }
+  const [columnsSnap, cardsSnap] = await Promise.all([
+    boardRef.collection('columns').orderBy('order').get(),
+    boardRef.collection('cards').orderBy('order').get()
+  ]);
+  return {
+    boardRef,
+    columns: columnsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredBoardColumn)),
+    cards: cardsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as StoredBoardCard))
+  };
+}
+
+const containsQueryTokens = (haystack: string, queryText: string) => {
+  const tokens = queryText.toLowerCase().split(/\s+/).filter((token) => token.length >= 2);
+  if (tokens.length === 0) return true;
+  const normalized = haystack.toLowerCase();
+  return tokens.every((token) => normalized.includes(token));
+};
+
+function summarizeDocumentMeta(doc: StoredDocument) {
+  return {
+    id: doc.id,
+    name: doc.name || 'Sin título',
+    type: doc.type || DocumentType.Text,
+    folder: normalizeFolderPath(doc.folder),
+    updatedAt: formatTimestamp(doc.updatedAt),
+    size: typeof doc.size === 'number' ? doc.size : null,
+    preview: excerpt(doc.content || '', 180)
+  };
+}
+
+async function inspectWorkspace(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const limit = clamp(typeof call.args.limit === 'number' ? call.args.limit : 40, 5, 100);
+  const includeWorker = call.args.includeWorker === true;
+  const [workspace, documents, snippets, semantic, board, worker] = await Promise.all([
+    fetchWorkspaceDoc(ctx.workspaceId, ctx.uid),
+    loadWorkspaceDocuments(ctx, MAX_DOC_SCAN),
+    listWorkspaceSnippets(ctx).catch(() => [] as StoredSnippet[]),
+    loadSemanticState(ctx).catch(() => EMPTY_SEMANTIC_WORKSPACE_STATE),
+    loadBoardStateIfExists(ctx).catch(() => ({ columns: [] as StoredBoardColumn[], cards: [] as StoredBoardCard[] })),
+    includeWorker ? fetchWorkerStatus(ctx, 3000) : Promise.resolve(null)
+  ]);
+
+  const folders = new Set<string>();
+  documents.forEach((doc) => {
+    folders.add(normalizeFolderPath(doc.folder));
+    if (doc.type === DocumentType.Folder && doc.name) folders.add(normalizeFolderPath(doc.name));
+  });
+
+  const textDocs = documents.filter((doc) => (doc.type || DocumentType.Text) !== DocumentType.Folder);
+  const folderDocs = documents.filter((doc) => doc.type === DocumentType.Folder);
+  const recentDocuments = documents
+    .slice()
+    .sort((left, right) => toEpoch(right.updatedAt) - toEpoch(left.updatedAt))
+    .slice(0, limit)
+    .map(summarizeDocumentMeta);
+
+  return ok(call, `Inventarié el workspace: ${documents.length} documento(s), ${folders.size} carpeta(s), ${snippets.length} snippet(s), ${semantic.concepts.length} concepto(s).`, {
+    workspace: {
+      id: String(workspace.id),
+      name: String(workspace.name || 'Workspace'),
+      type: String(workspace.type || (isPersonalWorkspaceId(ctx.workspaceId) ? 'personal' : 'shared')),
+      membersCount: Array.isArray(workspace.members) ? workspace.members.length : 1
+    },
+    inventory: {
+      documentCount: documents.length,
+      textDocumentCount: textDocs.length,
+      folderDocumentCount: folderDocs.length,
+      folders: Array.from(folders).sort().slice(0, limit),
+      recentDocuments,
+      snippets: snippets.slice(0, limit).map((snippet) => ({
+        id: snippet.id,
+        title: snippet.title || 'Sin título',
+        category: snippet.category || 'general',
+        preview: excerpt(snippet.markdown || snippet.description || '', 120)
+      })),
+      board: {
+        columnCount: board.columns.length,
+        cardCount: board.cards.length,
+        columns: board.columns.slice(0, limit).map((column) => ({ id: column.id, name: column.name || 'Sin título' })),
+        cards: board.cards.slice(0, limit).map((card) => ({
+          id: card.id,
+          title: card.title || 'Sin título',
+          columnId: card.columnId || '',
+          preview: excerpt(card.description || '', 120)
+        }))
+      },
+      semantic: {
+        conceptCount: semantic.concepts.length,
+        relationCount: semantic.relations.length,
+        fragmentCount: semantic.fragments.length,
+        concepts: semantic.concepts.slice(0, limit).map((concept) => ({
+          id: concept.id,
+          title: concept.title,
+          definition: excerpt(concept.definition || concept.excerpt || '', 160),
+          logicProfile: concept.logicProfile || null
+        }))
+      },
+      worker
+    }
+  });
+}
+
+async function searchWorkspace(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const queryText = String(call.args.query || '').trim();
+  if (!queryText) throw new Error('query es requerido');
+  const limit = clamp(typeof call.args.limit === 'number' ? call.args.limit : 10, 1, 25);
+  const [documents, snippets, semantic, board] = await Promise.all([
+    loadWorkspaceDocuments(ctx, MAX_DOC_SCAN),
+    listWorkspaceSnippets(ctx).catch(() => [] as StoredSnippet[]),
+    loadSemanticState(ctx).catch(() => EMPTY_SEMANTIC_WORKSPACE_STATE),
+    loadBoardStateIfExists(ctx).catch(() => ({ columns: [] as StoredBoardColumn[], cards: [] as StoredBoardCard[] }))
+  ]);
+
+  const documentResults = documents
+    .filter((doc) => containsQueryTokens([doc.name, doc.folder, doc.content].map(String).join('\n'), queryText))
+    .slice(0, limit)
+    .map(summarizeDocumentMeta);
+  const snippetResults = snippets
+    .filter((snippet) => containsQueryTokens([snippet.title, snippet.description, snippet.category, snippet.markdown].map(String).join('\n'), queryText))
+    .slice(0, limit)
+    .map((snippet) => ({
+      id: snippet.id,
+      title: snippet.title || 'Sin título',
+      category: snippet.category || 'general',
+      preview: excerpt(snippet.markdown || snippet.description || '', 180)
+    }));
+  const conceptResults = semantic.concepts
+    .filter((concept) => containsQueryTokens([concept.title, concept.definition, concept.formula, concept.excerpt].map(String).join('\n'), queryText))
+    .slice(0, limit)
+    .map((concept) => ({
+      id: concept.id,
+      title: concept.title,
+      definition: excerpt(concept.definition || concept.excerpt || '', 180),
+      formula: concept.formula || ''
+    }));
+  const cardResults = board.cards
+    .filter((card) => containsQueryTokens([card.title, card.description, card.sourceDocName, card.sourceFragment].map(String).join('\n'), queryText))
+    .slice(0, limit)
+    .map((card) => ({
+      id: card.id,
+      title: card.title || 'Sin título',
+      columnId: card.columnId || '',
+      preview: excerpt(card.description || card.sourceFragment || '', 180)
+    }));
+
+  const total = documentResults.length + snippetResults.length + conceptResults.length + cardResults.length;
+  return ok(call, `La búsqueda global devolvió ${total} resultado(s).`, {
+    query: queryText,
+    results: {
+      documents: documentResults,
+      snippets: snippetResults,
+      concepts: conceptResults,
+      boardCards: cardResults
+    }
+  });
+}
+
+async function readWorkspaceBundle(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const maxDocuments = clamp(typeof call.args.maxDocuments === 'number' ? call.args.maxDocuments : 12, 1, 50);
+  const maxCharsPerDocument = clamp(typeof call.args.maxCharsPerDocument === 'number' ? call.args.maxCharsPerDocument : 4000, 500, 12000);
+  const includeContent = call.args.includeContent !== false;
+  const includeSnippets = call.args.includeSnippets === true;
+  const includeSemantic = call.args.includeSemantic === true;
+  const folder = typeof call.args.folder === 'string' && call.args.folder.trim()
+    ? normalizeFolderPath(call.args.folder)
+    : '';
+  const queryText = typeof call.args.query === 'string' ? call.args.query.trim() : '';
+  const documentIds = Array.isArray(call.args.documentIds)
+    ? call.args.documentIds.map(String).map((id) => id.trim()).filter(Boolean)
+    : [];
+
+  let docs: StoredDocument[];
+  if (documentIds.length > 0) {
+    docs = await Promise.all(documentIds.slice(0, maxDocuments).map((id) => fetchDocumentForUser(id, ctx)));
+  } else {
+    docs = await loadWorkspaceDocuments(ctx, MAX_DOC_SCAN);
+    if (folder) {
+      docs = docs.filter((doc) => {
+        const docFolder = normalizeFolderPath(doc.folder);
+        return docFolder === folder || docFolder.startsWith(`${folder}/`);
+      });
+    }
+    if (queryText) {
+      docs = docs.filter((doc) => containsQueryTokens([doc.name, doc.folder, doc.content].map(String).join('\n'), queryText));
+    }
+    docs = docs
+      .sort((left, right) => toEpoch(right.updatedAt) - toEpoch(left.updatedAt))
+      .slice(0, maxDocuments);
+  }
+
+  const bundle: Record<string, unknown> = {
+    documents: docs.map((doc) => ({
+      ...summarizeDocumentMeta(doc),
+      content: includeContent ? truncateText(doc.content || '', maxCharsPerDocument) : undefined,
+      truncated: includeContent ? (doc.content || '').length > maxCharsPerDocument : undefined,
+      mimeType: doc.mimeType || null
+    }))
+  };
+
+  if (includeSnippets) {
+    const snippets = await listWorkspaceSnippets(ctx);
+    bundle.snippets = snippets.slice(0, 20).map((snippet) => ({
+      id: snippet.id,
+      title: snippet.title || 'Sin título',
+      category: snippet.category || 'general',
+      markdown: truncateText(snippet.markdown || '', Math.min(maxCharsPerDocument, 3000))
+    }));
+  }
+
+  if (includeSemantic) {
+    const semantic = await loadSemanticState(ctx);
+    bundle.semantic = {
+      concepts: semantic.concepts.slice(0, 50),
+      relations: semantic.relations.slice(0, 50),
+      fragments: semantic.fragments.slice(0, 30)
+    };
+  }
+
+  return ok(call, `Leí un paquete de contexto con ${docs.length} documento(s).`, {
+    filters: { folder, query: queryText, documentIds },
+    bundle
+  });
+}
+
+async function getWorkerStatus(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const status = await fetchWorkerStatus(ctx, 5000);
+  return ok(
+    call,
+    status.worker.online
+      ? `El worker está online para ${status.workspaceId}.`
+      : `No hay worker online para ${status.workspaceId}.`,
+    { status }
+  );
+}
+
+const FORBIDDEN_COMMAND_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
+  { pattern: /\bsudo\b|\bsu\s+-?|\bpasswd\b/, message: 'Comandos de privilegios o cambio de usuario no permitidos.' },
+  { pattern: /\b(mkfs|fdisk|parted|mount|umount|shutdown|reboot|poweroff)\b/, message: 'Comandos de sistema no permitidos.' },
+  { pattern: /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}/, message: 'Patrones de fork bomb no permitidos.' },
+  { pattern: /\brm\s+(-[^\n;|&]*[rR][^\n;|&]*[fF]|-[^\n;|&]*[fF][^\n;|&]*[rR])\s+(\/|\/\*|~|\$HOME)(\s|$)/, message: 'No se permite borrar rutas raíz, home o absolutas peligrosas.' }
+];
+
+function validateWorkerCommand(command: string) {
+  if (!command.trim()) throw new Error('command es requerido');
+  if (command.length > 4000) throw new Error('command excede 4000 caracteres');
+  if (command.includes('\0')) throw new Error('command contiene caracteres nulos');
+  const blocked = FORBIDDEN_COMMAND_PATTERNS.find(({ pattern }) => pattern.test(command));
+  if (blocked) throw new Error(blocked.message);
+}
+
+async function runWorkerCommand(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const command = String(call.args.command || '').trim();
+  validateWorkerCommand(command);
+  const cwd = typeof call.args.cwd === 'string' && call.args.cwd.trim() ? call.args.cwd.trim() : '.';
+  const timeoutMs = clamp(typeof call.args.timeoutMs === 'number' ? call.args.timeoutMs : 15000, 1000, 25000);
+  const maxOutputChars = clamp(typeof call.args.maxOutputChars === 'number' ? call.args.maxOutputChars : 12000, 1000, 20000);
+  const expectChanges = call.args.expectChanges === true;
+  const confirmed = call.args.confirmed === true;
+
+  if (!confirmed) {
+    const reason = typeof call.args.reason === 'string' && call.args.reason.trim()
+      ? `\n\nMotivo: ${call.args.reason.trim()}`
+      : '';
+    return confirm(call, `¿Confirmas ejecutar este comando en el worker del workspace?\n\n\`${command}\`\n\nDirectorio: /workspace/${cwd === '.' ? '' : cwd}${reason}`, {
+      command,
+      cwd,
+      timeoutMs,
+      expectChanges
+    });
+  }
+
+  const result = await fetchNexusJson<{
+    requestId: string;
+    workspaceId: string;
+    ok: boolean;
+    command: string;
+    cwd: string;
+    stdout: string;
+    stderr: string;
+    exitCode: number | null;
+    signal?: string | null;
+    timedOut?: boolean;
+    durationMs: number;
+  }>('/agent/run-command', ctx, {
+    method: 'POST',
+    body: JSON.stringify({
+      workspaceId: resolveWorkerWorkspaceId(ctx),
+      command,
+      cwd,
+      timeoutMs,
+      maxOutputBytes: maxOutputChars
+    })
+  }, timeoutMs + 7000);
+
+  const stdout = truncateText(result.stdout || '', maxOutputChars);
+  const stderr = truncateText(result.stderr || '', Math.max(1000, Math.floor(maxOutputChars / 2)));
+  const summary = result.ok
+    ? `Comando ejecutado correctamente en el worker (exit ${result.exitCode ?? 0}).`
+    : `El comando terminó con error en el worker (exit ${result.exitCode ?? 'desconocido'}).`;
+
+  return ok(call, summary, {
+    command,
+    cwd: result.cwd,
+    commandOk: result.ok,
+    workerWorkspaceId: result.workspaceId,
+    stdout,
+    stderr,
+    exitCode: result.exitCode,
+    signal: result.signal || null,
+    timedOut: result.timedOut === true,
+    durationMs: result.durationMs,
+    mayHaveChangedWorkspace: expectChanges
+  });
+}
+
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function normalizeWorkerReadPath(rawPath: unknown) {
+  const path = typeof rawPath === 'string' && rawPath.trim() ? rawPath.trim() : '.';
+  if (path.includes('\0')) throw new Error('path contiene caracteres nulos');
+  if (path.startsWith('/')) throw new Error('path debe ser relativo a /workspace');
+  if (path.split('/').some((part) => part === '..')) throw new Error('path no puede contener segmentos ".."');
+  return path || '.';
+}
+
+async function runControlledWorkerCommand(
+  ctx: AgentExecutionContext,
+  command: string,
+  cwd = '.',
+  timeoutMs = 10000,
+  maxOutputChars = 12000
+) {
+  return await fetchNexusJson<{
+    requestId: string;
+    workspaceId: string;
+    ok: boolean;
+    command: string;
+    cwd: string;
+    stdout: string;
+    stderr: string;
+    exitCode: number | null;
+    signal?: string | null;
+    timedOut?: boolean;
+    durationMs: number;
+  }>('/agent/run-command', ctx, {
+    method: 'POST',
+    body: JSON.stringify({
+      workspaceId: resolveWorkerWorkspaceId(ctx),
+      command,
+      cwd,
+      timeoutMs,
+      maxOutputBytes: maxOutputChars
+    })
+  }, timeoutMs + 7000);
+}
+
+async function listWorkerFiles(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const path = normalizeWorkerReadPath(call.args.path);
+  const maxDepth = clamp(typeof call.args.maxDepth === 'number' ? call.args.maxDepth : 3, 1, 6);
+  const limit = clamp(typeof call.args.limit === 'number' ? call.args.limit : 80, 1, 200);
+  const command = `find ${shellQuote(path)} -maxdepth ${maxDepth} -printf '%y %p\\n' | sort | head -n ${limit}`;
+  const result = await runControlledWorkerCommand(ctx, command, '.', 12000, 20000);
+  const stdout = truncateText(result.stdout || '', 20000);
+  const stderr = truncateText(result.stderr || '', 4000);
+  const entries = stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const kind = line.slice(0, 1);
+      const entryPath = line.slice(2);
+      return {
+        type: kind === 'd' ? 'directory' : kind === 'f' ? 'file' : 'other',
+        path: entryPath
+      };
+    });
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      name: call.name,
+      callId: call.id,
+      summary: `No pude listar archivos del worker (exit ${result.exitCode ?? 'desconocido'}).`,
+      error: stderr || stdout || 'find falló en el worker',
+      data: {
+        command,
+        cwd: result.cwd,
+        stdout,
+        stderr,
+        exitCode: result.exitCode,
+        diagnostic: {
+          severity: 'warning',
+          message: 'Falló list_worker_files',
+          detail: stderr || stdout || 'find falló en el worker',
+          code: 'list_worker_files'
+        }
+      }
+    } as AgentToolExecutionResult;
+  }
+
+  return ok(call, `Listé ${entries.length} entrada(s) reales del worker en ${path}.`, {
+    workerWorkspaceId: result.workspaceId,
+    path,
+    maxDepth,
+    entries,
+    stdout,
+    stderr,
+    command
+  });
+}
+
+type GitStatusItem = {
+  docId: string;
+  repoPath: string;
+  name?: string | null;
+  folder?: string | null;
+  status: 'clean' | 'modified' | 'new' | 'unknown' | string;
+};
+
+type GitStatusResponse = {
+  workspaceId: string;
+  repoFullName: string;
+  items: GitStatusItem[];
+};
+
+async function fetchGitStatus(ctx: AgentExecutionContext) {
+  return await fetchAppJson<GitStatusResponse>(
+    `/api/workspaces/${encodeURIComponent(ctx.workspaceId)}/git/status`,
+    ctx,
+    { method: 'GET' },
+    20000
+  );
+}
+
+function summarizeGitStatus(status: GitStatusResponse) {
+  const counts = status.items.reduce((acc, item) => {
+    acc[item.status] = (acc[item.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const changed = status.items.filter((item) => item.status !== 'clean');
+  return { counts, changed };
+}
+
+async function gitStatus(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const status = await fetchGitStatus(ctx);
+  const { counts, changed } = summarizeGitStatus(status);
+  return ok(call, `Git detectó ${changed.length} cambio(s): ${counts.modified || 0} modificado(s), ${counts.new || 0} nuevo(s), ${counts.unknown || 0} desconocido(s).`, {
+    repoFullName: status.repoFullName,
+    counts,
+    items: status.items
+  });
+}
+
+async function gitLog(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const limit = clamp(typeof call.args.limit === 'number' ? call.args.limit : 10, 1, 50);
+  const data = await fetchAppJson<{
+    repoFullName: string;
+    commits: Array<{
+      sha: string;
+      shortSha: string;
+      message: string;
+      authorName?: string;
+      authorEmail?: string;
+      date?: string;
+      htmlUrl?: string;
+    }>;
+  }>(
+    `/api/workspaces/${encodeURIComponent(ctx.workspaceId)}/git/log?limit=${limit}`,
+    ctx,
+    { method: 'GET' },
+    15000
+  );
+
+  return ok(call, `Leí ${data.commits.length} commit(s) de ${data.repoFullName}.`, data);
+}
+
+async function gitCommitWorkspace(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const message = String(call.args.message || '').trim();
+  if (!message) throw new Error('message es requerido');
+  const confirmed = call.args.confirmed === true;
+  const explicitIds = Array.isArray(call.args.documentIds)
+    ? call.args.documentIds.map(String).map((id) => id.trim()).filter(Boolean)
+    : [];
+  const status = explicitIds.length > 0 ? null : await fetchGitStatus(ctx);
+  const candidateIds = explicitIds.length > 0
+    ? explicitIds
+    : (status?.items || [])
+      .filter((item) => item.status !== 'clean')
+      .map((item) => item.docId);
+
+  if (candidateIds.length === 0) {
+    return ok(call, 'No hay documentos nuevos o modificados para commitear.', {
+      message,
+      documentIds: [],
+      status: status ? summarizeGitStatus(status) : null
+    });
+  }
+
+  if (!confirmed) {
+    const preview = status
+      ? status.items
+        .filter((item) => candidateIds.includes(item.docId))
+        .slice(0, 8)
+        .map((item) => `- ${item.repoPath} (${item.status})`)
+        .join('\n')
+      : candidateIds.slice(0, 8).map((id) => `- ${id}`).join('\n');
+    return confirm(call, `¿Confirmas crear un commit Git con ${candidateIds.length} documento(s)?\n\nMensaje: ${message}\n\n${preview}`, {
+      message,
+      documentIds: candidateIds
+    });
+  }
+
+  const events = await fetchAppSseEvents(
+    `/api/workspaces/${encodeURIComponent(ctx.workspaceId)}/git/commit`,
+    ctx,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        docIds: candidateIds
+      })
+    },
+    55000
+  );
+  const errorEvent = events.find((event) => event.event === 'error');
+  if (errorEvent) {
+    return {
+      ok: false,
+      name: call.name,
+      callId: call.id,
+      summary: `Falló el commit Git: ${String(errorEvent.error || 'error desconocido')}`,
+      error: String(errorEvent.error || 'error desconocido'),
+      data: {
+        events,
+        diagnostic: {
+          severity: 'error',
+          message: 'Falló git_commit_workspace',
+          detail: String(errorEvent.error || 'error desconocido'),
+          code: 'git_commit_workspace'
+        }
+      }
+    } as AgentToolExecutionResult;
+  }
+
+  const done = events.find((event) => event.event === 'done');
+  const committedCount = typeof done?.committedCount === 'number' ? done.committedCount : 0;
+  const failedCount = typeof done?.failedCount === 'number' ? done.failedCount : 0;
+  const commitOk = done?.ok !== false && failedCount === 0;
+  const summary = commitOk
+    ? `Commit Git creado con ${committedCount} archivo(s).`
+    : `Commit Git parcial: ${committedCount} archivo(s), ${failedCount} fallo(s).`;
+
+  if (!commitOk) {
+    return {
+      ok: false,
+      name: call.name,
+      callId: call.id,
+      summary,
+      error: summary,
+      data: {
+        events,
+        commit: done || null,
+        mayHaveChangedWorkspace: committedCount > 0,
+        diagnostic: {
+          severity: failedCount > 0 ? 'warning' : 'error',
+          message: 'Commit Git incompleto',
+          detail: JSON.stringify(done?.errors || events.slice(-3), null, 2),
+          code: 'git_commit_workspace'
+        }
+      }
+    } as AgentToolExecutionResult;
+  }
+
+  return ok(call, summary, {
+    events,
+    commit: done || null,
+    documentIds: candidateIds,
+    mayHaveChangedWorkspace: true
+  });
+}
+
+async function syncStatus(call: AgentToolCall, ctx: AgentExecutionContext) {
+  const [documents, worker, git] = await Promise.all([
+    loadWorkspaceDocuments(ctx, MAX_DOC_SCAN),
+    fetchWorkerStatus(ctx, 5000),
+    fetchGitStatus(ctx).catch((error) => ({ error: getErrorMessage(error) }))
+  ]);
+  const textDocs = documents.filter((doc) => (doc.type || DocumentType.Text) !== DocumentType.Folder);
+  const withStorage = textDocs.filter((doc) => typeof doc.storagePath === 'string' && doc.storagePath.trim());
+  const gitSummary = 'items' in git ? summarizeGitStatus(git) : null;
+  const pendingGit = gitSummary ? gitSummary.changed.length : null;
+
+  return ok(call, `Sincronización: ${withStorage.length}/${textDocs.length} documento(s) con storage, worker ${worker.worker.online ? 'online' : 'offline'}${pendingGit === null ? '' : `, ${pendingGit} cambio(s) Git pendiente(s)`}.`, {
+    documents: {
+      total: documents.length,
+      textDocuments: textDocs.length,
+      withStorage: withStorage.length,
+      withoutStorage: textDocs.length - withStorage.length
+    },
+    worker,
+    git: 'items' in git ? {
+      repoFullName: git.repoFullName,
+      counts: gitSummary?.counts,
+      pendingCount: pendingGit,
+      items: git.items.slice(0, 100)
+    } : git
+  });
+}
+
+async function openAppPanel(call: AgentToolCall) {
+  const panel = String(call.args.panel || '').trim();
+  const allowed = new Set([
+    'files', 'search', 'git', 'snippets', 'board', 'semantic', 'st', 'formalizer',
+    'ai', 'ai-config', 'linter-config', 'terminal', 'problems', 'settings'
+  ]);
+  if (!allowed.has(panel)) throw new Error(`Panel no soportado: ${panel}`);
+  const folder = typeof call.args.folder === 'string' && call.args.folder.trim()
+    ? normalizeFolderPath(call.args.folder)
+    : undefined;
+  const type =
+    panel === 'terminal' ? 'open_terminal' :
+    panel === 'problems' ? 'open_problems' :
+    panel === 'ai-config' ? 'open_ai_config' :
+    panel === 'linter-config' ? 'open_linter_config' :
+    'open_panel';
+
+  return ok(call, `Abrí/enfoqué el panel ${panel}.`, {
+    uiCommand: {
+      type,
+      panel,
+      folder
+    }
+  });
+}
+
+async function reportDebug(call: AgentToolCall) {
+  const message = String(call.args.message || '').trim();
+  if (!message) throw new Error('message es requerido');
+  const rawSeverity = String(call.args.severity || 'info');
+  const severity = rawSeverity === 'error' || rawSeverity === 'warning' || rawSeverity === 'hint' ? rawSeverity : 'info';
+  const detail = typeof call.args.detail === 'string' ? call.args.detail : undefined;
+  const code = typeof call.args.code === 'string' ? call.args.code : undefined;
+
+  return ok(call, `Publiqué debug: ${message}`, {
+    diagnostic: {
+      severity,
+      message,
+      detail,
+      code: code || 'agent-debug'
+    }
+  });
+}
 
 async function listDocuments(call: AgentToolCall, ctx: AgentExecutionContext) {
   await ensureWorkspaceAccess(ctx.workspaceId, ctx.uid);
@@ -1740,6 +2582,18 @@ const DOCUMENT_TOOL_HANDLERS: Record<string, ToolHandler> = {
   list_folders: listFolders,
   create_folder: createFolder,
   get_workspace_info: getWorkspaceInfo,
+  inspect_workspace: inspectWorkspace,
+  search_workspace: searchWorkspace,
+  read_workspace_bundle: readWorkspaceBundle,
+  get_worker_status: getWorkerStatus,
+  run_worker_command: runWorkerCommand,
+  list_worker_files: listWorkerFiles,
+  sync_status: syncStatus,
+  git_status: gitStatus,
+  git_log: gitLog,
+  git_commit_workspace: gitCommitWorkspace,
+  open_app_panel: openAppPanel,
+  report_debug: reportDebug,
   restore_document: restoreDocument
 };
 

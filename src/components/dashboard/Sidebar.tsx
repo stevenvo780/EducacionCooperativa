@@ -93,6 +93,7 @@ interface SidebarProps {
   onShowCurrentLocationProperties?: () => void;
   onRenameFolder?: (folder: FolderItem) => void;
   onDeleteFolder?: (folder: FolderItem) => void;
+
 }
 
 const Sidebar = ({

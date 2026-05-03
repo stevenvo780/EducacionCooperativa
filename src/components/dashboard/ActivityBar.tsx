@@ -9,11 +9,6 @@ interface ActivityBarProps {
   active: ActivityView;
   onChange: (view: ActivityView) => void;
 
-  workspaceLabel: string;
-  workspaceInitial: string;
-  hasInvites?: boolean;
-  onOpenWorkspaceManager: () => void;
-
   isZenMode: boolean;
   onToggleZenMode: () => void;
 
@@ -28,10 +23,6 @@ interface ActivityBarProps {
 export default function ActivityBar({
   active,
   onChange,
-  workspaceLabel,
-  workspaceInitial,
-  hasInvites,
-  onOpenWorkspaceManager,
   isZenMode,
   onToggleZenMode,
   userInitial,
@@ -46,24 +37,6 @@ export default function ActivityBar({
       className={`flex w-12 shrink-0 flex-col items-center justify-between border-r border-surface-700/40 bg-surface-900 py-2 ${className}`}
     >
       <div className="flex flex-col items-center gap-1">
-        <button
-          type="button"
-          onClick={onOpenWorkspaceManager}
-          title={`Workspace: ${workspaceLabel}\nClick para gestionar`}
-          aria-label={`Workspace ${workspaceLabel}. Gestionar workspaces`}
-          className="relative flex h-9 w-9 items-center justify-center rounded-md bg-gradient-mandy text-white text-sm font-bold shadow-sm ring-1 ring-mandy-400/30 transition hover:brightness-110"
-        >
-          {workspaceInitial.toUpperCase()}
-          {hasInvites && (
-            <span
-              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-mandy-300 ring-2 ring-surface-900"
-              aria-label="Invitaciones pendientes"
-            />
-          )}
-        </button>
-
-        <div className="my-1 h-px w-6 bg-surface-700/60" aria-hidden />
-
         <ul className="flex flex-col items-center gap-0.5">
           {SIDEBAR_VIEWS.map((item) => {
             const Icon = item.icon;

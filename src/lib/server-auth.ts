@@ -8,7 +8,7 @@ export type AuthContext = {
   email?: string | null;
 };
 
-const getTokenFromRequest = (req: NextRequest) => {
+export const getTokenFromRequest = (req: NextRequest) => {
   const header = req.headers.get('authorization') || req.headers.get('Authorization');
   if (header) {
     const match = header.match(/^Bearer\s+(.+)$/i);

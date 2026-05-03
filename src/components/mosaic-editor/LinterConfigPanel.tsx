@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useSyncExternalStore } from 'react';
+import React, { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
   Settings2, RotateCcw, ChevronDown, ChevronRight, X,
   PenLine, Layers, Link, BookOpen, Accessibility, RefreshCw,
@@ -44,6 +44,12 @@ interface LinterConfigPanelProps {
 export function LinterConfigPanel({ linterStatus = 'ready' }: LinterConfigPanelProps) {
   const [open, setOpen] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState<Set<RuleCategory>>(new Set());
+
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('agora:open-linter-config', handler);
+    return () => window.removeEventListener('agora:open-linter-config', handler);
+  }, []);
 
   const ruleStates = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const countLabel = useSyncExternalStore(subscribe, getEnabledCount, getEnabledCount);

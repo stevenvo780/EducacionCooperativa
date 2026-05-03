@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown, Save, Loader2, Check, X, Lightbulb } from 'lucide-react';
+import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown, Check, X, Lightbulb } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
 import STCodeEditor from '@/components/editor/STCodeEditor';
@@ -581,20 +581,6 @@ export default function STRunner({
             <span className="text-xs text-slate-400 font-mono truncate max-w-[200px]" title={fileMode.docName}>
               {fileMode.docName}
             </span>
-            <button
-              type="button"
-              onClick={fileMode.onSave}
-              disabled={fileMode.isSaving || !fileMode.isDirty}
-              className={`flex items-center gap-1.5 px-2 py-1 text-[10px] rounded transition ${
-                fileMode.isDirty
-                  ? 'bg-sky-600/20 text-sky-400 hover:bg-sky-600/30'
-                  : 'bg-slate-800 text-slate-500 cursor-default'
-              }`}
-              title="Guardar (Ctrl+S)"
-            >
-              {fileMode.isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-              {fileMode.isSaving ? '...' : fileMode.isDirty ? 'Guardar' : 'Guardado'}
-            </button>
           </div>
         ) : (
           <div className="flex bg-slate-800 rounded-md p-0.5">

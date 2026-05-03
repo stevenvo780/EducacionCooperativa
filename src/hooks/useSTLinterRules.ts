@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { STDefinitionsRegistry, type STDefinition } from '@/lib/st-definitions-registry';
+import { LinterRegistry } from '@/lib/linters/registry';
 import type { LinterRule, LinterDiagnostic } from '@/hooks/useMarkdownLinter';
 
 function escapeRegex(str: string): string {
@@ -31,7 +32,12 @@ export function useSTLinterRules() {
 
   useEffect(() => {
     setDefinitions(STDefinitionsRegistry.getAllDefinitions());
-    return STDefinitionsRegistry.subscribe(setDefinitions);
+    const offDefs = STDefinitionsRegistry.subscribe(setDefinitions);
+    // Re-render cuando cambia el flag global del linter ST.
+    const offReg = LinterRegistry.subscribe(() => {
+      setDefinitions(STDefinitionsRegistry.getAllDefinitions());
+    });
+    return () => { offDefs(); offReg(); };
   }, []);
 
   // Conjunto de nombres definidos (para lookup O(1))
@@ -55,6 +61,7 @@ export function useSTLinterRules() {
     defaultEnabled: true,
     supportsIncremental: true,
     check: (text: string): LinterDiagnostic[] => {
+      if (!LinterRegistry.isEnabled('st-rules')) return [];
       if (definedNamesSet.size === 0) return [];
       const results: LinterDiagnostic[] = [];
       const lines = text.split('\n');
@@ -94,6 +101,7 @@ export function useSTLinterRules() {
     defaultEnabled: false,
     supportsIncremental: false,
     check: (text: string): LinterDiagnostic[] => {
+      if (!LinterRegistry.isEnabled('st-rules')) return [];
       if (theoremsAndAxioms.length === 0) return [];
       const results: LinterDiagnostic[] = [];
 
@@ -128,6 +136,7 @@ export function useSTLinterRules() {
     defaultEnabled: true,
     supportsIncremental: false,
     check: (text: string): LinterDiagnostic[] => {
+      if (!LinterRegistry.isEnabled('st-rules')) return [];
       const conflicts = STDefinitionsRegistry.getCrossDocumentConflicts();
       if (conflicts.length === 0) return [];
 

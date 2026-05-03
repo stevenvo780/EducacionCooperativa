@@ -2,16 +2,16 @@
  * POST /api/agora-ai
  *
  * Multi-provider AI chat/agent proxy with Firebase workspace context injection.
- * Supports: OpenAI (ChatGPT), Anthropic (Claude), Google Gemini.
+ * Supports: OpenAI (ChatGPT), Anthropic (Claude), Google Gemini, DeepSeek.
  * Ollama keeps a direct browser flow because it is commonly deployed locally.
  *
  * API keys are sent from the client (stored in localStorage) and never persisted server-side.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, isWorkspaceMember } from '@/lib/server-auth';
+import { requireAuth, isWorkspaceMember, getTokenFromRequest } from '@/lib/server-auth';
 import { runProviderConversation } from '@/lib/agora-ai/providerAdapters';
 import { buildAgoraWorkspaceContext } from '@/lib/agora-ai/context';
-import type { AgentMode, AgentRequestBody } from '@/lib/agora-ai/types';
+import type { AgentMode, AgentRequestBody, AIProvider } from '@/lib/agora-ai/types';
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 export const maxDuration = 60;
@@ -54,10 +54,11 @@ export async function POST(request: NextRequest) {
     }
 
     const contextPrompt = workspaceId ? await buildAgoraWorkspaceContext(workspaceId) : '';
-    const defaults: Record<'openai' | 'anthropic' | 'gemini', string> = {
+    const defaults: Record<Exclude<AIProvider, 'ollama'>, string> = {
       openai: 'gpt-4o-mini',
       anthropic: 'claude-haiku-4-5-20251001',
-      gemini: 'gemini-2.0-flash'
+      gemini: 'gemini-2.0-flash',
+      deepseek: 'deepseek-v4-flash'
     };
 
     if (!apiKey) {
@@ -75,7 +76,8 @@ export async function POST(request: NextRequest) {
         workspaceId,
         uid: auth.uid,
         email: auth.email,
-        origin: request.nextUrl.origin
+        origin: request.nextUrl.origin,
+        authToken: getTokenFromRequest(request) ?? undefined
       }
     });
 

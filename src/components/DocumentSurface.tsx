@@ -33,6 +33,7 @@ interface DocumentSurfaceProps {
     storagePath?: string;
   };
   viewMode?: ViewMode;
+  hideInlineStatus?: boolean;
 }
 
 interface ResolvedDocumentMeta {
@@ -61,7 +62,8 @@ export default function DocumentSurface({
   externalSearchTerm,
   onSearchStateChange,
   searchNavRef,
-  initialDocument
+  initialDocument,
+  hideInlineStatus
 }: DocumentSurfaceProps) {
   const normalizedInitialDocument = useMemo<ResolvedDocumentMeta | null>(() => (
     initialDocument
@@ -187,6 +189,7 @@ export default function DocumentSurface({
       externalSearchTerm={externalSearchTerm}
       onSearchStateChange={onSearchStateChange}
       searchNavRef={searchNavRef}
+      hideInlineStatus={hideInlineStatus}
     />
   );
 }

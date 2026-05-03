@@ -16,6 +16,12 @@ export interface EditorProps {
   externalSearchTerm?: string;
   onSearchStateChange?: (state: SearchState) => void;
   searchNavRef?: React.MutableRefObject<{ next: () => void; prev: () => void } | null>;
+  /**
+   * Cuando true, oculta la barra de stats inline del editor y publica
+   * los segments al status-bus global. Se usa cuando el editor vive
+   * dentro del workspace shell, que ya tiene su StatusBar.
+   */
+  hideInlineStatus?: boolean;
 }
 
 export type ToolbarGroupKey =

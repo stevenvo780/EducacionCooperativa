@@ -1,17 +1,18 @@
 import { NextRequest } from 'next/server';
-import { requireAuth, isWorkspaceMember } from '@/lib/server-auth';
+import { requireAuth, isWorkspaceMember, getTokenFromRequest } from '@/lib/server-auth';
 import { buildAgoraWorkspaceContext } from '@/lib/agora-ai/context';
 import { runProviderConversation } from '@/lib/agora-ai/providerAdapters';
-import type { AgentMode, AgentRequestBody, AgentStreamEvent } from '@/lib/agora-ai/types';
+import type { AgentMode, AgentRequestBody, AgentStreamEvent, AIProvider } from '@/lib/agora-ai/types';
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const DEFAULT_MODELS: Record<'openai' | 'anthropic' | 'gemini', string> = {
+const DEFAULT_MODELS: Record<Exclude<AIProvider, 'ollama'>, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-haiku-4-5-20251001',
-  gemini: 'gemini-2.0-flash'
+  gemini: 'gemini-2.0-flash',
+  deepseek: 'deepseek-v4-flash'
 };
 
 function encodeEvent(encoder: TextEncoder, payload: AgentStreamEvent) {
@@ -102,7 +103,8 @@ export async function POST(request: NextRequest) {
               workspaceId,
               uid: auth.uid,
               email: auth.email,
-              origin: request.nextUrl.origin
+              origin: request.nextUrl.origin,
+              authToken: getTokenFromRequest(request) ?? undefined
             },
             callbacks: {
               onStatus: async (status) => send({ type: 'status', status }),

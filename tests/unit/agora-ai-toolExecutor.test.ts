@@ -315,6 +315,30 @@ describe('executeAgentTool', () => {
     );
   });
 
+  it('inspecciona y lee paquetes del workspace', async () => {
+    const { executeAgentTool } = await import('@/lib/agora-ai/toolExecutor');
+    db.seed('snippets', 'snip-1', {
+      title: 'Plantilla',
+      markdown: '## Plantilla',
+      workspaceId: PERSONAL_WORKSPACE_ID,
+      ownerId: 'u1'
+    });
+
+    const inspected = await executeAgentTool(call('inspect_workspace'), ctx);
+    expect(inspected.ok).toBe(true);
+    expect((inspected.data?.inventory as { documentCount?: number }).documentCount).toBeGreaterThanOrEqual(1);
+
+    const bundle = await executeAgentTool(call('read_workspace_bundle', {
+      folder: 'Clase',
+      includeSnippets: true,
+      maxDocuments: 5
+    }), ctx);
+    expect(bundle.ok).toBe(true);
+    const data = bundle.data?.bundle as { documents?: Array<{ content?: string }>; snippets?: unknown[] };
+    expect(data.documents?.[0]?.content).toContain('# Hola');
+    expect(data.snippets).toHaveLength(1);
+  });
+
   it('pide confirmacion antes de borrar y reporta tools desconocidas', async () => {
     const { executeAgentTool } = await import('@/lib/agora-ai/toolExecutor');
 
@@ -326,6 +350,20 @@ describe('executeAgentTool', () => {
     const failed = await executeAgentTool(call('nope'), ctx);
     expect(failed.ok).toBe(false);
     expect(failed.error).toContain('Tool desconocida');
+  });
+
+  it('pide confirmacion antes de ejecutar comandos de worker', async () => {
+    const { executeAgentTool } = await import('@/lib/agora-ai/toolExecutor');
+
+    const pending = await executeAgentTool(call('run_worker_command', {
+      command: 'npm test',
+      reason: 'verificar cambios'
+    }), ctx);
+
+    expect(pending.ok).toBe(true);
+    expect(pending.requiresConfirmation).toBe(true);
+    expect(pending.pendingConfirmation?.toolName).toBe('run_worker_command');
+    expect(pending.summary).toContain('npm test');
   });
 
   it('crea snippets y tarjetas de tablero', async () => {

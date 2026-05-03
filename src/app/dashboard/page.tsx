@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FileText, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, PanelLeftOpen, Terminal as TerminalIcon } from 'lucide-react';
+import { FileText, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, Terminal as TerminalIcon } from 'lucide-react';
 import { LazyMotion, domAnimation, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -61,6 +61,8 @@ import NewFileModal, { type FileKind } from '@/components/dashboard/NewFileModal
 import DragOverlay from '@/components/dashboard/DragOverlay';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
+import WorkspaceTopBar from '@/components/dashboard/WorkspaceTopBar';
+import SettingsModal from '@/components/dashboard/SettingsModal';
 import LeftPanel from '@/components/dashboard/LeftPanel';
 import { SIDEBAR_VIEWS } from '@/components/dashboard/sidebar-views';
 import BottomDock from '@/components/dashboard/BottomDock';
@@ -501,6 +503,7 @@ function DashboardContent() {
     const [rightPanelOpen, setRightPanelOpen] = useState(false);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
     const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
@@ -1983,7 +1986,30 @@ function DashboardContent() {
                     }}
                     onShowMembers={() => setShowMembersModal(true)}
                     onOpenPricing={() => setShowPricingModal(true)}
+                    onOpenSettings={() => setSettingsOpen(true)}
                     onLogout={() => logout()}
+                />
+
+                <SettingsModal
+                    open={settingsOpen}
+                    onClose={() => setSettingsOpen(false)}
+                    onOpenChangePassword={() => {
+                        setPasswordForm({ current: '', new: '', confirm: '' });
+                        setPasswordError('');
+                        setPasswordSuccess(false);
+                        setShowPasswordModal(true);
+                    }}
+                    onOpenMembers={() => setShowMembersModal(true)}
+                    onOpenGitAccess={() => {
+                        setActivityView('git');
+                        if (isSidebarCollapsed) setIsSidebarCollapsed(false);
+                    }}
+                    onOpenAIConfig={() => {
+                        setRightPanelOpen(true);
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('agora:open-ai-config'));
+                        }
+                    }}
                 />
 
                 <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} activeFolder={activeFolder} onDismiss={dismissDragOverlay} />
@@ -2026,19 +2052,6 @@ function DashboardContent() {
                     />
                 )}
 
-                {isSidebarCollapsed && !isZenMode && (
-                    <div className="absolute bottom-3 left-2 z-50">
-                        <button
-                            onClick={handleToggleSidebarCollapse}
-                            className="flex items-center justify-center w-8 h-8 bg-surface-800/90 border border-surface-600/60 rounded-full text-surface-300 hover:text-white hover:border-mandy-500/40 hover:bg-surface-700/80 transition shadow-xl shadow-black/30 backdrop-blur"
-                            title="Mostrar panel de archivos (Ctrl+B)"
-                            aria-label="Mostrar panel de archivos"
-                        >
-                            <PanelLeftOpen className="w-4 h-4" />
-                        </button>
-                    </div>
-                )}
-
                 {isZenMode && (
                     <div className="absolute bottom-3 right-3 z-50">
                         <button
@@ -2063,7 +2076,7 @@ function DashboardContent() {
 
                     <div
                       className={`
-                        flex shrink-0 z-40 h-full bg-surface-900
+                        flex flex-col shrink-0 z-40 h-full bg-surface-900
                         md:relative md:translate-x-0 md:transform-none
                         fixed inset-y-0 left-0 transform transition-transform duration-150
                         ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
@@ -2071,16 +2084,29 @@ function DashboardContent() {
                       `}
                     >
                     {!isZenMode && (
+                      <WorkspaceTopBar
+                        workspaceLabel={currentWorkspace?.name ?? 'Sin workspace'}
+                        workspaceInitial={(currentWorkspace?.name ?? 'A').slice(0, 1)}
+                        hasInvites={invites.length > 0}
+                        onOpenWorkspaceManager={() => setShowWorkspaceManagerModal(true)}
+                        sidebarCollapsed={isSidebarCollapsed}
+                        onToggleSidebar={handleToggleSidebarCollapse}
+                        bottomDockOpen={bottomDockOpen}
+                        onToggleBottomDock={() => { setDockInitialTab('terminal'); setBottomDockOpen((v) => !v); }}
+                        rightPanelOpen={rightPanelOpen}
+                        onToggleRightPanel={() => setRightPanelOpen((v) => !v)}
+                        totalWidth={48 + (isSidebarCollapsed ? 0 : effectiveSidebarWidth)}
+                      />
+                    )}
+
+                    <div className="flex flex-1 min-h-0">
+                    {!isZenMode && (
                       <ActivityBar
                         active={activityView}
                         onChange={(v) => {
                           setActivityView(v);
                           if (isSidebarCollapsed) setIsSidebarCollapsed(false);
                         }}
-                        workspaceLabel={currentWorkspace?.name ?? 'Sin workspace'}
-                        workspaceInitial={(currentWorkspace?.name ?? 'A').slice(0, 1)}
-                        hasInvites={invites.length > 0}
-                        onOpenWorkspaceManager={() => setShowWorkspaceManagerModal(true)}
                         isZenMode={isZenMode}
                         onToggleZenMode={handleToggleZenMode}
                         userInitial={(userEmail || user?.email || 'U').slice(0, 1)}
@@ -2175,6 +2201,7 @@ function DashboardContent() {
                         </aside>
                       )
                     )}
+                    </div>
                     </div>
 
                     {/* Resize Handle */}
@@ -2333,7 +2360,6 @@ function DashboardContent() {
                             <Panel id="right-panel" defaultSize="35%" minSize="20%" maxSize="65%">
                               <RightPanel
                                 open
-                                onToggle={() => setRightPanelOpen(false)}
                                 currentWorkspace={currentWorkspace}
                               />
                             </Panel>
@@ -2344,7 +2370,6 @@ function DashboardContent() {
                         <div className="fixed inset-0 z-50 flex bg-surface-900">
                           <RightPanel
                             open
-                            onToggle={() => setRightPanelOpen(false)}
                             currentWorkspace={currentWorkspace}
                           />
                         </div>
@@ -2358,11 +2383,16 @@ function DashboardContent() {
                         workspaceLabel={currentWorkspace?.name ?? 'Sin workspace'}
                         workerStatus={workerStatus}
                         isOnline={isOnline}
-                        bottomDockOpen={bottomDockOpen}
-                        onToggleDock={() => { setDockInitialTab('terminal'); setBottomDockOpen((v) => !v); }}
                         onOpenProblems={() => { setDockInitialTab('problems'); setBottomDockOpen(true); }}
-                        rightPanelOpen={rightPanelOpen}
-                        onToggleRightPanel={() => setRightPanelOpen((v) => !v)}
+                        sidebarCollapsed={isSidebarCollapsed}
+                        onShowSidebar={handleToggleSidebarCollapse}
+                        activeFileExt={(() => {
+                          const doc = selectedDocId ? docs.find((d) => d.id === selectedDocId) : null;
+                          if (!doc?.name) return null;
+                          const dot = doc.name.lastIndexOf('.');
+                          if (dot < 0 || dot === doc.name.length - 1) return null;
+                          return doc.name.slice(dot + 1).toLowerCase();
+                        })()}
                     />
                 )}
 

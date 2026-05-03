@@ -845,6 +845,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         externalSearchTerm={searchTerm}
                         onSearchStateChange={(state) => handleSearchStateChange(doc.id, state)}
                         searchNavRef={getSearchNavRef(doc.id)}
+                        hideInlineStatus
                       />
                   )}
             </div>

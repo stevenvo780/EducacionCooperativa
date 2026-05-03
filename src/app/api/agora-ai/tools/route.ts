@@ -6,11 +6,11 @@
  * POST { action, workspaceId, … }   — write and advanced actions, enforced server-side.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, isWorkspaceMember } from '@/lib/server-auth';
+import { requireAuth, isWorkspaceMember, getTokenFromRequest } from '@/lib/server-auth';
 import { isPersonalWorkspaceId } from '@/types/workspace';
 import { executeAgentTool } from '@/lib/agora-ai/toolExecutor';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 async function verifyAccess(request: NextRequest, workspaceId: string) {
   const auth = await requireAuth(request);
@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
       workspaceId,
       uid: auth.uid,
       email: auth.email,
-      origin: request.nextUrl.origin
+      origin: request.nextUrl.origin,
+      authToken: getTokenFromRequest(request) ?? undefined
     });
 
     const status = result.ok ? 200 : 500;
@@ -116,6 +117,18 @@ export async function POST(request: NextRequest) {
     snippetId?: string;
     llmEndpoint?: string;
     llmModel?: string;
+    command?: string;
+    cwd?: string;
+    timeoutMs?: number;
+    maxOutputChars?: number;
+    expectChanges?: boolean;
+    reason?: string;
+    documentIds?: string[];
+    includeContent?: boolean;
+    includeSnippets?: boolean;
+    includeSemantic?: boolean;
+    maxDocuments?: number;
+    maxCharsPerDocument?: number;
   };
 
   const { action, workspaceId = '' } = body;
@@ -140,7 +153,8 @@ export async function POST(request: NextRequest) {
       email: auth.email,
       origin: request.nextUrl.origin,
       llmEndpoint: typeof body.llmEndpoint === 'string' ? body.llmEndpoint : undefined,
-      llmModel: typeof body.llmModel === 'string' ? body.llmModel : undefined
+      llmModel: typeof body.llmModel === 'string' ? body.llmModel : undefined,
+      authToken: getTokenFromRequest(request) ?? undefined
     });
 
     const status = result.ok ? 200 : 500;

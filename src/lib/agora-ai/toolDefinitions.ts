@@ -140,6 +140,164 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
     }
   },
   {
+    name: 'inspect_workspace',
+    description: 'Construye un inventario amplio del workspace: carpetas, documentos, snippets, tablero, glosario semántico y estado del worker si está disponible. Úsala como primer paso para tareas generales sobre "todo el workspace".',
+    parameters: {
+      type: 'object',
+      properties: {
+        includeWorker: { type: 'boolean', description: 'Si true, consulta el Hub para saber si hay worker conectado.' },
+        limit: { type: 'number', description: 'Máximo de elementos por sección, entre 5 y 100.' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'search_workspace',
+    description: 'Busca en todo el workspace a la vez: documentos, snippets, conceptos semánticos y tarjetas Kanban.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Texto de búsqueda.' },
+        limit: { type: 'number', description: 'Máximo de resultados por sección, entre 1 y 25.' }
+      },
+      required: ['query'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'read_workspace_bundle',
+    description: 'Lee un paquete de contexto del workspace en una sola llamada. Puede leer documentos concretos, una carpeta, resultados de búsqueda, snippets y glosario semántico con límites de tamaño.',
+    parameters: {
+      type: 'object',
+      properties: {
+        documentIds: { type: 'array', items: { type: 'string' }, description: 'IDs o nombres de documentos concretos a leer.' },
+        folder: { type: 'string', description: 'Carpeta a leer. Incluye subcarpetas.' },
+        query: { type: 'string', description: 'Filtro de texto sobre nombre, carpeta o contenido.' },
+        includeContent: { type: 'boolean', description: 'Si false, devuelve solo metadatos y previews.' },
+        includeSnippets: { type: 'boolean', description: 'Incluye snippets del workspace.' },
+        includeSemantic: { type: 'boolean', description: 'Incluye conceptos y relaciones semánticas.' },
+        maxDocuments: { type: 'number', description: 'Máximo de documentos, entre 1 y 50.' },
+        maxCharsPerDocument: { type: 'number', description: 'Máximo de caracteres por documento, entre 500 y 12000.' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'get_worker_status',
+    description: 'Consulta si hay worker/terminal conectado para este workspace y lista sesiones activas conocidas por el Hub.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'run_worker_command',
+    description: 'Ejecuta un comando shell dentro del worker del workspace sincronizado (/workspace). Requiere confirmación explícita. Úsala para inspeccionar archivos reales, correr tests, git status, scripts o comandos de proyecto cuando el worker esté online.',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Comando shell a ejecutar dentro del worker.' },
+        cwd: { type: 'string', description: 'Directorio relativo dentro de /workspace. Por defecto ".".' },
+        timeoutMs: { type: 'number', description: 'Timeout entre 1000 y 25000 ms.' },
+        maxOutputChars: { type: 'number', description: 'Máximo de caracteres de stdout/stderr devueltos, entre 1000 y 20000.' },
+        expectChanges: { type: 'boolean', description: 'True si esperas que el comando modifique archivos sincronizados.' },
+        reason: { type: 'string', description: 'Motivo breve para mostrar al usuario en la confirmación.' },
+        confirmed: { type: 'boolean', description: 'Solo true después de confirmación explícita del usuario.' }
+      },
+      required: ['command'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'list_worker_files',
+    description: 'Lista archivos y carpetas reales dentro del worker en /workspace usando un comando de solo lectura controlado. No requiere confirmación porque no acepta comandos arbitrarios.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Ruta relativa dentro de /workspace. Por defecto ".".' },
+        maxDepth: { type: 'number', description: 'Profundidad máxima entre 1 y 6.' },
+        limit: { type: 'number', description: 'Máximo de entradas entre 1 y 200.' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'sync_status',
+    description: 'Resume el estado de sincronización del workspace: documentos en Firestore, worker conectado y estado Git si Forgejo está disponible.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_status',
+    description: 'Consulta el estado Git del workspace en Forgejo y lista documentos nuevos, modificados o limpios.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_log',
+    description: 'Lee el historial de commits Git del workspace.',
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Número de commits a devolver, entre 1 y 50.' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_commit_workspace',
+    description: 'Crea un commit Git con documentos del workspace. Requiere confirmación explícita; si no se pasan documentIds, commitea documentos nuevos/modificados detectados por git_status.',
+    parameters: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'Mensaje de commit.' },
+        documentIds: { type: 'array', items: { type: 'string' }, description: 'IDs de documentos a commitear. Opcional.' },
+        confirmed: { type: 'boolean', description: 'Solo true después de confirmación explícita del usuario.' }
+      },
+      required: ['message'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'open_app_panel',
+    description: 'Pide a la interfaz abrir o enfocar un panel de la app: files, search, git, snippets, board, semantic, st, formalizer, ai, ai-config, linter-config, terminal, problems o settings.',
+    parameters: {
+      type: 'object',
+      properties: {
+        panel: {
+          type: 'string',
+          enum: ['files', 'search', 'git', 'snippets', 'board', 'semantic', 'st', 'formalizer', 'ai', 'ai-config', 'linter-config', 'terminal', 'problems', 'settings'],
+          description: 'Panel a abrir.'
+        },
+        folder: { type: 'string', description: 'Carpeta a enfocar si panel=files. Opcional.' }
+      },
+      required: ['panel'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'report_debug',
+    description: 'Publica una nota de debug del agente en el bus de Problemas para que el usuario vea fallos, advertencias o información operativa.',
+    parameters: {
+      type: 'object',
+      properties: {
+        severity: { type: 'string', enum: ['error', 'warning', 'info', 'hint'], description: 'Severidad del diagnóstico.' },
+        message: { type: 'string', description: 'Mensaje corto visible.' },
+        detail: { type: 'string', description: 'Detalle técnico opcional.' },
+        code: { type: 'string', description: 'Código opcional del problema.' }
+      },
+      required: ['message'],
+      additionalProperties: false
+    }
+  },
+  {
     name: 'get_semantic_state',
     description: 'Lee el estado semántico del workspace: conceptos, fragmentos y relaciones.',
     parameters: {
@@ -606,11 +764,16 @@ export const toGeminiTools = () => [{
 const OLLAMA_CORE_TOOL_NAMES = new Set([
   // Documents — most common operations
   'list_documents',
+  'inspect_workspace',
+  'search_workspace',
+  'read_workspace_bundle',
   'read_document',
   'create_document',
   'update_document',
   'search_documents',
   'list_folders',
+  'get_worker_status',
+  'run_worker_command',
   // Kanban
   'get_board',
   'create_board_card',
