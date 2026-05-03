@@ -73,7 +73,8 @@ export default function BottomDock({
       if (i.severity === 'error') error++;
       else if (i.severity === 'warning') warning++;
     }
-    setDiagCount({ error, warning });
+    // Skip si los counts no cambian — evita re-renders innecesarios.
+    setDiagCount((prev) => prev.error === error && prev.warning === warning ? prev : { error, warning });
   }), []);
 
   useEffect(() => {

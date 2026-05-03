@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { MosaicNode } from 'react-mosaic-component';
 import type { User } from 'firebase/auth';
 import { canAccessTerminals, type PlanId } from '@/types/subscription';
@@ -21,7 +21,6 @@ interface UseTerminalTabsOptions {
     openTabs: DocItem[];
     setOpenTabs: React.Dispatch<React.SetStateAction<DocItem[]>>;
     setMosaicNode: React.Dispatch<React.SetStateAction<MosaicNode<string> | null>>;
-    setSelectedDocId: (id: string | null) => void;
     setShowMobileSidebar: (value: boolean) => void;
     selectSession: (id: string) => void;
     user: User | null;
@@ -63,7 +62,6 @@ export function useTerminalTabs({
     openTabs,
     setOpenTabs,
     setMosaicNode,
-    setSelectedDocId,
     setShowMobileSidebar,
     selectSession,
     user,
@@ -74,14 +72,18 @@ export function useTerminalTabs({
 }: UseTerminalTabsOptions): UseTerminalTabsResult {
 
     // Cleanup: eliminar tiles 'terminal' que vinieran del state persistido
-    // pre-rediseño. Corre cuando openTabs cambia y detecta cualquiera.
+    // pre-rediseño. Solo corre una vez (controlado por ref) y solo si al
+    // hidratar se encontraron terminales — evita ciclos y carreras con
+    // otros effects que tocan openTabs.
+    const cleanupDoneRef = useRef(false);
     useEffect(() => {
-        const hasTerminalTabs = openTabs.some((t) => t.type === 'terminal');
-        if (!hasTerminalTabs) return;
+        if (cleanupDoneRef.current) return;
+        const hasTerminal = openTabs.some((t) => t.type === 'terminal');
+        if (!hasTerminal) return;
+        cleanupDoneRef.current = true;
         setOpenTabs((prev) => withoutTerminalTiles(prev, null).tabs);
         setMosaicNode((prev) => withoutTerminalTiles(openTabs, prev).node);
-        setSelectedDocId(null);
-    }, [openTabs, setOpenTabs, setMosaicNode, setSelectedDocId]);
+    }, [openTabs, setOpenTabs, setMosaicNode]);
 
     const openTerminal = async (session?: { id: string; name?: string }) => {
         if (!canAccessTerminals(currentPlan)) {

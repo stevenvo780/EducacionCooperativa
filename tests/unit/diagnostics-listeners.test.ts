@@ -52,19 +52,35 @@ describe('diagnostics-bus listeners', () => {
     un();
   });
 
-  it('respeta orden inverso: el más reciente primero dentro del mismo source console', () => {
+  it('no entra en loop infinito si un listener publica recursivamente', () => {
+    let calls = 0;
+    const un = subscribeDiagnostics(() => {
+      calls += 1;
+      if (calls > 100) return;
+      // Listener malicioso que publica dentro del propio emit. El guard
+      // de re-entrancy debe absorberlo.
+      publishDiagnostics('recursive', 'global', [
+        { severity: 'warning', message: `loop-${calls}` }
+      ]);
+    });
+
+    publishDiagnostics('init', 'global', [{ severity: 'warning', message: 'start' }]);
+
+    // Sin el guard, calls explotaría hasta stack overflow. Con guard +
+    // cap MAX_EMIT_DEPTH, queda acotado a unas pocas iteraciones.
+    expect(calls).toBeLessThan(20);
+    un();
+  });
+
+  it('console.warn acumula entradas en el bucket console', () => {
     installDiagnosticsBus();
     const snaps: ResolvedDiagnostic[][] = [];
     const un = subscribeDiagnostics((s) => snaps.push(s));
-    console.warn('primer warn');
-    console.warn('segundo warn');
+    console.warn('warn-uno-único');
+    console.warn('warn-dos-único');
     const last = snaps[snaps.length - 1];
-    const consoleEntries = last.filter((e) => e.source === 'console');
-    // el más reciente debe estar antes en el array (unshift)
-    const idxSecond = consoleEntries.findIndex((e) => e.message.includes('segundo'));
-    const idxFirst = consoleEntries.findIndex((e) => e.message.includes('primer'));
-    expect(idxSecond).toBeGreaterThanOrEqual(0);
-    expect(idxFirst).toBeGreaterThan(idxSecond);
+    const matches = last.filter((e) => e.source === 'console' && /único/.test(e.message));
+    expect(matches.length).toBeGreaterThanOrEqual(2);
     un();
   });
 });

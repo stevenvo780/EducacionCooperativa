@@ -9,7 +9,7 @@ import {
   WifiOff,
   AlertTriangle
 } from 'lucide-react';
-import { subscribeDiagnostics, type ResolvedDiagnostic } from '@/lib/diagnostics-bus';
+import { subscribeDiagnostics } from '@/lib/diagnostics-bus';
 
 interface StatusBarProps {
   workspaceLabel: string;
@@ -40,10 +40,16 @@ export default function StatusBar({
   rightPanelOpen,
   onToggleRightPanel
 }: StatusBarProps) {
-  const [diagnostics, setDiagnostics] = useState<ResolvedDiagnostic[]>([]);
-  useEffect(() => subscribeDiagnostics(setDiagnostics), []);
-  const errors = diagnostics.filter((p) => p.severity === 'error').length;
-  const warns = diagnostics.filter((p) => p.severity === 'warning').length;
+  const [counts, setCounts] = useState({ errors: 0, warns: 0 });
+  useEffect(() => subscribeDiagnostics((items) => {
+    let errors = 0, warns = 0;
+    for (const i of items) {
+      if (i.severity === 'error') errors++;
+      else if (i.severity === 'warning') warns++;
+    }
+    setCounts((prev) => prev.errors === errors && prev.warns === warns ? prev : { errors, warns });
+  }), []);
+  const { errors, warns } = counts;
 
   return (
     <div

@@ -66,16 +66,57 @@ interface Bucket {
 const buckets = new Map<string, Bucket>();
 const listeners = new Set<Listener>();
 
+/**
+ * Re-entrancy guard: si un listener dispara indirectamente otro publish
+ * (por ejemplo, un setState que provoca console.error de React Dev), NO
+ * debemos volver a invocar listeners en cascada. inEmit corta el ciclo;
+ * la actualización pendiente se aplica al final como un solo emit extra,
+ * con un cap para abortar loops patológicos que nunca convergen.
+ */
+let inEmit = false;
+let pendingEmit = false;
+let emitDepth = 0;
+const MAX_EMIT_DEPTH = 3;
+
 function bucketKey(source: string, uri: string): string {
   return `${source}::${uri}`;
 }
 
-function emit() {
+function snapshotItems(): ResolvedDiagnostic[] {
   const snapshot: ResolvedDiagnostic[] = [];
   for (const b of buckets.values()) snapshot.push(...b.items);
-  listeners.forEach((l) => {
-    try { l(snapshot); } catch (e) { void e; }
-  });
+  return snapshot;
+}
+
+function emit() {
+  if (inEmit) {
+    pendingEmit = true;
+    return;
+  }
+  // Si estamos re-entrando desde un emit que terminó pero llamó a este
+  // a traves de pendingEmit, contamos profundidad. Cuando la profundidad
+  // excede el cap, abortamos el ciclo (último estado queda en buckets).
+  if (emitDepth >= MAX_EMIT_DEPTH) {
+    pendingEmit = false;
+    emitDepth = 0;
+    return;
+  }
+  inEmit = true;
+  emitDepth += 1;
+  try {
+    const snapshot = snapshotItems();
+    listeners.forEach((l) => {
+      try { l(snapshot); } catch (e) { void e; }
+    });
+  } finally {
+    inEmit = false;
+    if (pendingEmit) {
+      pendingEmit = false;
+      emit();
+    } else {
+      emitDepth = 0;
+    }
+  }
 }
 
 function genId(): string {
@@ -168,29 +209,42 @@ export function getAllDiagnostics(): ResolvedDiagnostic[] {
  * ──────────────────────────────────────────────────────────────── */
 
 let consoleInstalled = false;
+/**
+ * Si un listener del bus lanza una excepción, React (o el navegador)
+ * puede llamar console.error como reacción. Sin guard, esto vuelve a
+ * push'ear al bus → notify → listener falla otra vez → ... OOM.
+ * Este flag corta el ciclo durante el procesamiento del propio bus.
+ */
+let inConsoleHook = false;
 
 function severityFromConsole(level: 'error' | 'warning'): DiagnosticSeverity {
   return level === 'error' ? 'error' : 'warning';
 }
 
 function pushConsole(level: 'error' | 'warning', message: string, detail?: string) {
-  const key = bucketKey('console', 'global');
-  const bucket = buckets.get(key);
-  const items: ResolvedDiagnostic[] = bucket ? bucket.items.slice() : [];
-  items.unshift({
-    id: genId(),
-    source: 'console',
-    uri: 'global',
-    severity: severityFromConsole(level),
-    message,
-    detail,
-    publishedAt: Date.now()
-  });
-  // Cap del historial console — los diagnostics estructurados se reemplazan,
-  // pero el bus de consola es append-only y necesita límite.
-  if (items.length > 200) items.length = 200;
-  buckets.set(key, { source: 'console', uri: 'global', items });
-  emit();
+  // Anti re-entrancy: si llegamos acá ya dentro del hook (por ejemplo,
+  // un listener que setState que React reporta como warning), salir.
+  if (inConsoleHook || inEmit) return;
+  inConsoleHook = true;
+  try {
+    const key = bucketKey('console', 'global');
+    const bucket = buckets.get(key);
+    const items: ResolvedDiagnostic[] = bucket ? bucket.items.slice() : [];
+    items.unshift({
+      id: genId(),
+      source: 'console',
+      uri: 'global',
+      severity: severityFromConsole(level),
+      message,
+      detail,
+      publishedAt: Date.now()
+    });
+    if (items.length > 200) items.length = 200;
+    buckets.set(key, { source: 'console', uri: 'global', items });
+    emit();
+  } finally {
+    inConsoleHook = false;
+  }
 }
 
 function formatArg(arg: unknown): string {

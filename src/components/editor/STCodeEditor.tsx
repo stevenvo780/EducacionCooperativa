@@ -182,10 +182,18 @@ export default function STCodeEditor({
     dispatchDiagnostics(view, diagnostics);
   }, [diagnostics, isTouchDevice]);
 
-  // Bridge: emite los diagnostics ST al bus global vía custom event para
-  // que el dashboard los publique al diagnostics-bus con el doc activo.
+  // Bridge: emite los diagnostics ST al bus global vía custom event.
+  // Skip si la lista equivale a la anterior para evitar spam en cada
+  // render del padre (los diagnostics suelen ser arrays nuevos por ref
+  // aunque el contenido sea el mismo).
+  const lastBridgeSigRef = useRef<string>('');
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const sig = diagnostics.length === 0
+      ? 'empty'
+      : `${diagnostics.length}:${diagnostics[0]?.severity ?? ''}:${(diagnostics[0]?.message ?? '').slice(0, 40)}`;
+    if (lastBridgeSigRef.current === sig) return;
+    lastBridgeSigRef.current = sig;
     window.dispatchEvent(new CustomEvent('agora:st-diagnostics', {
       detail: { diagnostics }
     }));
