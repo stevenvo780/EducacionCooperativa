@@ -15,6 +15,7 @@ import type { WorkspaceTypeId } from '@/types/workspace';
 import type { TerminalSession } from '@/context/TerminalContext';
 import { subscribeDiagnostics, type ResolvedDiagnostic } from '@/lib/diagnostics-bus';
 import ProblemsPane from './ProblemsPane';
+import { PanelErrorBoundary } from './PanelErrorBoundary';
 
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 
@@ -241,11 +242,13 @@ export default function BottomDock({
           </div>
         </div>
       ) : (
-        <ProblemsPane
-          resolveDocName={resolveDocName}
-          onOpenDocument={onOpenDocument}
-          onRunAction={onRunDiagnosticAction}
-        />
+        <PanelErrorBoundary name="Problemas">
+          <ProblemsPane
+            resolveDocName={resolveDocName}
+            onOpenDocument={onOpenDocument}
+            onRunAction={onRunDiagnosticAction}
+          />
+        </PanelErrorBoundary>
       )}
     </div>
   );

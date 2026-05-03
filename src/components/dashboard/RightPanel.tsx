@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { Sparkles, X } from 'lucide-react';
 import type { Workspace } from '@/components/dashboard/types';
+import { PanelErrorBoundary } from './PanelErrorBoundary';
 
 const AgoraAIChat = dynamic(() => import('@/components/AgoraAIChat'), { ssr: false });
 
@@ -41,14 +42,16 @@ export default function RightPanel({ open, onToggle, currentWorkspace }: RightPa
       </button>
 
       <div className="flex-1 min-h-0">
-        {currentWorkspace ? (
-          <AgoraAIChat workspaceId={currentWorkspace.id} />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-xs text-surface-500">
-            <Sparkles className="h-5 w-5 text-sky-300" />
-            <p>Selecciona un workspace para chatear con Agora AI.</p>
-          </div>
-        )}
+        <PanelErrorBoundary name="Agora AI">
+          {currentWorkspace ? (
+            <AgoraAIChat workspaceId={currentWorkspace.id} />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-xs text-surface-500">
+              <Sparkles className="h-5 w-5 text-sky-300" />
+              <p>Selecciona un workspace para chatear con Agora AI.</p>
+            </div>
+          )}
+        </PanelErrorBoundary>
       </div>
     </aside>
   );

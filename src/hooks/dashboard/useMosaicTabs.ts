@@ -166,6 +166,13 @@ export function useMosaicTabs({
         if (currentWorkspace && docId === `files-${currentWorkspace.id}`) {
             setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspace.id]: true }));
         }
+        // Limpia los diagnostics asociados al doc cerrado en todas las
+        // fuentes conocidas (markdown-linter, st-linter, etc.) — evita
+        // que el panel "Problemas" muestre items huerfanos.
+        void import('@/lib/diagnostics-bus').then((m) => {
+            m.clearDiagnosticsFor('markdown-linter', docId);
+            m.clearDiagnosticsFor('st-linter', docId);
+        });
         setOpenTabs(prev => {
             const tabToClose = prev.find(t => t.id === docId);
             if (tabToClose?.type === 'terminal' && tabToClose.sessionId) {
