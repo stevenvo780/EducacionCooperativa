@@ -6,7 +6,6 @@ import {
   GitBranch,
   Sparkles,
   LayoutGrid,
-  TerminalSquare,
   Eye,
   EyeOff,
   Wifi,
@@ -15,7 +14,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 
-export type ActivityView = 'files' | 'search' | 'git' | 'tools' | 'terminals' | 'ai';
+export type ActivityView = 'files' | 'search' | 'git' | 'tools' | 'ai';
 
 interface ViewItem {
   id: ActivityView;
@@ -29,7 +28,6 @@ const VIEWS: ViewItem[] = [
   { id: 'search', label: 'Buscar', icon: Search, shortcut: 'Ctrl+K' },
   { id: 'git', label: 'Control de versiones', icon: GitBranch, shortcut: 'Ctrl+Shift+G' },
   { id: 'tools', label: 'Herramientas', icon: LayoutGrid },
-  { id: 'terminals', label: 'Terminales', icon: TerminalSquare, shortcut: 'Ctrl+`' },
   { id: 'ai', label: 'Agora AI', icon: Sparkles }
 ];
 
