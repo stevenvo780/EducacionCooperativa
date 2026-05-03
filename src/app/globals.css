@@ -473,6 +473,17 @@ body {
   }
 }
 
+/* react-resizable-panels Separator: hover/active styles deben usar
+   el atributo data-separator (la libreria controla el div interno).
+   Damos width visible y cursor explícito. */
+div[data-separator]:hover {
+  background-color: rgba(244, 114, 182, 0.5) !important; /* mandy-400/50 */
+}
+div[data-separator]:active,
+div[data-separator][data-active="true"] {
+  background-color: rgba(244, 114, 182, 0.7) !important;
+}
+
 /* RightPanel (Agora AI) — container queries para que el chat se
    adapte al ancho disponible sin reescribirlo. Usa el data-shell
    para scopear las reglas y evitar afectar otros chats. */
