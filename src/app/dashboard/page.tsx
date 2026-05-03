@@ -12,14 +12,13 @@ import {
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode
+  type MouseEvent as ReactMouseEvent
 } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FileText, Folder, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, PanelLeftOpen, Terminal as TerminalIcon } from 'lucide-react';
+import { FileText, Image as ImageIcon, File as FileIcon, KanbanSquare, Loader2, Minimize2, PanelLeftOpen, Terminal as TerminalIcon } from 'lucide-react';
 import { LazyMotion, domAnimation, useReducedMotion, type Transition } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
@@ -68,9 +67,10 @@ import BottomDock from '@/components/dashboard/BottomDock';
 import CommandPalette, { type Command as PaletteCommand } from '@/components/dashboard/CommandPalette';
 import UserMenu from '@/components/dashboard/UserMenu';
 import MobileTopBar from '@/components/dashboard/MobileTopBar';
+import RightPanel from '@/components/dashboard/RightPanel';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { useIsCompact } from '@/hooks/useMediaQuery';
-import WorkspaceExplorer from '@/components/dashboard/WorkspaceExplorer';
+import WelcomeView from '@/components/dashboard/WelcomeView';
 import MembersModal from '@/components/dashboard/MembersModal';
 import ChangePasswordModal from '@/components/dashboard/ChangePasswordModal';
 import NewWorkspaceModal from '@/components/dashboard/NewWorkspaceModal';
@@ -396,6 +396,7 @@ function DashboardContent() {
     const [mosaicNode, setMosaicNode] = useState<MosaicNode<string> | null>(null);
     const [activityView, setActivityView] = useState<ActivityView>('files');
     const [bottomDockOpen, setBottomDockOpen] = useState(false);
+    const [rightPanelOpen, setRightPanelOpen] = useState(false);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -414,6 +415,13 @@ function DashboardContent() {
         const max = Math.max(220, viewportWidth - ACTIVITY - 16);
         return Math.min(sidebarWidth, max);
     }, [isCompact, sidebarWidth, viewportWidth]);
+    const recentDocs = useMemo(() => {
+        return docs
+            .filter(d => d.type !== 'folder' && d.type !== 'terminal' && d.type !== 'files')
+            .slice()
+            .sort((a, b) => getUpdatedAtValue(b) - getUpdatedAtValue(a))
+            .slice(0, 8);
+    }, [docs]);
     const workerStatus: 'online' | 'offline' | 'unknown' = useMemo(() => {
         if (!currentWorkspace || !user) return 'unknown';
         const tok = currentWorkspace.id === PERSONAL_WORKSPACE_ID
@@ -832,12 +840,11 @@ function DashboardContent() {
         setSelectedDocId,
         setShowMobileSidebar,
         selectSession,
-        activeSessionId,
-        terminalSessions,
         user,
         currentWorkspace,
         createSession,
-        getSessionsForWorkspace
+        getSessionsForWorkspace,
+        onOpenDock: () => setBottomDockOpen(true)
     });
 
     const {
@@ -904,7 +911,6 @@ function DashboardContent() {
         reorderDocsInFolder,
         reorderFoldersInParent,
         copyDocument,
-        promptMoveDocument,
         createDoc,
         createStDoc,
         handleDownloadDoc,
@@ -1111,6 +1117,13 @@ function DashboardContent() {
                 return;
             }
 
+            if (matchesShortcut('KeyI', 'i') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                setRightPanelOpen((v) => !v);
+                return;
+            }
+
             if ((e.code === 'Backquote' || normalizedKey === '`' || normalizedKey === 'dead') && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
@@ -1186,8 +1199,6 @@ function DashboardContent() {
         });
     }, []);
 
-    const activeFolderLabel = activeFolder || 'Raiz';
-
     const docsByFolder = useMemo(() => {
         const grouped: Record<string, DocItem[]> = {};
         docs.forEach(docItem => {
@@ -1211,10 +1222,6 @@ function DashboardContent() {
         return grouped;
     }, [docs]);
 
-    const activeFolderDocs = useMemo(() => {
-        return docsByFolder[activeFolder] ?? [];
-    }, [docsByFolder, activeFolder]);
-
     const folderChildrenMap = useMemo(() => {
         const map: Record<string, FolderItem[]> = {};
         folders.forEach(folder => {
@@ -1237,10 +1244,6 @@ function DashboardContent() {
         });
         return map;
     }, [folders]);
-
-    const activeChildFolders = useMemo(() => {
-        return folderChildrenMap[activeFolder] ?? [];
-    }, [folderChildrenMap, activeFolder]);
 
     const formatPropertyDate = useCallback((value: unknown) => {
         const timestamp = getUpdatedAtValue(value);
@@ -1354,34 +1357,6 @@ function DashboardContent() {
             order: folder.order
         });
     }, [promptRenameDocument, showDialog]);
-
-    const renderFolderTree = (parentPath: string, depth = 0): ReactNode[] => {
-        const children = folderChildrenMap[parentPath] ?? [];
-        return children.map(folder => {
-            const count = docsByFolder[folder.path]?.length ?? 0;
-            const isActive = activeFolder === folder.path;
-            const isDropActive = folderDragOver === folder.path;
-            const paddingLeft = 12 + depth * 12;
-
-            return (
-                <div key={folder.path}>
-                    <button
-                        onClick={() => setActiveFolderSafe(folder.path)}
-                        onDragOver={(e) => handleFolderDragOver(e, folder.path)}
-                        onDrop={(e) => handleFolderDrop(e, folder.path)}
-                        onDragLeave={() => handleFolderDragLeave(folder.path)}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition border ${isDropActive ? 'border-mandy-500/70 bg-mandy-500/10 text-mandy-300' : isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'}`}
-                        style={{ paddingLeft }}
-                    >
-                        <Folder className={`w-4 h-4 ${isActive ? 'text-mandy-400' : 'text-surface-500'}`} />
-                        <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
-                        <span className="text-[10px] text-surface-500">{count}</span>
-                    </button>
-                    {renderFolderTree(folder.path, depth + 1)}
-                </div>
-            );
-        });
-    };
 
     useEffect(() => {
         if (activeFolder === ROOT_FOLDER_PATH) return;
@@ -1652,9 +1627,10 @@ function DashboardContent() {
         {
             id: 'view.ai',
             category: 'Vista',
-            label: 'Agora AI',
-            keywords: ['agora', 'chat', 'asistente', 'ai'],
-            run: () => setActivityView('ai')
+            label: 'Alternar Agora AI',
+            shortcut: 'Ctrl+Shift+I',
+            keywords: ['agora', 'chat', 'asistente', 'ai', 'copilot'],
+            run: () => setRightPanelOpen((v) => !v)
         },
         {
             id: 'terminal.new',
@@ -2019,7 +1995,9 @@ function DashboardContent() {
                     >
                       <PanelGroup orientation="vertical" id="agora-shell-vertical" className="flex h-full w-full flex-col">
                         <Panel id="editor-area" defaultSize="70%" minSize="20%">
-                          <div className="relative h-full w-full flex flex-col">
+                          <PanelGroup orientation="horizontal" id="agora-shell-horizontal" className="flex h-full w-full">
+                            <Panel id="editor-main" defaultSize="100%" minSize="30%">
+                              <div className="relative h-full w-full flex flex-col">
                         {effectiveMosaicNode ? (
                             <div className="flex-1 min-h-0 relative">
                                 <MosaicLayout
@@ -2070,54 +2048,43 @@ function DashboardContent() {
                                 />
                             </div>
                         ) : (
-                            <WorkspaceExplorer
-                                currentWorkspace={currentWorkspace}
-                                activeFolder={activeFolder}
-                                activeFolderLabel={activeFolderLabel}
-                                activeChildFolders={activeChildFolders}
-                                activeFolderDocs={activeFolderDocs}
-                                docsByFolder={docsByFolder}
-                                folderTree={renderFolderTree(ROOT_FOLDER_PATH)}
-                                folderDragOver={folderDragOver}
-                                onFolderDragOver={handleFolderDragOver}
-                                onFolderDrop={handleFolderDrop}
-                                onFolderDragLeave={handleFolderDragLeave}
-                                onDocDragStart={handleDocDragStart}
-                                onDocDragEnd={handleDocDragEnd}
-                                onActiveFolderChange={setActiveFolderSafe}
-                                onOpenDocument={openDocument}
+                            <WelcomeView
+                                workspaceName={currentWorkspace?.name}
+                                recentDocs={recentDocs}
+                                onOpenDoc={openDocument}
                                 onCreateDoc={() => openNewFileModalAt()}
-                                onCreateStDoc={() => openNewFileModalAt()}
                                 onCreateFolder={() => { void createFolderAtPath(); }}
-                                onCreateDocInFolder={openNewFileModalAt}
-                                onCreateFolderInFolder={(folderPath) => { void createFolderAtPath(folderPath); }}
                                 onUploadFile={() => openUploadFilePickerAt(activeFolder)}
-                                onUploadFolder={() => openUploadFolderPickerAt(activeFolder)}
-                                onUploadFileToFolder={openUploadFilePickerAt}
-                                onUploadFolderToFolder={openUploadFolderPickerAt}
-                                onCopyWorkspaceId={(id) => {
-                                    navigator.clipboard.writeText(id);
-                                    showDialog({ type: DialogKind.Info, title: 'ID copiado', message: id });
-                                }}
-                                onCopyDocument={copyDocument}
-                                onMoveDocument={promptMoveDocument}
-                                onDeleteDocument={deleteDocument}
-                                onRenameDocument={promptRenameDocument}
-                                onShowDocProperties={(doc) => { void showDocumentProperties(doc); }}
-                                onShowFolderProperties={(folder) => { void showFolderProperties(folder); }}
-                                onShowCurrentLocationProperties={() => { void showCurrentLocationProperties(); }}
-                                onRenameFolder={(folder) => { void promptRenameFolder(folder); }}
-                                onDeleteFolder={(folder) => { void deleteFolder(folder); }}
-                                onReorderDocs={reorderDocsInFolder}
-                                onReorderFolders={reorderFoldersInParent}
-                                getIcon={getIcon}
-                                getDocBadge={getDocBadge}
-                                personalWorkspaceId={PERSONAL_WORKSPACE_ID}
-                                rootFolderPath={ROOT_FOLDER_PATH}
-                                defaultFolderName={DEFAULT_FOLDER_NAME}
+                                onOpenSearch={() => { setActivityView('search'); if (isCompact) setShowMobileSidebar(true); }}
+                                onOpenTerminal={() => setBottomDockOpen(true)}
+                                onOpenGit={() => { setActivityView('git'); if (isCompact) setShowMobileSidebar(true); }}
+                                onOpenBoard={openBoard}
+                                onOpenStRunner={openStRunner}
+                                onOpenAI={() => setRightPanelOpen(true)}
                             />
                         )}
-                          </div>
+                              </div>
+                            </Panel>
+                            {rightPanelOpen && (
+                              <>
+                                <PanelResizeHandle className="w-1 bg-surface-800 hover:bg-mandy-500/40 transition-colors" />
+                                <Panel id="right-panel" defaultSize="30%" minSize="20%" maxSize="60%" collapsible>
+                                  <RightPanel
+                                    open
+                                    onToggle={() => setRightPanelOpen(false)}
+                                    currentWorkspace={currentWorkspace}
+                                  />
+                                </Panel>
+                              </>
+                            )}
+                          </PanelGroup>
+                          {!rightPanelOpen && !isCompact && currentWorkspace && (
+                            <RightPanel
+                              open={false}
+                              onToggle={() => setRightPanelOpen(true)}
+                              currentWorkspace={currentWorkspace}
+                            />
+                          )}
                         </Panel>
 
                         {bottomDockOpen && (

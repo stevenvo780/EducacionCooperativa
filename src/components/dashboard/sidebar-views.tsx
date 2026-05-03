@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Files, Search, GitBranch, LayoutGrid, Sparkles, FileCode2, type LucideIcon } from 'lucide-react';
+import { Files, Search, GitBranch, LayoutGrid, FileCode2, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { Workspace } from '@/components/dashboard/types';
@@ -10,7 +10,6 @@ import ToolsGallery from './ToolsGallery';
 import SearchPanel from './SearchPanel';
 
 const GitWorkbench = dynamic(() => import('@/components/dashboard/GitWorkbench'), { ssr: false });
-const AgoraAIChat = dynamic(() => import('@/components/AgoraAIChat'), { ssr: false });
 const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
 
 /**
@@ -168,20 +167,6 @@ export const SIDEBAR_VIEWS: SidebarView[] = [
           />
         ) : (
           <EmptyView icon={<FileCode2 className="h-4 w-4" />} text="Selecciona un workspace." />
-        )}
-      </PanelShell>
-    )
-  },
-  {
-    id: 'ai',
-    label: 'Agora AI',
-    icon: Sparkles,
-    render: (ctx) => (
-      <PanelShell title="Agora AI">
-        {ctx.currentWorkspace ? (
-          <AgoraAIChat workspaceId={ctx.currentWorkspace.id} />
-        ) : (
-          <EmptyView icon={<Sparkles className="h-4 w-4" />} text="Selecciona un workspace para chatear." />
         )}
       </PanelShell>
     )
