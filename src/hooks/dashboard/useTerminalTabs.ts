@@ -8,6 +8,13 @@ import { WorkspaceType, PERSONAL_WORKSPACE_ID, type WorkspaceTypeId } from '@/ty
 import type { TerminalSession } from '@/context/TerminalContext';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 
+/**
+ * Las terminales viven exclusivamente en el BottomDock estilo VS Code.
+ * Nunca abren un tile en el grid del editor: este hook solo selecciona la
+ * sesion activa y pide al dashboard que abra el dock. Si vienen
+ * pestañas `type=terminal` de versiones anteriores en el state persistido,
+ * se eliminan al montar para evitar incongruencias.
+ */
 interface UseTerminalTabsOptions {
     currentPlan: PlanId;
     setShowPricingModal: (value: boolean) => void;
@@ -17,17 +24,37 @@ interface UseTerminalTabsOptions {
     setSelectedDocId: (id: string | null) => void;
     setShowMobileSidebar: (value: boolean) => void;
     selectSession: (id: string) => void;
-    activeSessionId: string | null | undefined;
-    terminalSessions: TerminalSession[];
     user: User | null;
     currentWorkspace: Workspace | null;
     createSession: (workspaceId: string, workspaceType: WorkspaceTypeId, workspaceName?: string) => void;
     getSessionsForWorkspace: (workerToken: string) => TerminalSession[];
+    onOpenDock: () => void;
 }
 
 interface UseTerminalTabsResult {
     openTerminal: (session?: { id: string; name?: string }) => Promise<void>;
     handleRequestNewTerminal: () => void;
+}
+
+function withoutTerminalTiles(
+    openTabs: DocItem[],
+    mosaicNode: MosaicNode<string> | null
+): { tabs: DocItem[]; node: MosaicNode<string> | null } {
+    const terminalIds = new Set(openTabs.filter((t) => t.type === 'terminal').map((t) => t.id));
+    if (terminalIds.size === 0) return { tabs: openTabs, node: mosaicNode };
+
+    const tabs = openTabs.filter((t) => !terminalIds.has(t.id));
+
+    const stripNode = (node: MosaicNode<string> | null): MosaicNode<string> | null => {
+        if (!node) return null;
+        if (typeof node === 'string') return terminalIds.has(node) ? null : node;
+        const first = stripNode(node.first);
+        const second = stripNode(node.second);
+        if (first && second) return { ...node, first, second };
+        return first || second;
+    };
+
+    return { tabs, node: stripNode(mosaicNode) };
 }
 
 export function useTerminalTabs({
@@ -39,131 +66,32 @@ export function useTerminalTabs({
     setSelectedDocId,
     setShowMobileSidebar,
     selectSession,
-    activeSessionId,
-    terminalSessions,
     user,
     currentWorkspace,
     createSession,
-    getSessionsForWorkspace
+    getSessionsForWorkspace,
+    onOpenDock
 }: UseTerminalTabsOptions): UseTerminalTabsResult {
+
+    // Cleanup: eliminar tiles 'terminal' que vinieran del state persistido
+    // pre-rediseño. Corre cuando openTabs cambia y detecta cualquiera.
+    useEffect(() => {
+        const hasTerminalTabs = openTabs.some((t) => t.type === 'terminal');
+        if (!hasTerminalTabs) return;
+        setOpenTabs((prev) => withoutTerminalTiles(prev, null).tabs);
+        setMosaicNode((prev) => withoutTerminalTiles(openTabs, prev).node);
+        setSelectedDocId(null);
+    }, [openTabs, setOpenTabs, setMosaicNode, setSelectedDocId]);
 
     const openTerminal = async (session?: { id: string; name?: string }) => {
         if (!canAccessTerminals(currentPlan)) {
             setShowPricingModal(true);
             return;
         }
-        const terminalId = session ? `terminal-${session.id}` : 'terminal-main';
-        const terminalName = session?.name || 'Mi Asistente';
-
-        if (session?.id) {
-            const existingTab = openTabs.find(t => t.type === 'terminal' && t.sessionId === session.id);
-            if (existingTab) {
-                selectSession(session.id);
-                setSelectedDocId(existingTab.id);
-                setShowMobileSidebar(false);
-                return;
-            }
-            const mainTab = openTabs.find(t => t.id === 'terminal-main');
-            if (mainTab) {
-                selectSession(session.id);
-                setOpenTabs(prev => prev.map(t =>
-                    t.id === 'terminal-main'
-                        ? { ...t, id: terminalId, name: terminalName, sessionId: session.id }
-                        : t
-                ));
-                const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-                setMosaicNode(current => {
-                    const leaves = getLeaves(current).map(l => l === 'terminal-main' ? terminalId : l);
-                    return createBalancedTreeFromLeaves(leaves);
-                });
-                setSelectedDocId(terminalId);
-                setShowMobileSidebar(false);
-                return;
-            }
-        } else {
-            const anyTerminal = openTabs.find(t => t.type === 'terminal');
-            if (anyTerminal) {
-                setSelectedDocId(anyTerminal.id);
-                setShowMobileSidebar(false);
-                return;
-            }
-        }
-        if (openTabs.find(t => t.id === terminalId)) {
-            if (session?.id) selectSession(session.id);
-            setSelectedDocId(terminalId);
-            setShowMobileSidebar(false);
-            return;
-        }
-
-        const newTerminalItem: DocItem = {
-            id: terminalId,
-            name: terminalName,
-            type: 'terminal',
-            sessionId: session?.id,
-            updatedAt: new Date(),
-            ownerId: user?.uid || 'system'
-        };
-
-        setOpenTabs(prev => [...prev, newTerminalItem]);
-        const { getLeaves, createBalancedTreeFromLeaves } = await import('react-mosaic-component');
-        setMosaicNode(current => {
-            const leaves = getLeaves(current);
-            if (leaves.includes(terminalId)) return current;
-            return createBalancedTreeFromLeaves([...leaves, terminalId]);
-        });
-        if (session?.id) {
-            selectSession(session.id);
-        }
+        if (session?.id) selectSession(session.id);
+        onOpenDock();
         setShowMobileSidebar(false);
-        setSelectedDocId(terminalId);
     };
-
-    // Auto-replace terminal-main with the session-specific tab, or open a new tab if created from an existing terminal
-    useEffect(() => {
-        if (!activeSessionId) return;
-        const session = terminalSessions.find(s => s.id === activeSessionId);
-        const terminalId = `terminal-${activeSessionId}`;
-        const terminalName = session?.name || `Terminal ${activeSessionId.slice(-4)}`;
-
-        if (openTabs.find(t => t.id === terminalId)) return;
-
-        const mainTab = openTabs.find(t => t.id === 'terminal-main' && t.type === 'terminal');
-        if (mainTab) {
-            setOpenTabs(prev => prev.map(t =>
-                t.id === 'terminal-main'
-                    ? { ...t, id: terminalId, name: terminalName, sessionId: activeSessionId }
-                    : t
-            ));
-            setMosaicNode(current => {
-                if (!current) return current;
-                const replaceMosaicId = (node: MosaicNode<string>): MosaicNode<string> => {
-                    if (typeof node === 'string') return node === 'terminal-main' ? terminalId : node;
-                    return { ...node, first: replaceMosaicId(node.first), second: replaceMosaicId(node.second) };
-                };
-                return replaceMosaicId(current);
-            });
-            setSelectedDocId(terminalId);
-        } else {
-            const newTerminalItem: DocItem = {
-                id: terminalId,
-                name: terminalName,
-                type: 'terminal',
-                sessionId: activeSessionId,
-                updatedAt: new Date(),
-                ownerId: user?.uid || 'system'
-            };
-            setOpenTabs(prev => [...prev, newTerminalItem]);
-            import('react-mosaic-component').then(({ getLeaves, createBalancedTreeFromLeaves }) => {
-                setMosaicNode(current => {
-                    const leaves = getLeaves(current);
-                    if (leaves.includes(terminalId)) return current;
-                    return createBalancedTreeFromLeaves([...leaves, terminalId]);
-                });
-            });
-            selectSession(activeSessionId);
-            setSelectedDocId(terminalId);
-        }
-    }, [activeSessionId, terminalSessions, openTabs, selectSession, user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleRequestNewTerminal = useCallback(() => {
         if (!currentWorkspace || !user) return;
@@ -172,7 +100,8 @@ export function useTerminalTabs({
             : currentWorkspace.id;
         const workspaceSessions = getSessionsForWorkspace(workerToken);
         createSession(workerToken, currentWorkspace.type, `Terminal ${workspaceSessions.length + 1}`);
-    }, [currentWorkspace, user, createSession, getSessionsForWorkspace]);
+        onOpenDock();
+    }, [currentWorkspace, user, createSession, getSessionsForWorkspace, onOpenDock]);
 
     return {
         openTerminal,
