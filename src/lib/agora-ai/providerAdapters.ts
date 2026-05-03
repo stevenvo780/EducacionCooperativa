@@ -9,11 +9,67 @@ import type {
   AgentToolCall,
   AgentTraceStep,
   AgentToolExecutionResult,
+  AgentUsageStats,
   AIProvider,
   ChatMessage
 } from '@/lib/agora-ai/types';
 
 const MAX_AGENT_ITERATIONS = 10;
+const BUDGET_SAFETY_MS = 18_000; // 1 round del modelo + tools antes del cutoff
+
+function budgetWillExpire(ctx: AgentExecutionContext): boolean {
+  if (!ctx.elapsedBudgetMs || !ctx.maxBudgetMs) return false;
+  return ctx.elapsedBudgetMs() + BUDGET_SAFETY_MS >= ctx.maxBudgetMs;
+}
+
+/**
+ * Costos aproximados por provider/modelo (USD por millón de tokens).
+ * Se usa para mostrar un costo estimado al usuario — no es una factura.
+ */
+const COST_TABLE: Record<string, { input: number; output: number }> = {
+  // OpenAI (mini families)
+  'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'gpt-4o': { input: 2.50, output: 10.00 },
+  // Anthropic
+  'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
+  'claude-sonnet-4-6': { input: 3.00, output: 15.00 },
+  // Gemini
+  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
+  'gemini-1.5-pro': { input: 1.25, output: 5.00 },
+  // DeepSeek
+  'deepseek-v4-flash': { input: 0.07, output: 0.27 },
+  'deepseek-chat': { input: 0.27, output: 1.10 }
+};
+
+function lookupCost(model: string): { input: number; output: number } | null {
+  const direct = COST_TABLE[model];
+  if (direct) return direct;
+  // Fallback: prefix match (e.g., 'gpt-4o-mini-2024-07-18' → 'gpt-4o-mini')
+  const prefix = Object.keys(COST_TABLE).find((key) => model.startsWith(key));
+  return prefix ? COST_TABLE[prefix]! : null;
+}
+
+function accumulateUsage(
+  acc: AgentUsageStats,
+  provider: AIProvider,
+  model: string,
+  raw: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; input_tokens?: number; output_tokens?: number }
+) {
+  const inTok = raw.prompt_tokens ?? raw.input_tokens ?? 0;
+  const outTok = raw.completion_tokens ?? raw.output_tokens ?? 0;
+  const total = raw.total_tokens ?? (inTok + outTok);
+
+  acc.promptTokens = (acc.promptTokens ?? 0) + inTok;
+  acc.completionTokens = (acc.completionTokens ?? 0) + outTok;
+  acc.totalTokens = (acc.totalTokens ?? 0) + total;
+
+  const cost = lookupCost(model);
+  if (cost) {
+    const usd = (inTok * cost.input + outTok * cost.output) / 1_000_000;
+    acc.estimatedCostUsd = (acc.estimatedCostUsd ?? 0) + usd;
+  }
+  void provider;
+}
 
 interface ProviderRunCallbacks {
   onStep?: (step: AgentTraceStep) => void | Promise<void>;
@@ -223,10 +279,46 @@ async function collectTextAndThinking(
  * Execute tool calls with bounded concurrency and return results in original order.
  * allSettled semantics keep one tool failure from blocking the rest.
  */
+/**
+ * Tools cuya salida es idempotente dentro de un mismo turno: no modifican
+ * estado y devolver el mismo resultado al modelo es seguro y ahorra latencia
+ * + costo. La lista se mantiene conservadora: solo lecturas.
+ */
+const READ_ONLY_TOOLS = new Set([
+  'list_documents', 'list_folders', 'read_document', 'search_documents',
+  'inspect_workspace', 'list_snippets', 'get_semantic_state',
+  'list_kanban_cards', 'list_st_definitions', 'workspace_status',
+  'get_document_metadata'
+]);
+
+/**
+ * Tools destructivas: cuando el agente intenta ejecutar 2+ en un mismo
+ * batch (mismo turno paralelo), exigimos confirmación explícita del user
+ * para la primera y rechazamos el resto del batch.
+ */
+const DESTRUCTIVE_TOOLS = new Set([
+  'delete_document', 'delete_file', 'delete_folder',
+  'overwrite_document', 'rollback_action', 'rollback_last',
+  'run_worker_command'
+]);
+
+function toolCacheKey(call: AgentToolCall): string | null {
+  if (!READ_ONLY_TOOLS.has(call.name)) return null;
+  try { return `${call.name}::${JSON.stringify(call.args ?? {})}`; }
+  catch { return null; }
+}
+
 async function executeToolsParallel(
   toolCalls: AgentToolCall[],
-  executionContext: AgentExecutionContext
+  executionContext: AgentExecutionContext,
+  cache?: Map<string, AgentToolExecutionResult>
 ): Promise<Array<{ toolCall: AgentToolCall; result: AgentToolExecutionResult }>> {
+  // Salvaguarda: si el batch contiene 2+ tools destructivas, rechazamos las
+  // posteriores y dejamos que la primera pida confirmación de forma natural.
+  const destructiveBatch = toolCalls.filter((c) => DESTRUCTIVE_TOOLS.has(c.name));
+  const blockedDestructive = destructiveBatch.length > 1
+    ? new Set(destructiveBatch.slice(1).map((c) => c.id))
+    : new Set<string>();
   const concurrency = Math.min(4, Math.max(1, toolCalls.length));
   const settled: Array<PromiseSettledResult<AgentToolExecutionResult> | undefined> = new Array(toolCalls.length);
   let nextIndex = 0;
@@ -237,8 +329,35 @@ async function executeToolsParallel(
       nextIndex += 1;
       const toolCall = toolCalls[index];
       if (!toolCall) continue;
+      if (blockedDestructive.has(toolCall.id)) {
+        settled[index] = {
+          status: 'fulfilled',
+          value: {
+            ok: false,
+            name: toolCall.name,
+            callId: toolCall.id,
+            summary: `Bloqueado: ${toolCall.name} hace parte de un batch destructivo. Confirma primero la otra acción destructiva del turno antes de ejecutar esta.`,
+            error: 'destructive_batch_blocked'
+          }
+        };
+        continue;
+      }
+      const cacheKey = cache ? toolCacheKey(toolCall) : null;
+      if (cacheKey && cache?.has(cacheKey)) {
+        const cached = cache.get(cacheKey)!;
+        // Devolvemos una copia con el callId actualizado para que el provider
+        // empareje correctamente la herramienta esperada.
+        settled[index] = {
+          status: 'fulfilled',
+          value: { ...cached, callId: toolCall.id, cached: true }
+        };
+        continue;
+      }
       settled[index] = await Promise.resolve(executeAgentTool(toolCall, executionContext))
-        .then((value): PromiseSettledResult<AgentToolExecutionResult> => ({ status: 'fulfilled', value }))
+        .then((value): PromiseSettledResult<AgentToolExecutionResult> => {
+          if (cacheKey && cache && value.ok) cache.set(cacheKey, value);
+          return { status: 'fulfilled', value };
+        })
         .catch((reason): PromiseSettledResult<AgentToolExecutionResult> => ({ status: 'rejected', reason }));
     }
   }));
@@ -295,8 +414,16 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
   let finalReply = '';
   let iterations = 0;
   let pendingConfirmation: AgentRun['pendingConfirmation'];
+  let truncated = false;
+  const usage: AgentUsageStats = {};
+  const toolCache = new Map<string, AgentToolExecutionResult>();
 
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
+    if (budgetWillExpire(options.executionContext)) {
+      truncated = true;
+      finalReply = finalReply || `Se interrumpió la ejecución para no exceder el presupuesto de tiempo (iter ${iterations - 1}/${MAX_AGENT_ITERATIONS}).`;
+      break;
+    }
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
 
     const res = await fetchProviderWithRetry(providerConfig.label, providerConfig.endpoint, {
@@ -327,7 +454,10 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
         message?: { content?: string | null; reasoning_content?: string | null; tool_calls?: OpenAIToolCall[] };
         finish_reason?: string;
       }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
+
+    if (data.usage) accumulateUsage(usage, options.provider, options.model, data.usage);
 
     const choice = data.choices?.[0];
     const message = choice?.message;
@@ -381,7 +511,7 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
       }));
     }
 
-    const toolResults = await executeToolsParallel(toolCalls, options.executionContext);
+    const toolResults = await executeToolsParallel(toolCalls, options.executionContext, toolCache);
 
     for (const { toolCall, result } of toolResults) {
       if (result.rollback?.length) rollback.push(...result.rollback);
@@ -411,14 +541,25 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
     }
   }
 
-  if (!finalReply) finalReply = 'Se completó la ejecución del agente.';
+  if (!finalReply) {finalReply = (typeof truncated !== 'undefined' && truncated)
+    ? 'La ejecución del agente fue truncada por presupuesto de tiempo.'
+    : 'Se completó la ejecución del agente.';}
 
   await emitStep(createStep({
     id: `final-${steps.length + 1}`,
     type: 'final', title: 'Respuesta final', content: finalReply
   }));
 
-  return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
+  return {
+    mode: options.mode,
+    provider: options.provider,
+    iterations,
+    steps,
+    finalReply,
+    rollback,
+    truncated: typeof truncated !== 'undefined' && truncated ? true : undefined,
+    usage: typeof usage !== 'undefined' && Object.keys(usage).length ? usage : undefined
+  };
 }
 
 /**
@@ -451,8 +592,16 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
   let finalReply = '';
   let iterations = 0;
   let pendingConfirmation: AgentRun['pendingConfirmation'];
+  let truncated = false;
+  const usage: AgentUsageStats = {};
+  const toolCache = new Map<string, AgentToolExecutionResult>();
 
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
+    if (budgetWillExpire(options.executionContext)) {
+      truncated = true;
+      finalReply = finalReply || `Se interrumpió la ejecución para no exceder el presupuesto de tiempo (iter ${iterations - 1}/${MAX_AGENT_ITERATIONS}).`;
+      break;
+    }
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
 
     const res = await fetchProviderWithRetry('Anthropic', 'https://api.anthropic.com/v1/messages', {
@@ -479,8 +628,13 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
       throw new Error(await parseProviderError('Anthropic', res.status, await res.text()));
     }
 
-    const data = await res.json() as { content?: AnthropicBlock[]; stop_reason?: string };
+    const data = await res.json() as {
+      content?: AnthropicBlock[];
+      stop_reason?: string;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
     const blocks = data.content ?? [];
+    if (data.usage) accumulateUsage(usage, options.provider, options.model, data.usage);
 
     let visibleContent: string;
 
@@ -547,7 +701,7 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
       }));
     }
 
-    const toolResults = await executeToolsParallel(toolCalls, options.executionContext);
+    const toolResults = await executeToolsParallel(toolCalls, options.executionContext, toolCache);
     const toolResultBlocks: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
 
     for (const { toolCall, result } of toolResults) {
@@ -580,14 +734,25 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
     }
   }
 
-  if (!finalReply) finalReply = 'Se completó la ejecución del agente.';
+  if (!finalReply) {finalReply = (typeof truncated !== 'undefined' && truncated)
+    ? 'La ejecución del agente fue truncada por presupuesto de tiempo.'
+    : 'Se completó la ejecución del agente.';}
 
   await emitStep(createStep({
     id: `final-${steps.length + 1}`,
     type: 'final', title: 'Respuesta final', content: finalReply
   }));
 
-  return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
+  return {
+    mode: options.mode,
+    provider: options.provider,
+    iterations,
+    steps,
+    finalReply,
+    rollback,
+    truncated: typeof truncated !== 'undefined' && truncated ? true : undefined,
+    usage: typeof usage !== 'undefined' && Object.keys(usage).length ? usage : undefined
+  };
 }
 
 async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
@@ -612,8 +777,16 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
   let finalReply = '';
   let iterations = 0;
   let pendingConfirmation: AgentRun['pendingConfirmation'];
+  let truncated = false;
+  const usage: AgentUsageStats = {};
+  const toolCache = new Map<string, AgentToolExecutionResult>();
 
   for (iterations = 1; iterations <= MAX_AGENT_ITERATIONS; iterations += 1) {
+    if (budgetWillExpire(options.executionContext)) {
+      truncated = true;
+      finalReply = finalReply || `Se interrumpió la ejecución para no exceder el presupuesto de tiempo (iter ${iterations - 1}/${MAX_AGENT_ITERATIONS}).`;
+      break;
+    }
     await emitStatus(`Consultando ${options.provider} (${iterations}/${MAX_AGENT_ITERATIONS})…`);
 
     const res = await fetchProviderWithRetry(
@@ -641,7 +814,15 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
         content?: { parts?: GeminiPart[] };
         finishReason?: string;
       }>;
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
     };
+    if (data.usageMetadata) {
+      accumulateUsage(usage, options.provider, options.model, {
+        prompt_tokens: data.usageMetadata.promptTokenCount,
+        completion_tokens: data.usageMetadata.candidatesTokenCount,
+        total_tokens: data.usageMetadata.totalTokenCount
+      });
+    }
 
     const candidate = data.candidates?.[0];
     const finishReason = candidate?.finishReason;
@@ -679,7 +860,7 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
       }));
     }
 
-    const toolResults = await executeToolsParallel(toolCalls, options.executionContext);
+    const toolResults = await executeToolsParallel(toolCalls, options.executionContext, toolCache);
     const functionResponses: Array<Record<string, unknown>> = [];
 
     for (const { toolCall, result } of toolResults) {
@@ -710,14 +891,25 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
     }
   }
 
-  if (!finalReply) finalReply = 'Se completó la ejecución del agente.';
+  if (!finalReply) {finalReply = (typeof truncated !== 'undefined' && truncated)
+    ? 'La ejecución del agente fue truncada por presupuesto de tiempo.'
+    : 'Se completó la ejecución del agente.';}
 
   await emitStep(createStep({
     id: `final-${steps.length + 1}`,
     type: 'final', title: 'Respuesta final', content: finalReply
   }));
 
-  return { mode: options.mode, provider: options.provider, iterations, steps, finalReply, rollback };
+  return {
+    mode: options.mode,
+    provider: options.provider,
+    iterations,
+    steps,
+    finalReply,
+    rollback,
+    truncated: typeof truncated !== 'undefined' && truncated ? true : undefined,
+    usage: typeof usage !== 'undefined' && Object.keys(usage).length ? usage : undefined
+  };
 }
 
 export async function runProviderConversation(options: ProviderRunOptions): Promise<AgentRun> {

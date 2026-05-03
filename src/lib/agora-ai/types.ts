@@ -59,6 +59,8 @@ export interface AgentToolExecutionResult {
   requiresConfirmation?: boolean;
   pendingConfirmation?: AgentPendingConfirmation;
   rollback?: AgentRollbackAction[];
+  /** True cuando se sirvió desde el cache de tools del turno (no se ejecutó). */
+  cached?: boolean;
 }
 
 export interface AgentTraceStep {
@@ -72,6 +74,14 @@ export interface AgentTraceStep {
   finishedAt?: number;
 }
 
+export interface AgentUsageStats {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  /** Costo estimado en USD (calculado del lado server). */
+  estimatedCostUsd?: number;
+}
+
 export interface AgentRun {
   mode: AgentMode;
   provider: AIProvider;
@@ -80,6 +90,10 @@ export interface AgentRun {
   finalReply: string;
   pendingConfirmation?: AgentPendingConfirmation;
   rollback?: AgentRollbackAction[];
+  /** True cuando se cortó por timeout/budget antes de la respuesta natural. */
+  truncated?: boolean;
+  /** Tokens y costo agregados de todas las llamadas al provider. */
+  usage?: AgentUsageStats;
 }
 
 export interface AgentStoredChatMessage {
@@ -229,4 +243,9 @@ export interface AgentExecutionContext {
   llmModel?: string;
   authToken?: string;
   accessPolicy?: Partial<AgentAccessPolicy>;
+  /** Función que devuelve los ms transcurridos en la solicitud. */
+  elapsedBudgetMs?: () => number;
+  /** Presupuesto máximo en ms — el agente debe terminar antes para poder
+   *  emitir un `complete` con `truncated: true`. */
+  maxBudgetMs?: number;
 }

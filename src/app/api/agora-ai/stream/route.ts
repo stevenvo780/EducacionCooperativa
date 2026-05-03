@@ -8,7 +8,8 @@ import type { AgentMode, AgentRequestBody, AgentStreamEvent, AIProvider } from '
 import { isPersonalWorkspaceId, PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
+const SOFT_BUDGET_MS = 270_000; // 30s antes del cutoff Vercel
 
 const DEFAULT_MODELS: Record<Exclude<AIProvider, 'ollama'>, string> = {
   openai: 'gpt-4o-mini',
@@ -104,6 +105,26 @@ export async function POST(request: NextRequest) {
 
       request.signal.addEventListener('abort', close, { once: true });
 
+      const startedAt = Date.now();
+      const softTimeout = setTimeout(() => {
+        // Cuando se acerca el cutoff de Vercel emitimos un complete parcial
+        // antes de que la función sea matada — así el cliente nunca ve
+        // "stream terminó sin respuesta final".
+        send({
+          type: 'complete',
+          reply: 'La respuesta del agente fue truncada por límite de tiempo del servidor (5 min). Intenta una solicitud más específica o divídela en pasos.',
+          agentRun: {
+            mode: effectiveMode,
+            provider,
+            iterations: 0,
+            steps: [],
+            finalReply: '',
+            truncated: true
+          }
+        });
+        close();
+      }, SOFT_BUDGET_MS);
+
       void (async () => {
         try {
           send({ type: 'connected' });
@@ -125,7 +146,9 @@ export async function POST(request: NextRequest) {
               email: auth.email,
               origin: request.nextUrl.origin,
               authToken: getTokenFromRequest(request) ?? undefined,
-              accessPolicy
+              accessPolicy,
+              elapsedBudgetMs: () => Date.now() - startedAt,
+              maxBudgetMs: SOFT_BUDGET_MS
             },
             callbacks: {
               onStatus: async (status) => send({ type: 'status', status }),
@@ -133,10 +156,13 @@ export async function POST(request: NextRequest) {
             }
           });
 
+          clearTimeout(softTimeout);
           send({ type: 'complete', reply: agentRun.finalReply, agentRun });
           close();
         } catch (error) {
+          clearTimeout(softTimeout);
           const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('[agora-ai/stream]', message);
           send({ type: 'error', error: message });
           close();
         }
