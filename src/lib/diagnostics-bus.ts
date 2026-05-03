@@ -135,7 +135,7 @@ export function subscribeDiagnostics(listener: Listener): () => void {
   listeners.add(listener);
   const snapshot: ResolvedDiagnostic[] = [];
   for (const b of buckets.values()) snapshot.push(...b.items);
-  listener(snapshot);
+  try { listener(snapshot); } catch (e) { void e; }
   return () => listeners.delete(listener);
 }
 

@@ -353,5 +353,15 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     return () => clearTimeout(timeout);
   }, [linterStatus]);
 
+  // Bridge al diagnostics-bus global. Emite cada cambio de diagnostics
+  // como custom event; el dashboard lo escucha y publica al bus con el
+  // docId activo. Diseñado para no tocar MosaicEditor.tsx (intocable).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('agora:md-diagnostics', {
+      detail: { diagnostics }
+    }));
+  }, [diagnostics]);
+
   return { diagnostics, runLint, linterStatus };
 }

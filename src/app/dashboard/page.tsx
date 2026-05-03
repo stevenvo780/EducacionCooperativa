@@ -152,6 +152,76 @@ function DashboardContent() {
     useEffect(() => { initTouchDragPolyfill(); }, []);
     useEffect(() => { void import('@/lib/diagnostics-bus').then(m => m.installDiagnosticsBus()); }, []);
 
+    // Bridge: lints del editor ST → diagnostics-bus, asociado al doc activo.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        let collection: { set: (uri: string, items: { severity: 'error' | 'warning' | 'info' | 'hint'; message: string; code?: string; range?: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number } }[]) => void; clear: (uri: string) => void } | null = null;
+        let lastDocId: string | null = null;
+        void import('@/lib/diagnostics-bus').then((m) => {
+            collection = m.createDiagnosticsCollection('st-linter');
+        });
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<{ diagnostics: { line?: number; column?: number; endLine?: number; endColumn?: number; severity: string; message: string; code?: string }[] }>).detail;
+            const docId = selectedDocIdRef.current;
+            if (!docId || !collection) return;
+            if (lastDocId && lastDocId !== docId) collection.clear(lastDocId);
+            lastDocId = docId;
+            if (!detail || !Array.isArray(detail.diagnostics) || detail.diagnostics.length === 0) {
+                collection.clear(docId);
+                return;
+            }
+            collection.set(docId, detail.diagnostics.map((d) => ({
+                severity: (d.severity === 'error' ? 'error' : d.severity === 'info' ? 'info' : 'warning'),
+                message: d.message,
+                code: d.code,
+                range: {
+                    startLine: d.line ?? 1,
+                    startColumn: d.column,
+                    endLine: d.endLine,
+                    endColumn: d.endColumn
+                }
+            })));
+        };
+        window.addEventListener('agora:st-diagnostics', handler);
+        return () => {
+            window.removeEventListener('agora:st-diagnostics', handler);
+            if (collection && lastDocId) collection.clear(lastDocId);
+        };
+    }, []);
+
+    // Bridge: lints del editor MD → diagnostics-bus, asociado al doc activo.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        let collection: { set: (uri: string, items: { severity: 'error' | 'warning' | 'info' | 'hint'; message: string; code?: string; range?: { startLine: number; startColumn?: number } }[]) => void; clear: (uri: string) => void } | null = null;
+        let lastDocId: string | null = null;
+        void import('@/lib/diagnostics-bus').then((m) => {
+            collection = m.createDiagnosticsCollection('markdown-linter');
+        });
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<{ diagnostics: { line: number; column: number; severity: string; message: string; ruleId?: string }[] }>).detail;
+            const docId = selectedDocIdRef.current;
+            if (!docId || !collection) return;
+            // Si cambia el doc activo, limpiar el anterior.
+            if (lastDocId && lastDocId !== docId) collection.clear(lastDocId);
+            lastDocId = docId;
+            if (!detail || !Array.isArray(detail.diagnostics) || detail.diagnostics.length === 0) {
+                collection.clear(docId);
+                return;
+            }
+            collection.set(docId, detail.diagnostics.map((d) => ({
+                severity: (d.severity === 'error' ? 'error' : d.severity === 'info' ? 'info' : 'warning'),
+                message: d.message,
+                code: d.ruleId,
+                range: { startLine: d.line, startColumn: d.column }
+            })));
+        };
+        window.addEventListener('agora:md-diagnostics', handler);
+        return () => {
+            window.removeEventListener('agora:md-diagnostics', handler);
+            if (collection && lastDocId) collection.clear(lastDocId);
+        };
+    }, []);
+
     useEffect(() => {
         if (!user) return;
         const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL ||
@@ -290,6 +360,8 @@ function DashboardContent() {
     const requestedWorkspaceId = (searchParams?.get('workspaceId') || searchParams?.get('workspace') || '').trim() || null;
 
     const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+    const selectedDocIdRef = useRef<string | null>(null);
+    useEffect(() => { selectedDocIdRef.current = selectedDocId; }, [selectedDocId]);
     const [favoriteDocIds, setFavoriteDocIds] = useState<string[]>([]);
     const [openTabs, setOpenTabsRaw] = useState<DocItem[]>([]);
     // Saneo: si entran duplicados (bug histórico del effect que se disparaba 2x),

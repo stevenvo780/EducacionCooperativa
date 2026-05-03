@@ -182,6 +182,15 @@ export default function STCodeEditor({
     dispatchDiagnostics(view, diagnostics);
   }, [diagnostics, isTouchDevice]);
 
+  // Bridge: emite los diagnostics ST al bus global vía custom event para
+  // que el dashboard los publique al diagnostics-bus con el doc activo.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('agora:st-diagnostics', {
+      detail: { diagnostics }
+    }));
+  }, [diagnostics]);
+
   // Android/tablet IMEs are much more reliable with a native textarea than a
   // contenteditable-based code editor. Keep touch-first devices on the stable path.
   if (isTouchDevice) {
