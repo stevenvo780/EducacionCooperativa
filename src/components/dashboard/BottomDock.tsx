@@ -8,13 +8,13 @@ import {
   ChevronDown,
   AlertCircle,
   Plus,
-  Trash2,
   Pencil,
   AlertTriangle
 } from 'lucide-react';
 import type { WorkspaceTypeId } from '@/types/workspace';
 import type { TerminalSession } from '@/context/TerminalContext';
-import { clearProblems, subscribeProblems, type ProblemEntry, type ProblemSeverity } from '@/lib/console-bus';
+import { subscribeDiagnostics, type ResolvedDiagnostic } from '@/lib/diagnostics-bus';
+import ProblemsPane from './ProblemsPane';
 
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 
@@ -22,6 +22,7 @@ export type DockTab = 'terminal' | 'problems';
 
 interface BottomDockProps {
   open: boolean;
+  initialTab?: DockTab;
   onToggle: () => void;
   workspaceId?: string;
   workspaceName?: string;
@@ -36,10 +37,15 @@ interface BottomDockProps {
   onSelectSession: (id: string) => void;
   onDestroySession: (id: string) => void;
   onRenameSession: (id: string) => void;
+
+  resolveDocName?: (uri: string) => string | null;
+  onOpenDocument?: (uri: string, range?: { line: number; column?: number }) => void;
+  onRunDiagnosticAction?: (diagnostic: ResolvedDiagnostic, actionId: string) => void;
 }
 
 export default function BottomDock({
   open,
+  initialTab,
   onToggle,
   workspaceId,
   workspaceName,
@@ -52,17 +58,30 @@ export default function BottomDock({
   onCreateSession,
   onSelectSession,
   onDestroySession,
-  onRenameSession
+  onRenameSession,
+  resolveDocName,
+  onOpenDocument,
+  onRunDiagnosticAction
 }: BottomDockProps) {
-  const [active, setActive] = useState<DockTab>('terminal');
-  const [problems, setProblems] = useState<ProblemEntry[]>([]);
+  const [active, setActive] = useState<DockTab>(initialTab ?? 'terminal');
+  const [diagCount, setDiagCount] = useState({ error: 0, warning: 0 });
 
-  useEffect(() => subscribeProblems(setProblems), []);
+  useEffect(() => subscribeDiagnostics((items) => {
+    let error = 0, warning = 0;
+    for (const i of items) {
+      if (i.severity === 'error') error++;
+      else if (i.severity === 'warning') warning++;
+    }
+    setDiagCount({ error, warning });
+  }), []);
 
-  const errorCount = problems.filter((p) => p.severity === 'error').length;
-  const warnCount = problems.filter((p) => p.severity === 'warning').length;
+  useEffect(() => {
+    if (open && initialTab) setActive(initialTab);
+  }, [open, initialTab]);
+
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
   const workerDisabled = workerStatus !== 'online';
+  const totalProblems = diagCount.error + diagCount.warning;
 
   if (!open) return null;
 
@@ -82,22 +101,11 @@ export default function BottomDock({
             icon={<AlertCircle className="h-3.5 w-3.5" />}
             active={active === 'problems'}
             onClick={() => setActive('problems')}
-            badge={errorCount + warnCount > 0 ? (errorCount + warnCount) : undefined}
-            badgeTone={errorCount > 0 ? 'error' : 'warning'}
+            badge={totalProblems > 0 ? totalProblems : undefined}
+            badgeTone={diagCount.error > 0 ? 'error' : 'warning'}
           />
         </div>
         <div className="flex items-center gap-0.5">
-          {active === 'problems' && problems.length > 0 && (
-            <button
-              type="button"
-              onClick={clearProblems}
-              title="Limpiar problemas"
-              aria-label="Limpiar problemas"
-              className="flex h-7 items-center gap-1 rounded px-2 text-[11px] text-surface-400 transition hover:bg-surface-800 hover:text-white"
-            >
-              <Trash2 className="h-3 w-3" /> Limpiar
-            </button>
-          )}
           <button
             type="button"
             onClick={onToggle}
@@ -233,7 +241,11 @@ export default function BottomDock({
           </div>
         </div>
       ) : (
-        <ProblemsPane problems={problems} />
+        <ProblemsPane
+          resolveDocName={resolveDocName}
+          onOpenDocument={onOpenDocument}
+          onRunAction={onRunDiagnosticAction}
+        />
       )}
     </div>
   );
@@ -274,41 +286,4 @@ function DockTabButton({
       ) : null}
     </button>
   );
-}
-
-function ProblemsPane({ problems }: { problems: ProblemEntry[] }) {
-  if (problems.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-xs text-surface-500">
-        Sin problemas detectados.
-      </div>
-    );
-  }
-  return (
-    <ul className="flex-1 min-h-0 overflow-y-auto py-1 font-mono text-[11px] text-surface-200">
-      {problems.map((p) => (
-        <li
-          key={p.id}
-          className="flex items-start gap-2 border-b border-surface-800/60 px-3 py-1.5 last:border-b-0"
-        >
-          <SeverityIcon severity={p.severity} />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="break-words text-surface-100">{p.message}</span>
-            {p.detail && <span className="break-words text-[10px] text-surface-500">{p.detail}</span>}
-          </div>
-          <span className="shrink-0 text-[10px] text-surface-500">{p.source}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function SeverityIcon({ severity }: { severity: ProblemSeverity }) {
-  const map = {
-    error: { Icon: AlertCircle, cls: 'text-rose-400' },
-    warning: { Icon: AlertTriangle, cls: 'text-amber-300' },
-    info: { Icon: AlertCircle, cls: 'text-sky-300' }
-  } as const;
-  const { Icon, cls } = map[severity];
-  return <Icon className={`mt-0.5 h-3 w-3 shrink-0 ${cls}`} />;
 }
