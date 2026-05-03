@@ -23,21 +23,34 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
       return;
     }
     let active = true;
-    setLoading(true);
-    setError(null);
-    void (async () => {
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const fetchContent = async (silent: boolean) => {
+      if (!silent) setLoading(true);
       try {
         const res = await authFetch(`/api/documents/${encodeURIComponent(selectedDoc.id)}/raw`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
-        if (active) setContent(text);
+        if (active) {
+          setContent(text);
+          setError(null);
+        }
       } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : 'Error cargando contenido');
+        if (active && !silent) setError(e instanceof Error ? e.message : 'Error cargando contenido');
       } finally {
-        if (active) setLoading(false);
+        if (active && !silent) setLoading(false);
       }
-    })();
-    return () => { active = false; };
+    };
+
+    void fetchContent(false);
+    // Auto-refresh suave cada 30s para que el outline siga al editor
+    // sin necesidad de un evento explicito de save.
+    pollTimer = setInterval(() => { void fetchContent(true); }, 30_000);
+
+    return () => {
+      active = false;
+      if (pollTimer) clearInterval(pollTimer);
+    };
   }, [selectedDoc]);
 
   const headings = useMemo(() => parseMarkdownOutline(content), [content]);
