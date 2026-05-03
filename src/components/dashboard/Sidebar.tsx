@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, ListCollapse, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
 import { getUpdatedAtValue } from '@/services/dashboardUtils';
@@ -158,6 +158,7 @@ const Sidebar = ({
   const effectiveWidth = isCollapsedView ? 0 : sidebarWidth;
   const favoriteDocIdSet = useMemo(() => new Set(favoriteDocIds), [favoriteDocIds]);
   const touchHandleVisibilityClass = isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
+  const iconButtonClass = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-surface-400 transition hover:bg-surface-700/70 hover:text-surface-100 active:bg-surface-700';
 
   useEffect(() => {
     setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
@@ -548,55 +549,61 @@ const Sidebar = ({
       >
         <div className="flex-1 overflow-hidden p-2 flex flex-col">
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="px-2 py-1.5 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-surface-500 uppercase tracking-wider flex items-center gap-2">
-                ARCHIVOS: {currentWorkspace?.name}
-                {loadingDocs && <Loader2 className="w-3 h-3 animate-spin text-surface-500" />}
-              </span>
-              <button
-                type="button"
-                onClick={collapseAllFolders}
-                className="rounded-md px-2 py-1 text-[10px] font-medium text-surface-500 transition hover:bg-surface-700/70 hover:text-surface-200"
-                title="Contraer toda la jerarquia"
-              >
-                Contraer todo
-              </button>
-            </div>
+            <div className="flex items-center justify-between gap-1 px-2 py-1.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-surface-500" title={currentWorkspace?.name ? `Archivos: ${currentWorkspace.name}` : 'Archivos'}>
+                {loadingDocs ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Folder className="h-5 w-5 text-amber-400" />
+                )}
+              </div>
 
-            {/* File action buttons */}
-            <div className="grid grid-cols-2 gap-1 px-2 pb-2">
-              <button
-                onClick={onCreateDoc}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
-                title="Nuevo archivo"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="truncate">Nuevo archivo</span>
-              </button>
-              <button
-                onClick={onCreateFolder}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
-                title="Nueva carpeta"
-              >
-                <FolderPlus className="w-3.5 h-3.5" />
-                <span className="truncate">Nueva carpeta</span>
-              </button>
-              <button
-                onClick={onUploadFile}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
-                title="Subir archivos"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span className="truncate">Subir archivos</span>
-              </button>
-              <button
-                onClick={onUploadFolder}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-surface-300 hover:text-mandy-300 hover:bg-surface-700 transition"
-                title="Subir carpeta"
-              >
-                <FolderUp className="w-3.5 h-3.5" />
-                <span className="truncate">Subir carpeta</span>
-              </button>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+                {onCreateDoc && (
+                  <button
+                    type="button"
+                    onClick={onCreateDoc}
+                    className={iconButtonClass}
+                    title="Nuevo archivo"
+                    aria-label="Nuevo archivo"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                )}
+                {onCreateFolder && (
+                  <button
+                    type="button"
+                    onClick={onCreateFolder}
+                    className={iconButtonClass}
+                    title="Nueva carpeta"
+                    aria-label="Nueva carpeta"
+                  >
+                    <FolderPlus className="h-5 w-5" />
+                  </button>
+                )}
+                {onUploadFile && (
+                  <button
+                    type="button"
+                    onClick={onUploadFile}
+                    className={iconButtonClass}
+                    title="Subir archivos"
+                    aria-label="Subir archivos"
+                  >
+                    <Upload className="h-5 w-5" />
+                  </button>
+                )}
+                {onUploadFolder && (
+                  <button
+                    type="button"
+                    onClick={onUploadFolder}
+                    className={iconButtonClass}
+                    title="Subir carpeta"
+                    aria-label="Subir carpeta"
+                  >
+                    <FolderUp className="h-5 w-5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {favoriteDocs.length > 0 && (
@@ -658,23 +665,37 @@ const Sidebar = ({
             )}
 
             <div className="px-2 py-1">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
-                <input
-                  type="text"
-                  value={sidebarSearchQuery}
-                  onChange={e => setSidebarSearchQuery(e.target.value)}
-                  placeholder="Buscar..."
-                  className="w-full pl-7 pr-7 py-1.5 text-xs bg-surface-800 border border-surface-700 rounded-md text-white placeholder-surface-500 outline-none focus:border-mandy-500/50 transition"
-                />
-                {sidebarSearchQuery && (
-                  <button
-                    onClick={() => setSidebarSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-300"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+              <div className="flex items-center gap-1.5">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-500" />
+                  <input
+                    type="text"
+                    value={sidebarSearchQuery}
+                    onChange={e => setSidebarSearchQuery(e.target.value)}
+                    placeholder="Buscar..."
+                    className="w-full rounded-md border border-surface-700 bg-surface-800 py-2 pl-8 pr-10 text-sm text-white placeholder-surface-500 outline-none transition focus:border-mandy-500/50"
+                  />
+                  {sidebarSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSidebarSearchQuery('')}
+                      className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-surface-500 transition hover:bg-surface-700/70 hover:text-surface-200"
+                      title="Limpiar busqueda"
+                      aria-label="Limpiar busqueda"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={collapseAllFolders}
+                  className={iconButtonClass}
+                  title="Contraer toda la jerarquia"
+                  aria-label="Contraer toda la jerarquia"
+                >
+                  <ListCollapse className="h-5 w-5" />
+                </button>
               </div>
             </div>
 
@@ -724,12 +745,11 @@ const Sidebar = ({
             <button
               type="button"
               onClick={onToggleSidebarCollapse}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-surface-400 transition hover:bg-surface-700/70 hover:text-surface-200"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-surface-400 transition hover:bg-surface-700/70 hover:text-surface-200"
               title="Ocultar panel de archivos (Ctrl+B)"
               aria-label="Ocultar panel de archivos"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Ocultar</span>
+              <ChevronLeft className="h-5 w-5" />
             </button>
           </div>
         </div>
