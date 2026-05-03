@@ -20,6 +20,11 @@
   },
   "routes": [
     {
+      "src": "/api/agora-ai/stream",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "https://agora-backend-578238159459.us-central1.run.app/agora-ai/stream"
+    },
+    {
       "src": "/api/upload",
       "methods": ["POST"],
       "headers": {
