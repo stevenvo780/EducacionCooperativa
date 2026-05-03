@@ -12,6 +12,7 @@ import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import SnippetGallery from '@/components/SnippetGallery';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { collectSTDiagnostics, hasSTExecutionErrors } from '@/lib/st-execution';
+import { registerChannel, forceUnregisterChannel } from '@/lib/output-channels';
 
 const DEFAULT_SCRIPT = `// ST — Motor de Lógica Formal
 // Escribe tu script ST aquí
@@ -244,6 +245,13 @@ interface STRunnerProps {
     onSave: () => void;
     onContentChange: (content: string) => void;
   };
+  /**
+   * Si true, oculta el panel inferior interno (Salida/Problemas/Símbolos)
+   * y publica esos contenidos al BottomDock global como canales sticky.
+   * Pensado para uso dentro del workspace, donde la utilidad inferior
+   * es compartida entre Terminal, Problemas, ST output, etc.
+   */
+  dockToWorkspace?: boolean;
 }
 
 export default function STRunner({
@@ -255,7 +263,8 @@ export default function STRunner({
   workspaceId = PERSONAL_WORKSPACE_ID,
   autoRun = false,
   initialOutputHeight = 300,
-  fileMode
+  fileMode,
+  dockToWorkspace = false
 }: STRunnerProps) {
   const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles: _profiles, isRunning, getSymbols, validate, lastDiagnostics } =
     useSTInterpreter();
@@ -287,6 +296,46 @@ export default function STRunner({
   const isTouchTablet = useMemo(() => isTouchDeviceProfile(), []);
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
   const currentFileId = fileMode?.docName || 'st-runner-scratch';
+
+  // Publica los outputs al BottomDock global cuando se monta dentro del
+  // workspace. Los canales son sticky: aunque el editor ST se cierre, el
+  // último estado queda visible hasta que otro ST lo reemplace.
+  useEffect(() => {
+    if (!dockToWorkspace) return;
+    const idOutput = 'st-output';
+    const idSymbols = 'st-symbols';
+    registerChannel({
+      id: idOutput,
+      label: 'Salida ST',
+      icon: Terminal,
+      sticky: true,
+      order: 30,
+      badge: history.length > 0 ? { count: history.length, tone: 'info' } : undefined,
+      render: () => <HistoryPanel entries={history} viewMode={viewMode} />
+    });
+    registerChannel({
+      id: idSymbols,
+      label: 'Símbolos',
+      icon: List,
+      sticky: true,
+      order: 40,
+      badge: currentSymbols.length > 0 ? { count: currentSymbols.length, tone: 'success' } : undefined,
+      render: () => <SymbolsPanel symbolsList={currentSymbols} />
+    });
+    // No hacemos forceUnregister al desmontar para mantener "último ST
+    // ejecutado" visible. Se reemplazan al ejecutar otro ST.
+  }, [dockToWorkspace, history, currentSymbols, viewMode]);
+
+  // Cleanup explícito si el componente se desmonta y NO está en modo dock:
+  // protege contra fugas si el flag cambia en runtime.
+  useEffect(() => {
+    return () => {
+      if (!dockToWorkspace) {
+        forceUnregisterChannel('st-output');
+        forceUnregisterChannel('st-symbols');
+      }
+    };
+  }, [dockToWorkspace]);
 
   const getEnrichedSymbols = useCallback((source: string) => {
     const symbols = getSymbols(source);
@@ -673,7 +722,8 @@ export default function STRunner({
                 />
               </div>
 
-              {/* Resize Handle and Tabs */}
+              {/* Resize Handle and Tabs — ocultos cuando los outputs van al BottomDock */}
+              {!dockToWorkspace && (
               <div className="flex flex-col flex-shrink-0 bg-slate-900 border-t border-slate-800">
                 {/* Actual resize handle bar */}
                 <div
@@ -755,6 +805,7 @@ export default function STRunner({
                   </div>
                 )}
               </div>
+              )}
             </>
           ) : (
           /* REPL mode: output arriba, input abajo */
