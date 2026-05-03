@@ -6,9 +6,9 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
-  Bot, Send, Settings, X, ChevronDown, ChevronUp,
+  Bot, Send, Settings, X, ChevronDown,
   Loader2, Trash2, Copy, Check, AlertCircle, Sparkles, Undo2,
-  History, MessageSquarePlus, PanelLeftClose, PanelLeftOpen
+  History, MessageSquarePlus
 } from 'lucide-react';
 import { authFetch, getAuthToken } from '@/services/apiClient';
 import {
@@ -201,7 +201,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [config, setConfig] = useState<AIProviderConfig>(loadConfig);
   const [mode, setMode] = useState<AgentMode>(loadMode);
   const [showConfig, setShowConfig] = useState(false);
-  const [showHistory, setShowHistory] = useState(true);
+  // Historial cerrado por defecto: el RightPanel es solo chat. El usuario
+  // abre el historial como overlay clickeando el botón "Historial".
+  const [showHistory, setShowHistory] = useState(false);
   const [sessions, setSessions] = useState<AgentChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UIChatMessage[]>([]);
@@ -943,52 +945,61 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   }, [messages, clearPendingConfirmation, executeAgoraTool, config.provider, emitAgentWorkspaceEvents]);
 
   return (
-    <div className="flex h-full bg-surface-900 text-surface-200 overflow-hidden">
-      <aside className={`${showHistory ? 'w-60 border-r border-surface-700' : 'w-0 border-r-0'} bg-surface-950/70 transition-all duration-200 overflow-hidden flex-shrink-0`}>
-        <div className="h-full flex flex-col">
-          <div className="px-3 py-2 border-b border-surface-800 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-surface-200">
-                <History className="w-4 h-4 text-sky-400" />
-                <span className="text-sm font-medium">Historial local</span>
+    <div className="flex h-full bg-surface-900 text-surface-200 overflow-hidden relative">
+      {/* Historial como modal overlay sobre el chat — el panel queda limpio
+          mostrando solo el chat. Se invoca con el botón "Historial". */}
+      {showHistory && (
+        <>
+          <div
+            className="absolute inset-0 z-30 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowHistory(false)}
+            aria-hidden
+          />
+          <aside className="absolute inset-y-0 left-0 z-40 w-72 max-w-[90%] bg-surface-950 border-r border-surface-700 shadow-2xl shadow-black/40 flex flex-col">
+            <div className="px-3 py-2 border-b border-surface-800 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-surface-200">
+                  <History className="w-4 h-4 text-sky-400" />
+                  <span className="text-sm font-medium">Historial local</span>
+                </div>
+                <p className="text-[10px] text-surface-500 mt-0.5">Privado en tu navegador · sin Firebase</p>
               </div>
-              <p className="text-[10px] text-surface-500 mt-0.5">Privado en tu navegador · sin Firebase</p>
+              <button
+                type="button"
+                onClick={() => { startNewChat(); setShowHistory(false); }}
+                className="p-1 rounded text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition"
+                title="Nuevo chat"
+              >
+                <MessageSquarePlus className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={startNewChat}
-              className="p-1 rounded text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition"
-              title="Nuevo chat"
-            >
-              <MessageSquarePlus className="w-4 h-4" />
-            </button>
-          </div>
 
-          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-            {sessions.map((session) => {
-              const isActive = session.id === activeSessionId;
-              return (
-                <button
-                  key={session.id}
-                  type="button"
-                  onClick={() => activateSession(session.id)}
-                  className={`w-full text-left rounded-lg border px-2.5 py-2 transition ${
-                    isActive
-                      ? 'border-sky-500/40 bg-sky-500/10 text-surface-100'
-                      : 'border-surface-800 bg-surface-900/60 text-surface-300 hover:border-surface-700 hover:bg-surface-900'
-                  }`}
-                >
-                  <div className="text-xs font-medium truncate">{session.title || 'Nuevo chat'}</div>
-                  <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-surface-500">
-                    <span className="truncate">{session.messages.length} msg</span>
-                    <span>{formatSessionTimestamp(session.updatedAt)}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </aside>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              {sessions.map((session) => {
+                const isActive = session.id === activeSessionId;
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => { activateSession(session.id); setShowHistory(false); }}
+                    className={`w-full text-left rounded-lg border px-2.5 py-2 transition ${
+                      isActive
+                        ? 'border-sky-500/40 bg-sky-500/10 text-surface-100'
+                        : 'border-surface-800 bg-surface-900/60 text-surface-300 hover:border-surface-700 hover:bg-surface-900'
+                    }`}
+                  >
+                    <div className="text-xs font-medium truncate">{session.title || 'Nuevo chat'}</div>
+                    <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-surface-500">
+                      <span className="truncate">{session.messages.length} msg</span>
+                      <span>{formatSessionTimestamp(session.updatedAt)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        </>
+      )}
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-surface-700 bg-surface-900 flex-shrink-0 gap-2">
@@ -997,37 +1008,15 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             type="button"
             onClick={() => setShowHistory(value => !value)}
             className="p-1 rounded text-surface-500 hover:text-surface-200 hover:bg-surface-800 transition"
-            title={showHistory ? 'Ocultar historial local' : 'Mostrar historial local'}
+            title="Historial de conversaciones"
+            aria-label="Historial de conversaciones"
           >
-            {showHistory ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+            <History className="w-4 h-4" />
           </button>
           <Bot className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <span className="text-sm font-medium text-surface-100 truncate">Agora AI</span>
-          <span className={`text-xs ${meta.color} bg-surface-800 px-1.5 py-0.5 rounded whitespace-nowrap`}>
-            {meta.label}
-          </span>
-          <span className={`text-xs px-1.5 py-0.5 rounded whitespace-nowrap ${mode === 'agent' ? 'bg-violet-500/15 text-violet-300' : 'bg-surface-800 text-surface-400'}`}>
-            {mode === 'agent' ? 'Agente' : 'Chat'}
-          </span>
-          <span className="text-xs text-surface-500 hidden md:inline">· {resolvedWorkspaceId === PERSONAL_WORKSPACE_ID ? 'workspace personal' : 'contexto activo'}</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="hidden sm:flex rounded-md border border-surface-700 overflow-hidden mr-1">
-            <button
-              type="button"
-              onClick={() => updateMode('chat')}
-              className={`px-2 py-1 text-[10px] transition ${mode === 'chat' ? 'bg-surface-700 text-surface-100' : 'text-surface-500 hover:text-surface-300'}`}
-            >
-              Chat
-            </button>
-            <button
-              type="button"
-              onClick={() => updateMode('agent')}
-              className={`px-2 py-1 text-[10px] transition ${mode === 'agent' ? 'bg-violet-500/15 text-violet-300' : 'text-surface-500 hover:text-surface-300'}`}
-            >
-              Agente
-            </button>
-          </div>
           {rollbackQueue.length > 0 && (
             <button
               type="button"
@@ -1043,6 +1032,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             onClick={startNewChat}
             className="p-1 rounded text-surface-500 hover:text-surface-200 hover:bg-surface-700 transition"
             title="Nuevo chat"
+            aria-label="Nuevo chat"
           >
             <MessageSquarePlus className="w-3.5 h-3.5" />
           </button>
@@ -1051,6 +1041,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               onClick={deleteActiveChat}
               className="p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
               title="Eliminar conversación actual"
+              aria-label="Eliminar conversación"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -1058,7 +1049,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           <button
             onClick={() => setShowConfig(v => !v)}
             className={`p-1 rounded transition ${showConfig ? 'text-sky-400 bg-sky-500/10' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-700'}`}
-            title="Configurar IA"
+            title="Configuración de IA"
+            aria-label="Configuración"
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
@@ -1066,10 +1058,16 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       </div>
 
       {showConfig && (
-        <div className="flex-shrink-0 border-b border-surface-700 bg-surface-950 p-3 space-y-3 text-xs">
+        <>
+          <div
+            className="absolute inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowConfig(false)}
+            aria-hidden
+          />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(28rem,calc(100%-2rem))] max-h-[80%] overflow-y-auto rounded-lg border border-surface-700 bg-surface-950 p-3 space-y-3 text-xs shadow-2xl shadow-black/40">
           <div className="flex items-center justify-between">
-            <span className="text-surface-300 font-medium">Configuración del proveedor de IA</span>
-            <button onClick={() => setShowConfig(false)} className="text-surface-500 hover:text-surface-300">
+            <span className="text-surface-300 font-medium">Configuración de Agora AI</span>
+            <button onClick={() => setShowConfig(false)} className="text-surface-500 hover:text-surface-300" aria-label="Cerrar">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -1149,6 +1147,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             {mode === 'agent' && <span>· Tools activas · Confirmación obligatoria para borrar.</span>}
           </p>
         </div>
+        </>
       )}
 
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 min-h-0">
@@ -1327,17 +1326,47 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
-        <div className="flex items-center justify-between mt-1 px-1 gap-2">
-          <button
-            onClick={() => setShowConfig(v => !v)}
-            className="flex items-center gap-1 text-[10px] text-surface-600 hover:text-surface-400 transition"
-          >
-            <span className={meta.color}>{meta.label}</span>
-            {showConfig ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-          <div className="flex items-center gap-2 text-[10px] text-surface-700">
-            <span className="hidden sm:inline">{mode === 'agent' ? 'Agente activo' : 'Modo chat'}</span>
-            <span>Enter · enviar</span>
+        {/* Footer estilo Copilot: pills de Modelo, Modo y Contexto a la
+            izquierda; hint de Enter a la derecha. Click en pill abre el
+            modal de configuración correspondiente. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-2 px-0.5 text-[10px]">
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setShowConfig(v => !v)}
+              title="Cambiar modelo / proveedor"
+              className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-surface-300 transition hover:border-sky-500/40 hover:text-white"
+            >
+              <Bot className="w-3 h-3" />
+              <span className={`${meta.color} truncate max-w-[8rem]`}>{meta.label}</span>
+              <ChevronDown className="w-3 h-3 opacity-60" />
+            </button>
+            <button
+              type="button"
+              onClick={() => updateMode(mode === 'agent' ? 'chat' : 'agent')}
+              title={mode === 'agent' ? 'Cambiar a modo Chat (solo lectura)' : 'Cambiar a modo Agente (con tools)'}
+              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${
+                mode === 'agent'
+                  ? 'border-violet-500/40 bg-violet-500/10 text-violet-200 hover:border-violet-500/60'
+                  : 'border-surface-700 bg-surface-900 text-surface-300 hover:border-surface-600'
+              }`}
+            >
+              {mode === 'agent' ? <Sparkles className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
+              <span>{mode === 'agent' ? 'Agente' : 'Chat'}</span>
+            </button>
+            <span
+              title={resolvedWorkspaceId === PERSONAL_WORKSPACE_ID ? 'Contexto: workspace personal' : 'Contexto: workspace activo'}
+              className="hidden sm:flex items-center gap-1 rounded-md border border-surface-800 bg-surface-900/50 px-1.5 py-0.5 text-surface-400"
+            >
+              <Check className="w-3 h-3 text-emerald-500" />
+              <span>Contexto</span>
+            </span>
+          </div>
+          <div className="text-surface-600 flex items-center gap-1">
+            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px]">Enter</kbd>
+            <span>enviar · </span>
+            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px]">Shift+Enter</kbd>
+            <span className="hidden sm:inline">salto</span>
           </div>
         </div>
       </div>
