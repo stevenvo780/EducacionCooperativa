@@ -153,35 +153,49 @@ function DashboardContent() {
     useEffect(() => { initTouchDragPolyfill(); }, []);
     useEffect(() => { void import('@/lib/diagnostics-bus').then(m => m.installDiagnosticsBus()); }, []);
 
-    // Bridge: lints del editor ST → diagnostics-bus, asociado al doc activo.
+    // Bridges: lints del editor ST/MD → diagnostics-bus, asociados al
+    // doc activo. Skip si la nueva lista es idéntica a la anterior para
+    // no spamear publishes (que dispararían re-renders innecesarios y, en
+    // el peor caso, ciclos de re-entrada). Comparación por hash simple
+    // (count + severity-totals + first message) — barato y suficiente.
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        let collection: { set: (uri: string, items: { severity: 'error' | 'warning' | 'info' | 'hint'; message: string; code?: string; range?: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number } }[]) => void; clear: (uri: string) => void } | null = null;
+        type DiagItem = { severity: 'error' | 'warning' | 'info' | 'hint'; message: string; code?: string; range?: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number } };
+        let collection: { set: (uri: string, items: DiagItem[]) => void; clear: (uri: string) => void } | null = null;
         let lastDocId: string | null = null;
+        const lastSig = new Map<string, string>();
+
         void import('@/lib/diagnostics-bus').then((m) => {
             collection = m.createDiagnosticsCollection('st-linter');
         });
+
+        const sig = (items: DiagItem[]): string => {
+            if (items.length === 0) return 'empty';
+            return `${items.length}:${items[0]?.severity ?? ''}:${items[0]?.message?.slice(0, 40) ?? ''}`;
+        };
+
         const handler = (e: Event) => {
             const detail = (e as CustomEvent<{ diagnostics: { line?: number; column?: number; endLine?: number; endColumn?: number; severity: string; message: string; code?: string }[] }>).detail;
             const docId = selectedDocIdRef.current;
             if (!docId || !collection) return;
-            if (lastDocId && lastDocId !== docId) collection.clear(lastDocId);
-            lastDocId = docId;
-            if (!detail || !Array.isArray(detail.diagnostics) || detail.diagnostics.length === 0) {
-                collection.clear(docId);
-                return;
+            if (lastDocId && lastDocId !== docId) {
+                collection.clear(lastDocId);
+                lastSig.delete(lastDocId);
             }
-            collection.set(docId, detail.diagnostics.map((d) => ({
-                severity: (d.severity === 'error' ? 'error' : d.severity === 'info' ? 'info' : 'warning'),
-                message: d.message,
-                code: d.code,
-                range: {
-                    startLine: d.line ?? 1,
-                    startColumn: d.column,
-                    endLine: d.endLine,
-                    endColumn: d.endColumn
-                }
-            })));
+            lastDocId = docId;
+            const items: DiagItem[] = !detail || !Array.isArray(detail.diagnostics)
+                ? []
+                : detail.diagnostics.map((d) => ({
+                    severity: (d.severity === 'error' ? 'error' : d.severity === 'info' ? 'info' : 'warning') as DiagItem['severity'],
+                    message: d.message,
+                    code: d.code,
+                    range: { startLine: d.line ?? 1, startColumn: d.column, endLine: d.endLine, endColumn: d.endColumn }
+                }));
+            const newSig = sig(items);
+            if (lastSig.get(docId) === newSig) return;
+            lastSig.set(docId, newSig);
+            if (items.length === 0) collection.clear(docId);
+            else collection.set(docId, items);
         };
         window.addEventListener('agora:st-diagnostics', handler);
         return () => {
@@ -190,31 +204,44 @@ function DashboardContent() {
         };
     }, []);
 
-    // Bridge: lints del editor MD → diagnostics-bus, asociado al doc activo.
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        let collection: { set: (uri: string, items: { severity: 'error' | 'warning' | 'info' | 'hint'; message: string; code?: string; range?: { startLine: number; startColumn?: number } }[]) => void; clear: (uri: string) => void } | null = null;
+        type DiagItem = { severity: 'error' | 'warning' | 'info' | 'hint'; message: string; code?: string; range?: { startLine: number; startColumn?: number } };
+        let collection: { set: (uri: string, items: DiagItem[]) => void; clear: (uri: string) => void } | null = null;
         let lastDocId: string | null = null;
+        const lastSig = new Map<string, string>();
+
         void import('@/lib/diagnostics-bus').then((m) => {
             collection = m.createDiagnosticsCollection('markdown-linter');
         });
+
+        const sig = (items: DiagItem[]): string => {
+            if (items.length === 0) return 'empty';
+            return `${items.length}:${items[0]?.severity ?? ''}:${items[0]?.message?.slice(0, 40) ?? ''}`;
+        };
+
         const handler = (e: Event) => {
             const detail = (e as CustomEvent<{ diagnostics: { line: number; column: number; severity: string; message: string; ruleId?: string }[] }>).detail;
             const docId = selectedDocIdRef.current;
             if (!docId || !collection) return;
-            // Si cambia el doc activo, limpiar el anterior.
-            if (lastDocId && lastDocId !== docId) collection.clear(lastDocId);
-            lastDocId = docId;
-            if (!detail || !Array.isArray(detail.diagnostics) || detail.diagnostics.length === 0) {
-                collection.clear(docId);
-                return;
+            if (lastDocId && lastDocId !== docId) {
+                collection.clear(lastDocId);
+                lastSig.delete(lastDocId);
             }
-            collection.set(docId, detail.diagnostics.map((d) => ({
-                severity: (d.severity === 'error' ? 'error' : d.severity === 'info' ? 'info' : 'warning'),
-                message: d.message,
-                code: d.ruleId,
-                range: { startLine: d.line, startColumn: d.column }
-            })));
+            lastDocId = docId;
+            const items: DiagItem[] = !detail || !Array.isArray(detail.diagnostics)
+                ? []
+                : detail.diagnostics.map((d) => ({
+                    severity: (d.severity === 'error' ? 'error' : d.severity === 'info' ? 'info' : 'warning') as DiagItem['severity'],
+                    message: d.message,
+                    code: d.ruleId,
+                    range: { startLine: d.line, startColumn: d.column }
+                }));
+            const newSig = sig(items);
+            if (lastSig.get(docId) === newSig) return;
+            lastSig.set(docId, newSig);
+            if (items.length === 0) collection.clear(docId);
+            else collection.set(docId, items);
         };
         window.addEventListener('agora:md-diagnostics', handler);
         return () => {
@@ -919,7 +946,6 @@ function DashboardContent() {
         openTabs,
         setOpenTabs,
         setMosaicNode,
-        setSelectedDocId,
         setShowMobileSidebar,
         selectSession,
         user,
