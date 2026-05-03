@@ -161,7 +161,7 @@ const extractFrontmatterList = (frontmatter: string, keys: string[]) => {
   const collected: string[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
+    const line = lines[index] ?? '';
     const separator = line.indexOf(':');
     if (separator === -1) continue;
 
@@ -176,7 +176,7 @@ const extractFrontmatterList = (frontmatter: string, keys: string[]) => {
 
     let cursor = index + 1;
     while (cursor < lines.length) {
-      const nested = lines[cursor];
+      const nested = lines[cursor] ?? '';
       if (!/^\s+/.test(nested)) break;
       const itemMatch = nested.match(/^\s*-\s+(.+)$/);
       if (itemMatch?.[1]) {

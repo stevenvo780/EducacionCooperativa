@@ -5,7 +5,7 @@
  * Ninguna requiere estado de documento completo → supportsIncremental: true.
  */
 
-import { type LinterRule, type LinterDiagnostic, getCodeBlockLines } from './types';
+import { type LinterRule, type LinterDiagnostic, getCodeBlockLines, lineAt } from './types';
 
 function skipLine(line: string): boolean {
   const t = line.trim();
@@ -33,7 +33,7 @@ export const passiveVoiceEsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (skipLine(line)) continue;
 
       const combined = new RegExp(
@@ -101,7 +101,7 @@ export const nominalizationEsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (skipLine(line)) continue;
 
       for (const [phrase, suggestion] of NOMINALIZATIONS) {
@@ -143,7 +143,7 @@ export const vagueQuantifierEsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (skipLine(line)) continue;
 
       let match;
@@ -202,7 +202,7 @@ export const lexicalRedundancyEsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (skipLine(line)) continue;
 
       for (const [phrase, simplified] of REDUNDANCIES) {

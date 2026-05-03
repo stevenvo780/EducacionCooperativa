@@ -12,7 +12,8 @@
 import {
   type LinterRule,
   type LinterDiagnostic,
-  getCodeBlockLines
+  getCodeBlockLines,
+  lineAt
 } from './types';
 import {
   spellingRule,
@@ -49,7 +50,7 @@ export const headingSpaceRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (/^#{1,6}[^ #\n]/.test(line)) {
         const hashes = line.match(/^#+/)![0];
         results.push({
@@ -84,9 +85,10 @@ export const headingHierarchyRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const match = lines[lineIdx].match(/^(#{1,6})\s/);
+      const match = lineAt(lines, lineIdx).match(/^(#{1,6})\s/);
       if (match) {
-        const level = match[1].length;
+        const hashes = match[1] ?? '';
+        const level = hashes.length;
         if (lastLevel > 0 && level > lastLevel + 1) {
           results.push({
             message: `Salto de encabezado: h${lastLevel} → h${level}. Falta un h${lastLevel + 1} intermedio.`,
@@ -121,7 +123,7 @@ export const multipleH1Rule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      if (/^#\s/.test(lines[lineIdx])) {
+      if (/^#\s/.test(lineAt(lines, lineIdx))) {
         h1Count++;
         if (h1Count > 1) {
           results.push({
@@ -130,7 +132,7 @@ export const multipleH1Rule: LinterRule = {
             line: lineIdx + 1,
             column: 1,
             endLine: lineIdx + 1,
-            endColumn: lines[lineIdx].length + 1,
+            endColumn: lineAt(lines, lineIdx).length + 1,
             source: 'Structure'
           });
         }
@@ -154,14 +156,14 @@ export const emptyHeadingRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      if (/^#{1,6}\s*$/.test(lines[lineIdx])) {
+      if (/^#{1,6}\s*$/.test(lineAt(lines, lineIdx))) {
         results.push({
           message: 'Encabezado vacío — agrega texto descriptivo.',
           severity: 'warning',
           line: lineIdx + 1,
           column: 1,
           endLine: lineIdx + 1,
-          endColumn: lines[lineIdx].length + 1,
+          endColumn: lineAt(lines, lineIdx).length + 1,
           source: 'Structure'
         });
       }
@@ -187,20 +189,21 @@ export const linkSpacesRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let match;
       while ((match = linkRegex.exec(line)) !== null) {
-        if (match[2].includes(' ')) {
+        const url = match[2] ?? '';
+        if (url.includes(' ')) {
           results.push({
             message: 'La URL del enlace contiene espacios.',
             suggestion: 'Usa %20 en lugar de espacios.',
             severity: 'error',
             line: lineIdx + 1,
-            column: match.index + match[0].indexOf(match[2]) + 1,
+            column: match.index + match[0].indexOf(url) + 1,
             endLine: lineIdx + 1,
-            endColumn: match.index + match[0].indexOf(match[2]) + 1 + match[2].length,
+            endColumn: match.index + match[0].indexOf(url) + 1 + url.length,
             source: 'Links',
-            replacements: [match[2].replace(/ /g, '%20')]
+            replacements: [url.replace(/ /g, '%20')]
           });
         }
       }
@@ -224,11 +227,11 @@ export const emptyLinkRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let match;
       while ((match = linkRegex.exec(line)) !== null) {
-        const linkText = match[1].trim();
-        const url = match[2].trim();
+        const linkText = (match[1] ?? '').trim();
+        const url = (match[2] ?? '').trim();
         if (!linkText) {
           results.push({
             message: 'Enlace sin texto descriptivo: [](…)',
@@ -275,7 +278,7 @@ export const bareUrlRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let match;
       while ((match = urlRegex.exec(line)) !== null) {
         // Check it's not already in a markdown link or angle bracket
@@ -337,7 +340,7 @@ export const longParagraphRule: LinterRule = {
         flushParagraph(lineIdx - 1);
         continue;
       }
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       const trimmed = line.trim();
 
       // Blank line or heading = paragraph boundary
@@ -369,7 +372,7 @@ export const longSentenceRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       // Skip headings, lists, etc.
       if (/^[#\-*+>|]/.test(line.trim())) continue;
 
@@ -414,10 +417,10 @@ export const imageAltTextRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let match;
       while ((match = imgRegex.exec(line)) !== null) {
-        if (!match[1].trim()) {
+        if (!(match[1] ?? '').trim()) {
           results.push({
             message: 'Imagen sin texto alternativo: ![](…)',
             suggestion: 'Agrega una descripción: ![descripción de la imagen](url)',
@@ -452,20 +455,25 @@ export const mixedListMarkersRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const match = lines[lineIdx].match(/^(\s*)([-*+])\s/);
+      const match = lineAt(lines, lineIdx).match(/^(\s*)([-*+])\s/);
       if (match) {
         const marker = match[2];
-        if (!markersUsed.has(marker)) markersUsed.set(marker, []);
-        markersUsed.get(marker)!.push(lineIdx);
+        if (!marker) continue;
+        const markerLines = markersUsed.get(marker) ?? [];
+        markerLines.push(lineIdx);
+        markersUsed.set(marker, markerLines);
       }
     }
 
     if (markersUsed.size > 1) {
       // Find the minority markers
       const sorted = Array.from(markersUsed.entries()).sort((a, b) => b[1].length - a[1].length);
-      const dominant = sorted[0][0];
+      const dominant = sorted[0]?.[0];
+      if (!dominant) return results;
       for (let i = 1; i < sorted.length; i++) {
-        const [marker, lineIdxs] = sorted[i];
+        const entry = sorted[i];
+        if (!entry) continue;
+        const [marker, lineIdxs] = entry;
         for (const lineIdx of lineIdxs) {
           results.push({
             message: `Marcador de lista "${marker}" inconsistente — el documento usa mayoritariamente "${dominant}".`,
@@ -500,11 +508,12 @@ export const trailingWhitespaceRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       // Markdown uses "  " (2 spaces) for <br>, so only flag >2 trailing spaces or trailing tabs
       const trailingMatch = line.match(/(\s+)$/);
       if (trailingMatch) {
         const trailing = trailingMatch[1];
+        if (!trailing) continue;
         // Allow exactly 2 trailing spaces (markdown linebreak)
         if (trailing === '  ') continue;
         results.push({
@@ -537,7 +546,7 @@ export const consecutiveBlankLinesRule: LinterRule = {
     let blankCount = 0;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-      if (lines[lineIdx].trim() === '') {
+      if (lineAt(lines, lineIdx).trim() === '') {
         blankCount++;
         if (blankCount === 3) {
           results.push({
@@ -576,7 +585,7 @@ export const unclosedBracketsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
 
       for (const [open, close] of pairs) {
         let count = 0;
@@ -626,7 +635,7 @@ export const todoMarkersRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let match;
       while ((match = markerRegex.exec(line)) !== null) {
         results.push({
@@ -665,7 +674,7 @@ export const malformedTableRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) { inTable = false; headerColCount = 0; continue; }
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       const isTableRow = line.trim().startsWith('|') && line.includes('|');
 
       if (isTableRow) {
@@ -712,13 +721,14 @@ export const codeBlockLangRule: LinterRule = {
     let fenceChar = '';
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-      const trimmed = lines[lineIdx].trim();
+      const trimmed = lineAt(lines, lineIdx).trim();
       if (!inFence) {
         const m = trimmed.match(/^(`{3,}|~{3,})(.*)/);
         if (m) {
+          const fence = m[1] ?? '';
           inFence = true;
-          fenceChar = m[1][0];
-          if (!m[2].trim()) {
+          fenceChar = fence[0] ?? '';
+          if (!(m[2] ?? '').trim()) {
             results.push({
               message: 'Bloque de código sin lenguaje especificado.',
               suggestion: 'Agrega el lenguaje: ```javascript, ```python, ```st, etc.',
@@ -726,7 +736,7 @@ export const codeBlockLangRule: LinterRule = {
               line: lineIdx + 1,
               column: 1,
               endLine: lineIdx + 1,
-              endColumn: lines[lineIdx].length + 1,
+              endColumn: lineAt(lines, lineIdx).length + 1,
               source: 'Structure'
             });
           }
@@ -757,10 +767,15 @@ export const unclosedFenceRule: LinterRule = {
     let fenceChar = '';
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-      const trimmed = lines[lineIdx].trim();
+      const trimmed = lineAt(lines, lineIdx).trim();
       if (!inFence) {
         const m = trimmed.match(/^(`{3,}|~{3,})/);
-        if (m) { inFence = true; fenceOpenLine = lineIdx; fenceChar = m[1][0]; }
+        if (m) {
+          const fence = m[1] ?? '';
+          inFence = true;
+          fenceOpenLine = lineIdx;
+          fenceChar = fence[0] ?? '';
+        }
       } else {
         const closeChar = fenceChar === '`' ? '`' : '~';
         if (new RegExp(`^${closeChar}{3,}\\s*$`).test(trimmed)) {
@@ -776,7 +791,7 @@ export const unclosedFenceRule: LinterRule = {
         line: fenceOpenLine + 1,
         column: 1,
         endLine: fenceOpenLine + 1,
-        endColumn: lines[fenceOpenLine].length + 1,
+        endColumn: lineAt(lines, fenceOpenLine).length + 1,
         source: 'Structure'
       }];
     }
@@ -800,12 +815,16 @@ export const orphanFootnoteRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       const defMatch = line.match(/^\s*\[\^([^\]]+)\]:/);
-      if (defMatch) { defined.set(defMatch[1], lineIdx); continue; }
+      const defId = defMatch?.[1];
+      if (defId) { defined.set(defId, lineIdx); continue; }
       const useRegex = /\[\^([^\]]+)\](?!:)/g;
       let m;
-      while ((m = useRegex.exec(line)) !== null) used.add(m[1]);
+      while ((m = useRegex.exec(line)) !== null) {
+        const useId = m[1];
+        if (useId) used.add(useId);
+      }
     }
 
     for (const [id, lineIdx] of defined) {
@@ -816,7 +835,7 @@ export const orphanFootnoteRule: LinterRule = {
           line: lineIdx + 1,
           column: 1,
           endLine: lineIdx + 1,
-          endColumn: lines[lineIdx].length + 1,
+          endColumn: lineAt(lines, lineIdx).length + 1,
           source: 'Structure'
         });
       }
@@ -826,7 +845,7 @@ export const orphanFootnoteRule: LinterRule = {
       if (!defined.has(id)) {
         for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
           if (codeLines.has(lineIdx)) continue;
-          const col = lines[lineIdx].indexOf(`[^${id}]`);
+          const col = lineAt(lines, lineIdx).indexOf(`[^${id}]`);
           if (col !== -1) {
             results.push({
               message: `Referencia [^${id}] usada pero sin definición.`,
@@ -861,16 +880,17 @@ export const frontmatterRule: LinterRule = {
 
     let endLine = -1;
     for (let i = 1; i < lines.length; i++) {
-      if (lines[i].trim() === '---') { endLine = i; break; }
+      if (lineAt(lines, i).trim() === '---') { endLine = i; break; }
     }
     if (endLine === -1) {
-      return [{ message: 'Frontmatter YAML sin cerrar — falta el "---" de cierre.', severity: 'error', line: 1, column: 1, endLine: 1, endColumn: lines[0].length + 1, source: 'Structure' }];
+      return [{ message: 'Frontmatter YAML sin cerrar — falta el "---" de cierre.', severity: 'error', line: 1, column: 1, endLine: 1, endColumn: lineAt(lines, 0).length + 1, source: 'Structure' }];
     }
 
     const fields = new Map<string, { value: string; lineIdx: number }>();
     for (let i = 1; i < endLine; i++) {
-      const m = lines[i].match(/^(\w[\w-]*):\s*(.*)$/);
-      if (m) fields.set(m[1], { value: m[2].trim(), lineIdx: i });
+      const m = lineAt(lines, i).match(/^(\w[\w-]*):\s*(.*)$/);
+      const key = m?.[1];
+      if (key) fields.set(key, { value: (m[2] ?? '').trim(), lineIdx: i });
     }
 
     if (!fields.has('title')) {
@@ -882,7 +902,7 @@ export const frontmatterRule: LinterRule = {
       const d = fields.get('date')!;
       const val = d.value.replace(/^["']|["']$/g, '');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-        results.push({ message: `Frontmatter: formato de fecha inválido "${d.value}". Use YYYY-MM-DD.`, severity: 'warning', line: d.lineIdx + 1, column: 1, endLine: d.lineIdx + 1, endColumn: lines[d.lineIdx].length + 1, source: 'Structure' });
+        results.push({ message: `Frontmatter: formato de fecha inválido "${d.value}". Use YYYY-MM-DD.`, severity: 'warning', line: d.lineIdx + 1, column: 1, endLine: d.lineIdx + 1, endColumn: lineAt(lines, d.lineIdx).length + 1, source: 'Structure' });
       }
     }
     return results;
@@ -931,7 +951,7 @@ export const fleschKincaidEsRule: LinterRule = {
 
     for (let i = 0; i < lines.length; i++) {
       if (codeLines.has(i)) { flush(i - 1); continue; }
-      const t = lines[i].trim();
+      const t = lineAt(lines, i).trim();
       if (!t || /^#{1,6}\s/.test(t) || /^[-*+]\s/.test(t) || /^\d+\.\s/.test(t)) { flush(i - 1); continue; }
       if (paraStart < 0) paraStart = i;
       paraLines.push(t);
@@ -958,8 +978,8 @@ export const quoteStyleRule: LinterRule = {
 
     for (let i = 0; i < lines.length; i++) {
       if (codeLines.has(i)) continue;
-      if (/"/.test(lines[i])) hasStraight = true;
-      if (/[""«»]/.test(lines[i])) hasTypographic = true;
+      if (/"/.test(lineAt(lines, i))) hasStraight = true;
+      if (/[""«»]/.test(lineAt(lines, i))) hasTypographic = true;
     }
     if (!hasStraight || !hasTypographic) return results;
 
@@ -967,7 +987,7 @@ export const quoteStyleRule: LinterRule = {
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
       let m;
-      while ((m = regex.exec(lines[lineIdx])) !== null) {
+      while ((m = regex.exec(lineAt(lines, lineIdx))) !== null) {
         results.push({
           message: 'Comillas rectas mezcladas con tipográficas.',
           suggestion: 'Usa comillas tipográficas: \u201c\u2026\u201d o «\u2026»',
@@ -997,7 +1017,7 @@ export const dashStyleRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (/^[#\-*+>|]/.test(line.trim())) continue;
       let m;
       while ((m = regex.exec(line)) !== null) {
@@ -1031,7 +1051,7 @@ export const numberStyleRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (/^[#\-*+>|]/.test(line.trim())) continue;
       const hasArabic = arabic.test(line); arabic.lastIndex = 0;
       const hasWritten = written.test(line); written.lastIndex = 0;
@@ -1066,16 +1086,17 @@ export const duplicateHeadingsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       const match = line.match(/^(#{1,6})\s+(.+)$/);
       if (!match) continue;
 
-      const normalized = match[2].trim().toLowerCase().replace(/\s+/g, ' ');
+      const headingText = match[2] ?? '';
+      const normalized = headingText.trim().toLowerCase().replace(/\s+/g, ' ');
       const firstLine = seen.get(normalized);
 
       if (firstLine !== undefined) {
         results.push({
-          message: `Encabezado duplicado: "${match[2].trim()}" (primera aparición en línea ${firstLine + 1}).`,
+          message: `Encabezado duplicado: "${headingText.trim()}" (primera aparición en línea ${firstLine + 1}).`,
           suggestion: 'Diferencia los encabezados para mejorar la navegación y los anclas del documento.',
           severity: 'warning',
           line: lineIdx + 1,
@@ -1106,7 +1127,7 @@ export const emptyListItemRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       // Unordered: - , * , + or Ordered: 1.  2.  etc.
       if (/^(\s*[-*+]|\s*\d+\.)\s*$/.test(line)) {
         results.push({
@@ -1147,15 +1168,16 @@ export const linkTextQualityRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       // Match [text](url) patterns
       const linkRegex = /\[([^\]]+)\]\([^)]+\)/g;
       let m;
       while ((m = linkRegex.exec(line)) !== null) {
-        const linkText = m[1].trim().toLowerCase();
+        const rawLinkText = m[1] ?? '';
+        const linkText = rawLinkText.trim().toLowerCase();
         if (BAD_TEXTS.has(linkText)) {
           results.push({
-            message: `Texto de enlace poco descriptivo: "${m[1].trim()}"`,
+            message: `Texto de enlace poco descriptivo: "${rawLinkText.trim()}"`,
             suggestion: 'Usa texto que describa el destino: "[guía de instalación](url)" en lugar de "[clic aquí](url)".',
             severity: 'warning',
             line: lineIdx + 1,
@@ -1187,17 +1209,18 @@ export const htmlInMarkdownRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let m;
       while ((m = HTML_TAGS.exec(line)) !== null) {
+        const tag = m[1] ?? '';
         results.push({
-          message: `HTML crudo detectado: "${m[1]}"`,
+          message: `HTML crudo detectado: "${tag}"`,
           suggestion: 'Usa la sintaxis Markdown equivalente para mejor portabilidad y accesibilidad.',
           severity: 'info',
           line: lineIdx + 1,
           column: m.index + 1,
           endLine: lineIdx + 1,
-          endColumn: m.index + 1 + m[1].length,
+          endColumn: m.index + 1 + tag.length,
           source: 'Accessibility'
         });
       }
@@ -1222,7 +1245,7 @@ export const excessiveExclamationRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (/^[#>]/.test(line.trim())) continue;
 
       // Multiple consecutive exclamation marks
@@ -1262,12 +1285,13 @@ export const sentenceStartConjunctionRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       if (/^[#\->*+|`]/.test(line.trim())) continue;
 
       let m;
       while ((m = conjunctionRegex.exec(line)) !== null) {
         const conj = m[1];
+        if (!conj) continue;
         const conjStart = m.index + m[0].indexOf(conj);
         results.push({
           message: `Oración inicia con la conjunción "${conj}".`,
@@ -1320,7 +1344,7 @@ export const inconsistentTerminologyRule: LinterRule = {
         for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
           if (codeLines.has(lineIdx)) continue;
           const re = new RegExp(`\\b${abbrLabel.replace('.', '\\.')}\\s`, 'i');
-          const m = re.exec(lines[lineIdx]);
+          const m = re.exec(lineAt(lines, lineIdx));
           if (m) {
             results.push({
               message: `Mezcla de "${abbrLabel}" y "${fullLabel}" en el documento.`,
@@ -1359,9 +1383,10 @@ export const brokenInternalLinkRule: LinterRule = {
     const anchors = new Set<string>();
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const match = lines[lineIdx].match(/^#{1,6}\s+(.+)$/);
+      const match = lineAt(lines, lineIdx).match(/^#{1,6}\s+(.+)$/);
       if (match) {
-        const slug = match[1]
+        const headingText = match[1] ?? '';
+        const slug = headingText
           .trim()
           .toLowerCase()
           .replace(/[^\w\s\-áéíóúüñ]/g, '')
@@ -1373,14 +1398,14 @@ export const brokenInternalLinkRule: LinterRule = {
     // Find internal links [text](#anchor) or bare #anchor in [text](#anchor)
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       const linkRegex = /\[[^\]]*\]\(#([^)]+)\)/g;
       let m;
       while ((m = linkRegex.exec(line)) !== null) {
-        const anchor = m[1].trim().toLowerCase();
+        const anchor = (m[1] ?? '').trim().toLowerCase();
         if (!anchors.has(anchor)) {
           results.push({
-            message: `Enlace interno roto: "#${m[1]}" no corresponde a ningún encabezado.`,
+            message: `Enlace interno roto: "#${m[1] ?? ''}" no corresponde a ningún encabezado.`,
             suggestion: 'Verifica el ancla o crea un encabezado que la genere.',
             severity: 'warning',
             line: lineIdx + 1,

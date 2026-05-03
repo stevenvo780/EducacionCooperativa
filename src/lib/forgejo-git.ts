@@ -299,6 +299,7 @@ export const applyCommit = async (params: {
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
+    if (!chunk) continue;
     const chunkIndex = i + 1;
     const message = chunks.length === 1
       ? params.message

@@ -71,6 +71,16 @@ const safeJsonParse = (value: string | undefined): Record<string, unknown> => {
 
 const stringifyToolResult = (result: unknown) => JSON.stringify(result, null, 2);
 
+const toolExecutionStatus = (toolCalls: AgentToolCall[]) => {
+  const firstToolCall = toolCalls[0];
+  if (toolCalls.length > 1) return `Ejecutando ${toolCalls.length} herramientas en paralelo…`;
+  return firstToolCall ? `Ejecutando ${firstToolCall.name}…` : 'Sin herramientas para ejecutar…';
+};
+
+const firstToolResultSummary = (
+  toolResults: Array<{ toolCall: AgentToolCall; result: AgentToolExecutionResult }>
+) => toolResults[0]?.result.summary ?? '';
+
 /**
  * Parse structured error bodies from AI provider APIs and return a
  * user-friendly Spanish message that includes rate-limit / quota hints.
@@ -136,8 +146,20 @@ async function executeToolsParallel(
   const settled = await Promise.allSettled(
     toolCalls.map(tc => executeAgentTool(tc, executionContext))
   );
-  return settled.map((item, i) => {
-    const toolCall = toolCalls[i];
+  return toolCalls.map((toolCall, i) => {
+    const item = settled[i];
+    if (!item) {
+      return {
+        toolCall,
+        result: {
+          ok: false,
+          name: toolCall.name,
+          callId: toolCall.id,
+          summary: `Error inesperado ejecutando ${toolCall.name}: resultado ausente`,
+          error: 'Resultado de herramienta ausente'
+        } as AgentToolExecutionResult
+      };
+    }
     if (item.status === 'fulfilled') return { toolCall, result: item.value };
     return {
       toolCall,
@@ -234,11 +256,7 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
     });
 
     // Announce & execute all tools concurrently
-    await emitStatus(
-      toolCalls.length > 1
-        ? `Ejecutando ${toolCalls.length} herramientas en paralelo…`
-        : `Ejecutando ${toolCalls[0].name}…`
-    );
+    await emitStatus(toolExecutionStatus(toolCalls));
     for (const tc of toolCalls) {
       await emitStep(createStep({
         id: `call-${tc.id}`, type: 'tool_call',
@@ -268,7 +286,7 @@ async function runOpenAI(options: ProviderRunOptions): Promise<AgentRun> {
     }
 
     if (pendingConfirmation) {
-      finalReply = visibleContent || toolResults[0].result.summary;
+      finalReply = visibleContent || firstToolResultSummary(toolResults);
       return {
         mode: options.mode, provider: options.provider,
         iterations, steps, finalReply, pendingConfirmation, rollback
@@ -403,11 +421,7 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
     messages.push({ role: 'assistant', content: blocks });
 
     // Announce & execute all tools concurrently
-    await emitStatus(
-      toolCalls.length > 1
-        ? `Ejecutando ${toolCalls.length} herramientas en paralelo…`
-        : `Ejecutando ${toolCalls[0].name}…`
-    );
+    await emitStatus(toolExecutionStatus(toolCalls));
     for (const tc of toolCalls) {
       await emitStep(createStep({
         id: `call-${tc.id}`, type: 'tool_call',
@@ -440,7 +454,7 @@ async function runAnthropic(options: ProviderRunOptions): Promise<AgentRun> {
     messages.push({ role: 'user', content: toolResultBlocks });
 
     if (pendingConfirmation) {
-      finalReply = visibleContent || toolResults[0].result.summary;
+      finalReply = visibleContent || firstToolResultSummary(toolResults);
       return {
         mode: options.mode, provider: options.provider,
         iterations, steps, finalReply, pendingConfirmation, rollback
@@ -536,11 +550,7 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
     contents.push({ role: 'model', parts: parts as Array<Record<string, unknown>> });
 
     // Announce & execute all tools concurrently
-    await emitStatus(
-      toolCalls.length > 1
-        ? `Ejecutando ${toolCalls.length} herramientas en paralelo…`
-        : `Ejecutando ${toolCalls[0].name}…`
-    );
+    await emitStatus(toolExecutionStatus(toolCalls));
     for (const tc of toolCalls) {
       await emitStep(createStep({
         id: `call-${tc.id}`, type: 'tool_call',
@@ -571,7 +581,7 @@ async function runGemini(options: ProviderRunOptions): Promise<AgentRun> {
     contents.push({ role: 'user', parts: functionResponses });
 
     if (pendingConfirmation) {
-      finalReply = visibleContent || toolResults[0].result.summary;
+      finalReply = visibleContent || firstToolResultSummary(toolResults);
       return {
         mode: options.mode, provider: options.provider,
         iterations, steps, finalReply, pendingConfirmation, rollback

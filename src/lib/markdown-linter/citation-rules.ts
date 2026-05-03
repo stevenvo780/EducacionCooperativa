@@ -8,7 +8,7 @@
  * entradas bibliográficas formalizadas y se cruzan con citas en texto.
  */
 
-import { type LinterRule, type LinterDiagnostic, getCodeBlockLines } from './types';
+import { type LinterRule, type LinterDiagnostic, getCodeBlockLines, lineAt } from './types';
 
 /**
  * Detecta la línea donde empieza una sección de bibliografía/referencias.
@@ -17,7 +17,7 @@ import { type LinterRule, type LinterDiagnostic, getCodeBlockLines } from './typ
 function findBibliographySection(lines: string[]): number {
   const bibPattern = /^#{1,3}\s+(referencias?|bibliografía|bibliography|fuentes?|works\s+cited|literatura\s+citada)\s*$/i;
   for (let i = 0; i < lines.length; i++) {
-    if (bibPattern.test(lines[i].trim())) return i;
+    if (bibPattern.test(lineAt(lines, i).trim())) return i;
   }
   return -1;
 }
@@ -35,8 +35,10 @@ function parseInTextCitation(raw: string): { key: string; raw: string } | null {
     /\(([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+(?:y|and|&)\s+[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+)?(?:\s+et\s+al\.?)?),\s*(\d{4}[a-z]?)(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/
   );
   if (parenMatch) {
-    const author = parenMatch[1].split(/\s+(?:y|and|&)\s+/)[0].split(/\s+et\s+al/)[0].trim();
-    return { key: `${author.toLowerCase()}_${parenMatch[2]}`, raw };
+    const author = (parenMatch[1] ?? '').split(/\s+(?:y|and|&)\s+/)[0]?.split(/\s+et\s+al/)[0]?.trim();
+    const year = parenMatch[2];
+    if (!author || !year) return null;
+    return { key: `${author.toLowerCase()}_${year}`, raw };
   }
 
   // Apellido (Año) — narrativa
@@ -44,7 +46,10 @@ function parseInTextCitation(raw: string): { key: string; raw: string } | null {
     /\b([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?)\s*\((\d{4}[a-z]?)(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/
   );
   if (narrativeMatch) {
-    return { key: `${narrativeMatch[1].toLowerCase()}_${narrativeMatch[2]}`, raw };
+    const author = narrativeMatch[1];
+    const year = narrativeMatch[2];
+    if (!author || !year) return null;
+    return { key: `${author.toLowerCase()}_${year}`, raw };
   }
 
   return null;
@@ -60,8 +65,10 @@ function parseInTextCitation(raw: string): { key: string; raw: string } | null {
 function parseBibEntry(line: string): string | null {
   const match = line.trim().match(/^([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:[A-Za-záéíóúüñ\s,\.]+)?)\s*\((\d{4}[a-z]?)\)/);
   if (!match) return null;
-  const firstAuthor = match[1].split(',')[0].trim().split(/\s+/).pop()!;
-  return `${firstAuthor.toLowerCase()}_${match[2]}`;
+  const firstAuthor = (match[1] ?? '').split(',')[0]?.trim().split(/\s+/).pop();
+  const year = match[2];
+  if (!firstAuthor || !year) return null;
+  return `${firstAuthor.toLowerCase()}_${year}`;
 }
 
 // 1. CITAS APA MAL FORMADAS
@@ -87,7 +94,7 @@ export const apaMalformedRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
 
       let match;
       while ((match = missingComma.exec(line)) !== null) {
@@ -154,7 +161,7 @@ export const missingBibliographyRule: LinterRule = {
     // Recopilar entradas bibliográficas
     const bibKeys = new Set<string>();
     for (let i = bibStart + 1; i < lines.length; i++) {
-      const key = parseBibEntry(lines[i]);
+      const key = parseBibEntry(lineAt(lines, i));
       if (key) bibKeys.add(key);
     }
     if (bibKeys.size === 0) return results;
@@ -165,7 +172,7 @@ export const missingBibliographyRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < Math.min(bibStart, lines.length); lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
 
       for (const regex of [citationRegex, narrativeRegex]) {
         let match;
@@ -210,8 +217,8 @@ export const orphanBibliographyRule: LinterRule = {
     // Recopilar entradas bibliográficas con su línea
     const bibEntries: Array<{ key: string; lineIdx: number; raw: string }> = [];
     for (let i = bibStart + 1; i < lines.length; i++) {
-      const key = parseBibEntry(lines[i]);
-      if (key) bibEntries.push({ key, lineIdx: i, raw: lines[i].trim() });
+      const key = parseBibEntry(lineAt(lines, i));
+      if (key) bibEntries.push({ key, lineIdx: i, raw: lineAt(lines, i).trim() });
     }
 
     // Recopilar todas las claves citadas en el texto
@@ -221,7 +228,7 @@ export const orphanBibliographyRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < bibStart; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       for (const regex of [citationRegex, narrativeRegex]) {
         let match;
         while ((match = regex.exec(line)) !== null) {
@@ -241,7 +248,7 @@ export const orphanBibliographyRule: LinterRule = {
           line: entry.lineIdx + 1,
           column: 1,
           endLine: entry.lineIdx + 1,
-          endColumn: lines[entry.lineIdx].length + 1,
+          endColumn: lineAt(lines, entry.lineIdx).length + 1,
           source: 'Citation'
         });
       }
@@ -271,7 +278,7 @@ export const doiFormatRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
 
       let match;
       while ((match = badDoi.exec(line)) !== null) {
@@ -325,7 +332,7 @@ export const missingReferenceSectionRule: LinterRule = {
     const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+,\s*\d{4}\)/;
     let hasCitations = false;
     for (let i = 0; i < lines.length; i++) {
-      if (!codeLines.has(i) && citationRegex.test(lines[i])) {
+      if (!codeLines.has(i) && citationRegex.test(lineAt(lines, i))) {
         hasCitations = true;
         break;
       }
@@ -364,7 +371,7 @@ export const ibidOpCitRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let match;
       while ((match = ibidRegex.exec(line)) !== null) {
         results.push({

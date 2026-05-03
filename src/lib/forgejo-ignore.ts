@@ -22,7 +22,7 @@ const findGitignoreDoc = async (workspaceQuery: FirebaseFirestore.Query): Promis
   // Prefer el que esté en la raíz (folder = "No estructurado" / vacío).
   const docs = snap.docs.map(d => d.data() as DocLite);
   const root = docs.find(d => !d.folder || d.folder === 'No estructurado');
-  return root ?? docs[0];
+  return root ?? docs[0] ?? null;
 };
 
 /**

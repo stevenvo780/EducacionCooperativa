@@ -1,7 +1,8 @@
 import {
   type LinterRule,
   type LinterDiagnostic,
-  getCodeBlockLines
+  getCodeBlockLines,
+  lineAt
 } from './types';
 import { isSpellEngineReady, isCorrect, suggest } from './spell-engine';
 
@@ -29,7 +30,7 @@ function pushMathRange(rangesByLine: Range[][], startLine: number, startCol: num
   for (let line = startLine; line <= endLine; line++) {
     const lineStart = line === startLine ? startCol : 0;
     const lineEnd = line === endLine ? endCol : Number.POSITIVE_INFINITY;
-    rangesByLine[line].push({ start: lineStart, end: lineEnd });
+    rangesByLine[line]?.push({ start: lineStart, end: lineEnd });
   }
 }
 
@@ -40,7 +41,7 @@ function getMathRangesByLine(lines: string[]): Range[][] {
     | null = null;
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
+    const line = lineAt(lines, lineIndex);
 
     for (let column = 0; column < line.length; column++) {
       if (line[column] !== '$') continue;
@@ -101,7 +102,7 @@ export const spellingRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       WORD_REGEX.lastIndex = 0;
       let wordMatch;
       while ((wordMatch = WORD_REGEX.exec(line)) !== null) {
@@ -110,7 +111,7 @@ export const spellingRule: LinterRule = {
         const end = start + word.length;
 
         if (!spellReady) continue;
-        if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
+        if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
         if (word.length <= 2) continue;
         if (/^\d+$/.test(word)) continue;
         if (matchesAccentPattern(word)) continue;
@@ -152,14 +153,16 @@ export const doubledWordsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       let match;
       while ((match = regex.exec(line)) !== null) {
         const start = match.index;
         const end = start + match[0].length;
-        if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
+        if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
+        const repeatedWord = match[1];
+        if (!repeatedWord) continue;
         results.push({
-          message: `Palabra duplicada: "${match[1]} ${match[1]}"`,
+          message: `Palabra duplicada: "${repeatedWord} ${repeatedWord}"`,
           suggestion: 'Elimina una de las repeticiones.',
           severity: 'warning',
           line: lineIdx + 1,
@@ -167,7 +170,7 @@ export const doubledWordsRule: LinterRule = {
           endLine: lineIdx + 1,
           endColumn: match.index + 1 + match[0].length,
           source: 'Spelling',
-          replacements: [match[1]]
+          replacements: [repeatedWord]
         });
       }
     }
@@ -312,7 +315,7 @@ export const accentPatternRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
 
       for (const rule of ACCENT_SUFFIX_RULES) {
         let match;
@@ -321,7 +324,7 @@ export const accentPatternRule: LinterRule = {
           const word = match[0];
           const start = match.index;
           const end = start + word.length;
-          if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
+          if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
           if (/[áéíóú]/i.test(word)) continue;
 
           const fixed = rule.fix(word);
@@ -378,7 +381,7 @@ export const suspiciousPatternsRule: LinterRule = {
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
-      const line = lines[lineIdx];
+      const line = lineAt(lines, lineIdx);
       const wordRegex = /\b[a-záéíóúñü]{3,}\b/gi;
       let wordMatch;
 
@@ -386,7 +389,7 @@ export const suspiciousPatternsRule: LinterRule = {
         const word = wordMatch[0];
         const start = wordMatch.index;
         const end = start + word.length;
-        if (overlapsMathRange(mathRangesByLine[lineIdx], start, end)) continue;
+        if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
         const lower = word.toLowerCase();
         if (SUSPICIOUS_WHITELIST.has(lower)) continue;
 
