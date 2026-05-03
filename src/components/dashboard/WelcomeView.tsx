@@ -23,6 +23,7 @@ import { authFetch } from '@/services/apiClient';
 interface WelcomeViewProps {
   workspaceName?: string;
   recentDocs: DocItem[];
+  loadingRecents?: boolean;
   onOpenDoc: (doc: DocItem) => void;
   onCreateDoc: () => void;
   onCreateFolder: () => void;
@@ -88,6 +89,7 @@ function formatRelativeDate(raw: unknown): string {
 export default function WelcomeView({
   workspaceName,
   recentDocs,
+  loadingRecents,
   onOpenDoc,
   onCreateDoc,
   onCreateFolder,
@@ -165,7 +167,16 @@ export default function WelcomeView({
         </Section>
 
         <Section title="Recientes">
-          {recentDocs.length === 0 ? (
+          {loadingRecents ? (
+            <ul className="space-y-1">
+              {[0, 1, 2].map((i) => (
+                <li key={i} className="flex items-center gap-3 px-3 py-2">
+                  <span className="h-4 w-4 shrink-0 animate-pulse rounded bg-surface-800" />
+                  <span className="h-3 flex-1 animate-pulse rounded bg-surface-800" />
+                </li>
+              ))}
+            </ul>
+          ) : recentDocs.length === 0 ? (
             <p className="text-xs text-surface-500">Aún no has abierto documentos en este espacio.</p>
           ) : (
             <ul className="divide-y divide-surface-800/60 rounded-md border border-surface-800/60">
