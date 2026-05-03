@@ -122,6 +122,27 @@ describe('diagnostics-bus', () => {
     expect(getAllDiagnostics()[0].id).toBe('fixed-id');
   });
 
+  it('trunca a MAX_ITEMS_PER_BUCKET items por bucket', () => {
+    const items = Array.from({ length: 600 }, (_, i) => ({
+      severity: 'warning' as const,
+      message: `item-${i}`
+    }));
+    publishDiagnostics('md', 'doc-1', items);
+    const all = getAllDiagnostics();
+    expect(all.length).toBeLessThanOrEqual(500);
+  });
+
+  it('LRU evict cuando se supera MAX_BUCKETS', () => {
+    // Crear más buckets que el cap. Como solo testeamos comportamiento
+    // observable (no contar exactamente), verificamos que el bus no crece
+    // sin límite.
+    for (let i = 0; i < 250; i++) {
+      publishDiagnostics('md', `doc-${i}`, [{ severity: 'warning', message: 'x' }]);
+    }
+    const all = getAllDiagnostics();
+    expect(all.length).toBeLessThanOrEqual(200);
+  });
+
   it('preserva range, detail y actions del input', () => {
     publishDiagnostics('md', 'doc-1', [{
       severity: 'warning',

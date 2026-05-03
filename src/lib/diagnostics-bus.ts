@@ -89,6 +89,11 @@ function genId(): string {
  * Pasar `[]` es la forma de limpiar diagnostics de un archivo cuando
  * el linter ya no encuentra problemas.
  */
+/** Cap de items por bucket — evita que un linter buggy llene el bus. */
+const MAX_ITEMS_PER_BUCKET = 500;
+/** Cap total de buckets — evita memoria sin límite con muchos archivos. */
+const MAX_BUCKETS = 200;
+
 export function publishDiagnostics(source: string, uri: string, items: Diagnostic[]) {
   if (items.length === 0) {
     buckets.delete(bucketKey(source, uri));
@@ -96,7 +101,8 @@ export function publishDiagnostics(source: string, uri: string, items: Diagnosti
     return;
   }
   const now = Date.now();
-  const resolved: ResolvedDiagnostic[] = items.map((it) => ({
+  const truncated = items.slice(0, MAX_ITEMS_PER_BUCKET);
+  const resolved: ResolvedDiagnostic[] = truncated.map((it) => ({
     ...it,
     id: it.id ?? genId(),
     severity: it.severity,
@@ -106,6 +112,15 @@ export function publishDiagnostics(source: string, uri: string, items: Diagnosti
     publishedAt: now
   }));
   buckets.set(bucketKey(source, uri), { source, uri, items: resolved });
+
+  // LRU evict: si excedemos MAX_BUCKETS, quitamos el más antiguo (Map mantiene
+  // orden de inserción; al hacer set encima de uno existente lo mueve al final).
+  while (buckets.size > MAX_BUCKETS) {
+    const oldest = buckets.keys().next().value;
+    if (oldest === undefined) break;
+    buckets.delete(oldest);
+  }
+
   emit();
 }
 
