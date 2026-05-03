@@ -1152,6 +1152,21 @@ function DashboardContent() {
                 return;
             }
 
+            if (e.key === '?' && !e.altKey && !hasPrimaryModifier) {
+                const target = e.target as HTMLElement | null;
+                const isEditing = target && (
+                    target.tagName === 'INPUT' ||
+                    target.tagName === 'TEXTAREA' ||
+                    target.isContentEditable
+                );
+                if (!isEditing) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    setShowKeyboardHelp(true);
+                    return;
+                }
+            }
+
             if (chordActive) {
                 if (matchesShortcut('KeyZ', 'z') && !e.altKey && !e.shiftKey) {
                     e.preventDefault();
