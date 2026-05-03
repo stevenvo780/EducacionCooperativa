@@ -1230,6 +1230,27 @@ function DashboardContent() {
                 return;
             }
 
+            if (matchesShortcut('KeyW', 'w') && !e.shiftKey && !e.altKey) {
+                if (selectedDocId) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    void closeTabById(selectedDocId);
+                }
+                return;
+            }
+
+            if (e.code === 'Tab' && !e.altKey) {
+                if (openTabs.length <= 1) return;
+                e.preventDefault();
+                clearShortcutChord();
+                const currentIdx = selectedDocId ? openTabs.findIndex(t => t.id === selectedDocId) : -1;
+                const dir = e.shiftKey ? -1 : 1;
+                const nextIdx = (currentIdx + dir + openTabs.length) % openTabs.length;
+                const nextTab = openTabs[nextIdx];
+                if (nextTab) setSelectedDocId(nextTab.id);
+                return;
+            }
+
             if ((e.code === 'Backquote' || normalizedKey === '`' || normalizedKey === 'dead') && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
@@ -1268,7 +1289,10 @@ function DashboardContent() {
         showPricingModal,
         showQuickSearch,
         isCompact,
-        setShowMobileSidebar
+        setShowMobileSidebar,
+        closeTabById,
+        openTabs,
+        selectedDocId
     ]);
 
     const resolveDialog = (result: DialogResult) => {

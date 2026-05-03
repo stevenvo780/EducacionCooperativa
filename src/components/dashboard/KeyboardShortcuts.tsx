@@ -39,6 +39,14 @@ const GROUPS: ShortcutGroup[] = [
     ]
   },
   {
+    title: 'Pestañas',
+    items: [
+      { keys: 'Ctrl+Tab', label: 'Siguiente pestaña' },
+      { keys: 'Ctrl+Shift+Tab', label: 'Pestaña anterior' },
+      { keys: 'Ctrl+W', label: 'Cerrar pestaña activa' }
+    ]
+  },
+  {
     title: 'Edición',
     items: [
       { keys: 'Enter', label: 'Enviar mensaje en chat AI' },
