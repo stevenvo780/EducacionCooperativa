@@ -1721,153 +1721,82 @@ async function extractPendingTasks(call: AgentToolCall, ctx: AgentExecutionConte
   }, createdCards.map((card) => ({ action: 'delete_board_card', args: { cardId: card.id, confirmed: true } })));
 }
 
+type ToolHandler = (call: AgentToolCall, ctx: AgentExecutionContext) => Promise<AgentToolExecutionResult>;
+
+const DOCUMENT_TOOL_HANDLERS: Record<string, ToolHandler> = {
+  list_documents: listDocuments,
+  list_files: listDocuments,
+  read_document: readDocument,
+  read_file: readDocument,
+  create_document: createDocument,
+  create_file: createDocument,
+  update_document: updateDocument,
+  rename_document: renameDocument,
+  rename_file: renameDocument,
+  move_document: moveDocument,
+  delete_document: deleteDocument,
+  delete_file: deleteDocument,
+  search_documents: searchDocuments,
+  list_folders: listFolders,
+  create_folder: createFolder,
+  get_workspace_info: getWorkspaceInfo,
+  restore_document: restoreDocument
+};
+
+const SNIPPET_AND_ST_TOOL_HANDLERS: Record<string, ToolHandler> = {
+  list_snippets: listSnippets,
+  create_snippet: createSnippet,
+  read_snippet: readSnippet,
+  search_snippets: searchSnippets,
+  update_snippet: updateSnippet,
+  delete_snippet: deleteSnippet,
+  check_logic: checkLogic,
+  formalize_text: formalizeText,
+  list_st_profiles: listStProfilesTool,
+  validate_st_syntax: validateStSyntax,
+  run_st_program: runStProgram,
+  render_st_glossary: renderStGlossary,
+  explain_formalization: explainFormalization
+};
+
+const BOARD_TOOL_HANDLERS: Record<string, ToolHandler> = {
+  get_board: getBoard,
+  create_board_column: createBoardColumn,
+  rename_board_column: renameBoardColumn,
+  delete_board_column: deleteBoardColumn,
+  create_board_card: createBoardCard,
+  update_board_card: updateBoardCard,
+  move_board_card: moveBoardCard,
+  delete_board_card: deleteBoardCard,
+  restore_board_card: restoreBoardCard,
+  restore_board_column: restoreBoardColumn,
+  extract_pending_tasks: extractPendingTasks
+};
+
+const SEMANTIC_AND_INTELLIGENCE_TOOL_HANDLERS: Record<string, ToolHandler> = {
+  get_semantic_state: getSemanticState,
+  list_concepts: listConcepts,
+  define_concept: defineConcept,
+  create_relation: createRelation,
+  list_glossary_entries: listGlossaryEntries,
+  search_glossary_entries: searchGlossaryEntries,
+  summarize_document: summarizeDocument,
+  compare_documents: compareDocuments,
+  analyze_document: analyzeDocument
+};
+
+const TOOL_HANDLERS: Record<string, ToolHandler> = {
+  ...DOCUMENT_TOOL_HANDLERS,
+  ...SNIPPET_AND_ST_TOOL_HANDLERS,
+  ...BOARD_TOOL_HANDLERS,
+  ...SEMANTIC_AND_INTELLIGENCE_TOOL_HANDLERS
+};
+
 export async function executeAgentTool(call: AgentToolCall, ctx: AgentExecutionContext): Promise<AgentToolExecutionResult> {
   try {
-    let result: AgentToolExecutionResult;
-    switch (call.name) {
-      case 'list_documents':
-      case 'list_files':
-        result = await listDocuments(call, ctx);
-        break;
-      case 'read_document':
-      case 'read_file':
-        result = await readDocument(call, ctx);
-        break;
-      case 'create_document':
-      case 'create_file':
-        result = await createDocument(call, ctx);
-        break;
-      case 'update_document':
-        result = await updateDocument(call, ctx);
-        break;
-      case 'rename_document':
-      case 'rename_file':
-        result = await renameDocument(call, ctx);
-        break;
-      case 'move_document':
-        result = await moveDocument(call, ctx);
-        break;
-      case 'delete_document':
-      case 'delete_file':
-        result = await deleteDocument(call, ctx);
-        break;
-      case 'search_documents':
-        result = await searchDocuments(call, ctx);
-        break;
-      case 'list_folders':
-        result = await listFolders(call, ctx);
-        break;
-      case 'create_folder':
-        result = await createFolder(call, ctx);
-        break;
-      case 'get_workspace_info':
-        result = await getWorkspaceInfo(call, ctx);
-        break;
-      case 'get_semantic_state':
-        result = await getSemanticState(call, ctx);
-        break;
-      case 'list_snippets':
-        result = await listSnippets(call, ctx);
-        break;
-      case 'create_snippet':
-        result = await createSnippet(call, ctx);
-        break;
-      case 'read_snippet':
-        result = await readSnippet(call, ctx);
-        break;
-      case 'search_snippets':
-        result = await searchSnippets(call, ctx);
-        break;
-      case 'update_snippet':
-        result = await updateSnippet(call, ctx);
-        break;
-      case 'delete_snippet':
-        result = await deleteSnippet(call, ctx);
-        break;
-      case 'get_board':
-        result = await getBoard(call, ctx);
-        break;
-      case 'create_board_column':
-        result = await createBoardColumn(call, ctx);
-        break;
-      case 'rename_board_column':
-        result = await renameBoardColumn(call, ctx);
-        break;
-      case 'delete_board_column':
-        result = await deleteBoardColumn(call, ctx);
-        break;
-      case 'create_board_card':
-        result = await createBoardCard(call, ctx);
-        break;
-      case 'update_board_card':
-        result = await updateBoardCard(call, ctx);
-        break;
-      case 'move_board_card':
-        result = await moveBoardCard(call, ctx);
-        break;
-      case 'delete_board_card':
-        result = await deleteBoardCard(call, ctx);
-        break;
-      case 'check_logic':
-        result = await checkLogic(call, ctx);
-        break;
-      case 'formalize_text':
-        result = await formalizeText(call, ctx);
-        break;
-      case 'list_st_profiles':
-        result = await listStProfilesTool(call);
-        break;
-      case 'validate_st_syntax':
-        result = await validateStSyntax(call);
-        break;
-      case 'run_st_program':
-        result = await runStProgram(call);
-        break;
-      case 'render_st_glossary':
-        result = await renderStGlossary(call);
-        break;
-      case 'explain_formalization':
-        result = await explainFormalization(call, ctx);
-        break;
-      case 'list_concepts':
-        result = await listConcepts(call, ctx);
-        break;
-      case 'define_concept':
-        result = await defineConcept(call, ctx);
-        break;
-      case 'create_relation':
-        result = await createRelation(call, ctx);
-        break;
-      case 'list_glossary_entries':
-        result = await listGlossaryEntries(call, ctx);
-        break;
-      case 'search_glossary_entries':
-        result = await searchGlossaryEntries(call, ctx);
-        break;
-      case 'summarize_document':
-        result = await summarizeDocument(call, ctx);
-        break;
-      case 'compare_documents':
-        result = await compareDocuments(call, ctx);
-        break;
-      case 'analyze_document':
-        result = await analyzeDocument(call, ctx);
-        break;
-      case 'extract_pending_tasks':
-        result = await extractPendingTasks(call, ctx);
-        break;
-      case 'restore_document':
-        result = await restoreDocument(call, ctx);
-        break;
-      case 'restore_board_card':
-        result = await restoreBoardCard(call, ctx);
-        break;
-      case 'restore_board_column':
-        result = await restoreBoardColumn(call, ctx);
-        break;
-      default:
-        throw new Error(`Tool desconocida: ${call.name}`);
-    }
+    const handler = TOOL_HANDLERS[call.name];
+    if (!handler) throw new Error(`Tool desconocida: ${call.name}`);
+    const result = await handler(call, ctx);
 
     await writeAuditLog(ctx, call, result);
     return result;
