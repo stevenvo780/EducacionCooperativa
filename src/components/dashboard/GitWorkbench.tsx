@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import GitAccessPanel from '@/components/dashboard/GitAccessPanel';
 import { useAuth } from '@/context/AuthContext';
+import { fetchZod } from '@/lib/fetch-zod';
+import { gitWorkbenchStatusSchema, gitWorkbenchCommitsSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
@@ -99,20 +101,17 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
     }, [workspaceId]);
 
     const loadStatus = useCallback(async () => {
-        const res = await authFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/status`);
-        if (!res.ok) {
-            const txt = await res.text();
-            throw new Error(`status HTTP ${res.status} ${txt.slice(0, 100)}`);
-        }
-        const data = await res.json() as { items: StatusItem[] };
+        const data = await fetchZod(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/status`, gitWorkbenchStatusSchema);
         return data.items ?? [];
     }, [workspaceId]);
 
     const loadLog = useCallback(async () => {
-        const res = await authFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/log?limit=30`);
-        if (!res.ok) return [] as CommitInfo[];
-        const data = await res.json() as { commits: CommitInfo[] };
-        return data.commits ?? [];
+        try {
+            const data = await fetchZod(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/log?limit=30`, gitWorkbenchCommitsSchema);
+            return data.commits ?? [];
+        } catch {
+            return [];
+        }
     }, [workspaceId]);
 
     const refreshAll = useCallback(async () => {

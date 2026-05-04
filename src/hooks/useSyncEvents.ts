@@ -6,7 +6,7 @@ import { getErrorMessage } from '@/lib/error-utils';
 import { ref, onChildAdded, off, push, query, orderByChild, startAt } from 'firebase/database';
 import { SyncEventSource, SyncEventType, type SyncEvent } from '@/types/sync';
 import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
-import { parseSyncEventPayload } from '@/lib/contracts';
+import { parseSyncEventPayload } from '@agora/contracts';
 
 interface UseSyncEventsOptions {
   workspaceId: string | null;
@@ -62,6 +62,7 @@ export function useSyncEvents({
         folder: folder || 'No estructurado',
         docId: docId || null,
         timestamp: Date.now(),
+        schemaVersion: 1,
         source: SyncEventSource.Frontend
       });
     } catch (error) {

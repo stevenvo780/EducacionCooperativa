@@ -9,6 +9,7 @@ import {
   toOllamaTools,
   toOpenAITools
 } from '@/lib/agora-ai/toolDefinitions';
+import { AGENT_UI_PANEL_REGISTRY, AGENT_UI_PANELS, commandTypeForPanel, isAgentUiPanel } from '@/lib/agora-ai/uiPanels';
 import { DocumentType } from '@/types/documents';
 
 describe('agora ai agent prompt', () => {
@@ -86,6 +87,37 @@ describe('agora ai tools', () => {
     // Ollama uses the same OpenAI-compatible format
     expect(ollamaTools[0]).toHaveProperty('type', 'function');
     expect(ollamaTools[0]?.function?.name).toBe(AGORA_AGENT_TOOL_NAMES[0]);
+  });
+
+  it('usa el registry único para el schema de open_app_panel', () => {
+    const tool = AGORA_AGENT_TOOLS.find((item) => item.name === 'open_app_panel');
+    expect(tool).toBeDefined();
+    expect(tool?.parameters.properties.panel?.enum).toEqual([...AGENT_UI_PANELS]);
+    expect(tool?.description).toContain(AGENT_UI_PANELS.join(', '));
+  });
+
+  it('deriva tipos de comando UI desde el panel', () => {
+    expect(commandTypeForPanel('terminal')).toBe('open_terminal');
+    expect(commandTypeForPanel('problems')).toBe('open_problems');
+    expect(commandTypeForPanel('ai-config')).toBe('open_ai_config');
+    expect(commandTypeForPanel('linter-config')).toBe('open_linter_config');
+    expect(commandTypeForPanel('board')).toBe('open_panel');
+    expect(isAgentUiPanel('settings')).toBe(true);
+    expect(isAgentUiPanel('st-runner')).toBe(false);
+  });
+
+  it('todo panel permitido tiene estrategia de apertura frontend', () => {
+    expect(AGENT_UI_PANEL_REGISTRY.map(entry => entry.panelId)).toEqual([...AGENT_UI_PANELS]);
+    for (const panel of AGENT_UI_PANEL_REGISTRY) {
+      expect(panel.label).toBeTruthy();
+      expect(panel.openAction).toBeTruthy();
+      if (panel.openAction === 'mosaic') {
+        expect(panel).toHaveProperty('mosaicType');
+      }
+      if (panel.openAction === 'sidebar') {
+        expect(panel).toHaveProperty('sidebarView');
+      }
+    }
   });
 });
 
@@ -202,5 +234,37 @@ describe('agora ai workspace ui events', () => {
 
     expect(effects.openDocumentsEvent).toBeNull();
     expect(effects.mutatedEvent?.mutations).toHaveLength(1);
+  });
+
+  it('descarta comandos UI con paneles no registrados', () => {
+    const effects = collectAgentWorkspaceEffects({
+      mode: 'agent',
+      provider: 'openai',
+      iterations: 1,
+      finalReply: 'Intenté abrir panel',
+      rollback: [],
+      steps: [
+        {
+          id: 'bad-ui-panel',
+          type: 'tool_result',
+          title: 'Panel inválido',
+          startedAt: Date.now(),
+          result: {
+            ok: true,
+            name: 'open_app_panel',
+            callId: 'call-ui',
+            summary: 'panel',
+            data: {
+              uiCommand: {
+                type: 'open_panel',
+                panel: 'st-runner'
+              }
+            }
+          }
+        }
+      ]
+    }, 'workspace-1');
+
+    expect(effects.uiCommandEvents).toHaveLength(0);
   });
 });

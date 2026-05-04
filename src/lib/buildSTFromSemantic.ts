@@ -96,6 +96,8 @@ interface ConceptProjection {
   text: string;
   definition?: string;
   confidence?: number;
+  tentative?: boolean;
+  warning?: string;
   sourceConceptId: string;
 }
 
@@ -124,6 +126,8 @@ const buildConceptProjection = (
   const claimName = `CLM_${conceptName}`;
 
   let formula = concept.formula?.trim() || '';
+  let tentative = false;
+  let warning: string | undefined;
   if (!formula) {
     try {
       const result = formalize(fullText, {
@@ -134,13 +138,16 @@ const buildConceptProjection = (
       });
       if (result.ok) {
         formula = extractFirstFormula(result.stCode);
+      } else {
+        warning = 'formalizacion_tentativa: autologic no produjo una formula validada';
       }
-    } catch {
-      // Fallback to a generated atom alias.
+    } catch (error) {
+      warning = `formalizacion_tentativa: ${error instanceof Error ? error.message : 'error desconocido'}`;
     }
   }
 
   if (!formula) {
+    tentative = true;
     formula = conceptName;
   }
 
@@ -156,6 +163,8 @@ const buildConceptProjection = (
     text: fullText,
     definition: concept.definition,
     confidence: concept.confidence,
+    tentative,
+    warning,
     sourceConceptId: concept.id
   };
 };
@@ -193,6 +202,12 @@ const buildDefinitionsSection = (projections: ConceptProjection[]) => {
   const lines = ['// [definitions]'];
   projections.forEach((projection) => {
     lines.push(makeManagedComment('definition', projection.stableId));
+    if (projection.tentative) {
+      lines.push(`// formalización tentativa: revisar "${escapeSTString(projection.text)}"`);
+    }
+    if (projection.warning) {
+      lines.push(`// warning: ${escapeSTString(projection.warning)}`);
+    }
     lines.push(`interpret "${escapeSTString(projection.text)}" as ${projection.conceptName}`);
     lines.push(
       `define ${projection.definitionName} = ${projection.formula}${projection.definition ? ` description "${escapeSTString(projection.definition)}"` : ''}`

@@ -11,6 +11,8 @@ import {
   History, MessageSquarePlus, Shield
 } from 'lucide-react';
 import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
+import { fetchZod } from '@/lib/fetch-zod';
+import { agentResponseBodySchema, agentContextResponseSchema } from '@agora/contracts';
 import {
   createEmptyChatSession,
   deriveChatSessionTitle,
@@ -24,6 +26,7 @@ import { InlineConfirmation } from '@/components/chat/InlineConfirmation';
 import { buildAgoraSystemPrompt, extractThinkingSegments } from '@/lib/agora-ai/systemPrompt';
 import { toOllamaTools } from '@/lib/agora-ai/toolDefinitions';
 import { collectAgentWorkspaceEffects } from '@/lib/agora-ai/uiEvents';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 import {
   AI_SETTINGS_CHANGED_EVENT,
   PROVIDER_META,
@@ -48,10 +51,8 @@ import type {
   AgentStoredChatMessage,
   AgentStreamEvent,
   AgentToolCall,
-  AgentDiagnosticEventDetail,
   AgentToolExecutionResult,
-  AgentTraceStep,
-  AgentUiCommandEventDetail
+  AgentTraceStep
 } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
@@ -294,12 +295,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   const fetchContext = useCallback(async (signal: AbortSignal): Promise<string> => {
     try {
-      const res = await authFetch(
+      const data = await fetchZod(
         `/api/agora-ai/context?workspaceId=${encodeURIComponent(resolvedWorkspaceId)}`,
+        agentContextResponseSchema,
         { signal }
       );
-      if (!res.ok) return '';
-      const data = await res.json() as { context?: string };
       return data.context ?? '';
     } catch {
       return '';
@@ -366,7 +366,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         source: 'agora-ai',
         mutations: [{ action, result }]
       };
-      window.dispatchEvent(new CustomEvent('agora:documents-mutated', { detail }));
+      dispatchAgoraEvent(AGORA_EVENTS.documentsMutated, detail);
     }
     return result;
   }, [resolvedWorkspaceId, config.endpoint, config.model, accessPolicy]);
@@ -383,10 +383,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       shouldRefreshDocuments
     } = collectAgentWorkspaceEffects(agentRun, resolvedWorkspaceId);
     toolEvents.forEach((event) => {
-      window.dispatchEvent(new CustomEvent('agora:agent-tool-result', { detail: event }));
+      dispatchAgoraEvent(AGORA_EVENTS.agentToolResult, event);
     });
     workerCommandEvents.forEach((event) => {
-      window.dispatchEvent(new CustomEvent('agora:worker-command-result', { detail: event }));
+      dispatchAgoraEvent(AGORA_EVENTS.workerCommandResult, event);
       if (!event.ok) {
         publishAgentProblem({
           severity: 'warning',
@@ -402,10 +402,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       }
     });
     uiCommandEvents.forEach((event) => {
-      window.dispatchEvent(new CustomEvent<AgentUiCommandEventDetail>('agora:agent-ui-command', { detail: event }));
+      dispatchAgoraEvent(AGORA_EVENTS.agentUiCommand, event);
     });
     diagnosticEvents.forEach((event) => {
-      window.dispatchEvent(new CustomEvent<AgentDiagnosticEventDetail>('agora:agent-diagnostic', { detail: event }));
+      dispatchAgoraEvent(AGORA_EVENTS.agentDiagnostic, event);
       publishAgentProblem({
         severity: event.severity,
         message: event.message,
@@ -414,13 +414,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       });
     });
     if (mutatedEvent) {
-      window.dispatchEvent(new CustomEvent('agora:documents-mutated', { detail: mutatedEvent }));
+      dispatchAgoraEvent(AGORA_EVENTS.documentsMutated, mutatedEvent);
     }
     if (shouldRefreshDocuments) {
-      window.dispatchEvent(new Event('agora:docs-changed'));
+      dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
     }
     if (openDocumentsEvent) {
-      window.dispatchEvent(new CustomEvent('agora:open-documents', { detail: openDocumentsEvent }));
+      dispatchAgoraEvent(AGORA_EVENTS.openDocuments, openDocumentsEvent);
     }
   }, [resolvedWorkspaceId]);
 
@@ -951,7 +951,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         emitAgentWorkspaceEvents(agentRun);
       } else {
         const chatMsgs = history.map(message => ({ role: message.role, content: message.content }));
-        const res = await authFetch('/api/agora-ai', {
+        const data = await fetchZod('/api/agora-ai', agentResponseBodySchema, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
@@ -966,20 +966,21 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           })
         });
 
-        const data = await res.json() as AgentResponseBody;
-        if (!res.ok || data.error) {
+        if (data.status !== 'success' || data.error) {
           publishAgentProblem({
-            severity: res.status === 429 ? 'warning' : 'error',
-            message: `Agora AI falló (${res.status})`,
-            detail: data.error ?? 'Error desconocido',
+            severity: 'error',
+            message: 'Agora AI falló',
+            detail: (data.error as string) ?? 'Error desconocido',
             code: 'agora-ai-request'
           });
-          setMessages(prev => [...prev, toAssistantMessage(data.error ?? 'Error desconocido', undefined, true)]);
+          setMessages(prev => [...prev, toAssistantMessage((data.error as string) ?? 'Error desconocido', undefined, true)]);
           return;
         }
-        reply = data.reply;
-        agentRun = data.agentRun;
-        emitAgentWorkspaceEvents(agentRun);
+        reply = data.reply as string;
+        agentRun = data.agentRun as AgentRun | undefined;
+        if (agentRun) {
+          emitAgentWorkspaceEvents(agentRun);
+        }
       }
 
       if (agentRun?.rollback?.length) {

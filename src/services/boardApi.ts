@@ -1,4 +1,6 @@
 import { db, auth } from '@/lib/firebase';
+import { fetchZod } from '@/lib/fetch-zod';
+import { boardDataSchema, boardColumnSchema, boardCardSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { 
   collection, 
@@ -67,9 +69,8 @@ const ensureBoardExists = async (boardId: string, workspaceId: string) => {
 export const fetchBoardApi = async (params: { workspaceId: string }): Promise<BoardData> => {
   if (useHttpBoardApi) {
     const search = new URLSearchParams({ workspaceId: params.workspaceId });
-    const res = await authFetch(`/api/boards?${search.toString()}`, { cache: 'no-store' });
-    assertOk(res, 'Failed to fetch board');
-    return res.json() as Promise<BoardData>;
+    const data = await fetchZod(`/api/boards?${search.toString()}`, boardDataSchema, { cache: 'no-store' });
+    return data as BoardData;
   }
 
   const boardId = resolveBoardId(params.workspaceId);
@@ -107,7 +108,7 @@ export const fetchBoardApi = async (params: { workspaceId: string }): Promise<Bo
 
 export const createBoardColumnApi = async (params: { workspaceId: string; name: string }): Promise<BoardColumn> => {
   if (useHttpBoardApi) {
-    const res = await authFetch('/api/boards', {
+    const data = await fetchZod('/api/boards', boardColumnSchema, {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({
@@ -116,8 +117,7 @@ export const createBoardColumnApi = async (params: { workspaceId: string; name: 
         name: params.name
       })
     });
-    assertOk(res, 'Failed to create board column');
-    return res.json() as Promise<BoardColumn>;
+    return data as BoardColumn;
   }
 
   const boardId = resolveBoardId(params.workspaceId);
@@ -203,7 +203,7 @@ export const createBoardCardApi = async (params: {
   sourcePath?: string;
 }): Promise<BoardCard> => {
   if (useHttpBoardApi) {
-    const res = await authFetch('/api/boards', {
+    const data = await fetchZod('/api/boards', boardCardSchema, {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({
@@ -219,8 +219,7 @@ export const createBoardCardApi = async (params: {
         sourcePath: params.sourcePath
       })
     });
-    assertOk(res, 'Failed to create board card');
-    return res.json() as Promise<BoardCard>;
+    return data as BoardCard;
   }
 
   const boardId = resolveBoardId(params.workspaceId);

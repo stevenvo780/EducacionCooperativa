@@ -66,8 +66,17 @@ describe('HTTP service wrappers', () => {
   });
 
   it('handles snippet CRUD and seeding', async () => {
-    authFetchMock.mockResolvedValueOnce(jsonResponse([{ id: 's1' }]));
-    await expect(fetchSnippets('ws 1')).resolves.toEqual([{ id: 's1' }]);
+    const snippet = {
+      id: 's1',
+      title: 'Snippet',
+      description: 'Desc',
+      markdown: '# Hola',
+      workspaceId: 'ws 1',
+      category: 'text',
+      order: 1
+    };
+    authFetchMock.mockResolvedValueOnce(jsonResponse([snippet]));
+    await expect(fetchSnippets('ws 1')).resolves.toEqual([snippet]);
 
     authFetchMock.mockResolvedValueOnce(new Response('fail', { status: 500 }));
     await expect(fetchSnippets('ws-1')).resolves.toEqual([]);

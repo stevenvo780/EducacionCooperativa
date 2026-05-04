@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Loader2, RefreshCcw, X } from 'lucide-react';
+import { fetchZod } from '@/lib/fetch-zod';
+import { gitMeResponseSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 
 interface GitMeResponse {
@@ -46,9 +48,8 @@ export default function GitAccessPanel({ onClose }: GitAccessPanelProps) {
         setLoading(true);
         setError(null);
         try {
-            const res = await authFetch('/api/git/me');
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            setInfo(await res.json() as GitMeResponse);
+            const data = await fetchZod('/api/git/me', gitMeResponseSchema);
+            setInfo(data as GitMeResponse);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         } finally { setLoading(false); }
