@@ -6,6 +6,7 @@ import type { AgentTraceStep } from '@/lib/agora-ai/types';
 
 interface ToolCallBlockProps {
   step: AgentTraceStep;
+  defaultOpen?: boolean;
 }
 
 function prettyJson(value: unknown) {
@@ -16,8 +17,8 @@ function prettyJson(value: unknown) {
   }
 }
 
-export function ToolCallBlock({ step }: ToolCallBlockProps) {
-  const [open, setOpen] = useState(false);
+export function ToolCallBlock({ step, defaultOpen = false }: ToolCallBlockProps) {
+  const [open, setOpen] = useState(defaultOpen);
   const icon = step.type === 'error' ? AlertTriangle : step.type === 'tool_result' ? CheckCircle2 : Wrench;
   const Icon = icon;
   const tone = step.type === 'error'

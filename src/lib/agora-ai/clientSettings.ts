@@ -61,6 +61,7 @@ export const AI_SETTINGS_CHANGED_EVENT = 'agora:ai-settings-changed';
 export const CONFIG_KEY = 'agoraAIConfig';
 export const AGENT_MODE_KEY = 'agoraAIMode';
 export const AGENT_ACCESS_POLICY_KEY = 'agoraAIAccessPolicy';
+export const AGENT_TRACE_EXPANDED_KEY = 'agoraAITraceExpanded';
 
 export const DEFAULT_CONFIG: AIProviderConfig = {
   provider: 'ollama',
@@ -121,4 +122,16 @@ export function saveAgentAccessProfile(profile: Exclude<AgentAccessProfileId, 'c
 export function dispatchAISettingsChanged() {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(AI_SETTINGS_CHANGED_EVENT));
+}
+
+export function loadAgentTraceExpanded(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(AGENT_TRACE_EXPANDED_KEY) === '1';
+}
+
+export function saveAgentTraceExpanded(expanded: boolean) {
+  if (typeof window === 'undefined') return;
+  if (expanded) window.localStorage.setItem(AGENT_TRACE_EXPANDED_KEY, '1');
+  else window.localStorage.removeItem(AGENT_TRACE_EXPANDED_KEY);
+  dispatchAISettingsChanged();
 }

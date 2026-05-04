@@ -48,9 +48,9 @@ export const AGENT_ACCESS_PROFILES: Record<Exclude<AgentAccessProfileId, 'custom
 }> = {
   read_only: {
     id: 'read_only',
-    label: 'Solo lectura',
-    shortLabel: 'Lectura',
-    description: 'Puede leer contexto, buscar, razonar y abrir paneles, sin escribir ni ejecutar comandos.',
+    label: 'Visor',
+    shortLabel: 'Visor',
+    description: 'Solo lectura. Lee contexto, busca, razona y abre paneles. No escribe ni ejecuta comandos.',
     capabilities: withCapabilities([
       'workspaceContext',
       'documentsRead',
@@ -62,9 +62,9 @@ export const AGENT_ACCESS_PROFILES: Record<Exclude<AgentAccessProfileId, 'custom
   },
   editor: {
     id: 'editor',
-    label: 'Editor seguro',
+    label: 'Editor',
     shortLabel: 'Editor',
-    description: 'Puede crear y editar documentos, snippets, tablero y glosario. No borra, no commitea ni ejecuta terminal.',
+    description: 'Crea y edita documentos, snippets, tablero y glosario. No borra, no commitea ni ejecuta terminal.',
     capabilities: withCapabilities([
       'workspaceContext',
       'documentsRead',
@@ -79,9 +79,9 @@ export const AGENT_ACCESS_PROFILES: Record<Exclude<AgentAccessProfileId, 'custom
   },
   workspace: {
     id: 'workspace',
-    label: 'Workspace',
-    shortLabel: 'Workspace',
-    description: 'Perfil de trabajo diario: edición, estado Git y lectura del worker. Las acciones peligrosas siguen bloqueadas.',
+    label: 'Asistente',
+    shortLabel: 'Asistente',
+    description: 'Trabajo diario: edición, estado Git y lectura del worker. Las acciones destructivas piden confirmación explícita.',
     capabilities: withCapabilities([
       'workspaceContext',
       'documentsRead',
@@ -98,12 +98,19 @@ export const AGENT_ACCESS_PROFILES: Record<Exclude<AgentAccessProfileId, 'custom
   },
   developer: {
     id: 'developer',
-    label: 'Desarrollador',
-    shortLabel: 'Dev',
-    description: 'Acceso completo a tools, Git y worker. Las tools destructivas todavía piden confirmación explícita.',
+    label: 'God mode',
+    shortLabel: 'God',
+    description: 'Acceso absoluto: tools, Git, worker, borrado y comandos. No pide confirmaciones — el agente actúa sin pausas.',
     capabilities: allCapabilities(true)
   }
 };
+
+/** Perfiles que omiten el modal de confirmación de acciones destructivas. */
+export const AGENT_AUTO_CONFIRM_PROFILES: ReadonlySet<AgentAccessProfileId> = new Set(['developer']);
+
+export function profileAutoConfirms(profile: AgentAccessProfileId): boolean {
+  return AGENT_AUTO_CONFIRM_PROFILES.has(profile);
+}
 
 export const DEFAULT_AGENT_ACCESS_POLICY: AgentAccessPolicy = {
   profile: 'developer',

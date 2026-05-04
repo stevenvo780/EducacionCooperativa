@@ -1010,6 +1010,17 @@ function DashboardContent() {
     }, [openSettings]);
 
     useEffect(() => {
+        const handler = (event: Event) => {
+            const detail = (event as CustomEvent<{ tab?: string }>).detail;
+            const tab = detail?.tab;
+            if (tab) setDockInitialTab(tab);
+            setBottomDockOpen(true);
+        };
+        window.addEventListener('agora:open-bottom-dock', handler);
+        return () => window.removeEventListener('agora:open-bottom-dock', handler);
+    }, []);
+
+    useEffect(() => {
         const workspaceMatches = (workspaceId?: string) => {
             if (!workspaceId || !currentWorkspaceId) return false;
             return workspaceId === currentWorkspaceId

@@ -43,13 +43,23 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
     };
 
     void fetchContent(false);
-    // Auto-refresh suave cada 30s para que el outline siga al editor
-    // sin necesidad de un evento explicito de save.
+    // Auto-refresh suave cada 30s como respaldo si no hay edición en vivo.
     pollTimer = setInterval(() => { void fetchContent(true); }, 30_000);
+
+    // Live: cuando el editor activo dispara cambios, actualizamos el outline
+    // de inmediato sin esperar al save ni al poll.
+    const liveHandler = (event: Event) => {
+      const detail = (event as CustomEvent<{ docId?: string; content?: string }>).detail;
+      if (!detail || detail.docId !== selectedDoc.id || typeof detail.content !== 'string') return;
+      setContent(detail.content);
+      setError(null);
+    };
+    window.addEventListener('agora:document-content', liveHandler);
 
     return () => {
       active = false;
       if (pollTimer) clearInterval(pollTimer);
+      window.removeEventListener('agora:document-content', liveHandler);
     };
   }, [selectedDoc]);
 
