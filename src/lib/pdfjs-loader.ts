@@ -22,6 +22,8 @@ export interface PdfJsRenderTask {
 export interface PdfJsPageProxy {
   getViewport(params: { scale: number }): PdfJsViewportProxy;
   getTextContent: (params?: Record<string, unknown>) => Promise<PdfJsTextContent>;
+  /** API moderna de pdf.js (v3+); preferida sobre getTextContent. */
+  streamTextContent?: (params?: Record<string, unknown>) => unknown;
   render: (params: { canvasContext: CanvasRenderingContext2D; viewport: PdfJsViewportProxy }) => PdfJsRenderTask;
   cleanup?: () => void;
 }
