@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { Mosaic, MosaicNode, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
+import { MosaicWithoutDragDropContext, MosaicNode, MosaicPath, getLeaves, createBalancedTreeFromLeaves } from 'react-mosaic-component';
 import 'react-mosaic-component/react-mosaic-component.css';
 import { Columns, Pencil, X, Search, ChevronUp, ChevronDown, Check, XCircle, Maximize2, Minimize2, GripVertical, ArrowLeftRight, RotateCcw } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -910,7 +910,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   return (
     <>
       <div ref={mosaicContainerRef} className="relative h-full w-full">
-      <Mosaic<string>
+      <MosaicWithoutDragDropContext<string>
           renderTile={renderTile}
           value={value}
           onChange={onChange}
