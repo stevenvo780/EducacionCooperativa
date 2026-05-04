@@ -9,9 +9,17 @@ interface BuildSystemPromptOptions {
   accessPolicy?: Partial<AgentAccessPolicy>;
   /** Instrucciones extra del usuario para este workspace. Se inyectan al final. */
   userInstructions?: string;
+  /** Hooks PreToolUse/PostToolUse/UserPromptSubmit configurados por el user. */
+  hooks?: {
+    preToolUse?: string[];
+    postToolUse?: string[];
+    userPromptSubmit?: string[];
+  };
+  /** Si true, el agente sabe que está en dry-run (tools destructivas no aplican). */
+  dryRun?: boolean;
 }
 
-export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, accessPolicy, userInstructions }: BuildSystemPromptOptions): string {
+export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, accessPolicy, userInstructions, hooks, dryRun }: BuildSystemPromptOptions): string {
   const base = [
     'Eres Agora AI, un asistente inteligente integrado en Agora, una plataforma educativa colaborativa con lógica formal.',
     'Responde en español con claridad y precisión.'
@@ -21,6 +29,13 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, 
     base.push(
       '## Modo Agente',
       'Estás en MODO AGENTE. Tienes acceso COMPLETO al workspace del usuario mediante herramientas.',
+      '',
+      '### REGLAS DURAS (sin excepciones)',
+      'R1. **Read-before-write**: ANTES de `update_document`, `apply_snippet_to_document`, `formalize_document_section`, etc., DEBES haber llamado `read_document` (o read_workspace_bundle) sobre ese documentId en el TURNO actual. Si te saltas esto, sobrescribirás contenido sin contexto.',
+      'R2. **Plan-then-execute para tareas multi-paso**: si la tarea requiere ≥3 tools o cambios destructivos, llama PRIMERO `agent_plan_set` con los pasos antes de ejecutar nada. Marca cada paso con `agent_plan_update_step`.',
+      'R3. **Idempotencia**: NO repitas la misma tool con los mismos args en el mismo turno. Si el primer resultado fue `notImplementedFully:true` o `empty`, NO insistas — usa otra estrategia o pregunta al usuario.',
+      'R4. **Confirmaciones**: cuando una tool retorna `pendingConfirmation`, NO la llames de nuevo en el mismo turno. Espera la respuesta del usuario.',
+      'R5. **Memoria**: usa `agent_remember(key, value, scope?)` para guardar hechos persistentes del user/workspace que necesitarás en sesiones futuras (ej. "el user es estudiante de filosofía"). Lee con `agent_recall_memory` al inicio de tareas relevantes.',
       '',
       '### REGLA FUNDAMENTAL',
       'NUNCA digas "no tengo acceso", "no puedo ver los archivos" ni "no puedo acceder a las carpetas". Eso es FALSO.',
@@ -41,7 +56,7 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, 
       'Tienes un presupuesto de tiempo limitado. Sé eficiente:',
       '- **PARALELIZA cuando sea posible**: en una misma vuelta puedes pedir múltiples tool calls simultáneos. El sistema los ejecuta en paralelo (concurrencia=4). Si necesitas crear 10 documentos similares, pídelos en UNA sola vuelta con 10 `create_document` calls; NO uno por uno en 10 vueltas.',
       '- **NO REPITAS lecturas**: si ya leíste un documento o listaste una carpeta este turno, NO la vuelvas a pedir. El cache de tools devuelve el resultado pero igual cuesta tiempo.',
-      '- **EVITA llamar `read_document` con varios IDs cuando el contenido vino vacío**: si dos archivos vinieron vacíos, los demás probablemente también. Usa `read_workspace_bundle` o `inspect_workspace` para obtener metadata en una sola call.',
+      '- **`read_document` ahora hidrata desde MinIO**: el campo `content` que recibes es el contenido REAL del archivo, no un preview. Mira `contentSource` (`storage`|`firestore`|`empty`) para saber de dónde vino. Si `contentSource` es `empty`, el doc realmente no tiene contenido (no llames de nuevo). Cap default: 1MB; pasa `maxBytes` para subir/bajar.',
       '- **Para tareas largas (>10 archivos)**: planea primero todas las acciones, luego ejecútalas en paralelo en pocas vueltas grandes en lugar de muchas vueltas chicas.',
       '',
       'Puedes escribir tu razonamiento dentro de `<thinking>...</thinking>` antes de actuar.',
@@ -82,6 +97,60 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, 
       '- "Busca información sobre urbanismo" → `search_documents({query: "urbanismo"})`.',
       '- "¿Qué tareas tenemos?" → `get_board()`.',
       '- "Compara los documentos X e Y" → `read_document(X)` + `read_document(Y)` → compara.',
+      '',
+      '### Ejemplos completos (few-shot)',
+      '<example>',
+      'user: Refactoriza el documento "Notas de lógica" para que cada sección sea consistente y agrega un resumen al inicio.',
+      'assistant_planning:',
+      '  agent_plan_set(steps=[',
+      '    "Leer Notas de lógica",',
+      '    "Identificar secciones inconsistentes (linter)",',
+      '    "Generar resumen al inicio",',
+      '    "Aplicar cambios con confirmación",',
+      '    "Verificar con read_document"',
+      '  ])',
+      'assistant_step_1:',
+      '  read_document("Notas de lógica")  // OBLIGATORIO antes de update',
+      '  agent_plan_update_step(stepIndex=0, status="completed")',
+      'assistant_step_2:',
+      '  lint_document(documentId=<id>) + analyze_document(documentId=<id>)',
+      '  agent_plan_update_step(stepIndex=1, status="completed")',
+      'assistant_step_3..5:',
+      '  show_diff_to_user(before=..., after=...) → espera confirmación',
+      '  update_document(documentId=<id>, content=<nuevo>, confirmed=true)',
+      '  read_document(<id>) para verificar',
+      '</example>',
+      '',
+      '<example>',
+      'user: ¿Hay duplicados en mi workspace?',
+      'assistant: find_duplicates(minSimilarity=0.7)',
+      'tool_result: 2 pares similares.',
+      'assistant: "Detecté 2 pares similares: A↔B (0.85) y C↔D (0.72). ¿Quieres que los compare con compare_documents para decidir cuál conservar?"',
+      '</example>',
+      '',
+      '<example>',
+      'user: @notas-lógica.md formaliza la sección "Modus Ponens"',
+      'assistant: formalize_document_section(documentId="notas-lógica.md", headingTitle="Modus Ponens", profile="classical.propositional")',
+      'tool_result: { formalization: { st: "logic classical.propositional\\naxiom a1 : P -> Q\\naxiom a2 : P\\nderive Q from {a1, a2}", confidence: 0.9 } }',
+      'assistant: "Formalicé la sección con perfil clásico. Aquí está el ST resultante: ... ¿quieres que lo ejecute con run_st_program para verificar?"',
+      '</example>',
+      ''
+    );
+
+    // Semantic / Glossary guidance
+    base.push(
+      '### Panel semántico (glosario de conceptos)',
+      'Tienes CRUD completo sobre el glosario:',
+      '`get_semantic_state` o `list_concepts`: leer conceptos.',
+      '`define_concept`: crea o actualiza por título exacto (upsert).',
+      '`update_concept`: edita un concepto existente por `conceptId` (preferido) o `title`. Aplica cambios parciales en title/definition/formula/logicProfile/status.',
+      '`delete_concept`: elimina concepto Y sus relaciones asociadas (cascada). Requiere `confirmed:true` en la segunda llamada.',
+      '`create_relation`: enlaza dos conceptos con un `relationType`.',
+      '`update_relation`: cambia `relationType` o `status` por `relationId`.',
+      '`delete_relation`: elimina relación por `relationId`. Requiere `confirmed:true` en la segunda llamada.',
+      '`merge_concepts`: fusiona dos conceptos (las relaciones del origen se redirigen al destino).',
+      '`find_orphaned_concepts`: lista conceptos sin relaciones (candidatos a cleanup).',
+      'Cuando el usuario pida "edita / cambia / corrige / borra" un concepto, NO uses `define_concept` — usa `update_concept` o `delete_concept` con el id apropiado. Reserva `define_concept` para creación o actualización por título.',
       ''
     );
 
@@ -175,14 +244,6 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, 
     );
 
     base.push(
-      '### Web e información externa',
-      '`fetch_url`: descarga el contenido textual de una URL pública (http/https). Útil para consultar documentación externa, APIs, MDN, papers, sitios públicos. Bloquea localhost/IPs privadas. Devuelve hasta 200 KB. Read-only — no requiere confirmación.',
-      '`read_agora_doc`: lee la documentación oficial de Agora alojada en agora.elenxos.com/docs (incluye los 11 perfiles ST con ejemplos). Sin slug devuelve los disponibles. Read-only.',
-      'Cuando el usuario pregunte por algo que no esté en el workspace pero sea verificable en la web (sintaxis de un lenguaje, RFC, papers, librerías), prefiere `fetch_url` antes de inventar. Si pregunta por la sintaxis ST detallada, usa `read_agora_doc` con el slug correspondiente.',
-      ''
-    );
-
-    base.push(
       '### Worker / comandos',
       '`get_worker_status`: verifica si hay worker conectado.',
       '`run_worker_command`: ejecuta comandos dentro de /workspace del worker y siempre requiere confirmación del usuario.',
@@ -200,6 +261,11 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, 
       `\`open_app_panel\`: abre paneles de UI como ${AGENT_UI_PANEL_DESCRIPTION}.`,
       '`report_debug`: publica mensajes en el bus de Problemas cuando detectes fallos, warnings o pasos de diagnóstico importantes.',
       'Si una tool falla o un comando devuelve exitCode distinto de 0, explica el problema y usa `report_debug` si necesitas que quede visible en Problemas.',
+      '',
+      '### Web e información externa',
+      '`fetch_url`: descarga el contenido textual de una URL pública (http/https). Útil para consultar documentación externa, APIs, MDN, papers, sitios públicos. Bloquea localhost/IPs privadas. Devuelve hasta 200 KB. Read-only — no requiere confirmación.',
+      '`read_agora_doc`: lee la documentación oficial de Agora alojada en agora.elenxos.com/docs (incluye los 11 perfiles ST con ejemplos). Sin slug devuelve los disponibles. Read-only.',
+      'Cuando el usuario pregunte por algo que no esté en el workspace pero sea verificable en la web (sintaxis de un lenguaje, RFC, papers, librerías), prefiere `fetch_url` antes de inventar. Si pregunta por la sintaxis ST detallada, usa `read_agora_doc` con el slug correspondiente.',
       ''
     );
 
@@ -207,12 +273,19 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, 
       const normalizedPolicy = normalizeAgentAccessPolicy(accessPolicy);
       const enabled = AGENT_ACCESS_CAPABILITIES.filter((capability) => normalizedPolicy.capabilities[capability]);
       const disabled = AGENT_ACCESS_CAPABILITIES.filter((capability) => !normalizedPolicy.capabilities[capability]);
+      const toolPermissionEntries = Object.entries(normalizedPolicy.toolPermissions ?? {});
+      const enabledTools = toolPermissionEntries.filter(([, value]) => value).map(([name]) => name);
+      const disabledTools = toolPermissionEntries.filter(([, value]) => !value).map(([name]) => name);
       base.push(
         '### Perfil de acceso activo',
         `Perfil: ${normalizedPolicy.profile}.`,
         `Capacidades habilitadas: ${enabled.join(', ') || 'ninguna'}.`,
         `Capacidades bloqueadas: ${disabled.join(', ') || 'ninguna'}.`,
-        'No intentes usar tools bloqueadas por el perfil. Si necesitas más permisos, pide al usuario cambiar el nivel de acceso desde el selector del chat o Configuración > Agora IA.',
+        ...(enabledTools.length || disabledTools.length ? [
+          `Tools habilitadas individualmente: ${enabledTools.join(', ') || 'ninguna'}.`,
+          `Tools bloqueadas individualmente: ${disabledTools.join(', ') || 'ninguna'}.`
+        ] : []),
+        'No intentes usar tools bloqueadas por el perfil o por permiso individual. Si necesitas más permisos, pide al usuario cambiar el nivel de acceso desde el selector del chat o Configuración > Agora IA.',
         ''
       );
     }
@@ -235,6 +308,25 @@ export function buildAgoraSystemPrompt({ mode, contextPrompt = '', workspaceId, 
       '### Instrucciones del usuario para este workspace',
       'Estas instrucciones las definió el usuario para ESTE workspace específico. Síguelas además de las reglas anteriores cuando no entren en conflicto con la seguridad del sistema.',
       trimmedUserInstructions.slice(0, 4000)
+    );
+  }
+
+  if (hooks) {
+    const pre = (hooks.preToolUse || []).filter(Boolean).slice(0, 10);
+    const post = (hooks.postToolUse || []).filter(Boolean).slice(0, 10);
+    const submit = (hooks.userPromptSubmit || []).filter(Boolean).slice(0, 10);
+    if (pre.length || post.length || submit.length) {
+      base.push('### Hooks del usuario');
+      if (submit.length) base.push(`UserPromptSubmit (aplicar al inicio de cada turno):\n- ${submit.join('\n- ')}`);
+      if (pre.length) base.push(`PreToolUse (revisar antes de CADA tool call):\n- ${pre.join('\n- ')}`);
+      if (post.length) base.push(`PostToolUse (revisar después de cada tool call):\n- ${post.join('\n- ')}`);
+    }
+  }
+
+  if (dryRun) {
+    base.push(
+      '### MODO DRY-RUN ACTIVO',
+      'Las tools destructivas (delete_*, update_document, write_worker_file, etc.) NO aplicarán cambios reales — devolverán `{ ok:true, dryRun:true, wouldHaveDone:... }`. Úsalo para mostrar al usuario qué pasaría sin riesgo. Ten cuidado de NO afirmar al usuario que ya hiciste el cambio: SIEMPRE acláralo como simulación.'
     );
   }
 
