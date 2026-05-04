@@ -2758,6 +2758,7 @@ function DashboardContent() {
                                     docs={docs}
                                     folders={folders}
                                     docModes={docModes}
+                                    selectedDocId={selectedDocId}
                                     onSetDocMode={setDocMode}
                                     onCloseTab={closeTabById}
                                     onSelectDoc={openDocument}

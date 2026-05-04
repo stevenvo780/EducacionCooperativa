@@ -1590,7 +1590,7 @@ export default function MosaicEditor({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500 font-mono shrink-0">
+          <div className="flex items-center gap-2 text-xs text-slate-300 font-mono shrink-0">
             <button
               type="button"
               onClick={() => semanticBrowserBus.open(docName || currentDocMetaRef.current.name)}
@@ -1972,7 +1972,7 @@ export default function MosaicEditor({
 
       {/* Status bar for embedded mode */}
       {embedded && !hideInlineStatus && (
-        <div className="shrink-0 h-7 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-3 text-[11px] text-slate-400">
+        <div className="shrink-0 h-7 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-3 text-[11px] text-slate-300">
           <div className="flex items-center gap-3">
             <span>Markdown</span>
             <LinterConfigPanel linterStatus={linterStatus} />
