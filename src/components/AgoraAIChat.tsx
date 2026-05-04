@@ -28,7 +28,7 @@ import { buildAgoraSystemPrompt, extractThinkingSegments } from '@/lib/agora-ai/
 import { toOllamaTools } from '@/lib/agora-ai/toolDefinitions';
 import { collectAgentWorkspaceEffects } from '@/lib/agora-ai/uiEvents';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
-import { parseSlashCommand, SLASH_COMMANDS, type SlashCommandHelp } from '@/lib/agora-ai/slashCommands';
+import { parseSlashCommand, type SlashCommandHelp } from '@/lib/agora-ai/slashCommands';
 import {
   AI_SETTINGS_CHANGED_EVENT,
   PROVIDER_META,

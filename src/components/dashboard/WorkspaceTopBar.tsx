@@ -1,6 +1,8 @@
 'use client';
 
 import { PanelLeft, PanelBottom, PanelRight, type LucideIcon } from 'lucide-react';
+import PresenceAvatars from '@/components/dashboard/PresenceAvatars';
+import type { PresenceEntry } from '@/lib/presence';
 
 interface WorkspaceTopBarProps {
   workspaceLabel: string;
@@ -17,6 +19,11 @@ interface WorkspaceTopBarProps {
 
   /** Ancho total que debe ocupar la barra (ActivityBar + Sidebar). */
   totalWidth: number;
+
+  /** Personas conectadas al workspace (excluyendo a uno mismo). */
+  presencePeers?: PresenceEntry[];
+  presenceCurrentDocId?: string | null;
+  presenceResolveDocName?: (docId: string) => string | null;
 }
 
 /**
@@ -40,7 +47,10 @@ export default function WorkspaceTopBar({
   onToggleBottomDock,
   rightPanelOpen,
   onToggleRightPanel,
-  totalWidth
+  totalWidth,
+  presencePeers,
+  presenceCurrentDocId,
+  presenceResolveDocName
 }: WorkspaceTopBarProps) {
   return (
     <div
@@ -65,6 +75,16 @@ export default function WorkspaceTopBar({
             {workspaceLabel}
           </span>
         </button>
+      )}
+
+      {!sidebarCollapsed && presencePeers && presencePeers.length > 0 && (
+        <div className="flex items-center px-1.5">
+          <PresenceAvatars
+            peers={presencePeers}
+            highlightDocId={presenceCurrentDocId ?? null}
+            resolveDocName={presenceResolveDocName}
+          />
+        </div>
       )}
 
       <div className={`flex items-center gap-0 shrink-0 ${sidebarCollapsed ? 'mx-auto' : ''}`}>

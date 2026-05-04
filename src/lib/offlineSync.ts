@@ -11,12 +11,49 @@ import {
   SyncQueueStatus,
   updateSyncItem,
   removeSyncItem,
+  type SyncConflictDetails,
   type SyncQueueItem
 } from '@/lib/offlineStorage';
 import { authFetch } from '@/services/apiClient';
 
+/**
+ * Excepción dedicada para conflictos: el servidor respondió 409 porque la
+ * versión local está obsoleta. El detalle se persiste en el queue item para
+ * que la UI lo resuelva.
+ */
+export class SyncConflictError extends Error {
+  details: SyncConflictDetails;
+  constructor(details: SyncConflictDetails) {
+    super('Conflicto de versión: el documento fue modificado por otra persona');
+    this.name = 'SyncConflictError';
+    this.details = details;
+  }
+}
+
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 2_000; // 2s, 4s, 8s
+
+/**
+ * Decodifica la respuesta 409 del servidor al replay de un Update.
+ * El servidor puede devolver `{ serverVersion, content, updatedBy, updatedAt }`
+ * para permitir resolución informada del conflicto.
+ */
+async function parseConflictResponse(
+  res: Response,
+  localVersion: number | undefined
+): Promise<SyncConflictDetails> {
+  const details: SyncConflictDetails = { localVersion };
+  try {
+    const body = (await res.json()) as Record<string, unknown>;
+    if (typeof body.serverVersion === 'number') details.serverVersion = body.serverVersion;
+    if (typeof body.content === 'string') details.serverContent = body.content;
+    if (typeof body.updatedBy === 'string') details.serverUpdatedBy = body.updatedBy;
+    if (typeof body.updatedAt === 'string') details.serverUpdatedAt = body.updatedAt;
+  } catch {
+    // El servidor envió 409 sin cuerpo JSON; no rompemos por eso.
+  }
+  return details;
+}
 
 export type SyncProgress = {
   total: number;
@@ -50,11 +87,20 @@ async function replayOperation(item: SyncQueueItem): Promise<void> {
       const docId = payload.docId as string;
       const body = { ...payload };
       delete body.docId;
+      const headers: Record<string, string> = { ...JSON_HEADERS };
+      // Si el cliente conoce la versión local, manda If-Match para detección
+      // optimista de conflictos en el servidor.
+      const localVersion = typeof payload.expectedVersion === 'number' ? payload.expectedVersion : undefined;
+      if (typeof localVersion === 'number') headers['If-Match'] = String(localVersion);
       const res = await authFetch(`/api/documents/${docId}`, {
         method: 'PUT',
-        headers: JSON_HEADERS,
+        headers,
         body: JSON.stringify(body)
       });
+      if (res.status === 409) {
+        const details = await parseConflictResponse(res, localVersion);
+        throw new SyncConflictError(details);
+      }
       if (!res.ok) throw new Error(`Update failed: ${res.status}`);
       break;
     }
@@ -130,6 +176,19 @@ export async function processSyncQueue(
         if (item.id !== null && item.id !== undefined) await removeSyncItem(item.id);
         processed++;
       } catch (err) {
+        // Conflicto: NO reintentamos, marcamos como Conflict y guardamos
+        // los detalles para que la UI ofrezca resolución al usuario.
+        if (err instanceof SyncConflictError) {
+          await updateSyncItem({
+            ...item,
+            status: SyncQueueStatus.Conflict,
+            error: err.message,
+            conflict: err.details
+          });
+          failed++;
+          continue;
+        }
+
         const retries = (item.retries || 0) + 1;
         if (retries >= MAX_RETRIES) {
           await updateSyncItem({
