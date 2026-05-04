@@ -21,22 +21,50 @@ const GROUPS: ShortcutGroup[] = [
     title: 'Vistas',
     items: [
       { keys: 'Ctrl+Shift+E', label: 'Explorador (Files)' },
-      { keys: 'Ctrl+K', label: 'Buscar documentos' },
+      { keys: 'Ctrl+Shift+F', label: 'Buscar en el workspace' },
       { keys: 'Ctrl+Shift+G', label: 'Control de versiones (Git)' },
-      { keys: 'Ctrl+Shift+I', label: 'Alternar Agora AI' },
-      { keys: 'Ctrl+Shift+M', label: 'Alternar Problemas' },
-      { keys: 'Ctrl+`', label: 'Alternar Terminal' }
+      { keys: 'Ctrl+Shift+D', label: 'Herramientas' },
+      { keys: 'Ctrl+Shift+O', label: 'Esquema del documento' },
+      { keys: 'Ctrl+Shift+X', label: 'Snippets' },
+      { keys: 'Ctrl+B', label: 'Alternar barra lateral' },
+      { keys: 'Ctrl+Shift+I', label: 'Alternar Agora AI' }
     ]
   },
   {
     title: 'Comandos',
     items: [
-      { keys: 'Ctrl+Shift+P', label: 'Paleta de comandos' },
-      { keys: 'Ctrl+P', label: 'Buscar archivos' },
+      { keys: 'Ctrl+Shift+P / F1', label: 'Paleta de comandos' },
+      { keys: 'Ctrl+P / Ctrl+E', label: 'Buscar archivos' },
+      { keys: 'Ctrl+,', label: 'Ajustes' },
+      { keys: 'Ctrl+K Ctrl+S', label: 'Atajos de teclado' },
+      { keys: 'Ctrl+K Z / F11', label: 'Modo Zen' },
+      { keys: '?', label: 'Mostrar esta ayuda' }
+    ]
+  },
+  {
+    title: 'Archivos',
+    items: [
       { keys: 'Ctrl+N', label: 'Nuevo archivo' },
-      { keys: 'Ctrl+B', label: 'Alternar barra lateral' },
-      { keys: 'Ctrl+K Z', label: 'Modo Zen' },
-      { keys: 'Ctrl+Shift+`', label: 'Nueva terminal' }
+      { keys: 'Ctrl+O', label: 'Subir / abrir archivo' },
+      { keys: 'Ctrl+K Ctrl+O', label: 'Subir carpeta' },
+      { keys: 'Ctrl+S', label: 'Guardar / sincronizar' },
+      { keys: 'Ctrl+W / Ctrl+F4', label: 'Cerrar pestaña activa' },
+      { keys: 'Ctrl+K Ctrl+W', label: 'Cerrar todas las pestañas' },
+      { keys: 'Ctrl+K Ctrl+P', label: 'Copiar ruta activa' },
+      { keys: 'Ctrl+K Ctrl+R', label: 'Revelar archivo activo' }
+    ]
+  },
+  {
+    title: 'Panel',
+    items: [
+      { keys: 'Ctrl+J', label: 'Alternar panel inferior' },
+      { keys: 'Ctrl+`', label: 'Alternar terminal' },
+      { keys: 'Ctrl+Shift+`', label: 'Nueva terminal' },
+      { keys: 'Ctrl+Shift+C', label: 'Abrir terminal como pestaña' },
+      { keys: 'Ctrl+Shift+M', label: 'Problemas' },
+      { keys: 'Ctrl+K Ctrl+H', label: 'Salida / problemas' },
+      { keys: 'Ctrl+Shift+B', label: 'ST Logic' },
+      { keys: 'Ctrl+Alt+I', label: 'Alternar chat AI' }
     ]
   },
   {
@@ -44,12 +72,17 @@ const GROUPS: ShortcutGroup[] = [
     items: [
       { keys: 'Ctrl+Tab', label: 'Siguiente pestaña' },
       { keys: 'Ctrl+Shift+Tab', label: 'Pestaña anterior' },
-      { keys: 'Ctrl+W', label: 'Cerrar pestaña activa' }
+      { keys: 'Ctrl+PageDown', label: 'Siguiente pestaña' },
+      { keys: 'Ctrl+PageUp', label: 'Pestaña anterior' },
+      { keys: 'Ctrl+1…9', label: 'Ir a pestaña por posición' }
     ]
   },
   {
     title: 'Edición',
     items: [
+      { keys: 'Ctrl+/', label: 'Comentar línea en editores compatibles' },
+      { keys: 'Alt+↑/↓', label: 'Mover línea en editores compatibles' },
+      { keys: 'Ctrl+Shift+K', label: 'Borrar línea en editores compatibles' },
       { keys: 'Enter', label: 'Enviar mensaje en chat AI' },
       { keys: 'Shift+Enter', label: 'Nueva línea en chat AI' },
       { keys: 'Esc', label: 'Cerrar modal/popover' }
@@ -104,7 +137,7 @@ export default function KeyboardShortcuts({ open, onClose, modalFade, modalPop }
             </button>
           </header>
 
-          <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto p-4 sm:grid-cols-3">
+          <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3">
             {GROUPS.map((g) => (
               <section key={g.title}>
                 <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-surface-500">{g.title}</h3>
