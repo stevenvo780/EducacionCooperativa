@@ -16,7 +16,7 @@
     "lint:all": "npm run lint && npm --prefix services/hub run lint && npm --prefix services/worker run lint"
   },
   "dependencies": {
-    "@agora/contracts": "npm:@stevenvo780/agora-contracts@^1.0.0",
+    "@agora/contracts": "npm:@stevenvo780/agora-contracts@^1.0.1",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-javascript": "^6.2.4",

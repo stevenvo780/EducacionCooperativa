@@ -1036,6 +1036,24 @@ function DashboardContent() {
                 return;
             }
 
+            if (type === 'focus-document-section') {
+                const cmd = detail.command as unknown as Record<string, unknown>;
+                const docId = cmd.documentId as string | undefined;
+                const headingTitle = cmd.headingTitle as string | null | undefined;
+                const line = cmd.line as number | null | undefined;
+                if (docId) {
+                    window.dispatchEvent(new CustomEvent('agora:focus-document-section', {
+                        detail: { documentId: docId, headingTitle: headingTitle ?? null, line: line ?? null }
+                    }));
+                }
+                return;
+            }
+            if (type === 'prompt-user-choice' || type === 'show-diff' || type === 'agent-status') {
+                // Estos comandos se renderizan dentro del panel del agente; no
+                // requieren acción global del dashboard.
+                return;
+            }
+
             switch (panel) {
                 case 'files':
                     openSidebarView('files');
@@ -1247,6 +1265,87 @@ function DashboardContent() {
         folderInputRef.current?.click();
     }, [activeFolder, resolveActiveFolder, setActiveFolderSafe, setUploadTargetFolder]);
 
+    const openSidebarViewFromShortcut = useCallback((view: ActivityView) => {
+        setActivityView(view);
+        if (isCompact) {
+            setShowMobileSidebar(true);
+        } else if (isSidebarCollapsed) {
+            setIsSidebarCollapsed(false);
+        }
+    }, [isCompact, isSidebarCollapsed, setIsSidebarCollapsed, setShowMobileSidebar]);
+
+    const openSearchSidebarFromShortcut = useCallback(() => {
+        openSidebarViewFromShortcut('search');
+        requestAnimationFrame(() => quickSearchInputRef.current?.focus());
+    }, [openSidebarViewFromShortcut, quickSearchInputRef]);
+
+    const showBottomDockTab = useCallback((tab: string) => {
+        setDockInitialTab(tab);
+        setBottomDockOpen(true);
+    }, []);
+
+    const toggleBottomDockTab = useCallback((tab: string) => {
+        setDockInitialTab(tab);
+        setBottomDockOpen((current) => dockInitialTab === tab ? !current : true);
+    }, [dockInitialTab]);
+
+    const selectOpenTabByOffset = useCallback((direction: 1 | -1) => {
+        if (openTabs.length <= 1) return;
+        const currentIdx = selectedDocId ? openTabs.findIndex(t => t.id === selectedDocId) : -1;
+        const nextIdx = (currentIdx + direction + openTabs.length) % openTabs.length;
+        const nextTab = openTabs[nextIdx];
+        if (nextTab) setSelectedDocId(nextTab.id);
+    }, [openTabs, selectedDocId]);
+
+    const selectOpenTabByIndex = useCallback((index: number) => {
+        if (openTabs.length === 0) return;
+        const nextTab = openTabs[Math.min(index, openTabs.length - 1)];
+        if (nextTab) setSelectedDocId(nextTab.id);
+    }, [openTabs]);
+
+    const closeActiveTabFromShortcut = useCallback(() => {
+        if (selectedDocId) {
+            void closeTabById(selectedDocId);
+        }
+    }, [closeTabById, selectedDocId]);
+
+    const closeAllTabsFromShortcut = useCallback(() => {
+        openTabs.forEach((tab) => {
+            void closeTabById(tab.id);
+        });
+    }, [closeTabById, openTabs]);
+
+    const getActiveDocument = useCallback(() => {
+        if (!selectedDocId) return null;
+        return openTabs.find((doc) => doc.id === selectedDocId)
+            ?? docs.find((doc) => doc.id === selectedDocId)
+            ?? null;
+    }, [docs, openTabs, selectedDocId]);
+
+    const getDocumentDisplayPath = useCallback((doc: DocItem) => {
+        const folder = normalizeFolderPath(doc.folder);
+        return folder ? `${folder}/${doc.name}` : doc.name;
+    }, []);
+
+    const copyActiveDocumentPath = useCallback(() => {
+        const doc = getActiveDocument();
+        if (!doc) return;
+        const path = getDocumentDisplayPath(doc);
+        void navigator.clipboard?.writeText(path);
+        toast.success('Ruta copiada', { description: path });
+    }, [getActiveDocument, getDocumentDisplayPath]);
+
+    const revealActiveDocumentInSidebar = useCallback(() => {
+        const doc = getActiveDocument();
+        if (!doc) return;
+        setActiveFolderSafe(normalizeFolderPath(doc.folder));
+        openSidebarViewFromShortcut('files');
+    }, [getActiveDocument, openSidebarViewFromShortcut, setActiveFolderSafe]);
+
+    const syncNowFromShortcut = useCallback(() => {
+        void syncNow();
+    }, [syncNow]);
+
     useEffect(() => {
         const clearShortcutChord = () => {
             shortcutChordDeadlineRef.current = 0;
@@ -1257,6 +1356,8 @@ function DashboardContent() {
             const chordActive = shortcutChordDeadlineRef.current > Date.now();
             const normalizedKey = e.key.toLowerCase();
             const matchesShortcut = (code: string, key: string) => e.code === code || normalizedKey === key;
+            const target = e.target instanceof HTMLElement ? e.target : null;
+            const targetIsTerminal = Boolean(target?.closest('.xterm, .xterm-screen, .xterm-helper-textarea'));
             const hasBlockingOverlay = Boolean(
                 dialogConfig
                 || showNewFileModal
@@ -1265,6 +1366,9 @@ function DashboardContent() {
                 || showMembersModal
                 || showPasswordModal
                 || showPricingModal
+                || settingsOpen
+                || showCommandPalette
+                || showKeyboardHelp
             );
 
             if (e.key === 'Escape' && showQuickSearch) {
@@ -1296,9 +1400,71 @@ function DashboardContent() {
                     handleToggleZenMode();
                     return;
                 }
+                if (matchesShortcut('KeyS', 's') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    setShowKeyboardHelp(true);
+                    return;
+                }
+                if (matchesShortcut('KeyW', 'w') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    closeAllTabsFromShortcut();
+                    return;
+                }
+                if (matchesShortcut('KeyH', 'h') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    showBottomDockTab('problems');
+                    return;
+                }
+                if (matchesShortcut('KeyB', 'b') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    handleToggleSidebarCollapse();
+                    return;
+                }
+                if (matchesShortcut('KeyT', 't') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    openSettings();
+                    return;
+                }
+                if (matchesShortcut('KeyP', 'p') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    copyActiveDocumentPath();
+                    return;
+                }
+                if (matchesShortcut('KeyR', 'r') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    revealActiveDocumentInSidebar();
+                    return;
+                }
+                if (matchesShortcut('KeyO', 'o') && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    clearShortcutChord();
+                    openUploadFolderPickerAt();
+                    return;
+                }
                 if (!matchesShortcut('KeyK', 'k')) {
                     clearShortcutChord();
                 }
+            }
+
+            if (e.key === 'F1' && !e.altKey && !hasPrimaryModifier && !hasBlockingOverlay && !showQuickSearch) {
+                e.preventDefault();
+                clearShortcutChord();
+                setShowCommandPalette(true);
+                return;
+            }
+
+            if (e.key === 'F11' && !e.altKey && !hasPrimaryModifier && !hasBlockingOverlay && !showQuickSearch) {
+                e.preventDefault();
+                clearShortcutChord();
+                handleToggleZenMode();
+                return;
             }
 
             if (hasBlockingOverlay || showQuickSearch || !hasPrimaryModifier) {
@@ -1308,6 +1474,27 @@ function DashboardContent() {
             if (matchesShortcut('KeyK', 'k') && !e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 shortcutChordDeadlineRef.current = Date.now() + 1500;
+                return;
+            }
+
+            if (matchesShortcut('KeyS', 's') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                syncNowFromShortcut();
+                return;
+            }
+
+            if (matchesShortcut('Comma', ',') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openSettings();
+                return;
+            }
+
+            if (matchesShortcut('KeyO', 'o') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openUploadFilePickerAt();
                 return;
             }
 
@@ -1322,6 +1509,13 @@ function DashboardContent() {
                 return;
             }
 
+            if (matchesShortcut('KeyE', 'e') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openQuickSearch();
+                return;
+            }
+
             if (matchesShortcut('KeyN', 'n') && !e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
@@ -1329,10 +1523,59 @@ function DashboardContent() {
                 return;
             }
 
+            if (matchesShortcut('KeyF', 'f') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openSearchSidebarFromShortcut();
+                return;
+            }
+
+            if (matchesShortcut('KeyH', 'h') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openSearchSidebarFromShortcut();
+                return;
+            }
+
+            if (matchesShortcut('KeyD', 'd') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openSidebarViewFromShortcut('tools');
+                return;
+            }
+
+            if (matchesShortcut('KeyX', 'x') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openSidebarViewFromShortcut('snippets');
+                return;
+            }
+
+            if (matchesShortcut('KeyO', 'o') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                openSidebarViewFromShortcut('outline');
+                return;
+            }
+
+            if (matchesShortcut('KeyB', 'b') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                void openStRunner();
+                return;
+            }
+
             if (matchesShortcut('KeyB', 'b') && !e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
                 handleToggleSidebarCollapse();
+                return;
+            }
+
+            if (matchesShortcut('KeyI', 'i') && e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                setRightPanelOpen(e.shiftKey ? true : (current) => !current);
                 return;
             }
 
@@ -1346,33 +1589,42 @@ function DashboardContent() {
             if (matchesShortcut('KeyM', 'm') && e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
-                setDockInitialTab('problems');
-                setBottomDockOpen(true);
+                showBottomDockTab('problems');
                 return;
             }
 
             if (matchesShortcut('KeyE', 'e') && e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
-                setActivityView('files');
-                if (isCompact) setShowMobileSidebar(true);
+                openSidebarViewFromShortcut('files');
                 return;
             }
 
             if (matchesShortcut('KeyG', 'g') && e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 clearShortcutChord();
-                setActivityView('git');
-                if (isCompact) setShowMobileSidebar(true);
+                openSidebarViewFromShortcut('git');
+                return;
+            }
+
+            if (matchesShortcut('KeyU', 'u') && e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                showBottomDockTab('problems');
                 return;
             }
 
             if (matchesShortcut('KeyW', 'w') && !e.shiftKey && !e.altKey) {
-                if (selectedDocId) {
-                    e.preventDefault();
-                    clearShortcutChord();
-                    void closeTabById(selectedDocId);
-                }
+                e.preventDefault();
+                clearShortcutChord();
+                closeActiveTabFromShortcut();
+                return;
+            }
+
+            if (e.code === 'F4' && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                closeActiveTabFromShortcut();
                 return;
             }
 
@@ -1380,11 +1632,36 @@ function DashboardContent() {
                 if (openTabs.length <= 1) return;
                 e.preventDefault();
                 clearShortcutChord();
-                const currentIdx = selectedDocId ? openTabs.findIndex(t => t.id === selectedDocId) : -1;
-                const dir = e.shiftKey ? -1 : 1;
-                const nextIdx = (currentIdx + dir + openTabs.length) % openTabs.length;
-                const nextTab = openTabs[nextIdx];
-                if (nextTab) setSelectedDocId(nextTab.id);
+                selectOpenTabByOffset(e.shiftKey ? -1 : 1);
+                return;
+            }
+
+            if ((e.code === 'PageDown' || e.code === 'PageUp') && !e.altKey) {
+                if (openTabs.length <= 1) return;
+                e.preventDefault();
+                clearShortcutChord();
+                selectOpenTabByOffset(e.code === 'PageDown' ? 1 : -1);
+                return;
+            }
+
+            if (/^Digit[1-9]$/.test(e.code) && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                selectOpenTabByIndex(Number(e.code.replace('Digit', '')) - 1);
+                return;
+            }
+
+            if (matchesShortcut('KeyJ', 'j') && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                clearShortcutChord();
+                toggleBottomDockTab(dockInitialTab || 'terminal');
+                return;
+            }
+
+            if (matchesShortcut('KeyC', 'c') && e.shiftKey && !e.altKey && !targetIsTerminal) {
+                e.preventDefault();
+                clearShortcutChord();
+                void openTerminal();
                 return;
             }
 
@@ -1394,7 +1671,7 @@ function DashboardContent() {
                 if (e.shiftKey) {
                     handleRequestNewTerminal();
                 } else {
-                    setBottomDockOpen((v) => !v);
+                    toggleBottomDockTab('terminal');
                 }
             }
         };
@@ -1411,13 +1688,29 @@ function DashboardContent() {
         };
     }, [
         closeQuickSearch,
+        closeActiveTabFromShortcut,
+        closeAllTabsFromShortcut,
         dialogConfig,
+        copyActiveDocumentPath,
         handleRequestNewTerminal,
         handleToggleSidebarCollapse,
         handleToggleZenMode,
+        openSearchSidebarFromShortcut,
         openNewFileModalAt,
+        openSettings,
         openQuickSearch,
         openTerminal,
+        openSidebarViewFromShortcut,
+        openStRunner,
+        openUploadFilePickerAt,
+        openUploadFolderPickerAt,
+        revealActiveDocumentInSidebar,
+        selectOpenTabByIndex,
+        selectOpenTabByOffset,
+        settingsOpen,
+        showBottomDockTab,
+        showCommandPalette,
+        showKeyboardHelp,
         showMembersModal,
         showNewFileModal,
         showNewWorkspaceModal,
@@ -1425,9 +1718,9 @@ function DashboardContent() {
         showPasswordModal,
         showPricingModal,
         showQuickSearch,
-        isCompact,
-        setShowMobileSidebar,
-        closeTabById,
+        syncNowFromShortcut,
+        toggleBottomDockTab,
+        dockInitialTab,
         openTabs,
         selectedDocId
     ]);
@@ -1797,12 +2090,68 @@ function DashboardContent() {
             run: () => openNewFileModalAt()
         },
         {
+            id: 'file.open',
+            category: 'Archivos',
+            label: 'Subir / abrir archivo del sistema',
+            shortcut: 'Ctrl+O',
+            keywords: ['open', 'abrir', 'subir', 'upload', 'archivo'],
+            run: () => openUploadFilePickerAt()
+        },
+        {
+            id: 'file.openFolder',
+            category: 'Archivos',
+            label: 'Subir carpeta',
+            shortcut: 'Ctrl+K Ctrl+O',
+            keywords: ['folder', 'carpeta', 'upload', 'abrir carpeta'],
+            run: () => openUploadFolderPickerAt()
+        },
+        {
+            id: 'file.save',
+            category: 'Archivos',
+            label: 'Guardar / sincronizar ahora',
+            shortcut: 'Ctrl+S',
+            keywords: ['save', 'guardar', 'sincronizar', 'sync'],
+            run: () => syncNowFromShortcut()
+        },
+        {
             id: 'file.search',
             category: 'Archivos',
             label: 'Buscar archivos…',
-            shortcut: 'Ctrl+P',
+            shortcut: 'Ctrl+P / Ctrl+E',
             keywords: ['find', 'buscar', 'encontrar'],
             run: () => setShowQuickSearch(true)
+        },
+        {
+            id: 'file.copyPath',
+            category: 'Archivos',
+            label: 'Copiar ruta del archivo activo',
+            shortcut: 'Ctrl+K Ctrl+P',
+            keywords: ['path', 'ruta', 'copiar'],
+            run: () => copyActiveDocumentPath()
+        },
+        {
+            id: 'file.revealActive',
+            category: 'Archivos',
+            label: 'Revelar archivo activo en el explorador',
+            shortcut: 'Ctrl+K Ctrl+R',
+            keywords: ['reveal', 'mostrar', 'explorador', 'archivo activo'],
+            run: () => revealActiveDocumentInSidebar()
+        },
+        {
+            id: 'file.closeActive',
+            category: 'Archivos',
+            label: 'Cerrar pestaña activa',
+            shortcut: 'Ctrl+W',
+            keywords: ['close', 'cerrar', 'tab', 'pestaña'],
+            run: () => closeActiveTabFromShortcut()
+        },
+        {
+            id: 'file.closeAll',
+            category: 'Archivos',
+            label: 'Cerrar todas las pestañas',
+            shortcut: 'Ctrl+K Ctrl+W',
+            keywords: ['close all', 'cerrar todo', 'tabs', 'pestañas'],
+            run: () => closeAllTabsFromShortcut()
         },
         {
             id: 'view.toggleSidebar',
@@ -1813,12 +2162,60 @@ function DashboardContent() {
             run: () => handleToggleSidebarCollapse()
         },
         {
+            id: 'view.files',
+            category: 'Vista',
+            label: 'Mostrar Explorador',
+            shortcut: 'Ctrl+Shift+E',
+            keywords: ['explorer', 'archivos', 'files'],
+            run: () => openSidebarViewFromShortcut('files')
+        },
+        {
+            id: 'view.search',
+            category: 'Vista',
+            label: 'Mostrar búsqueda',
+            shortcut: 'Ctrl+Shift+F',
+            keywords: ['search', 'buscar', 'find in files'],
+            run: () => openSearchSidebarFromShortcut()
+        },
+        {
+            id: 'view.git',
+            category: 'Vista',
+            label: 'Mostrar control de versiones',
+            shortcut: 'Ctrl+Shift+G',
+            keywords: ['git', 'scm', 'source control'],
+            run: () => openSidebarViewFromShortcut('git')
+        },
+        {
+            id: 'view.tools',
+            category: 'Vista',
+            label: 'Mostrar herramientas',
+            shortcut: 'Ctrl+Shift+D',
+            keywords: ['run', 'debug', 'herramientas', 'tools'],
+            run: () => openSidebarViewFromShortcut('tools')
+        },
+        {
+            id: 'view.outline',
+            category: 'Vista',
+            label: 'Mostrar esquema del documento',
+            shortcut: 'Ctrl+Shift+O',
+            keywords: ['outline', 'symbol', 'simbolos', 'esquema'],
+            run: () => openSidebarViewFromShortcut('outline')
+        },
+        {
+            id: 'view.snippetsSidebar',
+            category: 'Vista',
+            label: 'Mostrar snippets',
+            shortcut: 'Ctrl+Shift+X',
+            keywords: ['snippets', 'extensions', 'plantillas'],
+            run: () => openSidebarViewFromShortcut('snippets')
+        },
+        {
             id: 'view.toggleTerminal',
             category: 'Vista',
             label: 'Alternar terminal',
             shortcut: 'Ctrl+`',
             keywords: ['terminal', 'consola', 'shell', 'panel inferior', 'output'],
-            run: () => { setDockInitialTab('terminal'); setBottomDockOpen((v) => !v); }
+            run: () => toggleBottomDockTab('terminal')
         },
         {
             id: 'view.toggleProblems',
@@ -1826,13 +2223,29 @@ function DashboardContent() {
             label: 'Alternar Problemas',
             shortcut: 'Ctrl+Shift+M',
             keywords: ['problemas', 'errores', 'lint', 'diagnostics'],
-            run: () => { setDockInitialTab('problems'); setBottomDockOpen((v) => !v); }
+            run: () => showBottomDockTab('problems')
+        },
+        {
+            id: 'view.togglePanel',
+            category: 'Vista',
+            label: 'Alternar panel inferior',
+            shortcut: 'Ctrl+J',
+            keywords: ['panel', 'dock', 'inferior'],
+            run: () => toggleBottomDockTab(dockInitialTab || 'terminal')
+        },
+        {
+            id: 'view.output',
+            category: 'Vista',
+            label: 'Mostrar salida / problemas',
+            shortcut: 'Ctrl+K Ctrl+H',
+            keywords: ['output', 'salida', 'problems', 'diagnostics'],
+            run: () => showBottomDockTab('problems')
         },
         {
             id: 'view.toggleAI',
             category: 'Vista',
             label: 'Alternar Agora AI',
-            shortcut: 'Ctrl+Shift+I',
+            shortcut: 'Ctrl+Shift+I / Ctrl+Alt+I',
             keywords: ['ai', 'copilot', 'chat', 'asistente'],
             run: () => setRightPanelOpen((v) => !v)
         },
@@ -1847,15 +2260,31 @@ function DashboardContent() {
             id: 'help.shortcuts',
             category: 'Ayuda',
             label: 'Atajos de teclado',
-            shortcut: '?',
+            shortcut: '? / Ctrl+K Ctrl+S',
             keywords: ['shortcuts', 'atajos', 'teclado', 'help', 'ayuda'],
             run: () => setShowKeyboardHelp(true)
+        },
+        {
+            id: 'workbench.commands',
+            category: 'Ayuda',
+            label: 'Mostrar todos los comandos',
+            shortcut: 'Ctrl+Shift+P / F1',
+            keywords: ['command palette', 'paleta', 'comandos'],
+            run: () => setShowCommandPalette(true)
+        },
+        {
+            id: 'preferences.openSettings',
+            category: 'Preferencias',
+            label: 'Abrir ajustes',
+            shortcut: 'Ctrl+,',
+            keywords: ['settings', 'configuracion', 'preferencias'],
+            run: () => openSettings()
         },
         {
             id: 'view.zen',
             category: 'Vista',
             label: 'Modo Zen',
-            shortcut: 'Ctrl+K Z',
+            shortcut: 'Ctrl+K Z / F11',
             keywords: ['focus', 'concentración', 'pantalla limpia'],
             run: () => handleToggleZenMode()
         },
@@ -1907,16 +2336,9 @@ function DashboardContent() {
             id: 'view.snippets',
             category: 'Vista',
             label: 'Snippets',
+            shortcut: 'Ctrl+Shift+X',
             keywords: ['snippets', 'galería'],
-            run: () => setActivityView('snippets')
-        },
-        {
-            id: 'view.ai',
-            category: 'Vista',
-            label: 'Alternar Agora AI',
-            shortcut: 'Ctrl+Shift+I',
-            keywords: ['agora', 'chat', 'asistente', 'ai', 'copilot'],
-            run: () => setRightPanelOpen((v) => !v)
+            run: () => openSidebarViewFromShortcut('snippets')
         },
         {
             id: 'terminal.new',
@@ -1930,6 +2352,7 @@ function DashboardContent() {
             id: 'terminal.tab',
             category: 'Terminal',
             label: 'Abrir terminal como tab',
+            shortcut: 'Ctrl+Shift+C',
             keywords: ['terminal', 'shell', 'tab', 'pestaña'],
             run: () => { void openTerminal(); }
         },
@@ -1967,6 +2390,10 @@ function DashboardContent() {
             run: () => logout()
         }
     ], [
+        closeActiveTabFromShortcut,
+        closeAllTabsFromShortcut,
+        copyActiveDocumentPath,
+        dockInitialTab,
         handleToggleSidebarCollapse,
         handleToggleZenMode,
         handleRequestNewTerminal,
@@ -1974,16 +2401,25 @@ function DashboardContent() {
         openBoard,
         openFormalizer,
         openNewFileModalAt,
+        openSearchSidebarFromShortcut,
         openSemanticBrowser,
+        openSettings,
+        openSidebarViewFromShortcut,
         openStRunner,
         openTerminal,
+        openUploadFilePickerAt,
+        openUploadFolderPickerAt,
+        revealActiveDocumentInSidebar,
         setPasswordError,
         setPasswordForm,
         setPasswordSuccess,
         setShowMembersModal,
         setShowPasswordModal,
         setShowPricingModal,
-        setShowQuickSearch
+        setShowQuickSearch,
+        showBottomDockTab,
+        syncNowFromShortcut,
+        toggleBottomDockTab
     ]);
 
     if (loading || !user) {
