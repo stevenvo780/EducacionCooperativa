@@ -103,6 +103,7 @@ public/worker-*.js
 # (prepare-next-build, generate-st-runtime-manifest, etc.) deben ir al repo
 # para que Vercel los ejecute en el auto-deploy.
 .tarballs/
+vendor/
 package.json.deploy-bak
 package-lock.json.deploy-bak
 .env*.local
