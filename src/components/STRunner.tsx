@@ -512,7 +512,7 @@ export default function STRunner({
               ? replHistory.length - 1
               : Math.max(0, replHistoryIdx - 1);
           setReplHistoryIdx(newIdx);
-          setReplInput(replHistory[newIdx]);
+          setReplInput(replHistory[newIdx] ?? '');
         }
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -523,7 +523,7 @@ export default function STRunner({
             setReplInput('');
           } else {
             setReplHistoryIdx(newIdx);
-            setReplInput(replHistory[newIdx]);
+            setReplInput(replHistory[newIdx] ?? '');
           }
         }
       }

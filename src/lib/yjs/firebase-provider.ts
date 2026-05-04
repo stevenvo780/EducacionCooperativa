@@ -135,7 +135,7 @@ export class FirebaseYjsProvider {
       try {
         Y.applyUpdate(this.ydoc, base64ToBytes(rec.data), ORIGIN_REMOTE);
         this.updateCount += 1;
-        this.maybeCompact();
+        void this.maybeCompact();
       } catch (e) {
         console.warn('[yjs-firebase] applyUpdate failed', e);
       }
@@ -157,7 +157,7 @@ export class FirebaseYjsProvider {
         console.warn('[yjs-firebase] push update failed', err)
       );
       this.updateCount += 1;
-      this.maybeCompact();
+      void this.maybeCompact();
     };
     this.ydoc.on('update', onUpdate);
     this.unsubscribeFns.push(() => this.ydoc.off('update', onUpdate));
@@ -212,7 +212,7 @@ export class FirebaseYjsProvider {
         if (current === null || current === undefined) {
           return this.ydoc.clientID;
         }
-        return; // abort: alguien más ya tiene el lock
+        return undefined;
       });
       return result.committed && result.snapshot.val() === this.ydoc.clientID;
     } catch (e) {
@@ -250,7 +250,7 @@ export class FirebaseYjsProvider {
     }
     this.unsubscribeFns = [];
     if (this.awareness) {
-      try { remove(this.myAwarenessRef); } catch { /* ignore */ }
+      try { void remove(this.myAwarenessRef); } catch { /* ignore */ }
     }
     this.opts.onStatusChange?.('disconnected');
   }
