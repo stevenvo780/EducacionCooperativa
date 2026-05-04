@@ -297,6 +297,12 @@ export default function STRunner({
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
   const currentFileId = fileMode?.docName || 'st-runner-scratch';
 
+  useEffect(() => {
+    const handler = () => setEditorConfig(loadConfig());
+    window.addEventListener('agora:st-editor-config-changed', handler);
+    return () => window.removeEventListener('agora:st-editor-config-changed', handler);
+  }, []);
+
   // Publica los outputs al BottomDock global cuando se monta dentro del
   // workspace. Los canales son sticky: aunque el editor ST se cierre, el
   // último estado queda visible hasta que otro ST lo reemplace.
@@ -671,7 +677,7 @@ export default function STRunner({
           <BookOpen className="w-3.5 h-3.5" />
         </button>
 
-        <EditorSettingsMenu config={editorConfig} onChange={setEditorConfig} />
+        <EditorSettingsMenu />
       </div>
 
       {/* ── Body ── */}

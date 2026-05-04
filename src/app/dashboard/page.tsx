@@ -62,7 +62,8 @@ import DragOverlay from '@/components/dashboard/DragOverlay';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
 import WorkspaceTopBar from '@/components/dashboard/WorkspaceTopBar';
-import SettingsModal, { type SettingsSectionId } from '@/components/dashboard/SettingsModal';
+import SettingsModal from '@/components/dashboard/SettingsModal';
+import { OPEN_SETTINGS_EVENT, isSettingsSectionId, type SettingsSectionId } from '@/lib/settings-events';
 import LeftPanel from '@/components/dashboard/LeftPanel';
 import { SIDEBAR_VIEWS } from '@/components/dashboard/sidebar-views';
 import BottomDock from '@/components/dashboard/BottomDock';
@@ -979,9 +980,20 @@ function DashboardContent() {
     }, [openSemanticBrowser]);
 
     useEffect(() => {
-        const handler = () => openSettings('ai');
-        window.addEventListener('agora:open-ai-config', handler);
-        return () => window.removeEventListener('agora:open-ai-config', handler);
+        const aiHandler = () => openSettings('ai');
+        const linterHandler = () => openSettings('linter');
+        const genericHandler = (event: Event) => {
+            const detail = (event as CustomEvent<{ section?: unknown }>).detail;
+            openSettings(isSettingsSectionId(detail?.section) ? detail.section : undefined);
+        };
+        window.addEventListener('agora:open-ai-config', aiHandler);
+        window.addEventListener('agora:open-linter-config', linterHandler);
+        window.addEventListener(OPEN_SETTINGS_EVENT, genericHandler);
+        return () => {
+            window.removeEventListener('agora:open-ai-config', aiHandler);
+            window.removeEventListener('agora:open-linter-config', linterHandler);
+            window.removeEventListener(OPEN_SETTINGS_EVENT, genericHandler);
+        };
     }, [openSettings]);
 
     useEffect(() => {
@@ -1032,7 +1044,7 @@ function DashboardContent() {
                 return;
             }
             if (type === 'open_linter_config' || panel === 'linter-config') {
-                window.dispatchEvent(new CustomEvent('agora:open-linter-config'));
+                openSettings('linter');
                 return;
             }
 
@@ -2507,6 +2519,7 @@ function DashboardContent() {
                     onClose={() => setSettingsOpen(false)}
                     initialSection={settingsInitialSection}
                     activeWorkspaceId={currentWorkspace?.id}
+                    activeUserId={user?.uid}
                     onOpenChangePassword={() => {
                         setPasswordForm({ current: '', new: '', confirm: '' });
                         setPasswordError('');

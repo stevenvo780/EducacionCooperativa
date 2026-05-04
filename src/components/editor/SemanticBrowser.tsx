@@ -18,6 +18,7 @@ import {
   Pin,
   Quote,
   Search,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -39,6 +40,7 @@ import type {
   TheoryGraphQuickFix
 } from '@/lib/semantic/theory-graph';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
+import { dispatchOpenSettings } from '@/lib/settings-events';
 
 export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
 
@@ -51,6 +53,12 @@ const TABS: { key: SemanticTab; label: string; icon: React.ReactNode }[] = [
   { key: 'relaciones', label: 'Relaciones', icon: <Link2 className="h-3.5 w-3.5" /> },
   { key: 'archivos', label: 'Archivos ST', icon: <FileCode2 className="h-3.5 w-3.5" /> }
 ];
+
+const EXPERIENCE_MODE_LABELS: Record<WorkspaceExperienceMode, string> = {
+  assisted: 'Asistido',
+  hybrid: 'Híbrido',
+  expert: 'Experto'
+};
 
 interface SemanticBrowserProps {
   docName: string;
@@ -784,23 +792,16 @@ export function SemanticBrowser({
 
           <div className="flex items-center gap-3 shrink-0 ml-3">
             {onExperienceModeChange && (
-              <div className="flex items-center rounded-lg border border-slate-700 bg-slate-900 p-0.5 gap-0.5">
-                {(['assisted', 'hybrid', 'expert'] as WorkspaceExperienceMode[]).map(mode => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => onExperienceModeChange(mode)}
-                    className={clsx(
-                      'px-2 py-1 rounded text-[10px] font-semibold transition',
-                      experienceMode === mode
-                        ? 'bg-blue-500/20 text-blue-300'
-                        : 'text-slate-500 hover:text-slate-300'
-                    )}
-                  >
-                    {mode === 'assisted' ? 'Asistido' : mode === 'hybrid' ? 'Híbrido' : 'Experto'}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => dispatchOpenSettings('semantic')}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[10px] font-semibold text-slate-300 transition hover:border-blue-500/40 hover:text-blue-200"
+                title="Abrir Configuración > Mesa semántica"
+                aria-label="Abrir configuración de la mesa semántica"
+              >
+                <Settings2 className="h-3.5 w-3.5 text-blue-300" />
+                Modo: {EXPERIENCE_MODE_LABELS[experienceMode ?? 'hybrid']}
+              </button>
             )}
             <div className="text-[11px] text-slate-500">
               {docName || 'Documento'}

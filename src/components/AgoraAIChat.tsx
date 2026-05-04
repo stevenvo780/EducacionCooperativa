@@ -1375,7 +1375,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
           return (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`group relative max-w-[88%] min-w-0 overflow-hidden break-words rounded-lg px-3 py-1.5 text-sm leading-normal [overflow-wrap:anywhere] ${
+              <div className={`group relative max-w-[88%] min-w-0 overflow-hidden rounded-lg px-3 py-1.5 text-sm leading-normal [overflow-wrap:anywhere] ${
                 msg.role === 'user'
                   ? 'bg-sky-600/20 border border-sky-500/20 text-surface-100'
                   : msg.error
@@ -1388,7 +1388,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                     Error
                   </div>
                 )}
-                <div className="break-words max-w-full overflow-hidden [overflow-wrap:anywhere]">
+                <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}

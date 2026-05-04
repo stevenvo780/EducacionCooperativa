@@ -89,12 +89,17 @@ export default function GlobalSemanticBrowser({
     if (!workspaceId) return;
 
     const handleWindowSync = () => scheduleReload();
+    const handleSemanticPreferencesSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string }>).detail;
+      if (!detail?.workspaceId || detail.workspaceId === workspaceId) scheduleReload(true);
+    };
     const handleVisibilitySync = () => {
       if (!document.hidden) scheduleReload(true);
     };
 
     window.addEventListener('agora:docs-changed', handleWindowSync);
     window.addEventListener('agora:doc-content-updated', handleWindowSync);
+    window.addEventListener('agora:semantic-preferences-changed', handleSemanticPreferencesSync);
     window.addEventListener('focus', handleWindowSync);
     window.addEventListener('online', handleWindowSync);
     document.addEventListener('visibilitychange', handleVisibilitySync);
@@ -102,6 +107,7 @@ export default function GlobalSemanticBrowser({
     return () => {
       window.removeEventListener('agora:docs-changed', handleWindowSync);
       window.removeEventListener('agora:doc-content-updated', handleWindowSync);
+      window.removeEventListener('agora:semantic-preferences-changed', handleSemanticPreferencesSync);
       window.removeEventListener('focus', handleWindowSync);
       window.removeEventListener('online', handleWindowSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);

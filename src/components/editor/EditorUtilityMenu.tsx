@@ -12,11 +12,10 @@ interface EditorUtilityMenuProps {
     y: number;
   };
   isFullscreen: boolean;
-  showToolsPanel: boolean;
   showSnippetGallery: boolean;
   viewMode: ViewMode;
   onClose: () => void;
-  onToggleToolsPanel: () => void;
+  onOpenToolbarSettings: () => void;
   onOpenSemanticDesk: () => void;
   onResetToolbar: () => void;
   onToggleFullscreen: () => void;
@@ -29,11 +28,10 @@ interface EditorUtilityMenuProps {
 export function EditorUtilityMenu({
   anchor,
   isFullscreen,
-  showToolsPanel,
   showSnippetGallery,
   viewMode,
   onClose,
-  onToggleToolsPanel,
+  onOpenToolbarSettings,
   onOpenSemanticDesk,
   onResetToolbar,
   onToggleFullscreen,
@@ -84,7 +82,7 @@ export function EditorUtilityMenu({
       window.removeEventListener('resize', computePosition);
       window.visualViewport?.removeEventListener('resize', computePosition);
     };
-  }, [anchor.id, anchor.x, anchor.y, viewMode, showSnippetGallery, showToolsPanel, isFullscreen]);
+  }, [anchor.id, anchor.x, anchor.y, viewMode, showSnippetGallery, isFullscreen]);
 
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
@@ -129,7 +127,7 @@ export function EditorUtilityMenu({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <UtilityButton icon={<Settings2 className="h-3.5 w-3.5" />} label={showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'} onClick={onToggleToolsPanel} />
+        <UtilityButton icon={<Settings2 className="h-3.5 w-3.5" />} label="Configurar toolbar" onClick={onOpenToolbarSettings} />
         <UtilityButton icon={<BookMarked className="h-3.5 w-3.5" />} label="Mesa semántica" onClick={onOpenSemanticDesk} />
         <UtilityButton icon={<CheckSquare className="h-3.5 w-3.5" />} label="Escanear pendientes" onClick={onScanPendings} />
         <UtilityButton icon={<Sparkles className="h-3.5 w-3.5" />} label="Restaurar barra" onClick={onResetToolbar} />

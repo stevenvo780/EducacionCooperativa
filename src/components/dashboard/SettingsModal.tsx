@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { X, Settings as SettingsIcon, Wrench, Sparkles, Code2, Shield, FolderGit2, KeyRound, Users, type LucideIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { X, Settings as SettingsIcon, Wrench, Sparkles, Code2, Shield, FolderGit2, KeyRound, Users, BookMarked, RotateCcw, type LucideIcon } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
 import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
@@ -10,6 +10,7 @@ import type { ToolbarGroupKey, ToolbarVisibility } from '@/components/mosaic-edi
 import {
   loadConfig as loadStEditorConfig,
   saveConfig as saveStEditorConfig,
+  getDefaultConfig as getDefaultStEditorConfig,
   FEATURE_LABELS as ST_FEATURE_LABELS,
   ALL_FEATURES as ST_ALL_FEATURES,
   type EditorConfig as StEditorConfig
@@ -42,8 +43,18 @@ import {
   type ModelCatalog
 } from '@/lib/agora-ai/modelCatalog';
 import type { AgentAccessCapability, AgentAccessPolicy, AIProvider } from '@/lib/agora-ai/types';
+import type { SettingsSectionId } from '@/lib/settings-events';
+import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { EMPTY_SEMANTIC_WORKSPACE_STATE } from '@/lib/semantic/workspace-state';
+import {
+  loadSemanticWorkspaceState,
+  setSemanticWorkspacePreferences,
+  type SemanticWorkspacePreferences,
+  type SemanticWorkspaceState
+} from '@/services/editorSemanticStore';
+import { saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
 
-export type SettingsSectionId = 'editor-md' | 'editor-st' | 'ai' | 'linter' | 'cuenta';
+export type { SettingsSectionId } from '@/lib/settings-events';
 
 interface Section {
   id: SettingsSectionId;
@@ -55,6 +66,7 @@ interface Section {
 const SECTIONS: Section[] = [
   { id: 'editor-md', label: 'Editor Markdown', icon: Wrench, description: 'Toolbar y módulos visibles' },
   { id: 'editor-st', label: 'Editor ST', icon: Code2, description: 'Comportamiento del editor de código' },
+  { id: 'semantic', label: 'Mesa semántica', icon: BookMarked, description: 'Modo de experiencia y previews' },
   { id: 'ai', label: 'Agora IA', icon: Sparkles, description: 'Proveedor, modelo, permisos' },
   { id: 'linter', label: 'Linter Markdown', icon: Shield, description: 'Reglas activas y diccionario personal' },
   { id: 'cuenta', label: 'Cuenta y permisos', icon: KeyRound, description: 'Contraseña, miembros, acceso Git' }
@@ -65,6 +77,7 @@ interface SettingsModalProps {
   onClose: () => void;
   initialSection?: SettingsSectionId;
   activeWorkspaceId?: string;
+  activeUserId?: string;
   onOpenChangePassword: () => void;
   onOpenMembers: () => void;
   onOpenGitAccess: () => void;
@@ -75,6 +88,7 @@ export default function SettingsModal({
   onClose,
   initialSection = 'editor-md',
   activeWorkspaceId,
+  activeUserId,
   onOpenChangePassword,
   onOpenMembers,
   onOpenGitAccess
@@ -159,6 +173,9 @@ export default function SettingsModal({
           <div className="flex-1 overflow-y-auto overscroll-contain p-4">
             {section === 'editor-md' && <EditorMdSection />}
             {section === 'editor-st' && <EditorStSection />}
+            {section === 'semantic' && (
+              <SemanticSection activeWorkspaceId={activeWorkspaceId} activeUserId={activeUserId} />
+            )}
             {section === 'ai' && (
               <AISection activeWorkspaceId={activeWorkspaceId} />
             )}
@@ -521,18 +538,36 @@ function EditorStSection() {
       if (!prev) return prev;
       const next = { ...prev, [key]: value };
       saveStEditorConfig(next);
+      window.dispatchEvent(new CustomEvent('agora:st-editor-config-changed', { detail: next }));
       return next;
     });
+  };
+
+  const resetDefaults = () => {
+    const next = getDefaultStEditorConfig();
+    saveStEditorConfig(next);
+    window.dispatchEvent(new CustomEvent('agora:st-editor-config-changed', { detail: next }));
+    setConfig(next);
   };
 
   if (!config) return <div className="text-xs text-surface-500">Cargando…</div>;
 
   return (
     <div className="space-y-4">
-      <SectionHelper>
-        Toggles que se aplican a los archivos .st (lenguaje formal).
-        Los cambios surten efecto al volver a abrir el archivo.
-      </SectionHelper>
+      <div className="flex items-start justify-between gap-3">
+        <SectionHelper>
+          Toggles que se aplican a los archivos .st (lenguaje formal).
+          Los cambios surten efecto al volver a abrir el archivo.
+        </SectionHelper>
+        <button
+          type="button"
+          onClick={resetDefaults}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-surface-700 bg-surface-925 px-2.5 py-1 text-[11px] text-surface-300 transition hover:border-surface-600 hover:text-white"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Restaurar
+        </button>
+      </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {ST_ALL_FEATURES.map((feature) => (
           <ToggleRow
@@ -542,6 +577,115 @@ function EditorStSection() {
             onChange={(v) => update(feature, v)}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+const EXPERIENCE_MODE_LABELS: Record<SemanticWorkspacePreferences['experienceMode'], { label: string; description: string }> = {
+  assisted: {
+    label: 'Asistido',
+    description: 'Prioriza guías, recomendaciones y flujo pedagógico.'
+  },
+  hybrid: {
+    label: 'Híbrido',
+    description: 'Equilibra ayuda contextual con controles avanzados.'
+  },
+  expert: {
+    label: 'Experto',
+    description: 'Muestra capas formales y reduce ayudas introductorias.'
+  }
+};
+
+function SemanticSection({
+  activeWorkspaceId,
+  activeUserId
+}: {
+  activeWorkspaceId?: string;
+  activeUserId?: string;
+}) {
+  const workspaceId = activeWorkspaceId || PERSONAL_WORKSPACE_ID;
+  const context = useMemo(() => ({
+    workspaceId,
+    userId: activeUserId ?? null
+  }), [activeUserId, workspaceId]);
+  const [state, setState] = useState<SemanticWorkspaceState>(() => loadSemanticWorkspaceState(context));
+
+  useEffect(() => {
+    setState(loadSemanticWorkspaceState(context));
+  }, [context]);
+
+  const persistPreferences = (updates: Partial<SemanticWorkspacePreferences>) => {
+    const nextState = setSemanticWorkspacePreferences(context, updates);
+    setState(nextState);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('agora:semantic-preferences-changed', {
+        detail: { workspaceId, preferences: nextState.preferences }
+      }));
+    }
+    void saveSemanticWorkspaceStateApi(workspaceId, nextState).catch((error) => {
+      console.warn('[settings] no se pudieron sincronizar preferencias semánticas', error);
+    });
+  };
+
+  const resetDefaults = () => {
+    persistPreferences(EMPTY_SEMANTIC_WORKSPACE_STATE.preferences);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <SectionHelper>
+          Estas preferencias pertenecen al workspace activo y afectan cómo se presenta la mesa semántica.
+        </SectionHelper>
+        <button
+          type="button"
+          onClick={resetDefaults}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-surface-700 bg-surface-925 px-2.5 py-1 text-[11px] text-surface-300 transition hover:border-surface-600 hover:text-white"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Restaurar
+        </button>
+      </div>
+
+      <div>
+        <SectionTitle>Modo de experiencia</SectionTitle>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {(Object.keys(EXPERIENCE_MODE_LABELS) as SemanticWorkspacePreferences['experienceMode'][]).map((mode) => {
+            const option = EXPERIENCE_MODE_LABELS[mode];
+            const active = state.preferences.experienceMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => persistPreferences({ experienceMode: mode })}
+                className={`rounded-md border px-3 py-2 text-left text-xs transition ${
+                  active
+                    ? 'border-mandy-400/50 bg-mandy-500/10 text-mandy-100'
+                    : 'border-surface-700/50 bg-surface-925/50 text-surface-400 hover:border-surface-600 hover:text-surface-200'
+                }`}
+              >
+                <span className="block font-medium">{option.label}</span>
+                <span className="mt-1 block text-[10px] leading-tight text-surface-500">{option.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <ToggleRow
+          label="Mostrar preview ST"
+          description="Mantiene visibles los previews formales cuando la vista los use."
+          checked={state.preferences.showSTPreview}
+          onChange={(checked) => persistPreferences({ showSTPreview: checked })}
+        />
+        <ToggleRow
+          label="Mostrar ayudas pedagógicas"
+          description="Activa guías y recomendaciones para consolidar conceptos."
+          checked={state.preferences.showPedagogicalHints}
+          onChange={(checked) => persistPreferences({ showPedagogicalHints: checked })}
+        />
       </div>
     </div>
   );
