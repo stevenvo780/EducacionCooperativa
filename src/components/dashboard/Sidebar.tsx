@@ -4,7 +4,7 @@ import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 're
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, ListCollapse, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
-import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
+import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -185,8 +185,10 @@ const Sidebar = ({
       return next;
     });
 
+    // Si vamos a expandir un path, asegúrate de que ningún ancestro
+    // top-level esté en collapsedByUser (lo desocupamos al navegar a él).
     setCollapsedByUser(prev => {
-      if (!paths.includes(DEFAULT_FOLDER_NAME) && prev.size === 0) return prev;
+      if (prev.size === 0) return prev;
       const next = new Set(prev);
       paths.forEach(item => next.delete(item));
       return next;
@@ -195,7 +197,9 @@ const Sidebar = ({
 
   const collapseAllFolders = () => {
     setExpandedFolders(new Set());
-    setCollapsedByUser(new Set([DEFAULT_FOLDER_NAME]));
+    // Colapsar todos los top-level → meterlos a collapsedByUser
+    const topLevelPaths = (folderChildrenMap[''] ?? []).map(f => f.path);
+    setCollapsedByUser(new Set(topLevelPaths));
   };
 
   const { folderChildrenMap, docsByFolder } = useMemo(
@@ -203,35 +207,25 @@ const Sidebar = ({
     [folders, docs]
   );
 
-  // Expandir automáticamente folders top-level al cargar el workspace,
-  // para que la jerarquía sea visible sin tener que clickear cada folder.
-  // Sólo se aplica una vez por workspace (mientras expandedFolders esté vacío).
-  useEffect(() => {
-    const topLevel = folderChildrenMap[''] ?? [];
-    if (topLevel.length === 0) return;
-    setExpandedFolders(prev => {
-      if (prev.size > 0) return prev;
-      const next = new Set<string>();
-      for (const f of topLevel) next.add(f.path);
-      return next;
-    });
-  }, [folderChildrenMap, currentWorkspace?.id]);
-
   const toggleFolder = (path: string) => {
-    setExpandedFolders(prev => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-    if (path === DEFAULT_FOLDER_NAME) {
+    // Top-level: expandido por defecto, así que el toggle se hace via
+    // collapsedByUser. Sub-folder: expandido sólo si el user lo abrió.
+    const folder = folderChildrenMap[''] && folderChildrenMap[''].some(f => f.path === path);
+    if (folder) {
       setCollapsedByUser(prev => {
         const next = new Set(prev);
         if (next.has(path)) next.delete(path);
         else next.add(path);
         return next;
       });
+      return;
     }
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
   };
 
   const isSearchMode = sidebarSearchQuery.trim().length > 0;
@@ -259,9 +253,12 @@ const Sidebar = ({
         const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
         items.push({ kind: 'folder', folder, depth, hasChildren });
 
-        const isDefaultFolder = folder.path === DEFAULT_FOLDER_NAME;
+        // Folders top-level (parentPath==='') están expandidos por defecto
+        // a menos que el user los haya colapsado manualmente. Sub-folders
+        // sólo se expanden cuando el user clicka explícitamente.
+        const isTopLevel = folder.parentPath === '';
         const isUserCollapsed = collapsedByUser.has(folder.path);
-        const shouldExpand = isDefaultFolder
+        const shouldExpand = isTopLevel
           ? !isUserCollapsed
           : expandedFolders.has(folder.path);
 
@@ -397,9 +394,9 @@ const Sidebar = ({
     }
 
     if (item.kind === 'folder') {
-      const isDefaultFolder = item.folder.path === DEFAULT_FOLDER_NAME;
+      const isTopLevel = item.folder.parentPath === '';
       const isUserCollapsed = collapsedByUser.has(item.folder.path);
-      const isExpanded = isDefaultFolder
+      const isExpanded = isTopLevel
         ? !isUserCollapsed
         : expandedFolders.has(item.folder.path);
       const isActive = activeFolder === item.folder.path;
