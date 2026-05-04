@@ -258,7 +258,7 @@ const markdownComponents = {
   h3: (props: any) => <h3 {...props} className="text-sm font-semibold mt-1.5 mb-0.5 text-surface-200" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   hr: (props: any) => <hr {...props} className="my-2 border-surface-700" />,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @next/next/no-img-element
   img: (props: any) => <img {...props} className="max-w-full h-auto rounded-md my-2" loading="lazy" alt={props.alt || ''} />
 } as const;
 

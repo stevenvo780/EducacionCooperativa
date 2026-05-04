@@ -34,9 +34,9 @@ describe('buildEffectiveFolders', () => {
     expect(out.find(f => f.path === 'Filosofía/Lógica')?.kind).toBe('virtual');
   });
 
-  it('siempre asegura DEFAULT_FOLDER_NAME', () => {
+  it('sin folders ni docs: no crea ningún nodo (raíz no es un folder)', () => {
     const out = buildEffectiveFolders([], []);
-    expect(out.map(f => f.path)).toContain('No estructurado');
+    expect(out).toEqual([]);
   });
 
   it('preserva folders explícitos sin duplicarlos', () => {

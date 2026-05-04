@@ -1,5 +1,5 @@
 import type { DocItem, FolderItem } from '@/types/document-item';
-import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
+import { normalizeFolderPath } from '@/lib/folder-utils';
 
 const getUpdatedAtMs = (value: DocItem['updatedAt']): number => {
   if (typeof value === 'number') return value;
@@ -56,6 +56,7 @@ export const buildEffectiveFolders = (folders: FolderItem[], docs: DocItem[]): F
 
   const ensureFolder = (rawPath?: string) => {
     const normalized = normalizeFolderPath(rawPath);
+    if (!normalized) return; // raíz: no crea nodo
     if (byPath.has(normalized)) return;
 
     const parts = normalized.split('/');
@@ -80,7 +81,6 @@ export const buildEffectiveFolders = (folders: FolderItem[], docs: DocItem[]): F
     }
   };
 
-  ensureFolder(DEFAULT_FOLDER_NAME);
   for (const doc of docs) ensureFolder(doc.folder);
 
   return [...folders, ...derived];
