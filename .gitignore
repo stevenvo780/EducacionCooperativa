@@ -99,7 +99,12 @@ public/sw.js
 public/workbox-*.js
 public/worker-*.js
 
-scripts
+# Solo ignoramos tarballs locales de prepare-deploy; los scripts de build
+# (prepare-next-build, generate-st-runtime-manifest, etc.) deben ir al repo
+# para que Vercel los ejecute en el auto-deploy.
+.tarballs/
+package.json.deploy-bak
+package-lock.json.deploy-bak
 .env*.local
 
 # Notas privadas para Claude (credenciales de infraestructura) — NUNCA commitear.

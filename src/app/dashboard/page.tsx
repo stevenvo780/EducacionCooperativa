@@ -91,6 +91,7 @@ import { useDeleteDocument } from '@/hooks/dashboard/useDeleteDocument';
 import { useTerminalTabs } from '@/hooks/dashboard/useTerminalTabs';
 import { useMosaicTabs } from '@/hooks/dashboard/useMosaicTabs';
 import { useDocumentActions } from '@/hooks/dashboard/useDocumentActions';
+import { useSidebarLayout } from '@/hooks/dashboard/useSidebarLayout';
 import { useWorkspaceActions } from '@/hooks/dashboard/useWorkspaceActions';
 import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
 import type { AgentDocumentTarget, AgentOpenDocumentsEventDetail, AgentUiCommandEventDetail } from '@/lib/agora-ai/types';
@@ -420,41 +421,15 @@ function DashboardContent() {
     const [showWorkspaceManagerModal, setShowWorkspaceManagerModal] = useState(false);
     const [newFileTargetFolder, setNewFileTargetFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
-    const [sidebarWidth, setSidebarWidth] = useState(260);
-    const [isResizingSidebar, setIsResizingSidebar] = useState(false);
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
-    const startResizingSidebar = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsResizingSidebar(true);
-    }, []);
-
-    const stopResizingSidebar = useCallback(() => {
-        setIsResizingSidebar(false);
-    }, []);
-
-    const resizeSidebar = useCallback((e: MouseEvent) => {
-        if (isResizingSidebar) {
-            const newWidth = e.clientX;
-            if (newWidth >= 160 && newWidth <= 600) {
-                setSidebarWidth(newWidth);
-            }
-        }
-    }, [isResizingSidebar]);
-
-    useEffect(() => {
-        if (isResizingSidebar) {
-            window.addEventListener('mousemove', resizeSidebar);
-            window.addEventListener('mouseup', stopResizingSidebar);
-        } else {
-            window.removeEventListener('mousemove', resizeSidebar);
-            window.removeEventListener('mouseup', stopResizingSidebar);
-        }
-        return () => {
-            window.removeEventListener('mousemove', resizeSidebar);
-            window.removeEventListener('mouseup', stopResizingSidebar);
-        };
-    }, [isResizingSidebar, resizeSidebar, stopResizingSidebar]);
+    const {
+        sidebarWidth,
+        setSidebarWidth,
+        isResizingSidebar,
+        isSidebarCollapsed,
+        setIsSidebarCollapsed,
+        startResizingSidebar,
+        stopResizingSidebar
+    } = useSidebarLayout();
 
     const [isZenMode, setIsZenMode] = useState(false);
     const zenRestoreRef = useRef({ sidebar: false });
@@ -1811,20 +1786,6 @@ function DashboardContent() {
         }
         return <FileText className="w-5 h-5" />;
     };
-
-    useEffect(() => {
-        if (typeof document === 'undefined') return;
-        document.body.classList.toggle('sidebar-resizing-active', isResizingSidebar);
-        if (isResizingSidebar) {
-            document.body.style.cursor = 'col-resize';
-        } else {
-            document.body.style.cursor = '';
-        }
-        return () => {
-            document.body.classList.remove('sidebar-resizing-active');
-            document.body.style.cursor = '';
-        };
-    }, [isResizingSidebar]);
 
     const paletteCommands = useMemo<PaletteCommand[]>(() => [
         {
