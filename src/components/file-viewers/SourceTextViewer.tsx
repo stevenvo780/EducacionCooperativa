@@ -4,7 +4,7 @@ import React, { useCallback, useMemo } from 'react';
 import { FileText } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource, decodeText } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, decodeText, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { parseBibtex, type BibEntry } from '@/lib/parsers/bibtex';
 import { escapeHtml } from '@/lib/html-utils';
 
@@ -19,7 +19,7 @@ const MAX_BYTES = 2 * 1024 * 1024;
 
 export default function SourceTextViewer({ docName, fileUrl, language = 'plain', onClose }: SourceTextViewerProps) {
   const transform = useCallback(async ({ buffer }: { buffer: ArrayBuffer }) => decodeText(buffer), []);
-  const state = useFileResource<string>(fileUrl, transform, { maxBytes: MAX_BYTES });
+  const state = useFileResource<string>(fileUrl, transform, { maxBytes: MAX_BYTES, cacheKey: urlCacheKey(`source-${language}`, fileUrl) });
 
   return (
     <FileViewerShell docName={docName} fileUrl={fileUrl} onClose={onClose}>

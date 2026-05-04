@@ -5,7 +5,7 @@ import { BookImage, ChevronLeft, ChevronRight } from 'lucide-react';
 import type JSZip from 'jszip';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { useObjectUrls } from '@/components/file-viewers/hooks/useObjectUrls';
 import { getFileExtension } from '@/lib/document-format';
 
@@ -41,7 +41,7 @@ export default function ComicArchiveViewer({ docName, fileUrl, onClose }: ComicA
     return { zip, entries };
   }, [docName]);
 
-  const state = useFileResource<ArchiveResource>(fileUrl, transform);
+  const state = useFileResource<ArchiveResource>(fileUrl, transform, { cacheKey: urlCacheKey('comic', fileUrl) });
 
   // Reset al abrir un archivo distinto.
   useEffect(() => {
