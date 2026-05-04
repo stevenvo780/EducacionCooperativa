@@ -341,6 +341,9 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
 
         textLayer.style.width = `${cssViewport.width}px`;
         textLayer.style.height = `${cssViewport.height}px`;
+        // pdf.js v3+ requiere --scale-factor en el container del text layer
+        // para alinear los spans con el canvas (si falta, console warn).
+        textLayer.style.setProperty('--scale-factor', String(actualScale));
         textLayer.innerHTML = '';
 
         const context = canvas.getContext('2d');
@@ -352,12 +355,16 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
         renderTasks.push(renderTask);
         await renderTask.promise;
 
-        if (page.getTextContent) {
-          const textContent = await page.getTextContent();
+        if (page.streamTextContent || page.getTextContent) {
+          // API nueva: textContentSource (stream). textContent quedó deprecado
+          // y el warning generaba muchísimo ruido en consola.
+          const textContentSource = page.streamTextContent
+            ? page.streamTextContent({ includeMarkedContent: true })
+            : await page.getTextContent();
           if (cancelled) return;
 
           const textLayerTask = pdfjs.renderTextLayer({
-            textContent,
+            textContentSource,
             container: textLayer,
             viewport: cssViewport
           });
