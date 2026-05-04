@@ -90,6 +90,7 @@ interface MosaicLayoutProps {
   onSetDocMode: (docId: string, mode: ViewMode) => void;
   onCloseTab: (docId: string) => void;
   onSelectDoc: (doc: DocItem) => void;
+  selectedDocId?: string | null;
   onActivateTab?: (docId: string) => void;
   onDropDocOnTile?: (docId: string, targetTileId: string, position: 'left' | 'right' | 'top' | 'bottom' | 'replace') => void;
   onDropDocOnEmpty?: (docId: string) => void;
@@ -130,6 +131,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   onSetDocMode: _onSetDocMode,
   onCloseTab,
   onSelectDoc,
+  selectedDocId,
   onActivateTab,
   onDropDocOnTile,
   onDropDocOnEmpty,
@@ -751,12 +753,13 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const mode = docModes[doc.id] ?? 'preview';
     const searchTerm = docSearchTerms[doc.id] || '';
     const dropInfo = dragOverInfo?.tileId === doc.id ? dragOverInfo : null;
+    const isActiveWindow = selectedDocId === doc.id;
 
     return (
         <CompatMosaicWindow<string>
             path={path}
             title={doc.name}
-            className="bg-surface-900 mosaic-window-compact"
+            className={`bg-surface-900 mosaic-window-compact ${isActiveWindow ? 'mosaic-window-active' : ''}`}
             toolbarControls={renderToolbarControls(doc, mode)}
             renderToolbar={() => renderWindowToolbar(doc, mode)}
             draggable={!isTouchDevice}
@@ -765,7 +768,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                 ref={(el) => { tileRefs.current[doc.id] = el; }}
                 data-drop-zone={doc.id}
                 className={`h-full w-full relative ${isBoard ? 'bg-surface-900' : 'bg-black'}`}
-                onMouseDownCapture={() => {
+                onPointerDownCapture={() => {
                   onActivateTab?.(doc.id);
                 }}
                 onFocusCapture={() => {
@@ -876,6 +879,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     );
   }, [
     tabById, docById, docModes, nexusUrl, renderToolbarControls, renderWindowToolbar, docSearchTerms, dragOverInfo, isDraggingDoc,
+    selectedDocId,
     currentWorkspaceId, currentWorkspaceName, currentWorkspaceType, currentUserId, folders, isTouchDevice,
     onSelectDoc, onActivateTab, onCreateFile, onCreateStFile, onCreateFolder, onUploadFile, onUploadFolder,
     handleTileDragOver, handleTileDragLeave, handleTileDrop,
@@ -972,15 +976,36 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           min-width: 0;
           min-height: 0;
         }
+        .mosaic-custom-dark .mosaic-window {
+          position: relative;
+          border: 1px solid rgba(51, 65, 85, 0.72) !important;
+          box-shadow: 0 0 0 1px rgba(2, 6, 23, 0.6);
+          transition: border-color 180ms ease, box-shadow 180ms ease;
+        }
+        .mosaic-custom-dark .mosaic-window.mosaic-window-active {
+          border-color: rgba(96, 165, 250, 0.62) !important;
+          box-shadow:
+            0 0 0 1px rgba(96, 165, 250, 0.34),
+            0 0 22px rgba(59, 130, 246, 0.2),
+            0 0 54px rgba(14, 165, 233, 0.1);
+        }
         .mosaic-window-compact .mosaic-window-toolbar {
           height: 28px !important;
           min-height: 28px !important;
           background: rgb(30 30 35) !important;
           border-bottom: 1px solid rgb(55 55 65) !important;
         }
+        .mosaic-window-compact.mosaic-window-active .mosaic-window-toolbar {
+          background: linear-gradient(90deg, rgba(30, 64, 175, 0.36), rgba(30, 30, 35, 0.96)) !important;
+          border-bottom-color: rgba(96, 165, 250, 0.45) !important;
+        }
         .mosaic-window-compact .mosaic-window-title {
           font-size: 11px !important;
           color: rgb(180 180 190) !important;
+        }
+        .mosaic-window-compact.mosaic-window-active .mosaic-window-title,
+        .mosaic-window-compact.mosaic-window-active .mosaic-inline-title {
+          color: rgb(226 232 240) !important;
         }
         .mosaic-window-compact .mosaic-inline-title:disabled {
           opacity: 1;

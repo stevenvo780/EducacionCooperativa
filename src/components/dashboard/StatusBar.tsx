@@ -150,7 +150,7 @@ function toneToClass(tone?: StatusTone): string {
     case 'warning': return 'text-amber-300';
     case 'info': return 'text-sky-300';
     case 'success': return 'text-emerald-300';
-    case 'muted': return 'text-surface-500';
+    case 'muted': return 'text-surface-300';
     default: return 'text-surface-300';
   }
 }
