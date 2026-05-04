@@ -9,7 +9,7 @@ import {
   Bot, Send, Settings, ChevronDown,
   Loader2, Trash2, Copy, Check, AlertCircle, Undo2,
   History, MessageSquarePlus, Shield, Square,
-  ListTree, ChevronsDownUp, ChevronsUpDown
+  ListTree, ChevronsDownUp, ChevronsUpDown, BookOpen, X
 } from 'lucide-react';
 import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
 import { fetchZod } from '@/lib/fetch-zod';
@@ -37,6 +37,9 @@ import {
   saveAgentAccessProfile,
   loadAgentTraceExpanded,
   saveAgentTraceExpanded,
+  loadAgentUserInstructions,
+  saveAgentUserInstructions,
+  AGENT_USER_INSTRUCTIONS_MAX_LENGTH,
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
 import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy, profileAutoConfirms } from '@/lib/agora-ai/accessPolicy';
@@ -263,6 +266,9 @@ const markdownComponents = {
 export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [config, setConfig] = useState<AIProviderConfig>(loadAIProviderConfig);
   const mode: AgentMode = 'agent';
+  const [userInstructions, setUserInstructions] = useState<string>('');
+  const [showUserInstructionsEditor, setShowUserInstructionsEditor] = useState(false);
+  const [userInstructionsDraft, setUserInstructionsDraft] = useState('');
   const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(loadAgentAccessPolicy);
   const [traceExpanded, setTraceExpanded] = useState<boolean>(loadAgentTraceExpanded);
   const [showProviderMenu, setShowProviderMenu] = useState(false);
@@ -322,6 +328,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   const meta = PROVIDER_META[config.provider];
   const resolvedWorkspaceId = workspaceId || PERSONAL_WORKSPACE_ID;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setUserInstructions(loadAgentUserInstructions(resolvedWorkspaceId));
+  }, [resolvedWorkspaceId]);
   const canSend = !loading && (!meta.needsKey || Boolean(config.apiKey));
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
 
@@ -547,7 +558,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         apiKey: config.apiKey,
         model: config.model || meta.defaultModel,
         mode,
-        accessPolicy
+        accessPolicy,
+        userInstructions
       })
     });
 
@@ -676,7 +688,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
 
     return finalPayload;
-  }, [accessPolicy, config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
+  }, [accessPolicy, config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById, userInstructions]);
 
   const callOllamaDirect = useCallback(async (
     msgs: Array<Record<string, unknown>>,
@@ -718,7 +730,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       mode,
       contextPrompt: context,
       workspaceId: resolvedWorkspaceId,
-      accessPolicy: normalizedPolicy
+      accessPolicy: normalizedPolicy,
+      userInstructions
     });
     const steps: AgentTraceStep[] = [];
     const rollback: AgentRollbackAction[] = [];
@@ -894,7 +907,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       pendingConfirmation,
       rollback
     };
-  }, [accessPolicy, callOllamaDirect, executeAgoraTool, fetchContext, mode, resolvedWorkspaceId]);
+  }, [accessPolicy, callOllamaDirect, executeAgoraTool, fetchContext, mode, resolvedWorkspaceId, userInstructions]);
 
   const copyMessage = useCallback(async (id: string, content: string) => {
     await navigator.clipboard.writeText(content);
@@ -1059,7 +1072,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             apiKey: config.apiKey,
             model: config.model || meta.defaultModel,
             mode,
-            accessPolicy
+            accessPolicy,
+            userInstructions
           })
         });
 
@@ -1113,7 +1127,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setStreamStatus('');
       textareaRef.current?.focus();
     }
-  }, [accessPolicy, input, loading, canSend, messages, mode, runRollback, config.provider, config.apiKey, config.model, meta.defaultModel, resolvedWorkspaceId, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById]);
+  }, [accessPolicy, input, loading, canSend, messages, mode, runRollback, config.provider, config.apiKey, config.model, meta.defaultModel, resolvedWorkspaceId, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1607,6 +1621,22 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                 )}
               </select>
             </label>
+            <button
+              type="button"
+              onClick={() => {
+                setUserInstructionsDraft(userInstructions);
+                setShowUserInstructionsEditor(true);
+              }}
+              title={userInstructions ? `Instrucciones del workspace activas (${userInstructions.length} caracteres). Click para editar.` : 'Definir instrucciones personalizadas para este workspace.'}
+              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${
+                userInstructions
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:border-emerald-500/60'
+                  : 'border-surface-700 bg-surface-900 text-surface-400 hover:border-surface-600 hover:text-surface-200'
+              }`}
+            >
+              <BookOpen className="w-3 h-3" />
+              <span>Instrucciones{userInstructions ? ' ✓' : ''}</span>
+            </button>
             {(() => {
               const lastUsage = [...messages].reverse().find(message => message.agentRun?.usage?.totalTokens);
               const usedTokens = lastUsage?.agentRun?.usage?.totalTokens
@@ -1637,6 +1667,79 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         </div>
       </div>
       </div>
+
+      {showUserInstructionsEditor && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowUserInstructionsEditor(false)}
+        >
+          <div
+            className="w-full max-w-xl rounded-lg border border-surface-700 bg-surface-900 p-4 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-surface-100">
+                <BookOpen className="w-4 h-4 text-emerald-400" />
+                Instrucciones del agente para este workspace
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowUserInstructionsEditor(false)}
+                className="rounded p-1 text-surface-400 hover:bg-surface-800 hover:text-surface-100"
+                title="Cerrar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="mb-2 text-xs text-surface-400">
+              Estas instrucciones se inyectan al system prompt SOLO en este workspace ({resolvedWorkspaceId}). Útil para indicarle el dominio (ej. &quot;Soy estudiante de filosofía: prefiero lógica modal y silogismos&quot;), tono o reglas específicas. Máx. {AGENT_USER_INSTRUCTIONS_MAX_LENGTH} caracteres.
+            </p>
+            <textarea
+              value={userInstructionsDraft}
+              onChange={(event) => setUserInstructionsDraft(event.target.value.slice(0, AGENT_USER_INSTRUCTIONS_MAX_LENGTH))}
+              placeholder="Ej.: Usa lógica clásica proposicional por defecto. Cuando formalices, comenta cada paso. Si dudas, pregunta antes de modificar archivos."
+              className="h-48 w-full resize-none rounded-md border border-surface-700 bg-surface-950 px-3 py-2 text-sm text-surface-100 placeholder:text-surface-600 focus:border-emerald-500/50 focus:outline-none"
+            />
+            <div className="mt-2 flex items-center justify-between text-xs text-surface-500">
+              <span>{userInstructionsDraft.length} / {AGENT_USER_INSTRUCTIONS_MAX_LENGTH}</span>
+              <div className="flex items-center gap-2">
+                {userInstructions && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveAgentUserInstructions(resolvedWorkspaceId, '');
+                      setUserInstructions('');
+                      setUserInstructionsDraft('');
+                      setShowUserInstructionsEditor(false);
+                    }}
+                    className="rounded-md border border-mandy-500/40 bg-mandy-500/10 px-3 py-1 text-mandy-200 hover:border-mandy-500/60"
+                  >
+                    Borrar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowUserInstructionsEditor(false)}
+                  className="rounded-md border border-surface-700 bg-surface-900 px-3 py-1 text-surface-300 hover:border-surface-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveAgentUserInstructions(resolvedWorkspaceId, userInstructionsDraft);
+                    setUserInstructions(userInstructionsDraft.trim().slice(0, AGENT_USER_INSTRUCTIONS_MAX_LENGTH));
+                    setShowUserInstructionsEditor(false);
+                  }}
+                  className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-emerald-100 hover:border-emerald-500/60"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

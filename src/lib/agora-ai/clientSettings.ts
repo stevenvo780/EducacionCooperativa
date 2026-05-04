@@ -62,6 +62,8 @@ export const CONFIG_KEY = 'agoraAIConfig';
 export const AGENT_MODE_KEY = 'agoraAIMode';
 export const AGENT_ACCESS_POLICY_KEY = 'agoraAIAccessPolicy';
 export const AGENT_TRACE_EXPANDED_KEY = 'agoraAITraceExpanded';
+const AGENT_USER_INSTRUCTIONS_KEY_PREFIX = 'agoraAIUserInstructions:';
+export const AGENT_USER_INSTRUCTIONS_MAX_LENGTH = 4000;
 
 export const DEFAULT_CONFIG: AIProviderConfig = {
   provider: 'ollama',
@@ -133,5 +135,24 @@ export function saveAgentTraceExpanded(expanded: boolean) {
   if (typeof window === 'undefined') return;
   if (expanded) window.localStorage.setItem(AGENT_TRACE_EXPANDED_KEY, '1');
   else window.localStorage.removeItem(AGENT_TRACE_EXPANDED_KEY);
+  dispatchAISettingsChanged();
+}
+
+const userInstructionsKeyFor = (workspaceId: string) => `${AGENT_USER_INSTRUCTIONS_KEY_PREFIX}${workspaceId || 'default'}`;
+
+export function loadAgentUserInstructions(workspaceId: string): string {
+  if (typeof window === 'undefined') return '';
+  const raw = window.localStorage.getItem(userInstructionsKeyFor(workspaceId));
+  return (raw || '').slice(0, AGENT_USER_INSTRUCTIONS_MAX_LENGTH);
+}
+
+export function saveAgentUserInstructions(workspaceId: string, value: string) {
+  if (typeof window === 'undefined') return;
+  const trimmed = (value || '').trim().slice(0, AGENT_USER_INSTRUCTIONS_MAX_LENGTH);
+  if (trimmed) {
+    window.localStorage.setItem(userInstructionsKeyFor(workspaceId), trimmed);
+  } else {
+    window.localStorage.removeItem(userInstructionsKeyFor(workspaceId));
+  }
   dispatchAISettingsChanged();
 }
