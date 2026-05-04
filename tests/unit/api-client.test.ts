@@ -119,6 +119,7 @@ describe('api client auth wrappers', () => {
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get('Authorization')).toBeNull();
     expect(headers.get('X-Test')).toBe('1');
+    expect(headers.get('X-Request-Id')).toBeTruthy();
   });
 
   it('falls back to local dev token when firebase auth is unavailable', async () => {
@@ -142,6 +143,7 @@ describe('api client auth wrappers', () => {
 
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer auth-token');
+    expect(headers.get('X-Request-Id')).toBeTruthy();
     await expect(apiClient.withAuthToken('/ruta')).resolves.toBe('/ruta');
     expect(warnSpy).toHaveBeenCalled();
   });

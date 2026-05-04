@@ -1,4 +1,6 @@
 import type { DocItem, Workspace } from '@/components/dashboard/types';
+import { fetchZod } from '@/lib/fetch-zod';
+import { dashboardApiItemSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { withErrorCode } from '@/lib/error-utils';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
@@ -334,13 +336,12 @@ export const createDocumentApi = async (payload: Record<string, unknown>) => {
     return { id: tempId, ...payload, _offline: true } as { id: string; [key: string]: unknown };
   }
 
-  const res = await authFetch('/api/documents', {
+  const data = await fetchZod('/api/documents', dashboardApiItemSchema, {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
   });
-  assertOk(res, 'Failed to create document via API');
-  return res.json() as Promise<{ id: string; [key: string]: unknown }>;
+  return data;
 };
 
 export const updateDocumentApi = (docId: string, payload: Record<string, unknown>): Promise<void> => {

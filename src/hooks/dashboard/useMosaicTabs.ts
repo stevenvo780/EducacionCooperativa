@@ -6,6 +6,7 @@ import type { User } from 'firebase/auth';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import type { TerminalSession } from '@/context/TerminalContext';
+import { DocumentType } from '@/types/documents';
 
 interface UseMosaicTabsOptions {
     currentWorkspace: Workspace | null;
@@ -259,14 +260,14 @@ export function useMosaicTabs({
         const wsId = currentWorkspace?.id;
         const uid = user?.uid || 'system';
         if (wsId) {
-            const specialPanels: Array<{ prefix: string; name: string; type: string }> = [
-                { prefix: 'board-', name: 'Tablero', type: 'board' },
-                { prefix: 'st-runner-', name: 'ST Logic', type: 'st-runner' },
-                { prefix: 'semantic-browser-', name: 'Mesa Semántica', type: 'semantic-browser' },
-                { prefix: 'formalizer-', name: 'Formalizador', type: 'formalizer' },
-                { prefix: 'agora-ai-', name: 'Agora AI', type: 'agora-ai' },
-                { prefix: 'snippets-gallery-', name: 'Galería de Snippets', type: 'snippets-gallery' },
-                { prefix: 'files-', name: 'Archivos', type: 'files' }
+            const specialPanels: Array<{ prefix: string; name: string; type: DocItem['type'] }> = [
+                { prefix: 'board-', name: 'Tablero', type: DocumentType.Board },
+                { prefix: 'st-runner-', name: 'ST Logic', type: DocumentType.STRunner },
+                { prefix: 'semantic-browser-', name: 'Mesa Semántica', type: DocumentType.SemanticBrowser },
+                { prefix: 'formalizer-', name: 'Formalizador', type: DocumentType.Formalizer },
+                { prefix: 'agora-ai-', name: 'Agora AI', type: DocumentType.AgoraAI },
+                { prefix: 'snippets-gallery-', name: 'Galería de Snippets', type: DocumentType.SnippetsGallery },
+                { prefix: 'files-', name: 'Archivos', type: DocumentType.Files }
             ];
             for (const panel of specialPanels) {
                 if (docId === `${panel.prefix}${wsId}`) {
@@ -494,7 +495,7 @@ export function useMosaicTabs({
         const newSnipItem: DocItem = {
             id: snipId,
             name: 'Galería de Snippets',
-            type: 'snippets-gallery' as DocItem['type'],
+            type: DocumentType.SnippetsGallery,
             workspaceId: currentWorkspace.id,
             ownerId: user.uid,
             updatedAt: new Date()

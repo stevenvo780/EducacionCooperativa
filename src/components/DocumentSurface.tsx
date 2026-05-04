@@ -4,7 +4,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import MosaicEditor from '@/components/MosaicEditor';
 import SpreadsheetViewer from '@/components/SpreadsheetViewer';
 import FileDocumentViewer from '@/components/file-viewers/FileDocumentViewer';
-import { authFetch } from '@/services/apiClient';
+import { fetchZod } from '@/lib/fetch-zod';
+import { resolvedDocumentMetaSchema } from '@agora/contracts';
 import { getErrorMessage } from '@/lib/error-utils';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { isMarkdownDocument, isPlainTextDocument, isSpreadsheetDocument } from '@/lib/document-format';
@@ -96,14 +97,10 @@ export default function DocumentSurface({
       setLoading(true);
       setError(null);
       try {
-        const res = await authFetch(`/api/documents/${roomId}`, { cache: 'no-store' });
-        if (!res.ok) {
-          throw new Error('No se pudo cargar el documento');
-        }
-        const data = await res.json() as ResolvedDocumentMeta;
+        const data = await fetchZod(`/api/documents/${roomId}`, resolvedDocumentMetaSchema, { cache: 'no-store' });
         if (!cancelled) {
           setResolvedMeta({
-            type: data.type,
+            type: data.type as DocumentTypeId,
             name: data.name,
             mimeType: data.mimeType,
             url: data.url ?? null,

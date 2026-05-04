@@ -100,4 +100,24 @@ describe('buildSTFromSemantic', () => {
     expect(evaluated.diagnostics ?? []).toHaveLength(0);
     expect(evaluated.results?.some((result) => result.status === 'error')).toBe(false);
   });
+
+  it('marca fallback como formalización tentativa en vez de átomo silencioso', () => {
+    const state = baseState();
+    state.concepts.push({
+      id: 'concept-fallback',
+      title: '',
+      excerpt: '',
+      docId: 'doc-1',
+      docName: 'Documento Demo',
+      workspaceId: 'ws-1',
+      createdAt: 1,
+      updatedAt: 1,
+      sourceFragmentId: ''
+    });
+
+    const stContent = buildSTFromSemantic(state, 'Documento Demo');
+
+    expect(stContent).toContain('formalización tentativa');
+    expect(stContent).toContain('warning:');
+  });
 });

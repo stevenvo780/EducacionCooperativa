@@ -12,6 +12,7 @@ import type { WorkspaceTypeId } from '@/types/workspace';
 import { isMarkdownDocument } from '@/lib/document-format';
 import { CompatMosaicWindow } from '@/components/mosaic/CompatMosaicWindow';
 import { useIsTouchDeviceProfile } from '@/lib/device-input';
+import { PanelErrorBoundary } from '@/components/dashboard/PanelErrorBoundary';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -56,6 +57,7 @@ function isTextSearchableDoc(doc: { type?: string; name: string; mimeType?: stri
     || doc.type === DocumentType.SemanticBrowser
     || doc.type === DocumentType.Formalizer
     || doc.type === DocumentType.AgoraAI
+    || doc.type === DocumentType.SnippetsGallery
     || isStFileDoc(doc)
   ) {
     return false;
@@ -363,7 +365,17 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [isResizingMosaic, resizeCursor]);
 
   const fileExplorerDocs = useMemo(() => {
-      return docs.filter(d => d.type !== 'terminal' && d.type !== 'files' && d.type !== 'board' && d.type !== 'st-runner');
+      const virtualTypes = new Set<string>([
+        DocumentType.Terminal,
+        DocumentType.Files,
+        DocumentType.Board,
+        DocumentType.STRunner,
+        DocumentType.SemanticBrowser,
+        DocumentType.Formalizer,
+        DocumentType.AgoraAI,
+        DocumentType.SnippetsGallery
+      ]);
+      return docs.filter(d => !virtualTypes.has(String(d.type ?? '')));
   }, [docs]);
   const tabById = useMemo(() => new Map(openTabs.map(tab => [tab.id, tab])), [openTabs]);
   const docById = useMemo(() => new Map(docs.map(doc => [doc.id, doc])), [docs]);
@@ -563,7 +575,16 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   }, [onCloseTab, openTabs]);
 
   const renderWindowToolbar = useCallback((doc: DocItem, mode: ViewMode) => {
-    const canRenameInline = Boolean(onRenameDocInline) && doc.type !== 'terminal' && doc.type !== 'files' && doc.type !== 'board' && doc.type !== 'st-runner' && doc.type !== 'agora-ai';
+    const canRenameInline = Boolean(onRenameDocInline) && !new Set<string>([
+      DocumentType.Terminal,
+      DocumentType.Files,
+      DocumentType.Board,
+      DocumentType.STRunner,
+      DocumentType.SemanticBrowser,
+      DocumentType.Formalizer,
+      DocumentType.AgoraAI,
+      DocumentType.SnippetsGallery
+    ]).has(String(doc.type ?? ''));
     const isEditingTitle = editingTitleDocId === doc.id;
     const isRenaming = renamingDocId === doc.id;
 
@@ -724,7 +745,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const isStRunner = doc.type === 'st-runner';
     const isSemanticBrowser = doc.type === 'semantic-browser';
     const isFormalizer = doc.type === 'formalizer';
-    const isSnippetsGallery = (doc.type as string) === 'snippets-gallery';
+    const isSnippetsGallery = doc.type === DocumentType.SnippetsGallery;
     const isAgoraAI = doc.type === 'agora-ai';
     const isStFile = !isTerminal && !isFileExplorer && !isBoard && !isStRunner && !isSemanticBrowser && !isFormalizer && !isSnippetsGallery && !isAgoraAI && isStFileDoc(doc);
     const mode = docModes[doc.id] ?? 'preview';
@@ -767,6 +788,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                     {dropInfo.position === 'replace' && <div className="absolute inset-0 bg-sky-500/10 ring-2 ring-inset ring-sky-500" />}
                   </div>
                 )}
+                <PanelErrorBoundary name={doc.name}>
                  {isTerminal ? (
                       <Terminal
                         nexusUrl={nexusUrl}
@@ -848,6 +870,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         hideInlineStatus
                       />
                   )}
+                </PanelErrorBoundary>
             </div>
         </CompatMosaicWindow>
     );

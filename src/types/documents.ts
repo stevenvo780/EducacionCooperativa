@@ -8,7 +8,8 @@ export enum DocumentType {
   STRunner = 'st-runner',
   SemanticBrowser = 'semantic-browser',
   Formalizer = 'formalizer',
-  AgoraAI = 'agora-ai'
+  AgoraAI = 'agora-ai',
+  SnippetsGallery = 'snippets-gallery'
 }
 
 export type DocumentTypeId = `${DocumentType}`;

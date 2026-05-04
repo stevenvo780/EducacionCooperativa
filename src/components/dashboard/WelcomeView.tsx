@@ -18,7 +18,8 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import type { DocItem } from '@/components/dashboard/types';
-import { authFetch } from '@/services/apiClient';
+import { fetchZod } from '@/lib/fetch-zod';
+import { workspaceStorageInfoSchema } from '@agora/contracts';
 
 interface WelcomeViewProps {
   workspaceName?: string;
@@ -110,9 +111,7 @@ export default function WelcomeView({
     setStorageLoading(true);
     void (async () => {
       try {
-        const res = await authFetch('/api/payments/storage-usage');
-        if (!res.ok) throw new Error(String(res.status));
-        const data = await res.json() as Partial<StorageInfo>;
+        const data = await fetchZod('/api/payments/storage-usage', workspaceStorageInfoSchema);
         if (active && typeof data.usedBytes === 'number' && typeof data.limitBytes === 'number') {
           setStorage({ usedBytes: data.usedBytes, limitBytes: data.limitBytes });
         }

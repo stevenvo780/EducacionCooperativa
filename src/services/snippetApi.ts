@@ -1,3 +1,6 @@
+import { fetchZod } from '@/lib/fetch-zod';
+import { snippetSchema } from '@agora/contracts';
+import { z } from 'zod';
 import { authFetch } from '@/services/apiClient';
 
 export interface Snippet {
@@ -14,12 +17,14 @@ export interface Snippet {
 export type SnippetInput = Omit<Snippet, 'id' | 'ownerId'>;
 
 export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => {
-  const res = await authFetch(`/api/snippets?workspaceId=${encodeURIComponent(workspaceId)}`, {
-    cache: 'no-store'
-  });
-  if (!res.ok) return [];
-  const data = await res.json() as unknown;
-  return Array.isArray(data) ? data as Snippet[] : [];
+  try {
+    const data = await fetchZod(`/api/snippets?workspaceId=${encodeURIComponent(workspaceId)}`, z.array(snippetSchema), {
+      cache: 'no-store'
+    });
+    return data as Snippet[];
+  } catch {
+    return [];
+  }
 };
 
 export const createSnippet = async (data: SnippetInput): Promise<Snippet | null> => {

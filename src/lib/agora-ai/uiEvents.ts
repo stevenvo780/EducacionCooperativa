@@ -11,6 +11,7 @@ import type {
   AgentWorkerCommandEventDetail,
   AgentToolExecutionResult
 } from '@/lib/agora-ai/types';
+import { isAgentUiCommandType, isAgentUiPanel } from '@/lib/agora-ai/uiPanels';
 
 const OPENABLE_ACTIONS = new Set([
   'read_document',
@@ -42,10 +43,13 @@ function toUiCommand(raw: unknown): AgentUiCommand | null {
   if (!raw || typeof raw !== 'object') return null;
   const command = raw as Record<string, unknown>;
   const type = typeof command.type === 'string' ? command.type : '';
-  if (!type) return null;
+  if (!type || !isAgentUiCommandType(type)) return null;
+  const rawPanel = typeof command.panel === 'string' ? command.panel : undefined;
+  const panel = rawPanel && isAgentUiPanel(rawPanel) ? rawPanel : undefined;
+  if (rawPanel && !panel) return null;
   return {
-    type: type as AgentUiCommand['type'],
-    panel: typeof command.panel === 'string' ? command.panel as AgentUiCommand['panel'] : undefined,
+    type,
+    panel,
     folder: typeof command.folder === 'string' ? command.folder : undefined
   };
 }

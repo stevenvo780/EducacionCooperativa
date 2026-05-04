@@ -5,6 +5,13 @@ import { toast } from 'sonner';
 const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
 
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
+const REQUEST_ID_HEADER = 'X-Request-Id';
+
+const createRequestId = () => {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  return `web_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+};
 
 export const apiUrl = (input: RequestInfo | URL): RequestInfo | URL => {
   if (!apiBaseUrl) return input;
@@ -107,6 +114,7 @@ const doFetch = async (input: RequestInfo | URL, init: RequestInit, forceRefresh
   const token = await getAuthToken(forceRefresh);
   const headers = new Headers(init.headers || {});
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (!headers.has(REQUEST_ID_HEADER)) headers.set(REQUEST_ID_HEADER, createRequestId());
   return fetch(input, { ...init, headers });
 };
 

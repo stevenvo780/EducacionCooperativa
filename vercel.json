@@ -2,5 +2,11 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "installCommand": "npm install",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://agora-backend-578238159459.us-central1.run.app/api/:path*"
+    }
+  ]
 }

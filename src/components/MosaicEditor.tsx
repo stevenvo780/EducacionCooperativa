@@ -59,6 +59,8 @@ import clsx from 'clsx';
 import 'katex/dist/katex.min.css';
 
 import { createSnippet } from '@/services/snippetApi';
+import { fetchZod } from '@/lib/fetch-zod';
+import { documentListSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { fetchDocumentRawApi } from '@/services/dashboardApi';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
@@ -811,10 +813,7 @@ export default function MosaicEditor({
         view: 'list',
         excludeContent: 'true'
       });
-      const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
-      if (!res.ok) return null;
-
-      const docs = await res.json() as Array<{ id: string; name?: string; folder?: string; type?: string }>;
+      const docs = await fetchZod(`/api/documents?${search.toString()}`, documentListSchema, { cache: 'no-store' });
       const currentFolder = normalizePath(currentMeta.folder);
       const normalizedH = searchHref.replace(/^\/+/, '');
       const resolvedPath = searchHref.startsWith('/')
@@ -843,7 +842,8 @@ export default function MosaicEditor({
       return foundDoc;
     };
 
-    const emitOpenDoc = (docId: string) => {
+    const emitOpenDoc = (docId?: string) => {
+      if (!docId) return false;
       if (embedded && typeof window !== 'undefined') {
         window.postMessage({ type: 'agora-open-doc', docId, sourceDocId: roomId }, window.location.origin);
         return true;
@@ -1057,14 +1057,10 @@ export default function MosaicEditor({
         view: 'list',
         excludeContent: 'true'
       });
-      const res = await authFetch(`/api/documents?${search.toString()}`, { cache: 'no-store' });
-      if (!res.ok) {
-        throw new Error('No se pudo cargar la lista de documentos');
-      }
-      const docs = await res.json() as Array<{ id: string; name?: string; folder?: string; type?: string }>;
+      const docs = await fetchZod(`/api/documents?${search.toString()}`, documentListSchema, { cache: 'no-store' });
       const filteredDocs = docs
-        .filter((doc) => doc.id !== roomId && doc.type !== 'folder')
-        .map((doc) => ({ id: doc.id, name: doc.name || 'Documento', folder: doc.folder || '' }));
+        .filter((doc) => doc.id && doc.id !== roomId && doc.type !== 'folder')
+        .map((doc) => ({ id: doc.id!, name: doc.name || 'Documento', folder: doc.folder || '' }));
       setLinkableDocuments(filteredDocs);
 
       // Detectar companion .st existente
@@ -1072,7 +1068,7 @@ export default function MosaicEditor({
       if (currentName) {
         const expectedSTName = companionSTName(currentName);
         const companion = filteredDocs.find((d) => d.name === expectedSTName);
-        if (companion) {
+        if (companion && companion.id) {
           setCompanionStDocId(companion.id);
         }
       }

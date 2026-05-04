@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CreditCard, KeyRound, LogOut, Settings, Sparkles, Users, HardDrive, type LucideIcon } from 'lucide-react';
-import { authFetch } from '@/services/apiClient';
+import { fetchZod } from '@/lib/fetch-zod';
+import { workspaceStorageInfoSchema } from '@agora/contracts';
 
 interface UserMenuProps {
   open: boolean;
@@ -48,9 +49,7 @@ export default function UserMenu({
     let active = true;
     void (async () => {
       try {
-        const res = await authFetch('/api/payments/storage-usage');
-        if (!res.ok) return;
-        const data = await res.json() as { usedBytes?: number; limitBytes?: number };
+        const data = await fetchZod('/api/payments/storage-usage', workspaceStorageInfoSchema);
         if (active && typeof data.usedBytes === 'number' && typeof data.limitBytes === 'number') {
           setStorage({ usedBytes: data.usedBytes, limitBytes: data.limitBytes });
         }
