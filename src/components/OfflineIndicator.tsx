@@ -1,6 +1,6 @@
 'use client';
 
-import { WifiOff, Wifi, RefreshCw, AlertTriangle, Check, CloudOff, Loader2 } from 'lucide-react';
+import { WifiOff, Wifi, RefreshCw, AlertTriangle, Check, CloudOff, Loader2, GitMerge } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export interface OfflineSyncStatus {
@@ -8,6 +8,7 @@ export interface OfflineSyncStatus {
   isSyncing: boolean;
   pendingCount: number;
   failedCount: number;
+  conflictCount?: number;
   lastSyncAt: number | null;
 }
 
@@ -15,6 +16,7 @@ interface Props {
   syncStatus?: OfflineSyncStatus;
   onRetryFailed?: () => void;
   onSyncNow?: () => void;
+  onResolveConflicts?: () => void;
 }
 
 function timeAgo(ts: number): string {
@@ -25,11 +27,12 @@ function timeAgo(ts: number): string {
   return `hace ${Math.floor(diff / 3600)}h`;
 }
 
-export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow }: Props) {
+export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow, onResolveConflicts }: Props) {
   const isOnline = syncStatus?.isOnline ?? true;
   const isSyncing = syncStatus?.isSyncing ?? false;
   const pendingCount = syncStatus?.pendingCount ?? 0;
   const failedCount = syncStatus?.failedCount ?? 0;
+  const conflictCount = syncStatus?.conflictCount ?? 0;
   const lastSyncAt = syncStatus?.lastSyncAt ?? null;
 
   const [expanded, setExpanded] = useState(false);
@@ -55,7 +58,7 @@ export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow 
   }, [isSyncing, lastSyncAt, pendingCount, failedCount]);
 
   // Nothing to show — all is well and online
-  const hasActivity = !isOnline || isSyncing || pendingCount > 0 || failedCount > 0 || showSuccess;
+  const hasActivity = !isOnline || isSyncing || pendingCount > 0 || failedCount > 0 || conflictCount > 0 || showSuccess;
   if (!hasActivity) return null;
 
   return (
@@ -93,6 +96,24 @@ export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow 
                   className="text-xs px-2 py-0.5 bg-red-600/20 hover:bg-red-600/30 rounded transition"
                 >
                   Reintentar
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Conflicts */}
+          {conflictCount > 0 && (
+            <div className="flex items-center justify-between gap-2 text-amber-300 mb-1">
+              <div className="flex items-center gap-2">
+                <GitMerge className="w-3.5 h-3.5" />
+                <span>{conflictCount} conflicto{conflictCount !== 1 ? 's' : ''}</span>
+              </div>
+              {onResolveConflicts && (
+                <button
+                  onClick={onResolveConflicts}
+                  className="text-xs px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 rounded transition"
+                >
+                  Resolver
                 </button>
               )}
             </div>
@@ -148,6 +169,8 @@ export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow 
           <><Loader2 className="w-4 h-4 animate-spin" /><span>Sincronizando…</span></>
         ) : !isOnline ? (
           <><WifiOff className="w-4 h-4" /><span>Offline</span>{pendingCount > 0 && <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-xs">{pendingCount}</span>}</>
+        ) : conflictCount > 0 ? (
+          <><GitMerge className="w-4 h-4" /><span>{conflictCount} conflicto{conflictCount !== 1 ? 's' : ''}</span></>
         ) : failedCount > 0 ? (
           <><AlertTriangle className="w-4 h-4" /><span>{failedCount} fallido{failedCount !== 1 ? 's' : ''}</span></>
         ) : pendingCount > 0 ? (

@@ -13,9 +13,13 @@ import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { apiUrl } from '@/services/apiClient';
 import {
   clearCompletedSync,
+  getConflictSyncItems,
   getFailedSyncItems,
   getSyncQueueCount,
-  SyncQueueStatus
+  removeSyncItem,
+  SyncQueueStatus,
+  updateSyncItem,
+  type SyncQueueItem
 } from '@/lib/offlineStorage';
 
 export interface OfflineSyncState {
@@ -23,6 +27,8 @@ export interface OfflineSyncState {
   isSyncing: boolean;
   pendingCount: number;
   failedCount: number;
+  conflictCount: number;
+  conflicts: SyncQueueItem[];
   lastSyncAt: number | null;
   syncProgress: SyncProgress | null;
 }
@@ -38,6 +44,8 @@ export function useOfflineSync() {
     isSyncing: false,
     pendingCount: 0,
     failedCount: 0,
+    conflictCount: 0,
+    conflicts: [],
     lastSyncAt: null,
     syncProgress: null
   });
@@ -96,13 +104,18 @@ export function useOfflineSync() {
    */
   const refreshCounts = useCallback(async () => {
     try {
-      const pending = await getSyncQueueCount();
-      const failed = await getFailedSyncItems();
+      const [pending, failed, conflicts] = await Promise.all([
+        getSyncQueueCount(),
+        getFailedSyncItems(),
+        getConflictSyncItems()
+      ]);
       if (isMounted.current) {
         setState(prev => ({
           ...prev,
           pendingCount: pending,
-          failedCount: failed.length
+          failedCount: failed.length,
+          conflictCount: conflicts.length,
+          conflicts
         }));
       }
     } catch {
@@ -166,6 +179,36 @@ export function useOfflineSync() {
   }, [state.isOnline, state.pendingCount, state.isSyncing, syncNow]);
 
   /**
+   * Mantener la versión local: re-encola el item con la versión del servidor
+   * como expectedVersion para que el próximo replay pase el If-Match.
+   */
+  const keepLocalConflict = useCallback(async (item: SyncQueueItem) => {
+    if (item.id === undefined || item.id === null) return;
+    const serverVersion = item.conflict?.serverVersion;
+    const nextPayload = { ...item.payload };
+    if (typeof serverVersion === 'number') nextPayload.expectedVersion = serverVersion;
+    await updateSyncItem({
+      ...item,
+      payload: nextPayload,
+      status: SyncQueueStatus.Pending,
+      retries: 0,
+      error: undefined,
+      conflict: undefined
+    });
+    await refreshCounts();
+    await syncNow();
+  }, [refreshCounts, syncNow]);
+
+  /**
+   * Aceptar la versión del servidor: descarta el cambio local sin pushearlo.
+   */
+  const acceptServerConflict = useCallback(async (item: SyncQueueItem) => {
+    if (item.id === undefined || item.id === null) return;
+    await removeSyncItem(item.id);
+    await refreshCounts();
+  }, [refreshCounts]);
+
+  /**
    * Reintenta procesar los elementos fallidos de la cola.
    */
   const retryFailed = useCallback(async () => {
@@ -186,7 +229,9 @@ export function useOfflineSync() {
     ...state,
     syncNow,
     retryFailed,
-    refreshCounts
+    refreshCounts,
+    keepLocalConflict,
+    acceptServerConflict
   };
 }
 

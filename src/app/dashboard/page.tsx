@@ -62,6 +62,7 @@ import DragOverlay from '@/components/dashboard/DragOverlay';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
 import WorkspaceTopBar from '@/components/dashboard/WorkspaceTopBar';
+import usePresence from '@/hooks/usePresence';
 import SettingsModal from '@/components/dashboard/SettingsModal';
 import { OPEN_SETTINGS_EVENT, isSettingsSectionId, type SettingsSectionId } from '@/lib/settings-events';
 import LeftPanel from '@/components/dashboard/LeftPanel';
@@ -394,6 +395,26 @@ function DashboardContent() {
     const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
     const selectedDocIdRef = useRef<string | null>(null);
     useEffect(() => { selectedDocIdRef.current = selectedDocId; }, [selectedDocId]);
+
+    // Presencia: publica al usuario en el workspace activo y consume los peers.
+    // Personal workspace usa un canal privado por uid; los compartidos usan el id.
+    const presenceWorkspaceId = currentWorkspaceId
+        ? (currentWorkspaceId === PERSONAL_WORKSPACE_ID
+            ? (user?.uid ? `personal_${user.uid}` : null)
+            : currentWorkspaceId)
+        : null;
+    const { peers: presencePeers } = usePresence({
+        workspaceId: presenceWorkspaceId,
+        userId: user?.uid ?? null,
+        displayName: user?.displayName ?? user?.email ?? null,
+        photoURL: user?.photoURL ?? undefined,
+        currentDocId: selectedDocId,
+        enabled: !!user && !!presenceWorkspaceId
+    });
+    const resolvePresenceDocName = useCallback((docId: string) => {
+        const doc = docs.find((d) => d.id === docId);
+        return doc?.name ?? null;
+    }, [docs]);
     const [favoriteDocIds, setFavoriteDocIds] = useState<string[]>([]);
     const [openTabs, setOpenTabsRaw] = useState<DocItem[]>([]);
     // Saneo: si entran duplicados (bug histórico del effect que se disparaba 2x),
@@ -2620,6 +2641,9 @@ function DashboardContent() {
                         rightPanelOpen={rightPanelOpen}
                         onToggleRightPanel={() => setRightPanelOpen((v) => !v)}
                         totalWidth={48 + (isSidebarCollapsed ? 0 : effectiveSidebarWidth)}
+                        presencePeers={presencePeers}
+                        presenceCurrentDocId={selectedDocId}
+                        presenceResolveDocName={resolvePresenceDocName}
                       />
                     )}
 

@@ -45,7 +45,22 @@ export enum SyncOperation {
 export enum SyncQueueStatus {
   Pending = 'pending',
   Processing = 'processing',
-  Failed = 'failed'
+  Failed = 'failed',
+  /** Servidor rechazó el cambio porque la versión local está obsoleta. Requiere
+   *  intervención del usuario para resolverlo. */
+  Conflict = 'conflict'
+}
+
+export interface SyncConflictDetails {
+  /** Versión local que el cliente intentó subir. */
+  localVersion?: number;
+  /** Versión actual en el servidor. */
+  serverVersion?: number;
+  /** Snapshot del contenido tal como está en el servidor (si lo trajo el 409). */
+  serverContent?: string;
+  /** updatedBy del servidor cuando ocurrió el conflicto. */
+  serverUpdatedBy?: string;
+  serverUpdatedAt?: string;
 }
 
 export interface SyncQueueItem {
@@ -57,6 +72,8 @@ export interface SyncQueueItem {
   status: SyncQueueStatus;
   retries: number;
   error?: string;
+  /** Detalles del conflicto cuando status === Conflict. */
+  conflict?: SyncConflictDetails;
 }
 
 export interface MetaEntry {
@@ -265,6 +282,22 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
       const items = (request.result as SyncQueueItem[]).sort((a, b) => a.timestamp - b.timestamp);
       resolve(items);
     };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Obtiene los elementos que están en estado de conflicto (servidor rechazó
+ * por versión obsoleta). Requieren intervención del usuario.
+ */
+export async function getConflictSyncItems(): Promise<SyncQueueItem[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_QUEUE, 'readonly');
+    const store = transaction.objectStore(STORE_QUEUE);
+    const index = store.index('status');
+    const request = index.getAll(SyncQueueStatus.Conflict);
+    request.onsuccess = () => resolve(request.result as SyncQueueItem[]);
     request.onerror = () => reject(request.error);
   });
 }

@@ -1,0 +1,198 @@
+/**
+ * Presencia en tiempo real vía Firebase RTDB.
+ *
+ * Modelo de datos:
+ *   /presence/<wsId>/<sessionId> = {
+ *     userId, displayName, photoURL?, color, currentDocId?,
+ *     joinedAt, lastSeen
+ *   }
+ *
+ * Cleanup automático: usamos onDisconnect() de RTDB que dispara cuando el
+ * WebSocket se cae (cierre de pestaña, crash, conexión perdida). Como
+ * fallback adicional el cliente refresca `lastSeen` cada PRESENCE_HEARTBEAT_MS
+ * y los lectores filtran entradas con `lastSeen < now - PRESENCE_TTL_MS`.
+ */
+
+import { onDisconnect, onValue, ref, remove, serverTimestamp, set, update } from 'firebase/database';
+import { rtdb } from '@/lib/firebase';
+
+export const PRESENCE_HEARTBEAT_MS = 25_000;
+export const PRESENCE_TTL_MS = 90_000;
+
+/** Paleta de colores para distinguir usuarios visualmente. */
+const PRESENCE_COLORS = [
+  '#60a5fa', '#f472b6', '#34d399', '#fbbf24', '#a78bfa',
+  '#fb7185', '#22d3ee', '#84cc16', '#f97316', '#c084fc'
+] as const;
+
+export interface PresenceEntry {
+  sessionId: string;
+  userId: string;
+  displayName: string;
+  photoURL?: string;
+  color: string;
+  currentDocId?: string;
+  joinedAt: number;
+  lastSeen: number;
+}
+
+interface PresenceUpdate {
+  currentDocId?: string | null;
+  displayName?: string;
+  photoURL?: string;
+}
+
+/**
+ * Asigna un color estable a partir del userId (para evitar que cambie
+ * entre sesiones).
+ */
+export function colorForUser(userId: string): string {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = ((hash << 5) - hash + userId.charCodeAt(i)) | 0;
+  }
+  const index = Math.abs(hash) % PRESENCE_COLORS.length;
+  return PRESENCE_COLORS[index]!;
+}
+
+function presencePath(wsId: string, sessionId?: string): string {
+  return sessionId ? `presence/${wsId}/${sessionId}` : `presence/${wsId}`;
+}
+
+export interface JoinPresenceArgs {
+  workspaceId: string;
+  sessionId: string;
+  userId: string;
+  displayName: string;
+  photoURL?: string;
+  currentDocId?: string;
+}
+
+/**
+ * Une al usuario al canal de presencia del workspace. Devuelve helpers
+ * para refrescar el doc actual y para salir explícitamente.
+ */
+export async function joinPresence(args: JoinPresenceArgs): Promise<{
+  updateCurrentDoc: (docId: string | null) => Promise<void>;
+  heartbeat: () => Promise<void>;
+  leave: () => Promise<void>;
+}> {
+  const database = rtdb();
+  const myRef = ref(database, presencePath(args.workspaceId, args.sessionId));
+  const color = colorForUser(args.userId);
+
+  const initial: Omit<PresenceEntry, 'sessionId'> = {
+    userId: args.userId,
+    displayName: args.displayName,
+    photoURL: args.photoURL,
+    color,
+    currentDocId: args.currentDocId,
+    joinedAt: Date.now(),
+    lastSeen: Date.now()
+  };
+
+  // RTDB no acepta `undefined` en valores; los limpiamos.
+  const sanitized = stripUndefined(initial);
+  await set(myRef, { ...sanitized, lastSeenServer: serverTimestamp() });
+  await onDisconnect(myRef).remove();
+
+  return {
+    updateCurrentDoc: async (docId) => {
+      const patch: PresenceUpdate = { currentDocId: docId ?? undefined };
+      await update(myRef, {
+        ...stripUndefined(patch),
+        currentDocId: docId ?? null,
+        lastSeen: Date.now(),
+        lastSeenServer: serverTimestamp()
+      });
+    },
+    heartbeat: async () => {
+      await update(myRef, { lastSeen: Date.now(), lastSeenServer: serverTimestamp() });
+    },
+    leave: async () => {
+      try { await remove(myRef); } catch { /* ignore */ }
+    }
+  };
+}
+
+/**
+ * Suscribe al canal de presencia y emite el snapshot completo (filtrado
+ * por TTL) cada vez que cambia. Devuelve función de unsubscribe.
+ */
+export function subscribePresence(
+  workspaceId: string,
+  callback: (entries: PresenceEntry[]) => void
+): () => void {
+  const database = rtdb();
+  const channelRef = ref(database, presencePath(workspaceId));
+  const unsubscribe = onValue(channelRef, (snapshot) => {
+    const raw = (snapshot.val() ?? {}) as Record<string, unknown>;
+    const now = Date.now();
+    const entries: PresenceEntry[] = [];
+    for (const [sessionId, value] of Object.entries(raw)) {
+      const parsed = parsePresenceEntry(sessionId, value);
+      if (!parsed) continue;
+      if (now - parsed.lastSeen > PRESENCE_TTL_MS) continue;
+      entries.push(parsed);
+    }
+    entries.sort((a, b) => a.joinedAt - b.joinedAt);
+    callback(entries);
+  });
+  return unsubscribe;
+}
+
+function parsePresenceEntry(sessionId: string, value: unknown): PresenceEntry | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.userId !== 'string' || typeof v.displayName !== 'string') return null;
+  if (typeof v.color !== 'string' || typeof v.lastSeen !== 'number') return null;
+  return {
+    sessionId,
+    userId: v.userId,
+    displayName: v.displayName,
+    photoURL: typeof v.photoURL === 'string' ? v.photoURL : undefined,
+    color: v.color,
+    currentDocId: typeof v.currentDocId === 'string' ? v.currentDocId : undefined,
+    joinedAt: typeof v.joinedAt === 'number' ? v.joinedAt : v.lastSeen,
+    lastSeen: v.lastSeen
+  };
+}
+
+function stripUndefined<T extends object>(value: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Agrupa entries por userId. Útil para no mostrar la misma persona
+ * dos veces si tiene varias pestañas abiertas. Conserva el currentDocId
+ * más reciente.
+ */
+export function deduplicateByUser(entries: PresenceEntry[]): PresenceEntry[] {
+  const byUser = new Map<string, PresenceEntry>();
+  for (const entry of entries) {
+    const existing = byUser.get(entry.userId);
+    if (!existing || entry.lastSeen > existing.lastSeen) {
+      byUser.set(entry.userId, entry);
+    }
+  }
+  return Array.from(byUser.values());
+}
+
+/**
+ * Devuelve los IDs de los usuarios que están viendo un doc específico
+ * en este momento. Excluye el `excludeSessionId` (usualmente la propia
+ * sesión).
+ */
+export function viewersOfDoc(
+  entries: PresenceEntry[],
+  docId: string,
+  excludeSessionId?: string
+): PresenceEntry[] {
+  return entries.filter(
+    (e) => e.currentDocId === docId && e.sessionId !== excludeSessionId
+  );
+}
