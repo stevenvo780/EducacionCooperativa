@@ -259,6 +259,11 @@ const Sidebar = ({
     };
 
     walk('', 0);
+    // Docs en raíz (folder=''): se listan al final del nivel superior.
+    const rootDocs = docsByFolder[''] ?? [];
+    for (const doc of rootDocs) {
+      items.push({ kind: 'doc', doc, depth: 0 });
+    }
     return items;
   }, [docsByFolder, expandedFolders, folderChildrenMap, collapsedByUser]);
 
