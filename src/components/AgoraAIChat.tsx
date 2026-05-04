@@ -42,6 +42,13 @@ import {
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
 import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy, profileAutoConfirms } from '@/lib/agora-ai/accessPolicy';
+import {
+  contextWindowForModel as contextWindowFromCatalog,
+  getModelCatalogSync,
+  loadModelCatalog,
+  modelsForProvider,
+  type ModelCatalog
+} from '@/lib/agora-ai/modelCatalog';
 import type {
   AIProvider,
   AgentAccessPolicy,
@@ -94,31 +101,11 @@ function approxTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** Ventana de contexto aproximada por modelo. Conservador — preferimos
- *  subestimar para no mentir al usuario. */
-function contextWindowForModel(provider: string, model: string): number {
-  const m = (model || '').toLowerCase();
-  if (provider === 'anthropic') {
-    if (m.includes('opus-4') && m.includes('1m')) return 1_000_000;
-    if (m.includes('claude-')) return 200_000;
-  }
-  if (provider === 'openai') {
-    if (m.startsWith('gpt-4o')) return 128_000;
-    if (m.startsWith('o1') || m.startsWith('o3')) return 200_000;
-    if (m.startsWith('gpt-4-turbo')) return 128_000;
-    if (m.startsWith('gpt-4')) return 8_192;
-    if (m.startsWith('gpt-3.5')) return 16_385;
-  }
-  if (provider === 'gemini') {
-    if (m.includes('1.5') || m.includes('2.0')) return 1_000_000;
-    return 32_768;
-  }
-  if (provider === 'deepseek') return 128_000;
-  if (provider === 'ollama') {
-    if (m.includes('qwen3') || m.includes('llama3')) return 128_000;
-    return 32_768;
-  }
-  return 32_768;
+/** Ventana de contexto del modelo, leída del catálogo (modelCatalog.json en el back).
+ *  El componente debe pasar el catálogo cargado; si no, se usa el snapshot sync
+ *  con fallback. */
+function contextWindowForModel(provider: string, model: string, catalog?: ModelCatalog): number {
+  return contextWindowFromCatalog(provider, model, catalog);
 }
 
 function formatNumber(n: number): string {
@@ -235,6 +222,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(loadAgentAccessPolicy);
   const [traceExpanded, setTraceExpanded] = useState<boolean>(loadAgentTraceExpanded);
   const [showProviderMenu, setShowProviderMenu] = useState(false);
+  const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(getModelCatalogSync);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadModelCatalog().then((catalog) => { if (!cancelled) setModelCatalog(catalog); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const handler = () => {
@@ -1601,7 +1595,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               const lastUsage = [...messages].reverse().find(message => message.agentRun?.usage?.totalTokens);
               const usedTokens = lastUsage?.agentRun?.usage?.totalTokens
                 ?? approxTokens(messages.map(message => message.content).join('\n') + input);
-              const window = contextWindowForModel(config.provider, config.model || meta.defaultModel);
+              const window = contextWindowForModel(config.provider, config.model || meta.defaultModel, modelCatalog);
               const ratio = Math.min(1, usedTokens / window);
               const tone = ratio > 0.85 ? 'text-amber-300 border-amber-500/40 bg-amber-500/10'
                 : ratio > 0.5 ? 'text-sky-200 border-sky-500/30 bg-sky-500/5'
