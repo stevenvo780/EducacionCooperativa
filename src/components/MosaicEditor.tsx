@@ -28,7 +28,7 @@ const CodeMirrorPlain = dynamic(() => import('@uiw/react-codemirror').then(m => 
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
 import type { ViewMode, EditorProps, MarkdownDocMeta } from '@/components/mosaic-editor/types';
-import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_GROUP_LABELS, QUICK_INSERTS, SAVE_DEBOUNCE_MS, ST_DEBOUNCE_MS, SEMANTIC_NOTICE_TIMEOUT_MS } from '@/components/mosaic-editor/constants';
+import { DEFAULT_TOOLBAR_VISIBILITY, SAVE_DEBOUNCE_MS, ST_DEBOUNCE_MS, SEMANTIC_NOTICE_TIMEOUT_MS } from '@/components/mosaic-editor/constants';
 import {
   isMarkdownName, isMarkdownMime,
   stripQueryAndHash, isExternalMarkdownHref, isBrowserNavigationHref,
@@ -48,11 +48,10 @@ import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
 import {
   BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Sparkles,
   Monitor, PenLine, FileCode2,
-  KanbanSquare, Loader2, Ruler, RefreshCw,
+  KanbanSquare, Loader2, Ruler,
   ZoomIn, ZoomOut, ChevronLeft
 } from 'lucide-react';
 import { useMosaicSemanticActions } from '@/components/mosaic-editor/useMosaicSemanticActions';
-import { SemanticPanelColumn } from '@/components/mosaic-editor/SemanticPanelColumn';
 import { MosaicToolbarContents, type ToolbarGroupKey } from '@/components/mosaic-editor/MosaicToolbarContents';
 import { FilePreviewPane } from '@/components/mosaic-editor/FilePreviewPane';
 import clsx from 'clsx';
@@ -93,7 +92,6 @@ import {
   normalizeSemanticWorkspaceState
 } from '@/lib/semantic/workspace-state';
 import {
-  getRecentSemanticItems,
   loadSemanticWorkspaceState,
   saveSemanticWorkspaceState,
   registerConceptFromSelection,
@@ -106,6 +104,7 @@ import {
 } from '@/services/semanticStateApi';
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
 import { registerStatusSegment, forceUnregisterStatusSegment } from '@/lib/status-bus';
+import { dispatchOpenSettings } from '@/lib/settings-events';
 
 export default function MosaicEditor({
   initialContent = '',
@@ -179,9 +178,6 @@ export default function MosaicEditor({
   const {
     toolbarVisibility,
     applyToolbarVisibility,
-    toggleToolbarGroup,
-    showToolsPanel,
-    setShowToolsPanel,
     isFullscreen,
     showSnippetGallery,
     setShowSnippetGallery,
@@ -261,7 +257,6 @@ export default function MosaicEditor({
     userId: user?.uid ?? null
   }), [effectiveWorkspaceId, user?.uid]);
 
-  const semanticOverview = useMemo(() => getRecentSemanticItems(semanticState), [semanticState]);
   const semanticItemCount = useMemo(() => (
     semanticState.concepts.length + semanticState.fragments.length + semanticState.relations.length
   ), [semanticState]);
@@ -1265,10 +1260,10 @@ export default function MosaicEditor({
     setEditorUtilityMenu(null);
   }, []);
 
-  const handleToggleToolsPanelFromContextMenu = useCallback(() => {
-    setShowToolsPanel((current) => !current);
+  const handleOpenToolbarSettingsFromContextMenu = useCallback(() => {
+    dispatchOpenSettings('editor-md');
     closeEditorUtilityMenu();
-  }, [closeEditorUtilityMenu, setShowToolsPanel]);
+  }, [closeEditorUtilityMenu]);
 
   const handleOpenSemanticDeskFromContextMenu = useCallback(() => {
     semanticBrowserBus.open(docName || currentDocMetaRef.current.name);
@@ -1348,10 +1343,7 @@ export default function MosaicEditor({
     handleMarkEvidence,
     handlePinFragment,
     handleLinkDocument,
-    handleInsertSemanticAtlas,
-    handleInsertEvidenceMatrix: _handleInsertEvidenceMatrix,
-    handleInsertResearchBrief,
-    handleGenerateSTFile
+    handleInsertEvidenceMatrix: _handleInsertEvidenceMatrix
   } = useMosaicSemanticActions({
     semanticState,
     semanticStoreContext,
@@ -1432,7 +1424,6 @@ export default function MosaicEditor({
         showCompactMenu={showCompactMenu}
         menuPos={menuPos}
         isFullscreen={isFullscreen}
-        showToolsPanel={showToolsPanel}
         viewMode={viewMode}
         isCreatingTask={isCreatingTask}
         docName={docName || ''}
@@ -1446,13 +1437,12 @@ export default function MosaicEditor({
         toggleFullscreen={toggleFullscreen}
         setShowCompactMenu={setShowCompactMenu}
         setShowSnippetGallery={setShowSnippetGallery}
-        setShowToolsPanel={setShowToolsPanel}
         setViewModeWithSync={setViewModeWithSync}
         createTaskFromSelection={createTaskFromSelection}
         scanPendings={scanPendings}
       />
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, showToolsPanel, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setShowToolsPanel, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName, menuBtnRef]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName, menuBtnRef]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)
@@ -1625,150 +1615,6 @@ export default function MosaicEditor({
       {semanticNotice && (
         <div className="shrink-0 border-b border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-100">
           {semanticNotice}
-        </div>
-      )}
-
-      {showToolsPanel && (
-        <div className="shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm">
-          <div className="px-3 py-3">
-            <div className="grid gap-4 lg:grid-cols-[1.1fr_1.4fr]">
-              <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Panel de visibilidad</h3>
-                  <button
-                    type="button"
-                    onClick={() => applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY)}
-                    className="text-[11px] text-slate-500 transition hover:text-slate-300"
-                  >
-                    Restaurar
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(TOOLBAR_GROUP_LABELS) as ToolbarGroupKey[]).map((group) => {
-                    const active = toolbarVisibility[group];
-                    return (
-                      <button
-                        key={group}
-                        type="button"
-                        onClick={() => toggleToolbarGroup(group)}
-                        className={clsx(
-                          'rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                          active
-                            ? 'border-blue-500/50 bg-blue-500/15 text-blue-200'
-                            : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
-                        )}
-                      >
-                        {TOOLBAR_GROUP_LABELS[group]}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                  Elige exactamente qué grupos aparecen en la barra principal: formato, bloques, listas, multimedia, inserciones, snippets y extras avanzados.
-                </p>
-              </section>
-
-              <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Biblioteca de snippets</h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowSnippetGallery(s => !s)}
-                    className="text-[11px] text-blue-400 transition hover:text-blue-300"
-                  >
-                    {showSnippetGallery ? 'Cerrar galería' : 'Abrir galería completa'}
-                  </button>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {QUICK_INSERTS.map((snippet) => (
-                    <button
-                      key={snippet.id}
-                      type="button"
-                      onClick={() => insertSnippet(snippet.markdown)}
-                      className="rounded-lg border border-slate-800 bg-slate-900/80 p-3 text-left transition hover:border-blue-500/40 hover:bg-slate-900"
-                    >
-                      <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-200">
-                        <Sparkles className="h-3.5 w-3.5 text-blue-300" />
-                        {snippet.title}
-                      </div>
-                      <p className="text-[11px] leading-5 text-slate-500">{snippet.description}</p>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            <section className="mt-4 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Panel semántico</h3>
-                  <p className="mt-1 text-[11px] leading-5 text-slate-500">Lo que guardas desde el menú contextual vive aquí: conceptos, notas, evidencias, fijados y relaciones rápidas.</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => semanticBrowserBus.open(docName || currentDocMetaRef.current.name)}
-                      className="rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-[11px] font-medium text-blue-200 transition hover:bg-blue-500/20"
-                    >
-                      Abrir mesa semántica
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleInsertSemanticAtlas}
-                      className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:border-slate-600 hover:text-white"
-                    >
-                      Insertar atlas
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleInsertResearchBrief}
-                      className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:border-slate-600 hover:text-white"
-                    >
-                      Insertar bitácora
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGenerateSTFile}
-                      className="rounded-full border border-emerald-700/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-                      title={companionStDocId ? 'Actualizar archivo .st companion' : 'Crear archivo .st con definiciones'}
-                    >
-                      {companionStDocId
-                        ? <><RefreshCw className="w-3 h-3 inline mr-1" />Actualizar ST</>
-                        : <><Ruler className="w-3 h-3 inline mr-1" />Generar ST</>}
-                    </button>
-                  </div>
-                </div>
-                <div className="text-[11px] text-slate-500">{semanticState.concepts.length} conceptos · {semanticState.fragments.length} fragmentos</div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                <SemanticPanelColumn
-                  title="Conceptos"
-                  emptyLabel="Aún no defines conceptos desde una selección."
-                  items={semanticOverview.concepts.map((concept) => ({ title: concept.title, subtitle: concept.definition || concept.excerpt, meta: concept.definition ? `${concept.docName} · con def.` : concept.docName }))}
-                />
-                <SemanticPanelColumn
-                  title="Notas"
-                  emptyLabel="Todavía no hay notas rápidas guardadas."
-                  items={semanticOverview.notes.map((item) => ({ title: item.note || 'Nota', subtitle: item.excerpt, meta: item.docName }))}
-                />
-                <SemanticPanelColumn
-                  title="Fijados"
-                  emptyLabel="Todavía no hay fragmentos fijados."
-                  items={semanticOverview.pinned.map((item) => ({ title: item.excerpt, subtitle: item.docName, meta: 'Fragmento fijado' }))}
-                />
-                <SemanticPanelColumn
-                  title="Evidencias"
-                  emptyLabel="Todavía no hay evidencias marcadas."
-                  items={semanticOverview.evidence.map((item) => ({ title: item.excerpt, subtitle: item.docName, meta: 'Evidencia' }))}
-                />
-                <SemanticPanelColumn
-                  title="Relaciones"
-                  emptyLabel="Todavía no hay relaciones con conceptos."
-                  items={semanticOverview.relations.map((item) => ({ title: item.conceptTitle, subtitle: 'Fragmento relacionado', meta: item.relationType }))}
-                />
-              </div>
-            </section>
-          </div>
         </div>
       )}
 
@@ -2030,11 +1876,10 @@ export default function MosaicEditor({
         <EditorUtilityMenu
           anchor={editorUtilityMenu}
           isFullscreen={isFullscreen}
-          showToolsPanel={showToolsPanel}
           showSnippetGallery={showSnippetGallery}
           viewMode={viewMode}
           onClose={closeEditorUtilityMenu}
-          onToggleToolsPanel={handleToggleToolsPanelFromContextMenu}
+          onOpenToolbarSettings={handleOpenToolbarSettingsFromContextMenu}
           onOpenSemanticDesk={handleOpenSemanticDeskFromContextMenu}
           onResetToolbar={handleResetToolbarFromContextMenu}
           onToggleFullscreen={handleToggleFullscreenFromContextMenu}

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
 import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
 import { DEFAULT_TOOLBAR_VISIBILITY, TOOLBAR_VISIBILITY_STORAGE_KEY } from './constants';
-import type { ToolbarGroupKey, ToolbarVisibility } from './types';
+import type { ToolbarVisibility } from './types';
 
 interface UseEditorUIOptions {
   editorShellRef: RefObject<HTMLDivElement | null>;
@@ -15,7 +15,6 @@ export function useEditorUI({ editorShellRef, embedded, roomId }: UseEditorUIOpt
   const dispatch = useAppDispatch();
   const toolbarVisibility = useAppSelector(selectEditorToolbarVisibility);
 
-  const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSnippetGallery, setShowSnippetGallery] = useState(false);
   const [showCompactMenu, setShowCompactMenu] = useState(false);
@@ -72,15 +71,6 @@ export function useEditorUI({ editorShellRef, embedded, roomId }: UseEditorUIOpt
     dispatch(setEditorToolbarVisibility(nextVisibility));
   }, [dispatch]);
 
-  const toggleToolbarGroup = useCallback((group: ToolbarGroupKey) => {
-    applyToolbarVisibility({ ...toolbarVisibility, [group]: !toolbarVisibility[group] });
-  }, [applyToolbarVisibility, toolbarVisibility]);
-
-  const enabledToolbarGroupsCount = useMemo(
-    () => Object.values(toolbarVisibility).filter(Boolean).length,
-    [toolbarVisibility]
-  );
-
   const toggleCompactMenu = useCallback(() => {
     if (!showCompactMenu && menuBtnRef.current) {
       const rect = menuBtnRef.current.getBoundingClientRect();
@@ -118,10 +108,6 @@ export function useEditorUI({ editorShellRef, embedded, roomId }: UseEditorUIOpt
   return {
     toolbarVisibility,
     applyToolbarVisibility,
-    toggleToolbarGroup,
-    enabledToolbarGroupsCount,
-    showToolsPanel,
-    setShowToolsPanel,
     isFullscreen,
     showSnippetGallery,
     setShowSnippetGallery,

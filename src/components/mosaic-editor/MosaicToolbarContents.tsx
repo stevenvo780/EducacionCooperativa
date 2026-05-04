@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
+import { dispatchOpenSettings } from '@/lib/settings-events';
 
 export type ToolbarGroupKey = 'history' | 'inline' | 'structure' | 'lists' | 'media' | 'insert' | 'snippets' | 'advanced';
 
@@ -46,7 +47,6 @@ export interface MosaicToolbarContentsProps {
   showCompactMenu: boolean;
   menuPos: { top: number; left: number } | null;
   isFullscreen: boolean;
-  showToolsPanel: boolean;
   viewMode: 'edit' | 'preview' | 'raw';
   isCreatingTask: boolean;
   docName: string;
@@ -60,7 +60,6 @@ export interface MosaicToolbarContentsProps {
   toggleFullscreen: () => void;
   setShowCompactMenu: React.Dispatch<React.SetStateAction<boolean>>;
   setShowSnippetGallery: React.Dispatch<React.SetStateAction<boolean>>;
-  setShowToolsPanel: React.Dispatch<React.SetStateAction<boolean>>;
   setViewModeWithSync: (mode: 'edit' | 'preview' | 'raw') => void;
   createTaskFromSelection: () => Promise<void>;
   scanPendings: () => Promise<void>;
@@ -71,7 +70,6 @@ export function MosaicToolbarContents({
   showCompactMenu,
   menuPos,
   isFullscreen,
-  showToolsPanel,
   viewMode,
   isCreatingTask,
   docName,
@@ -85,7 +83,6 @@ export function MosaicToolbarContents({
   toggleFullscreen,
   setShowCompactMenu,
   setShowSnippetGallery,
-  setShowToolsPanel,
   setViewModeWithSync,
   createTaskFromSelection,
   scanPendings
@@ -253,8 +250,8 @@ export function MosaicToolbarContents({
             className="min-w-[260px] rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-black/60"
             onClick={(e) => e.stopPropagation()}
           >
-            <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
-              <Settings2 className="h-5 w-5 shrink-0 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
+            <button type="button" title="Elegir qué grupos aparecen en la toolbar" aria-label="Configurar toolbar del editor Markdown" onClick={() => { dispatchOpenSettings('editor-md'); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
+              <Settings2 className="h-5 w-5 shrink-0 text-slate-400" />Configurar toolbar
             </button>
             <button type="button" title="Abrir mesa semántica" aria-label="Abrir mesa semántica" onClick={() => { semanticBrowserBus.open(docName || currentDocMetaRef.current.name); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
               <BookMarked className="h-5 w-5 shrink-0 text-blue-400" />Mesa semántica
