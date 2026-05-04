@@ -5,10 +5,11 @@ import { Brain, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AgentThinkingBlockProps {
   content: string;
+  defaultOpen?: boolean;
 }
 
-export function AgentThinkingBlock({ content }: AgentThinkingBlockProps) {
-  const [open, setOpen] = useState(false);
+export function AgentThinkingBlock({ content, defaultOpen = false }: AgentThinkingBlockProps) {
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div className="mt-1.5 rounded-md border border-violet-500/20 bg-violet-500/5 overflow-hidden">

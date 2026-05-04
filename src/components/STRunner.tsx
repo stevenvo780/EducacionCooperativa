@@ -438,8 +438,12 @@ export default function STRunner({
     } else {
       setActiveTab('output');
     }
+    if (dockToWorkspace && typeof window !== 'undefined') {
+      const tab = diagnostics.length > 0 ? 'problems' : 'st-output';
+      window.dispatchEvent(new CustomEvent('agora:open-bottom-dock', { detail: { tab } }));
+    }
     onExecute?.(code, result);
-  }, [code, run, getEnrichedSymbols, onExecute]);
+  }, [code, run, getEnrichedSymbols, onExecute, dockToWorkspace]);
 
   const autoRanRef = useRef(false);
   useEffect(() => {

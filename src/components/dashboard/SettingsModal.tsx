@@ -303,7 +303,7 @@ function AISection() {
               value={config.apiKey}
               onChange={(e) => updateConfig({ apiKey: e.target.value })}
               placeholder={`Pega tu ${meta.label} API key`}
-              className="w-full rounded-md border border-surface-700/50 bg-surface-925 px-2 py-1.5 font-mono text-xs text-surface-100 placeholder:text-surface-500 focus:border-mandy-400/50 focus:outline-none"
+              className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
             />
           </label>
         )}
@@ -316,7 +316,7 @@ function AISection() {
               value={config.endpoint}
               onChange={(e) => updateConfig({ endpoint: e.target.value })}
               placeholder="http://localhost:11434"
-              className="w-full rounded-md border border-surface-700/50 bg-surface-925 px-2 py-1.5 font-mono text-xs text-surface-100 placeholder:text-surface-500 focus:border-mandy-400/50 focus:outline-none"
+              className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
             />
           </label>
         )}
@@ -328,7 +328,7 @@ function AISection() {
             value={config.model}
             onChange={(e) => updateConfig({ model: e.target.value })}
             placeholder={meta.modelPlaceholder}
-            className="w-full rounded-md border border-surface-700/50 bg-surface-925 px-2 py-1.5 font-mono text-xs text-surface-100 placeholder:text-surface-500 focus:border-mandy-400/50 focus:outline-none"
+            className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
           />
           <span className="mt-1 block text-[10px] text-surface-500">Por defecto: {meta.defaultModel}</span>
         </label>

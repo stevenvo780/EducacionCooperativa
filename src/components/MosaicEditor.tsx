@@ -682,6 +682,11 @@ export default function MosaicEditor({
   const handleContentChange = useCallback((val: string) => {
     contentRef.current = val;
     setStatsContent(val);
+    if (typeof window !== 'undefined' && roomId) {
+      window.dispatchEvent(new CustomEvent('agora:document-content', {
+        detail: { docId: roomId, content: val }
+      }));
+    }
     if (!roomId || docType === DocumentType.File) return;
     if (!hasLoadedRef.current) return;
 

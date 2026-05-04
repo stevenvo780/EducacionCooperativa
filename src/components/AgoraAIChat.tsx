@@ -8,7 +8,8 @@ import rehypeKatex from 'rehype-katex';
 import {
   Bot, Send, Settings, ChevronDown,
   Loader2, Trash2, Copy, Check, AlertCircle, Sparkles, Undo2,
-  History, MessageSquarePlus, Shield
+  History, MessageSquarePlus, Shield, Square,
+  ListTree, ChevronsDownUp, ChevronsUpDown
 } from 'lucide-react';
 import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
 import { fetchZod } from '@/lib/fetch-zod';
@@ -31,14 +32,18 @@ import {
   AI_SETTINGS_CHANGED_EVENT,
   PROVIDER_META,
   loadAIProviderConfig,
+  saveAIProviderConfig,
   loadAgentAccessPolicy,
   saveAgentAccessProfile,
   loadAgentMode,
   saveAgentMode,
+  loadAgentTraceExpanded,
+  saveAgentTraceExpanded,
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
-import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy } from '@/lib/agora-ai/accessPolicy';
+import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy, profileAutoConfirms } from '@/lib/agora-ai/accessPolicy';
 import type {
+  AIProvider,
   AgentAccessPolicy,
   AgentAccessProfileId,
   AgentChatSession,
@@ -81,6 +86,45 @@ const UNDO_COMMAND = /^\s*(deshaz|undo|revierte|rollback)/i;
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+/** Estimación rápida de tokens (≈ 4 chars por token para texto mixto). */
+function approxTokens(text: string): number {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+/** Ventana de contexto aproximada por modelo. Conservador — preferimos
+ *  subestimar para no mentir al usuario. */
+function contextWindowForModel(provider: string, model: string): number {
+  const m = (model || '').toLowerCase();
+  if (provider === 'anthropic') {
+    if (m.includes('opus-4') && m.includes('1m')) return 1_000_000;
+    if (m.includes('claude-')) return 200_000;
+  }
+  if (provider === 'openai') {
+    if (m.startsWith('gpt-4o')) return 128_000;
+    if (m.startsWith('o1') || m.startsWith('o3')) return 200_000;
+    if (m.startsWith('gpt-4-turbo')) return 128_000;
+    if (m.startsWith('gpt-4')) return 8_192;
+    if (m.startsWith('gpt-3.5')) return 16_385;
+  }
+  if (provider === 'gemini') {
+    if (m.includes('1.5') || m.includes('2.0')) return 1_000_000;
+    return 32_768;
+  }
+  if (provider === 'deepseek') return 128_000;
+  if (provider === 'ollama') {
+    if (m.includes('qwen3') || m.includes('llama3')) return 128_000;
+    return 32_768;
+  }
+  return 32_768;
+}
+
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return String(n);
 }
 
 function formatSessionTimestamp(timestamp: number) {
@@ -189,15 +233,35 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [config, setConfig] = useState<AIProviderConfig>(loadAIProviderConfig);
   const [mode, setMode] = useState<AgentMode>(loadAgentMode);
   const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(loadAgentAccessPolicy);
+  const [traceExpanded, setTraceExpanded] = useState<boolean>(loadAgentTraceExpanded);
+  const [showProviderMenu, setShowProviderMenu] = useState(false);
 
   useEffect(() => {
     const handler = () => {
       setConfig(loadAIProviderConfig());
       setMode(loadAgentMode());
       setAccessPolicy(loadAgentAccessPolicy());
+      setTraceExpanded(loadAgentTraceExpanded());
     };
     window.addEventListener(AI_SETTINGS_CHANGED_EVENT, handler);
     return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, handler);
+  }, []);
+
+  const toggleTraceExpanded = useCallback(() => {
+    setTraceExpanded(prev => {
+      const next = !prev;
+      saveAgentTraceExpanded(next);
+      return next;
+    });
+  }, []);
+
+  const setProvider = useCallback((provider: AIProvider) => {
+    setShowProviderMenu(false);
+    saveAIProviderConfig({ ...loadAIProviderConfig(), provider });
+  }, []);
+
+  const stopGeneration = useCallback(() => {
+    abortRef.current?.abort();
   }, []);
   // Historial cerrado por defecto: el RightPanel es solo chat. El usuario
   // abre el historial como overlay clickeando el botón "Historial".
@@ -1088,6 +1152,17 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
   }, [messages, clearPendingConfirmation, executeAgoraTool, config.provider, emitAgentWorkspaceEvents]);
 
+  // Auto-confirm en god mode: si llega un pendingConfirmation y el perfil
+  // activo lo permite, se aprueba sin pedir input al usuario.
+  const autoConfirmedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!profileAutoConfirms(accessPolicy.profile)) return;
+    const target = messages.find(message => message.pendingConfirmation && !autoConfirmedRef.current.has(message.id));
+    if (!target) return;
+    autoConfirmedRef.current.add(target.id);
+    void handleConfirmation(target.id, true);
+  }, [accessPolicy.profile, messages, handleConfirmation]);
+
   return (
     <div className="flex h-full bg-surface-900 text-surface-200 overflow-hidden relative">
       {/* Historial como modal overlay sobre el chat — el panel queda limpio
@@ -1173,6 +1248,16 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           )}
           <button
             type="button"
+            onClick={toggleTraceExpanded}
+            className={`p-1 rounded transition ${traceExpanded ? 'text-sky-300 bg-sky-500/10' : 'text-surface-500 hover:text-surface-200 hover:bg-surface-700'}`}
+            title={traceExpanded ? 'Colapsar razonamientos y acciones' : 'Expandir todos los razonamientos y acciones'}
+            aria-label="Alternar detalle de trazas"
+            aria-pressed={traceExpanded}
+          >
+            {traceExpanded ? <ChevronsDownUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            type="button"
             onClick={startNewChat}
             className="p-1 rounded text-surface-500 hover:text-surface-200 hover:bg-surface-700 transition"
             title="Nuevo chat"
@@ -1201,7 +1286,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 min-h-0">
+      <div className="scrollbar-agora flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 space-y-1.5 min-h-0">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center text-surface-500 gap-4 select-none px-4">
             <Bot className="w-10 h-10 text-surface-700" />
@@ -1256,7 +1341,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
           return (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`group relative max-w-[88%] rounded-lg px-3 py-1.5 text-sm leading-normal ${
+              <div className={`group relative max-w-[88%] min-w-0 break-words rounded-lg px-3 py-1.5 text-sm leading-normal ${
                 msg.role === 'user'
                   ? 'bg-sky-600/20 border border-sky-500/20 text-surface-100'
                   : msg.error
@@ -1283,7 +1368,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                   <div className="mt-2">
                     {visibleSteps.map(step => {
                       if (step.type === 'thinking' && step.content) {
-                        return <AgentThinkingBlock key={step.id} content={step.content} />;
+                        return <AgentThinkingBlock key={step.id} content={step.content} defaultOpen={traceExpanded} />;
                       }
                       if (step.type === 'plan' && step.content) {
                         return (
@@ -1301,7 +1386,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                           </div>
                         );
                       }
-                      return <ToolCallBlock key={step.id} step={step} />;
+                      return <ToolCallBlock key={step.id} step={step} defaultOpen={traceExpanded} />;
                     })}
 
                     {msg.pendingConfirmation && (
@@ -1371,48 +1456,107 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex-shrink-0 border-t border-surface-700 p-2 bg-surface-900">
-        <div className="flex items-end gap-2">
+      <div className="flex-shrink-0 border-t border-surface-700 p-2 bg-surface-900 min-w-0">
+        <div className="flex items-end gap-2 min-w-0">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={meta.needsKey && !config.apiKey ? 'Configura tu API key primero…' : mode === 'agent' ? 'Pídele una acción al agente… (ej: organiza, resume, crea, mueve, deshaz eso)' : 'Escribe un mensaje… (Enter para enviar, Shift+Enter nueva línea)'}
+            placeholder={meta.needsKey && !config.apiKey ? 'Configura tu API key primero…' : mode === 'agent' ? 'Pídele una acción al agente…' : 'Escribe un mensaje…'}
             disabled={loading || !canSend}
             rows={1}
-            className="flex-1 bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder-surface-600 focus:outline-none focus:border-sky-500 transition resize-none disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ minHeight: '36px', maxHeight: '120px', overflowY: 'auto' }}
+            wrap="soft"
+            className="scrollbar-agora flex-1 min-w-0 bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder:text-surface-400 focus:outline-none focus:border-sky-500 transition resize-none disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ minHeight: '36px', maxHeight: '120px', overflowY: 'auto', overflowX: 'hidden', wordBreak: 'break-word' }}
             onInput={e => {
               const el = e.currentTarget;
               el.style.height = 'auto';
               el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
             }}
           />
-          <button
-            onClick={() => void sendMessage()}
-            disabled={!input.trim() || loading || !canSend}
-            className="flex-shrink-0 p-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition"
-            title="Enviar (Enter)"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </button>
-        </div>
-        {/* Footer estilo Copilot: pills de Modelo, Modo y Contexto a la
-            izquierda; hint de Enter a la derecha. Click en pill abre el
-            modal de configuración correspondiente. */}
-        <div className="flex flex-wrap items-center justify-between gap-2 mt-2 px-0.5 text-[10px]">
-          <div className="flex flex-wrap items-center gap-1">
+          {loading ? (
             <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('agora:open-ai-config'))}
-              title="Cambiar modelo / proveedor"
-              className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-surface-300 transition hover:border-sky-500/40 hover:text-white"
+              onClick={stopGeneration}
+              className="flex-shrink-0 p-2 rounded-lg bg-mandy-600 hover:bg-mandy-500 text-white transition"
+              title="Detener generación"
+              aria-label="Detener"
             >
-              <Bot className="w-3 h-3" />
-              <span className={`${meta.color} truncate max-w-[8rem]`}>{meta.label}</span>
-              <ChevronDown className="w-3 h-3 opacity-60" />
+              <Square className="w-4 h-4" fill="currentColor" />
             </button>
+          ) : (
+            <button
+              onClick={() => void sendMessage()}
+              disabled={!input.trim() || !canSend}
+              className="flex-shrink-0 p-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition"
+              title="Enviar (Enter)"
+              aria-label="Enviar"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {/* Footer: pills de Modelo (con dropdown rápido), Modo, Permisos y Contexto.
+            La pill de contexto muestra tokens estimados vs ventana del modelo. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-2 px-0.5 text-[10px] min-w-0">
+          <div className="flex flex-wrap items-center gap-1 min-w-0">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowProviderMenu(value => !value)}
+                title="Cambiar proveedor (click derecho para configurar)"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  window.dispatchEvent(new CustomEvent('agora:open-ai-config'));
+                }}
+                className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-surface-200 transition hover:border-sky-500/40 hover:text-white"
+              >
+                <Bot className="w-3 h-3" />
+                <span className={`${meta.color} truncate max-w-[8rem]`}>{meta.label.split('(')[0]?.trim() || meta.label}</span>
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </button>
+              {showProviderMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowProviderMenu(false)}
+                    aria-hidden
+                  />
+                  <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[10rem] rounded-md border border-surface-700 bg-surface-900 shadow-xl shadow-black/40 py-1">
+                    {(Object.keys(PROVIDER_META) as AIProvider[]).map((providerId) => {
+                      const providerMeta = PROVIDER_META[providerId];
+                      const isActive = providerId === config.provider;
+                      return (
+                        <button
+                          key={providerId}
+                          type="button"
+                          onClick={() => setProvider(providerId)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-left text-[11px] transition ${
+                            isActive ? 'bg-sky-500/10 text-white' : 'text-surface-200 hover:bg-surface-800'
+                          }`}
+                        >
+                          <Bot className={`w-3 h-3 ${providerMeta.color}`} />
+                          <span className="flex-1 truncate">{providerMeta.label.split('(')[0]?.trim() || providerId}</span>
+                          {isActive && <Check className="w-3 h-3 text-sky-400" />}
+                        </button>
+                      );
+                    })}
+                    <div className="my-1 border-t border-surface-700" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProviderMenu(false);
+                        window.dispatchEvent(new CustomEvent('agora:open-ai-config'));
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[11px] text-surface-300 hover:bg-surface-800 transition"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>API key, modelo…</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => updateMode(mode === 'agent' ? 'chat' : 'agent')}
@@ -1420,21 +1564,26 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${
                 mode === 'agent'
                   ? 'border-violet-500/40 bg-violet-500/10 text-violet-200 hover:border-violet-500/60'
-                  : 'border-surface-700 bg-surface-900 text-surface-300 hover:border-surface-600'
+                  : 'border-surface-700 bg-surface-900 text-surface-200 hover:border-surface-600'
               }`}
             >
               {mode === 'agent' ? <Sparkles className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
               <span>{mode === 'agent' ? 'Agente' : 'Chat'}</span>
             </button>
             <label
-              title="Nivel de permisos del agente"
-              className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-surface-300 transition hover:border-surface-600"
+              title={`Permisos: ${AGENT_ACCESS_PROFILES[accessPolicy.profile === 'custom' ? 'workspace' : accessPolicy.profile]?.description || 'Personalizado'}`}
+              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${
+                profileAutoConfirms(accessPolicy.profile)
+                  ? 'border-mandy-500/50 bg-mandy-500/10 text-mandy-100 hover:border-mandy-400'
+                  : 'border-surface-700 bg-surface-900 text-surface-200 hover:border-surface-600'
+              }`}
             >
-              <Shield className="w-3 h-3 text-mandy-300" />
+              <Shield className={`w-3 h-3 ${profileAutoConfirms(accessPolicy.profile) ? 'text-mandy-300' : 'text-surface-400'}`} />
               <select
                 value={accessPolicy.profile}
                 onChange={(event) => updateAccessProfile(event.target.value as Exclude<AgentAccessProfileId, 'custom'>)}
-                className="max-w-[6.5rem] bg-transparent text-[10px] text-surface-200 outline-none"
+                className="max-w-[7rem] bg-transparent text-[10px] outline-none cursor-pointer"
+                style={{ color: 'inherit' }}
               >
                 {AGENT_ACCESS_PROFILE_ORDER.map((profile) => (
                   <option key={profile} value={profile} className="bg-surface-900 text-surface-100">
@@ -1448,21 +1597,32 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                 )}
               </select>
             </label>
-            <span
-              title={accessPolicy.capabilities.workspaceContext
-                ? (resolvedWorkspaceId === PERSONAL_WORKSPACE_ID ? 'Contexto: workspace personal' : 'Contexto: workspace activo')
-                : 'Contexto automático desactivado'}
-              className="hidden sm:flex items-center gap-1 rounded-md border border-surface-800 bg-surface-900/50 px-1.5 py-0.5 text-surface-400"
-            >
-              <Check className={`w-3 h-3 ${accessPolicy.capabilities.workspaceContext ? 'text-emerald-500' : 'text-surface-600'}`} />
-              <span>Contexto</span>
-            </span>
+            {(() => {
+              const lastUsage = [...messages].reverse().find(message => message.agentRun?.usage?.totalTokens);
+              const usedTokens = lastUsage?.agentRun?.usage?.totalTokens
+                ?? approxTokens(messages.map(message => message.content).join('\n') + input);
+              const window = contextWindowForModel(config.provider, config.model || meta.defaultModel);
+              const ratio = Math.min(1, usedTokens / window);
+              const tone = ratio > 0.85 ? 'text-amber-300 border-amber-500/40 bg-amber-500/10'
+                : ratio > 0.5 ? 'text-sky-200 border-sky-500/30 bg-sky-500/5'
+                : 'text-surface-300 border-surface-700 bg-surface-900';
+              return (
+                <span
+                  title={`${usedTokens.toLocaleString()} / ${window.toLocaleString()} tokens (≈ ${(ratio * 100).toFixed(0)}%) — ventana del modelo. ${accessPolicy.capabilities.workspaceContext ? 'Contexto del workspace activo.' : 'Contexto del workspace desactivado.'}`}
+                  className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${tone}`}
+                >
+                  <ListTree className="w-3 h-3" />
+                  <span className="font-mono">{formatNumber(usedTokens)}/{formatNumber(window)}</span>
+                </span>
+              );
+            })()}
           </div>
-          <div className="text-surface-600 flex items-center gap-1">
-            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px]">Enter</kbd>
-            <span>enviar · </span>
-            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px]">Shift+Enter</kbd>
-            <span className="hidden sm:inline">salto</span>
+          <div className="text-surface-400 hidden sm:flex items-center gap-1 shrink-0">
+            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px] text-surface-300">Enter</kbd>
+            <span>enviar</span>
+            <span className="opacity-60">·</span>
+            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px] text-surface-300">⇧Enter</kbd>
+            <span>salto</span>
           </div>
         </div>
       </div>

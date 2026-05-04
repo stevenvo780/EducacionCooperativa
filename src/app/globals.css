@@ -309,6 +309,19 @@ body {
   margin-bottom: 0;
 }
 
+/* Reemplaza el amarillo del autofill por el fondo del tema oscuro y mantiene
+   legible el texto. Sin esto los password managers inyectan #fffbcc. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: #e8e8ef !important;
+  -webkit-box-shadow: 0 0 0 1000px #16161f inset !important;
+  caret-color: #e8e8ef;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar {
       display: none;
@@ -323,6 +336,65 @@ body {
       -webkit-text-fill-color: transparent;
       background-clip: text;
   }
+  /* Scrollbar oscuro consistente con el tema. Aplícalo al contenedor con
+     overflow para reemplazar la scrollbar blanca por defecto del SO. */
+  .scrollbar-agora {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(110, 110, 138, 0.45) transparent;
+  }
+  .scrollbar-agora::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-agora::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-agora::-webkit-scrollbar-thumb {
+    background-color: rgba(110, 110, 138, 0.35);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-agora::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(160, 160, 184, 0.55);
+    background-clip: content-box;
+  }
+  .scrollbar-agora::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* Aplicar el scrollbar Agora globalmente a todos los contenedores con
+   overflow auto/scroll en zonas con tema oscuro, para que ningún scrollbar
+   blanco contraste feo con la paleta surface. */
+html.dark *,
+.bg-surface-900,
+.bg-surface-925,
+.bg-surface-950,
+.bg-slate-900,
+.bg-slate-950 {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110, 110, 138, 0.45) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(110, 110, 138, 0.32);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(160, 160, 184, 0.5);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
