@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     GitBranch, GitCommit, RefreshCcw, AlertCircle, Check, History,
-    FileText, FilePlus, Loader2, ExternalLink, Plus, KeyRound
+    FileText, FilePlus, Loader2, ExternalLink, Plus, KeyRound, GitCompare
 } from 'lucide-react';
 import GitAccessPanel from '@/components/dashboard/GitAccessPanel';
+import GitGraphPanel from '@/components/dashboard/git/GitGraphPanel';
+import GitCommitDetail from '@/components/dashboard/git/GitCommitDetail';
+import GitComparePanel from '@/components/dashboard/git/GitComparePanel';
+import { gitGraphResponseSchema, type GitGraphCommit } from '@/components/dashboard/git/schemas';
 import { useAuth } from '@/context/AuthContext';
 import { fetchZod } from '@/lib/fetch-zod';
 import { gitWorkbenchStatusSchema, gitWorkbenchCommitsSchema } from '@agora/contracts';
@@ -72,7 +76,7 @@ interface GitWorkbenchProps {
     onClose?: () => void;
 }
 
-type Tab = 'changes' | 'history' | 'access';
+type Tab = 'changes' | 'history' | 'compare' | 'access';
 
 export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenchProps) {
     const { user } = useAuth();
@@ -80,6 +84,8 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
     const [info, setInfo] = useState<GitInfo | null>(null);
     const [items, setItems] = useState<StatusItem[]>([]);
     const [commits, setCommits] = useState<CommitInfo[]>([]);
+    const [graphCommits, setGraphCommits] = useState<GitGraphCommit[]>([]);
+    const [selectedSha, setSelectedSha] = useState<string | null>(null);
     const [staged, setStaged] = useState<Set<string>>(new Set());
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(true);
@@ -114,6 +120,18 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
         }
     }, [workspaceId]);
 
+    const loadGraph = useCallback(async (): Promise<GitGraphCommit[]> => {
+        try {
+            const data = await fetchZod(
+                `/api/workspaces/${encodeURIComponent(workspaceId)}/git/graph?limit=50`,
+                gitGraphResponseSchema
+            );
+            return data.commits;
+        } catch {
+            return [];
+        }
+    }, [workspaceId]);
+
     const refreshAll = useCallback(async () => {
         if (!user || !workspaceId) return;
         setLoading(true);
@@ -122,19 +140,26 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             const inf = await loadInfo();
             setInfo(inf);
             if (inf.provisioned) {
-                const [it, log] = await Promise.all([loadStatus(), loadLog()]);
+                const [it, log, graph] = await Promise.all([loadStatus(), loadLog(), loadGraph()]);
                 setItems(it);
                 setCommits(log);
+                setGraphCommits(graph);
+                setSelectedSha((prev) => {
+                    if (prev && graph.some((c) => c.sha === prev)) return prev;
+                    return graph[0]?.sha ?? null;
+                });
             } else {
                 setItems([]);
                 setCommits([]);
+                setGraphCommits([]);
+                setSelectedSha(null);
             }
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         } finally {
             setLoading(false);
         }
-    }, [user, workspaceId, loadInfo, loadStatus, loadLog]);
+    }, [user, workspaceId, loadInfo, loadStatus, loadLog, loadGraph]);
 
     useEffect(() => { void refreshAll(); }, [refreshAll]);
 
@@ -508,6 +533,9 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                         <button type="button" onClick={() => setTab('history')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'history' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
                             <History className="h-3.5 w-3.5" /> Historial
                         </button>
+                        <button type="button" onClick={() => setTab('compare')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'compare' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
+                            <GitCompare className="h-3.5 w-3.5" /> Comparar
+                        </button>
                         <button type="button" onClick={() => setTab('access')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'access' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
                             <KeyRound className="h-3.5 w-3.5" /> Acceso
                         </button>
@@ -549,8 +577,8 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                         </div>
                     )}
 
-                    <div className="flex-1 overflow-y-auto px-3 py-2">
-                        {tab === 'changes' && (
+                    {tab === 'changes' && (
+                        <div className="flex-1 overflow-y-auto px-3 py-2">
                             <div className="space-y-3 text-xs">
                                 {dirty.length === 0 && !loading && (
                                     <div className="rounded border border-dashed border-zinc-300 p-4 text-center text-zinc-500 dark:border-zinc-700">
@@ -572,34 +600,83 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                                     </Section>
                                 )}
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {tab === 'history' && (
-                            <div className="space-y-1.5 text-xs">
-                                {commits.length === 0 && !loading && (
-                                    <div className="rounded border border-dashed border-zinc-300 p-4 text-center text-zinc-500 dark:border-zinc-700">
+                    {tab === 'history' && (
+                        <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+                            <div className="md:w-[42%] md:max-w-[460px] md:min-w-[280px] md:border-r md:border-zinc-200 dark:md:border-zinc-800 overflow-y-auto">
+                                {graphCommits.length === 0 && !loading ? (
+                                    <div className="m-3 rounded border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 dark:border-zinc-700">
                                         Sin commits aún.
                                     </div>
-                                )}
-                                {commits.map((c) => (
-                                    <a key={c.sha} href={c.htmlUrl} target="_blank" rel="noreferrer noopener" className="block rounded border border-zinc-200 p-2 hover:border-emerald-400 dark:border-zinc-800 dark:hover:border-emerald-600">
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-mono text-[11px] text-zinc-500">{c.shortSha}</span>
-                                            <span className="text-[10px] text-zinc-500">{new Date(c.date).toLocaleString()}</span>
+                                ) : graphCommits.length === 0 && commits.length > 0 ? (
+                                    <div className="space-y-1.5 p-3 text-xs">
+                                        <div className="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
+                                            Vista grafo no disponible — fallback a lista plana.
                                         </div>
-                                        <div className="mt-0.5 truncate text-zinc-800 dark:text-zinc-200">{c.message.split('\n')[0]}</div>
-                                        <div className="mt-0.5 text-[10px] text-zinc-500">{c.authorName}</div>
-                                    </a>
-                                ))}
+                                        {commits.map((c) => (
+                                            <a key={c.sha} href={c.htmlUrl} target="_blank" rel="noreferrer noopener" className="block rounded border border-zinc-200 p-2 hover:border-emerald-400 dark:border-zinc-800 dark:hover:border-emerald-600">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-mono text-[11px] text-zinc-500">{c.shortSha}</span>
+                                                    <span className="text-[10px] text-zinc-500">{new Date(c.date).toLocaleString()}</span>
+                                                </div>
+                                                <div className="mt-0.5 truncate text-zinc-800 dark:text-zinc-200">{c.message.split('\n')[0]}</div>
+                                                <div className="mt-0.5 text-[10px] text-zinc-500">{c.authorName}</div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <GitGraphPanel
+                                        commits={graphCommits}
+                                        selectedSha={selectedSha}
+                                        onSelect={setSelectedSha}
+                                    />
+                                )}
                             </div>
-                        )}
+                            <div className="flex-1 min-h-0 min-w-0 border-t border-zinc-200 md:border-t-0 dark:border-zinc-800">
+                                {selectedSha && graphCommits.length > 0 ? (
+                                    (() => {
+                                        const sel = graphCommits.find((c) => c.sha === selectedSha);
+                                        if (!sel) return null;
+                                        return (
+                                            <GitCommitDetail
+                                                workspaceId={workspaceId}
+                                                commit={sel}
+                                                onMutated={() => { void refreshAll(); }}
+                                            />
+                                        );
+                                    })()
+                                ) : (
+                                    <div className="m-3 rounded border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 dark:border-zinc-700">
+                                        Selecciona un commit en el grafo.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
-                        {tab === 'access' && (
-                            <div className="-mx-3 -my-2">
-                                <GitAccessPanel />
-                            </div>
-                        )}
-                    </div>
+                    {tab === 'compare' && (
+                        <div className="flex-1 min-h-0">
+                            <GitComparePanel workspaceId={workspaceId} commits={graphCommits.length > 0 ? graphCommits : commits.map((c) => ({
+                                sha: c.sha,
+                                shortSha: c.shortSha,
+                                parents: [],
+                                message: c.message,
+                                authorName: c.authorName,
+                                authorEmail: c.authorEmail,
+                                date: c.date,
+                                htmlUrl: c.htmlUrl,
+                                refs: []
+                            }))} />
+                        </div>
+                    )}
+
+                    {tab === 'access' && (
+                        <div className="flex-1 overflow-y-auto">
+                            <GitAccessPanel />
+                        </div>
+                    )}
 
                     {revealedToken && (
                         <div className="m-3 rounded border border-amber-300 bg-amber-50 p-2 text-xs dark:border-amber-700 dark:bg-amber-900/20">

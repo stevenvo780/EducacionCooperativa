@@ -41,15 +41,15 @@ function renderNodes(children: HTMLCollection): string {
 
 function renderNode(el: Element): string {
   switch (el.localName.toLowerCase()) {
-    case 'section':  return `<section class="fb2-section">${renderNodes(el.children)}</section>`;
-    case 'title':    return `<h2>${renderNodes(el.children)}</h2>`;
+    case 'section': return `<section class="fb2-section">${renderNodes(el.children)}</section>`;
+    case 'title': return `<h2>${renderNodes(el.children)}</h2>`;
     case 'subtitle': return `<h3>${renderNodes(el.children)}</h3>`;
-    case 'p':        return `<p>${renderInline(el)}</p>`;
+    case 'p': return `<p>${renderInline(el)}</p>`;
     case 'epigraph': return `<aside class="fb2-epigraph">${renderNodes(el.children)}</aside>`;
-    case 'cite':     return `<blockquote>${renderNodes(el.children)}</blockquote>`;
+    case 'cite': return `<blockquote>${renderNodes(el.children)}</blockquote>`;
     case 'empty-line': return '<br/>';
-    case 'image':    return '';
-    default:         return renderNodes(el.children);
+    case 'image': return '';
+    default: return renderNodes(el.children);
   }
 }
 
