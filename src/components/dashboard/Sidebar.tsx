@@ -141,7 +141,6 @@ const Sidebar = ({
   onDeleteFolder
 }: SidebarProps) => {
   const isTouchDevice = useIsTouchDeviceProfile();
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [selectedDocsIds, setSelectedDocsIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
@@ -179,14 +178,7 @@ const Sidebar = ({
       paths.push(current);
     });
 
-    setExpandedFolders(prev => {
-      const next = new Set(prev);
-      paths.forEach(item => next.add(item));
-      return next;
-    });
-
-    // Si vamos a expandir un path, asegúrate de que ningún ancestro
-    // top-level esté en collapsedByUser (lo desocupamos al navegar a él).
+    // Garantizar que todos los ancestros estén visibles (no en collapsedByUser).
     setCollapsedByUser(prev => {
       if (prev.size === 0) return prev;
       const next = new Set(prev);
@@ -196,10 +188,12 @@ const Sidebar = ({
   };
 
   const collapseAllFolders = () => {
-    setExpandedFolders(new Set());
-    // Colapsar todos los top-level → meterlos a collapsedByUser
-    const topLevelPaths = (folderChildrenMap[''] ?? []).map(f => f.path);
-    setCollapsedByUser(new Set(topLevelPaths));
+    // Colapsar todos: meter cada path al set.
+    const allPaths: string[] = [];
+    Object.values(folderChildrenMap).forEach(list => {
+      list.forEach(f => allPaths.push(f.path));
+    });
+    setCollapsedByUser(new Set(allPaths));
   };
 
   const { folderChildrenMap, docsByFolder } = useMemo(
@@ -208,19 +202,9 @@ const Sidebar = ({
   );
 
   const toggleFolder = (path: string) => {
-    // Top-level: expandido por defecto, así que el toggle se hace via
-    // collapsedByUser. Sub-folder: expandido sólo si el user lo abrió.
-    const folder = folderChildrenMap[''] && folderChildrenMap[''].some(f => f.path === path);
-    if (folder) {
-      setCollapsedByUser(prev => {
-        const next = new Set(prev);
-        if (next.has(path)) next.delete(path);
-        else next.add(path);
-        return next;
-      });
-      return;
-    }
-    setExpandedFolders(prev => {
+    // Todos los folders están expandidos por defecto; el toggle invierte
+    // su presencia en collapsedByUser. expandedFolders ya no se usa.
+    setCollapsedByUser(prev => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
@@ -253,14 +237,13 @@ const Sidebar = ({
         const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
         items.push({ kind: 'folder', folder, depth, hasChildren });
 
-        // Folders top-level (parentPath==='') están expandidos por defecto
-        // a menos que el user los haya colapsado manualmente. Sub-folders
-        // sólo se expanden cuando el user clicka explícitamente.
-        const isTopLevel = folder.parentPath === '';
+        // Todos los folders están expandidos por defecto a menos que
+        // el user los haya colapsado manualmente (collapsedByUser).
+        // Antes el alias mágico 'No estructurado' jugaba ese rol; ahora
+        // sin alias, mantenemos el comportamiento "ver todo de entrada"
+        // que era el esperado por los users.
         const isUserCollapsed = collapsedByUser.has(folder.path);
-        const shouldExpand = isTopLevel
-          ? !isUserCollapsed
-          : expandedFolders.has(folder.path);
+        const shouldExpand = !isUserCollapsed;
 
         if (shouldExpand) {
           walk(folder.path, depth + 1);
@@ -278,7 +261,7 @@ const Sidebar = ({
       items.push({ kind: 'doc', doc, depth: 0 });
     }
     return items;
-  }, [docsByFolder, expandedFolders, folderChildrenMap, collapsedByUser]);
+  }, [docsByFolder, folderChildrenMap, collapsedByUser]);
 
   const listItems = useMemo<SidebarListItem[]>(() => {
     if (isSearchMode) {
@@ -394,11 +377,8 @@ const Sidebar = ({
     }
 
     if (item.kind === 'folder') {
-      const isTopLevel = item.folder.parentPath === '';
       const isUserCollapsed = collapsedByUser.has(item.folder.path);
-      const isExpanded = isTopLevel
-        ? !isUserCollapsed
-        : expandedFolders.has(item.folder.path);
+      const isExpanded = !isUserCollapsed;
       const isActive = activeFolder === item.folder.path;
       const isDragOver = folderDragOver === item.folder.path;
       const count = docsByFolder[item.folder.path]?.length ?? 0;
