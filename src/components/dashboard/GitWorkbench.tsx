@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     GitBranch, GitCommit, RefreshCcw, AlertCircle, Check, History,
-    FileText, FilePlus, Loader2, ExternalLink, Plus, KeyRound, GitCompare
+    FileText, FilePlus, Loader2, ExternalLink, Plus, GitCompare
 } from 'lucide-react';
-import GitAccessPanel from '@/components/dashboard/GitAccessPanel';
+import { dispatchOpenSettings } from '@/lib/settings-events';
 import GitGraphPanel from '@/components/dashboard/git/GitGraphPanel';
 import GitCommitDetail from '@/components/dashboard/git/GitCommitDetail';
 import GitComparePanel from '@/components/dashboard/git/GitComparePanel';
@@ -76,7 +76,7 @@ interface GitWorkbenchProps {
     onClose?: () => void;
 }
 
-type Tab = 'changes' | 'history' | 'compare' | 'access';
+type Tab = 'changes' | 'history' | 'compare';
 
 export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenchProps) {
     const { user } = useAuth();
@@ -536,8 +536,8 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                         <button type="button" onClick={() => setTab('compare')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'compare' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
                             <GitCompare className="h-3.5 w-3.5" /> Comparar
                         </button>
-                        <button type="button" onClick={() => setTab('access')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'access' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
-                            <KeyRound className="h-3.5 w-3.5" /> Acceso
+                        <button type="button" onClick={() => dispatchOpenSettings('git-access')} className="ml-auto flex items-center gap-1 px-3 py-2 text-zinc-500 transition hover:text-zinc-800 dark:hover:text-zinc-200" title="Tokens y URLs de clone (Configuración → Acceso Git)">
+                            Acceso ↗
                         </button>
                     </div>
 
@@ -669,12 +669,6 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                                 htmlUrl: c.htmlUrl,
                                 refs: []
                             }))} />
-                        </div>
-                    )}
-
-                    {tab === 'access' && (
-                        <div className="flex-1 overflow-y-auto">
-                            <GitAccessPanel />
                         </div>
                     )}
 
