@@ -28,6 +28,7 @@ import { buildAgoraSystemPrompt, extractThinkingSegments } from '@/lib/agora-ai/
 import { toOllamaTools } from '@/lib/agora-ai/toolDefinitions';
 import { collectAgentWorkspaceEffects } from '@/lib/agora-ai/uiEvents';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
+import { parseSlashCommand, SLASH_COMMANDS, type SlashCommandHelp } from '@/lib/agora-ai/slashCommands';
 import {
   AI_SETTINGS_CHANGED_EVENT,
   PROVIDER_META,
@@ -315,6 +316,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [rollbackQueue, setRollbackQueue] = useState<AgentRollbackAction[]>([]);
+  const [dryRun, setDryRun] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('agora-ai-dryrun') === '1';
+  });
+  const [nextTurnHints, setNextTurnHints] = useState<Set<'plan' | 'think'>>(new Set());
+  const [showSlashHelp, setShowSlashHelp] = useState<SlashCommandHelp[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -538,7 +545,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const runServerAgentStream = useCallback(async (
     history: UIChatMessage[],
     assistantMessageId: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    streamUserInstructions: string,
+    dryRunFlag: boolean
   ): Promise<AgentResponseBody> => {
     const token = await getAuthToken();
     const res = await fetch(apiUrl('/api/agora-ai/stream'), {
@@ -556,7 +565,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         model: config.model || meta.defaultModel,
         mode,
         accessPolicy,
-        userInstructions
+        userInstructions: streamUserInstructions,
+        dryRun: dryRunFlag
       })
     });
 
@@ -685,7 +695,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
 
     return finalPayload;
-  }, [accessPolicy, config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById, userInstructions]);
+  }, [accessPolicy, config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
 
   const callOllamaDirect = useCallback(async (
     msgs: Array<Record<string, unknown>>,
@@ -993,9 +1003,55 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   }, [executeAgoraTool, rollbackQueue]);
 
   const sendMessage = useCallback(async () => {
-    const text = input.trim();
+    const rawText = input.trim();
     const now = Date.now();
-    if (!text || loading || !canSend) return;
+    if (!rawText || loading || !canSend) return;
+
+    // Slash commands locales — interceptan antes del provider.
+    const slash = parseSlashCommand(rawText, {
+      onClear: () => {
+        setMessages([]);
+        setRollbackQueue([]);
+      },
+      onShowHelp: (cmds) => setShowSlashHelp(cmds)
+    });
+    let text = rawText;
+    if (slash.kind === 'handled') {
+      slash.sideEffect?.();
+      setInput('');
+      return;
+    }
+    if (slash.kind === 'flag') {
+      if (slash.flag === 'dry-run') {
+        const next = !dryRun;
+        setDryRun(next);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('agora-ai-dryrun', next ? '1' : '0');
+        }
+        setMessages(prev => [...prev, toAssistantMessage(
+          next
+            ? 'Dry-run ON. Las tools destructivas (delete_*, update_document, write_worker_file, overwrite_document) no aplicarán cambios reales hasta que escribas /dryrun otra vez.'
+            : 'Dry-run OFF. Las tools del agente vuelven a aplicar cambios reales.'
+        )]);
+      } else {
+        setNextTurnHints(prev => {
+          const next = new Set(prev);
+          next.add(slash.flag as 'plan' | 'think');
+          return next;
+        });
+        setMessages(prev => [...prev, toAssistantMessage(
+          slash.flag === 'plan'
+            ? 'Plan-mode activo para el próximo mensaje. El agente debe publicar un plan antes de actuar.'
+            : 'Razonamiento extendido activo para el próximo mensaje.'
+        )]);
+      }
+      setInput('');
+      return;
+    }
+    if (slash.kind === 'inject-system') {
+      text = slash.injection;
+    }
+
     if (sendingRef.current || now - lastSendAtRef.current < 650) {
       publishAgentProblem({
         severity: 'warning',
@@ -1047,12 +1103,21 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       let reply = '';
       let agentRun: AgentRun | undefined;
 
+      // Inyecta hints de slash flags (/plan, /think) sólo en este turno.
+      const turnHintLines: string[] = [];
+      if (nextTurnHints.has('plan')) turnHintLines.push('PLAN_MODE: empieza llamando agent_plan_set y publicando un plan antes de cualquier acción destructiva.');
+      if (nextTurnHints.has('think')) turnHintLines.push('THINK_MODE: razona explícitamente antes de cada tool call. Prefiere precisión sobre velocidad.');
+      const effectiveUserInstructions = turnHintLines.length > 0
+        ? `${userInstructions}\n\n${turnHintLines.join('\n')}`.trim()
+        : userInstructions;
+      if (nextTurnHints.size > 0) setNextTurnHints(new Set());
+
       if (config.provider === 'ollama') {
         agentRun = await runOllamaLoop(history, controller.signal);
         reply = agentRun.finalReply;
         emitAgentWorkspaceEvents(agentRun);
       } else if (shouldStreamServerAgent && assistantMessageId) {
-        const streamed = await runServerAgentStream(history, assistantMessageId, controller.signal);
+        const streamed = await runServerAgentStream(history, assistantMessageId, controller.signal, effectiveUserInstructions, dryRun);
         reply = streamed.reply;
         agentRun = streamed.agentRun;
         emitAgentWorkspaceEvents(agentRun);
@@ -1070,7 +1135,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             model: config.model || meta.defaultModel,
             mode,
             accessPolicy,
-            userInstructions
+            userInstructions: effectiveUserInstructions,
+            dryRun
           })
         });
 
@@ -1124,7 +1190,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setStreamStatus('');
       textareaRef.current?.focus();
     }
-  }, [accessPolicy, input, loading, canSend, messages, mode, runRollback, config.provider, config.apiKey, config.model, meta.defaultModel, resolvedWorkspaceId, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions]);
+  }, [accessPolicy, input, loading, canSend, messages, mode, runRollback, config.provider, config.apiKey, config.model, meta.defaultModel, resolvedWorkspaceId, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1491,6 +1557,45 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       </div>
 
       <div className="flex-shrink-0 border-t border-surface-700 p-2 bg-surface-900 min-w-0">
+        {(dryRun || nextTurnHints.size > 0 || showSlashHelp) && (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+            {dryRun && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-900/40 border border-amber-700 text-amber-200">
+                DRY-RUN — escribe /dryrun para desactivar
+              </span>
+            )}
+            {nextTurnHints.has('plan') && (
+              <span className="px-2 py-0.5 rounded-full bg-sky-900/40 border border-sky-700 text-sky-200">
+                Plan-mode (1 turno)
+              </span>
+            )}
+            {nextTurnHints.has('think') && (
+              <span className="px-2 py-0.5 rounded-full bg-violet-900/40 border border-violet-700 text-violet-200">
+                Razonamiento extendido (1 turno)
+              </span>
+            )}
+            {showSlashHelp && (
+              <div className="w-full mt-1 p-2 rounded-lg bg-surface-800 border border-surface-600">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-surface-300 font-medium">Comandos disponibles</span>
+                  <button
+                    onClick={() => setShowSlashHelp(null)}
+                    className="text-surface-500 hover:text-surface-200"
+                    aria-label="Cerrar"
+                  >×</button>
+                </div>
+                <ul className="space-y-0.5">
+                  {showSlashHelp.map(cmd => (
+                    <li key={cmd.command} className="flex gap-2">
+                      <code className="text-sky-400 min-w-[5rem]">{cmd.command}</code>
+                      <span className="text-surface-400">{cmd.description}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex items-end gap-2 min-w-0">
           <textarea
             ref={textareaRef}
