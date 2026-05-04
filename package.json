@@ -16,7 +16,7 @@
     "lint:all": "npm run lint && npm --prefix services/hub run lint && npm --prefix services/worker run lint"
   },
   "dependencies": {
-    "@agora/contracts": "file:../packages/agora-contracts",
+    "@agora/contracts": "npm:@stevenvo780/agora-contracts@^1.0.0",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-javascript": "^6.2.4",
@@ -36,7 +36,7 @@
     "@reduxjs/toolkit": "^2.11.2",
     "@replit/codemirror-minimap": "^0.5.2",
     "@stevenvo780/autologic": "^2.2.3",
-    "@stevenvo780/st-lang": "^3.2.2",
+    "@stevenvo780/st-lang": "^3.2.3",
     "@types/jszip": "^3.4.0",
     "@uiw/react-codemirror": "^4.25.4",
     "@xterm/addon-fit": "^0.11.0",
