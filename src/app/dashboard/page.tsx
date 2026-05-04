@@ -2551,10 +2551,6 @@ function DashboardContent() {
                         setShowPasswordModal(true);
                     }}
                     onOpenMembers={() => setShowMembersModal(true)}
-                    onOpenGitAccess={() => {
-                        setActivityView('git');
-                        if (isSidebarCollapsed) setIsSidebarCollapsed(false);
-                    }}
                 />
 
                 <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} activeFolder={activeFolder} onDismiss={dismissDragOverlay} />

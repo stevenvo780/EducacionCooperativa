@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { X, Settings as SettingsIcon, Wrench, Sparkles, Code2, Shield, FolderGit2, KeyRound, Users, BookMarked, RotateCcw, type LucideIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { X, Settings as SettingsIcon, Wrench, Sparkles, Code2, Shield, FolderGit2, KeyRound, Users, BookMarked, RotateCcw, Copy, Eye, EyeOff, RefreshCcw, Terminal, ExternalLink, Check, Download, Loader2, type LucideIcon } from 'lucide-react';
+import { authFetch } from '@/services/apiClient';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
 import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
@@ -23,8 +24,10 @@ import {
   AGENT_ACCESS_PROFILE_ORDER,
   AGENT_ACCESS_PROFILES,
   DEFAULT_CLIENT_AGENT_ACCESS_POLICY,
+  getAgentToolAccessState,
   normalizeAgentAccessPolicy
 } from '@/lib/agora-ai/accessPolicy';
+import { AGORA_AGENT_TOOLS } from '@/lib/agora-ai/toolDefinitions';
 import {
   PROVIDER_META,
   loadAIProviderConfig,
@@ -69,7 +72,8 @@ const SECTIONS: Section[] = [
   { id: 'semantic', label: 'Mesa semántica', icon: BookMarked, description: 'Modo de experiencia y previews' },
   { id: 'ai', label: 'Agora IA', icon: Sparkles, description: 'Proveedor, modelo, permisos' },
   { id: 'linter', label: 'Linter Markdown', icon: Shield, description: 'Reglas activas y diccionario personal' },
-  { id: 'cuenta', label: 'Cuenta y permisos', icon: KeyRound, description: 'Contraseña, miembros, acceso Git' }
+  { id: 'git-access', label: 'Acceso Git', icon: FolderGit2, description: 'Tokens y URLs de clone para Forgejo' },
+  { id: 'cuenta', label: 'Cuenta y permisos', icon: KeyRound, description: 'Contraseña y miembros del workspace' }
 ];
 
 interface SettingsModalProps {
@@ -80,7 +84,6 @@ interface SettingsModalProps {
   activeUserId?: string;
   onOpenChangePassword: () => void;
   onOpenMembers: () => void;
-  onOpenGitAccess: () => void;
 }
 
 export default function SettingsModal({
@@ -90,8 +93,7 @@ export default function SettingsModal({
   activeWorkspaceId,
   activeUserId,
   onOpenChangePassword,
-  onOpenMembers,
-  onOpenGitAccess
+  onOpenMembers
 }: SettingsModalProps) {
   const [section, setSection] = useState<SettingsSectionId>(initialSection);
 
@@ -180,11 +182,12 @@ export default function SettingsModal({
               <AISection activeWorkspaceId={activeWorkspaceId} />
             )}
             {section === 'linter' && <LintersSection />}
+            {section === 'git-access' && <GitAccessSection />}
             {section === 'cuenta' && (
               <CuentaSection
                 onOpenChangePassword={() => { onOpenChangePassword(); onClose(); }}
                 onOpenMembers={() => { onOpenMembers(); onClose(); }}
-                onOpenGitAccess={() => { onOpenGitAccess(); onClose(); }}
+                onOpenGitAccess={() => setSection('git-access')}
               />
             )}
           </div>
@@ -201,7 +204,7 @@ const CAPABILITY_LABELS: Record<AgentAccessCapability, { label: string; descript
   },
   documentsRead: {
     label: 'Leer documentos',
-    description: 'Listar, buscar, resumir y analizar documentos.'
+    description: 'Listar, buscar, resumir, analizar, revisar PDF y consultar actividad.'
   },
   documentsWrite: {
     label: 'Editar documentos',
@@ -229,29 +232,52 @@ const CAPABILITY_LABELS: Record<AgentAccessCapability, { label: string; descript
   },
   gitRead: {
     label: 'Git lectura',
-    description: 'Consultar status e historial de commits.'
+    description: 'Consultar status, historial, diff, repos e información Git.'
   },
   gitWrite: {
-    label: 'Git commit',
-    description: 'Crear commits del workspace, con confirmación.'
+    label: 'Git escritura',
+    description: 'Commit, pull, push, ramas, checkout y revert, con confirmación.'
   },
   workerRead: {
     label: 'Worker lectura',
-    description: 'Ver estado y listar archivos reales del worker.'
+    description: 'Ver estado, archivos, logs y sesiones reales del worker.'
   },
   workerCommand: {
     label: 'Comandos worker',
-    description: 'Ejecutar comandos shell en /workspace, con confirmación.'
+    description: 'Ejecutar comandos, escribir archivos y reiniciar procesos.'
   },
   uiControl: {
-    label: 'Control de interfaz',
-    description: 'Abrir paneles como Git, Terminal, Problemas o Board.'
+    label: 'UI y control agente',
+    description: 'Abrir paneles, mostrar diffs, planes, memoria, hooks y snapshots.'
   },
   debug: {
     label: 'Debug a Problemas',
     description: 'Publicar diagnósticos del agente en el bus de Problemas.'
   }
 };
+
+type ToolPermissionGroupId = AgentAccessCapability | 'unrestricted';
+
+type ToolPermissionRowModel = {
+  name: string;
+  description: string;
+  enabled: boolean;
+  source: 'tool' | 'capability' | 'unrestricted';
+};
+
+const TOOL_PERMISSION_GROUP_ORDER: ToolPermissionGroupId[] = [
+  ...AGENT_ACCESS_CAPABILITIES.filter((capability) => capability !== 'workspaceContext'),
+  'unrestricted'
+];
+
+function toolGroupLabel(group: ToolPermissionGroupId): string {
+  if (group === 'unrestricted') return 'Sin grupo';
+  return CAPABILITY_LABELS[group].label;
+}
+
+function compactToolDescription(description: string): string {
+  return description.length > 180 ? `${description.slice(0, 177).trim()}...` : description;
+}
 
 function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
   const [config, setConfig] = useState<AIProviderConfig>(() => loadAIProviderConfig());
@@ -301,7 +327,68 @@ function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
       capabilities: {
         ...accessPolicy.capabilities,
         [capability]: enabled
+      },
+      toolPermissions: accessPolicy.toolPermissions
+    });
+  };
+
+  const toolPermissionGroups = useMemo(() => {
+    const groups = new Map<ToolPermissionGroupId, ToolPermissionRowModel[]>(
+      TOOL_PERMISSION_GROUP_ORDER.map((group): [ToolPermissionGroupId, ToolPermissionRowModel[]] => [group, []])
+    );
+
+    for (const tool of AGORA_AGENT_TOOLS) {
+      const state = getAgentToolAccessState(tool.name, accessPolicy);
+      const group = state.capability ?? 'unrestricted';
+      const rows = groups.get(group) ?? [];
+      rows.push({
+        name: tool.name,
+        description: compactToolDescription(tool.description),
+        enabled: state.enabled,
+        source: state.source
+      });
+      groups.set(group, rows);
+    }
+
+    return TOOL_PERMISSION_GROUP_ORDER
+      .map((group) => ({
+        id: group,
+        label: toolGroupLabel(group),
+        tools: groups.get(group) ?? []
+      }))
+      .filter((group) => group.tools.length > 0);
+  }, [accessPolicy]);
+
+  const enabledToolCount = toolPermissionGroups.reduce((count, group) => (
+    count + group.tools.filter((tool) => tool.enabled).length
+  ), 0);
+  const toolOverrideCount = Object.keys(accessPolicy.toolPermissions ?? {}).length;
+
+  const toggleToolPermission = (toolName: string, enabled: boolean) => {
+    updatePolicy({
+      profile: 'custom',
+      capabilities: { ...accessPolicy.capabilities },
+      toolPermissions: {
+        ...(accessPolicy.toolPermissions ?? {}),
+        [toolName]: enabled
       }
+    });
+  };
+
+  const resetToolPermission = (toolName: string) => {
+    const nextToolPermissions = { ...(accessPolicy.toolPermissions ?? {}) };
+    delete nextToolPermissions[toolName];
+    updatePolicy({
+      profile: 'custom',
+      capabilities: { ...accessPolicy.capabilities },
+      toolPermissions: Object.keys(nextToolPermissions).length > 0 ? nextToolPermissions : undefined
+    });
+  };
+
+  const resetAllToolPermissions = () => {
+    updatePolicy({
+      profile: 'custom',
+      capabilities: { ...accessPolicy.capabilities }
     });
   };
 
@@ -445,6 +532,49 @@ function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
               checked={accessPolicy.capabilities[capability]}
               onChange={(enabled) => toggleCapability(capability, enabled)}
             />
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-surface-700/40 pt-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-xs font-semibold text-surface-200">Herramientas del agente</h4>
+            <span className="text-[10px] text-surface-500">
+              {enabledToolCount}/{AGORA_AGENT_TOOLS.length} activas
+              {toolOverrideCount > 0 ? ` · ${toolOverrideCount} manuales` : ' · heredando perfil'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={resetAllToolPermissions}
+            disabled={toolOverrideCount === 0}
+            className="rounded-md border border-surface-700 bg-surface-925 px-3 py-1.5 text-xs text-surface-300 transition hover:border-surface-600 hover:text-surface-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Heredar perfil
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {toolPermissionGroups.map((group) => (
+            <section key={group.id} className="rounded-md border border-surface-700/40 bg-surface-925/30">
+              <div className="flex items-center justify-between border-b border-surface-700/30 px-3 py-2">
+                <h5 className="text-[11px] font-semibold uppercase tracking-wide text-surface-300">{group.label}</h5>
+                <span className="text-[10px] text-surface-500">
+                  {group.tools.filter((tool) => tool.enabled).length}/{group.tools.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5 p-2 lg:grid-cols-2">
+                {group.tools.map((tool) => (
+                  <ToolPermissionRow
+                    key={tool.name}
+                    tool={tool}
+                    onToggle={(enabled) => toggleToolPermission(tool.name, enabled)}
+                    onReset={() => resetToolPermission(tool.name)}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </div>
@@ -892,9 +1022,353 @@ function CuentaSection({
       <ActionRow
         icon={FolderGit2}
         title="Acceso Git (Forgejo)"
-        description="Genera tokens y revoca credenciales del repo del workspace."
+        description="Tokens y URLs de clone. Abre la sección dedicada del modal."
         onClick={onOpenGitAccess}
       />
+    </div>
+  );
+}
+
+interface GitMeRepo {
+  fullName: string;
+  cloneUrl: string | null;
+  sshUrl: string | null;
+  htmlUrl: string | null;
+  private: boolean | null;
+}
+interface GitMeData {
+  login: string;
+  webUrl: string | null;
+  apiUrl: string | null;
+  org: string;
+  repos: GitMeRepo[];
+}
+
+function GitAccessSection() {
+  const [info, setInfo] = useState<GitMeData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [issuedToken, setIssuedToken] = useState<{ login: string; token: string; tokenName: string } | null>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [importName, setImportName] = useState('');
+  const [importToken, setImportToken] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await authFetch('/api/git/me');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = await res.json();
+      setInfo({
+        login: typeof raw?.login === 'string' ? raw.login : '',
+        webUrl: typeof raw?.webUrl === 'string' ? raw.webUrl : null,
+        apiUrl: typeof raw?.apiUrl === 'string' ? raw.apiUrl : null,
+        org: typeof raw?.org === 'string' ? raw.org : '',
+        repos: Array.isArray(raw?.repos) ? raw.repos : []
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const issueToken = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await authFetch('/api/git/me', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setIssuedToken({ login: data.login, token: data.token, tokenName: data.tokenName });
+      setShowToken(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(false); }
+  };
+
+  const copy = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setCopied(null), 1500);
+    } catch { /* noop */ }
+  };
+
+  const submitImport = async () => {
+    const url = importUrl.trim();
+    if (!url) { setImportError('URL requerida'); return; }
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const res = await authFetch('/api/git/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          name: importName.trim() || undefined,
+          authToken: importToken.trim() || undefined,
+          private: true,
+          mirror: false
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setImportOpen(false);
+      setImportUrl(''); setImportName(''); setImportToken('');
+      await load();
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e));
+    } finally { setImportBusy(false); }
+  };
+
+  const buildAuthedClone = (cloneUrl: string | null, login: string, token: string) => {
+    if (!cloneUrl) return '';
+    return cloneUrl.replace(/^https?:\/\//, (proto) => `${proto}${encodeURIComponent(login)}:${encodeURIComponent(token)}@`);
+  };
+
+  const repos = info?.repos ?? [];
+  const reposCount = repos.length;
+
+  return (
+    <div className="space-y-3 text-xs">
+      <div className="flex items-center justify-between">
+        <SectionHelper>Genera tokens para git push/clone HTTPS y administra los repos del usuario en Forgejo.</SectionHelper>
+        <button type="button" onClick={() => void load()} disabled={loading || busy} className="rounded p-1 text-surface-400 hover:bg-surface-700/50 disabled:opacity-50">
+          <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+      {error && (
+        <div role="alert" className="rounded border border-red-500/40 bg-red-500/10 p-2 text-[11px] text-red-300">{error}</div>
+      )}
+      {loading && !info && (
+        <div className="flex items-center gap-2 text-surface-400"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>
+      )}
+      {info && (
+        <>
+          <section className="space-y-2 rounded-md border border-surface-700/40 bg-surface-925/30 p-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-surface-400">Tu cuenta Forgejo</h3>
+            <SettingsField label="Usuario" value={info.login} onCopy={(v) => copy('login', v)} copied={copied === 'login'} />
+            {info.webUrl && (
+              <SettingsField
+                label="URL del servidor"
+                value={info.webUrl}
+                rightSlot={(
+                  <a href={info.webUrl} target="_blank" rel="noreferrer noopener" className="rounded p-1 text-emerald-400 hover:bg-emerald-500/10" aria-label="Abrir Forgejo">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
+                onCopy={(v) => copy('webUrl', v)}
+                copied={copied === 'webUrl'}
+              />
+            )}
+            <p className="text-[11px] text-surface-500">El token actúa como contraseña para git y la web. Inicia sesión en Forgejo con tu usuario y un token.</p>
+          </section>
+
+          <section className="space-y-2 rounded-md border border-surface-700/40 bg-surface-925/30 p-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-surface-400">Token de acceso</h3>
+              <button type="button" onClick={() => void issueToken()} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 disabled:opacity-60">
+                {busy ? <Loader2 className="inline h-3 w-3 animate-spin" /> : '+'} Generar token nuevo
+              </button>
+            </div>
+            {!issuedToken && (
+              <p className="text-[11px] text-surface-500">Cada vez que generas uno, los anteriores siguen activos. Revócalos desde la web de Forgejo.</p>
+            )}
+            {issuedToken && (
+              <div className="space-y-2 rounded border border-amber-500/40 bg-amber-500/10 p-2">
+                <p className="text-[11px] font-medium text-amber-200">Guárdalo ahora. Solo se muestra una vez.</p>
+                <div className="flex items-center gap-1 rounded bg-surface-950 px-2 py-1 font-mono text-[11px] text-emerald-300">
+                  <span className="flex-1 truncate">{showToken ? issuedToken.token : '•'.repeat(40)}</span>
+                  <button type="button" onClick={() => setShowToken((v) => !v)} className="rounded p-1 text-surface-300 hover:bg-surface-800" aria-label="Mostrar/ocultar">
+                    {showToken ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </button>
+                  <button type="button" onClick={() => void copy('token', issuedToken.token)} className="rounded p-1 text-surface-300 hover:bg-surface-800" aria-label="Copiar">
+                    <Copy className="h-3 w-3" />
+                  </button>
+                </div>
+                {copied === 'token' && <p className="text-[10px] text-emerald-400">Copiado.</p>}
+                <p className="text-[10px] text-surface-400">Nombre: <code>{issuedToken.tokenName}</code></p>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-2 rounded-md border border-surface-700/40 bg-surface-925/30 p-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-surface-400">Repositorios ({reposCount})</h3>
+              <button type="button" onClick={() => { setImportOpen(true); setImportError(null); }} className="flex items-center gap-1 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-500">
+                <Download className="h-3 w-3" /> Importar repo
+              </button>
+            </div>
+            {importOpen && (
+              <div className="space-y-2 rounded border border-sky-500/40 bg-sky-500/10 p-2">
+                <p className="text-[11px] font-medium text-sky-200">Importar repositorio externo</p>
+                <input type="url" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="https://github.com/usuario/repo.git" className="w-full rounded border border-surface-700 bg-surface-900 px-2 py-1 text-[11px] text-surface-100" />
+                <input type="text" value={importName} onChange={(e) => setImportName(e.target.value)} placeholder="Nombre opcional (default: del URL)" className="w-full rounded border border-surface-700 bg-surface-900 px-2 py-1 text-[11px] text-surface-100" />
+                <input type="password" value={importToken} onChange={(e) => setImportToken(e.target.value)} placeholder="Token (sólo si el repo es privado)" className="w-full rounded border border-surface-700 bg-surface-900 px-2 py-1 text-[11px] text-surface-100" />
+                {importError && <p className="text-[10px] text-red-400">{importError}</p>}
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => void submitImport()} disabled={importBusy || !importUrl.trim()} className="flex-1 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-500 disabled:opacity-50">
+                    {importBusy ? <Loader2 className="inline h-3 w-3 animate-spin" /> : 'Importar'}
+                  </button>
+                  <button type="button" onClick={() => { setImportOpen(false); setImportError(null); }} disabled={importBusy} className="rounded border border-surface-700 px-2 py-1 text-[11px] text-surface-200">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+            {reposCount === 0 && (
+              <p className="text-[11px] text-surface-500">Aún no tienes repos. Cada workspace genera uno al activar Git.</p>
+            )}
+            {repos.map((r) => {
+              const httpsUrl = r.cloneUrl
+                ? (issuedToken ? buildAuthedClone(r.cloneUrl, issuedToken.login, issuedToken.token) : r.cloneUrl)
+                : '';
+              const cloneCommand = httpsUrl ? `git clone ${httpsUrl}` : '';
+              const vscodeUrl = r.cloneUrl ? `vscode://vscode.git/clone?url=${encodeURIComponent(r.cloneUrl)}` : '';
+              return (
+                <div key={r.fullName} className="rounded border border-surface-700/40 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-medium text-surface-100">{r.fullName}</span>
+                    {r.htmlUrl && (
+                      <a href={r.htmlUrl} target="_blank" rel="noreferrer noopener" className="text-emerald-400 hover:underline">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
+                  {cloneCommand && (
+                    <div className="mt-2 flex gap-1">
+                      <button type="button" onClick={() => void copy(`cmd-${r.fullName}`, cloneCommand)} className="flex flex-1 items-center justify-center gap-1 rounded bg-emerald-600 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-emerald-500">
+                        {copied === `cmd-${r.fullName}` ? <Check className="h-3 w-3" /> : <Terminal className="h-3 w-3" />}
+                        {copied === `cmd-${r.fullName}` ? 'Copiado' : 'Copiar git clone'}
+                      </button>
+                      {vscodeUrl && (
+                        <a href={vscodeUrl} className="flex items-center justify-center gap-1 rounded border border-surface-700 bg-surface-925 px-2 py-1.5 text-[11px] font-medium text-surface-200 hover:bg-surface-800" title="Abrir en VS Code (requiere VS Code instalado)">
+                          VS Code
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {!issuedToken && cloneCommand && (
+                    <p className="mt-1 text-[10px] text-amber-300">Sin token, te pedirá usuario+contraseña. Genera uno arriba para copiar el comando con auth incluida.</p>
+                  )}
+                  {httpsUrl && (
+                    <SettingsField label="HTTPS" value={httpsUrl} mono small onCopy={(v) => copy(`https-${r.fullName}`, v)} copied={copied === `https-${r.fullName}`} />
+                  )}
+                  {r.sshUrl && (
+                    <SettingsField label="SSH" value={r.sshUrl} mono small onCopy={(v) => copy(`ssh-${r.fullName}`, v)} copied={copied === `ssh-${r.fullName}`} />
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface SettingsFieldProps {
+  label: string;
+  value: string;
+  mono?: boolean;
+  small?: boolean;
+  onCopy: (v: string) => void;
+  copied: boolean;
+  rightSlot?: React.ReactNode;
+}
+
+function SettingsField({ label, value, mono, small, onCopy, copied, rightSlot }: SettingsFieldProps) {
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-medium uppercase tracking-wide text-surface-500">{label}</label>
+        {copied && <span className="text-[10px] text-emerald-400">copiado</span>}
+      </div>
+      <div className={`flex items-center gap-1 rounded border border-surface-700/40 bg-surface-950 px-2 ${small ? 'py-0.5' : 'py-1'}`}>
+        <span className={`flex-1 truncate ${mono ? 'font-mono' : ''} text-surface-200`}>{value}</span>
+        <button type="button" onClick={() => onCopy(value)} className="rounded p-0.5 text-surface-400 hover:bg-surface-800" aria-label="Copiar">
+          <Copy className="h-3 w-3" />
+        </button>
+        {rightSlot}
+      </div>
+    </div>
+  );
+}
+
+function ToolPermissionRow({
+  tool,
+  onToggle,
+  onReset
+}: {
+  tool: ToolPermissionRowModel;
+  onToggle: (enabled: boolean) => void;
+  onReset: () => void;
+}) {
+  const manual = tool.source === 'tool';
+  const sourceLabel = manual ? 'Manual' : tool.source === 'capability' ? 'Perfil' : 'Libre';
+
+  return (
+    <div
+      className={`flex min-h-11 items-stretch gap-1 rounded-md border transition ${
+        tool.enabled
+          ? 'border-surface-700/50 bg-surface-900/70'
+          : 'border-surface-800/70 bg-surface-950/60 opacity-70'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(!tool.enabled)}
+        className="flex min-w-0 flex-1 items-start justify-between gap-3 px-3 py-2 text-left text-xs hover:bg-surface-800/50"
+        aria-pressed={tool.enabled}
+        title={tool.description}
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-mono text-[11px] font-semibold text-surface-100">{tool.name}</span>
+          <span className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-surface-500">{tool.description}</span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className={`rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wide ${
+            manual ? 'bg-mandy-500/10 text-mandy-200' : 'bg-surface-800 text-surface-400'
+          }`}>
+            {sourceLabel}
+          </span>
+          <span
+            aria-hidden
+            className={`relative h-4 w-7 rounded-full transition ${
+              tool.enabled ? 'bg-mandy-500/80' : 'bg-surface-700'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+                tool.enabled ? 'left-3' : 'left-0.5'
+              }`}
+            />
+          </span>
+        </span>
+      </button>
+      {manual && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="my-1 mr-1 shrink-0 rounded border border-surface-700 px-2 text-[10px] text-surface-400 transition hover:border-surface-600 hover:text-surface-100"
+        >
+          Heredar
+        </button>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 export const OPEN_SETTINGS_EVENT = 'agora:open-settings' as const;
 
-export type SettingsSectionId = 'editor-md' | 'editor-st' | 'semantic' | 'ai' | 'linter' | 'cuenta';
+export type SettingsSectionId = 'editor-md' | 'editor-st' | 'semantic' | 'ai' | 'linter' | 'cuenta' | 'git-access';
 
 export interface OpenSettingsEventDetail {
   section?: SettingsSectionId;
@@ -12,7 +12,8 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionId>([
   'semantic',
   'ai',
   'linter',
-  'cuenta'
+  'cuenta',
+  'git-access'
 ]);
 
 export function isSettingsSectionId(value: unknown): value is SettingsSectionId {
