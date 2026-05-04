@@ -75,7 +75,7 @@ function splitIntoParagraphs(text: string): Paragraph[] {
       flush();
     } else {
       if (paraStart < 0) paraStart = i;
-      paraLines.push(lines[i]);
+      paraLines.push(lines[i] ?? '');
     }
   }
   flush();

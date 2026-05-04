@@ -5,6 +5,19 @@ export const EPUB_EXTENSIONS = new Set(['epub']);
 export const NOTEBOOK_EXTENSIONS = new Set(['ipynb']);
 export const LATEX_EXTENSIONS = new Set(['tex', 'latex', 'ltx', 'sty', 'cls']);
 export const BIBTEX_EXTENSIONS = new Set(['bib', 'bibtex']);
+export const ODT_EXTENSIONS = new Set(['odt']);
+export const ODS_EXTENSIONS = new Set(['ods']);
+export const ODP_EXTENSIONS = new Set(['odp']);
+export const RTF_EXTENSIONS = new Set(['rtf']);
+export const FB2_EXTENSIONS = new Set(['fb2']);
+export const TEI_EXTENSIONS = new Set(['tei', 'xml']);
+export const COMIC_ARCHIVE_EXTENSIONS = new Set(['cbz', 'cbr']);
+export const SUBTITLE_EXTENSIONS = new Set(['srt', 'vtt', 'sbv']);
+export const MUSIC_NOTATION_EXTENSIONS = new Set(['musicxml', 'mxl', 'mscz']);
+export const KINDLE_EXTENSIONS = new Set(['mobi', 'azw', 'azw3']);
+export const DJVU_EXTENSIONS = new Set(['djvu', 'djv']);
+export const RIS_EXTENSIONS = new Set(['ris']);
+export const HIRES_IMAGE_EXTENSIONS = new Set(['tif', 'tiff']);
 
 export const getFileExtension = (name?: string) => {
   const lower = (name ?? '').toLowerCase().trim();
@@ -55,6 +68,24 @@ export const isNotebookMime = (mime?: string) => {
   return lower === 'application/x-ipynb+json' || lower === 'application/vnd.jupyter';
 };
 
+export const isOdtMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/vnd.oasis.opendocument.text';
+export const isOdsMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/vnd.oasis.opendocument.spreadsheet';
+export const isOdpMime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/vnd.oasis.opendocument.presentation';
+export const isRtfMime = (mime?: string) => {
+  const lower = (mime ?? '').toLowerCase();
+  return lower === 'application/rtf' || lower === 'text/rtf';
+};
+export const isFb2Mime = (mime?: string) => (mime ?? '').toLowerCase() === 'application/x-fictionbook+xml';
+export const isXmlMime = (mime?: string) => {
+  const lower = (mime ?? '').toLowerCase();
+  return lower === 'application/xml' || lower === 'text/xml';
+};
+export const isMusicXmlMime = (mime?: string) => {
+  const lower = (mime ?? '').toLowerCase();
+  return lower === 'application/vnd.recordare.musicxml+xml'
+    || lower === 'application/vnd.recordare.musicxml';
+};
+
 export const isSpreadsheetDocument = (name?: string, mime?: string) => (
   SPREADSHEET_EXTENSIONS.has(getFileExtension(name)) || isSpreadsheetMime(mime)
 );
@@ -75,12 +106,57 @@ export const isNotebookDocument = (name?: string, mime?: string) => (
   NOTEBOOK_EXTENSIONS.has(getFileExtension(name)) || isNotebookMime(mime)
 );
 
-export const isLatexDocument = (name?: string) => (
-  LATEX_EXTENSIONS.has(getFileExtension(name))
+export const isLatexDocument = (name?: string) => LATEX_EXTENSIONS.has(getFileExtension(name));
+export const isBibtexDocument = (name?: string) => BIBTEX_EXTENSIONS.has(getFileExtension(name));
+export const isRisDocument = (name?: string) => RIS_EXTENSIONS.has(getFileExtension(name));
+
+export const isOdtDocument = (name?: string, mime?: string) => (
+  ODT_EXTENSIONS.has(getFileExtension(name)) || isOdtMime(mime)
+);
+export const isOdsDocument = (name?: string, mime?: string) => (
+  ODS_EXTENSIONS.has(getFileExtension(name)) || isOdsMime(mime)
+);
+export const isOdpDocument = (name?: string, mime?: string) => (
+  ODP_EXTENSIONS.has(getFileExtension(name)) || isOdpMime(mime)
+);
+export const isOpenDocumentFormat = (name?: string, mime?: string) => (
+  isOdtDocument(name, mime) || isOdsDocument(name, mime) || isOdpDocument(name, mime)
 );
 
-export const isBibtexDocument = (name?: string) => (
-  BIBTEX_EXTENSIONS.has(getFileExtension(name))
+export const isRtfDocument = (name?: string, mime?: string) => (
+  RTF_EXTENSIONS.has(getFileExtension(name)) || isRtfMime(mime)
+);
+
+export const isFb2Document = (name?: string, mime?: string) => (
+  FB2_EXTENSIONS.has(getFileExtension(name)) || isFb2Mime(mime)
+);
+
+export const isTeiOrXmlDocument = (name?: string, mime?: string) => (
+  TEI_EXTENSIONS.has(getFileExtension(name)) || isXmlMime(mime)
+);
+
+export const isComicArchiveDocument = (name?: string) => (
+  COMIC_ARCHIVE_EXTENSIONS.has(getFileExtension(name))
+);
+
+export const isSubtitleDocument = (name?: string) => (
+  SUBTITLE_EXTENSIONS.has(getFileExtension(name))
+);
+
+export const isMusicNotationDocument = (name?: string, mime?: string) => (
+  MUSIC_NOTATION_EXTENSIONS.has(getFileExtension(name)) || isMusicXmlMime(mime)
+);
+
+export const isKindleEbookDocument = (name?: string) => (
+  KINDLE_EXTENSIONS.has(getFileExtension(name))
+);
+
+export const isDjvuDocument = (name?: string) => (
+  DJVU_EXTENSIONS.has(getFileExtension(name))
+);
+
+export const isHiResImageDocument = (name?: string) => (
+  HIRES_IMAGE_EXTENSIONS.has(getFileExtension(name))
 );
 
 export const isMarkdownDocument = (name?: string, mime?: string) => (

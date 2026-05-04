@@ -1060,7 +1060,8 @@ function DashboardContent() {
                 }
                 return;
             }
-            if (type === 'prompt-user-choice' || type === 'show-diff' || type === 'agent-status' || type === 'agent-plan') {
+            const dynamicTypes = new Set<string>(['prompt-user-choice', 'show-diff', 'agent-status', 'agent-plan']);
+            if (dynamicTypes.has(type as string)) {
                 // Estos comandos se renderizan dentro del panel del agente; no
                 // requieren acción global del dashboard. Re-emitimos como
                 // evento dedicado por si AgoraAIChat lo escucha por separado.
