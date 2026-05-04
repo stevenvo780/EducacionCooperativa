@@ -25,6 +25,49 @@ type InlineMath = {
   height: number;
 };
 
+const roundedMetric = (value: number) => Math.round(value * 100) / 100;
+
+const buildRenderKey = (blocks: MathBlock[], inlines: InlineMath[]) => JSON.stringify({
+  blocks: blocks.map((block) => [
+    block.latex,
+    roundedMetric(block.top),
+    roundedMetric(block.left),
+    roundedMetric(block.width),
+    roundedMetric(block.height)
+  ]),
+  inlines: inlines.map((inlineMath) => [
+    inlineMath.latex,
+    roundedMetric(inlineMath.top),
+    roundedMetric(inlineMath.left),
+    roundedMetric(inlineMath.width),
+    roundedMetric(inlineMath.height)
+  ])
+});
+
+const nodeIsInsideKatexOverlay = (node: Node) => {
+  const element = node.nodeType === Node.ELEMENT_NODE
+    ? node as Element
+    : node.parentElement;
+  return Boolean(
+    element?.classList.contains(OVERLAY_CONTAINER_CLASS)
+    || element?.closest(`.${OVERLAY_CONTAINER_CLASS}`)
+  );
+};
+
+const mutationOnlyTouchesKatexOverlay = (mutation: MutationRecord) => {
+  if (nodeIsInsideKatexOverlay(mutation.target)) return true;
+
+  const changedNodes = [
+    ...Array.from(mutation.addedNodes),
+    ...Array.from(mutation.removedNodes)
+  ];
+  return changedNodes.length > 0 && changedNodes.every(nodeIsInsideKatexOverlay);
+};
+
+export const isKatexOverlayMutationBatch = (mutations: readonly MutationRecord[]) => (
+  mutations.length > 0 && mutations.every(mutationOnlyTouchesKatexOverlay)
+);
+
 const normalizeLatex = (raw: string): string => {
   let src = raw.trim();
   src = src.replace(/\\\n/g, '\\\\\n');
@@ -319,7 +362,7 @@ const collectInlineMath = (
   return inlines;
 };
 
-const createBlockOverlay = (container: HTMLElement, block: MathBlock) => {
+const createBlockOverlay = (block: MathBlock) => {
   const html = katex.renderToString(block.latex, {
     displayMode: true,
     throwOnError: false,
@@ -348,7 +391,7 @@ const createBlockOverlay = (container: HTMLElement, block: MathBlock) => {
     }
   });
 
-  container.appendChild(overlay);
+  return overlay;
 };
 
 const createInlineOverlay = (container: HTMLElement, inlineMath: InlineMath) => {
@@ -383,7 +426,7 @@ const createInlineOverlay = (container: HTMLElement, inlineMath: InlineMath) => 
     moveCursorToMath(inlineMath.el, '$');
   });
 
-  container.appendChild(overlay);
+  return overlay;
 };
 
 export const useKatexOverlayDecorations = ({
@@ -402,6 +445,7 @@ export const useKatexOverlayDecorations = ({
     let editableObserver: MutationObserver | null = null;
     let shellObserver: MutationObserver | null = null;
     let scrollTarget: HTMLElement | null = null;
+    let decorateFrame: number | null = null;
 
     const decorateAll = () => {
       const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
@@ -411,36 +455,47 @@ export const useKatexOverlayDecorations = ({
       const paragraphs = editable.querySelectorAll('p, [data-lexical-paragraph], h1, h2, h3, h4, h5, h6, li, td, th, blockquote');
       const { blocks, blockParagraphs } = collectBlockMath(editable, paragraphs);
       const inlines = collectInlineMath(editable, paragraphs, blockParagraphs);
+      const renderKey = buildRenderKey(blocks, inlines);
 
-      container.innerHTML = '';
+      if (container.dataset.renderKey === renderKey) return;
+
+      const fragment = document.createDocumentFragment();
       blocks.forEach((block) => {
         try {
-          createBlockOverlay(container, block);
+          fragment.appendChild(createBlockOverlay(block));
         } catch {
           // ignore katex errors for malformed blocks
         }
       });
       inlines.forEach((inlineMath) => {
         try {
-          createInlineOverlay(container, inlineMath);
+          fragment.appendChild(createInlineOverlay(container, inlineMath));
         } catch {
           // ignore katex errors for malformed inline expressions
         }
       });
+      container.dataset.renderKey = renderKey;
+      container.replaceChildren(fragment);
     };
 
     let decorateTimer: ReturnType<typeof setTimeout> | null = null;
     let isDecorating = false;
 
-    const debouncedDecorate = () => {
+    const runDecorate = () => {
       if (isDecorating) return;
+      isDecorating = true;
+      decorateAll();
+      decorateFrame = requestAnimationFrame(() => {
+        isDecorating = false;
+        decorateFrame = null;
+      });
+    };
+
+    const debouncedDecorate = () => {
       if (decorateTimer) clearTimeout(decorateTimer);
       decorateTimer = setTimeout(() => {
-        isDecorating = true;
-        decorateAll();
-        requestAnimationFrame(() => {
-          isDecorating = false;
-        });
+        decorateTimer = null;
+        runDecorate();
       }, 120);
     };
 
@@ -472,7 +527,7 @@ export const useKatexOverlayDecorations = ({
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          decorateAll();
+          runDecorate();
         });
       });
     };
@@ -488,15 +543,16 @@ export const useKatexOverlayDecorations = ({
           element.removeAttribute(EDITING_ATTR);
         }
       });
-      requestAnimationFrame(decorateAll);
+      requestAnimationFrame(runDecorate);
     };
 
     const initialTimer = setTimeout(() => {
       attachEditableBindings();
-      decorateAll();
+      runDecorate();
     }, 400);
 
-    shellObserver = new MutationObserver(() => {
+    shellObserver = new MutationObserver((mutations) => {
+      if (isKatexOverlayMutationBatch(mutations)) return;
       attachEditableBindings();
       debouncedDecorate();
     });
@@ -509,6 +565,7 @@ export const useKatexOverlayDecorations = ({
     return () => {
       clearTimeout(initialTimer);
       if (decorateTimer) clearTimeout(decorateTimer);
+      if (decorateFrame !== null) cancelAnimationFrame(decorateFrame);
       shellObserver?.disconnect();
       detachEditableBindings();
       document.removeEventListener('click', handleClickOutside);

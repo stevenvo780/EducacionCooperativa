@@ -1,4 +1,17 @@
-import { collectBlockMath } from '@/components/mosaic-editor/useKatexOverlayDecorations';
+import {
+  collectBlockMath,
+  isKatexOverlayMutationBatch
+} from '@/components/mosaic-editor/useKatexOverlayDecorations';
+
+const mutation = (
+  target: Node,
+  addedNodes: Node[] = [],
+  removedNodes: Node[] = []
+) => ({
+  target,
+  addedNodes,
+  removedNodes
+}) as unknown as MutationRecord;
 
 describe('KaTeX overlay block detection', () => {
   it('detects a block math expression split across multiple paragraphs', () => {
@@ -28,5 +41,28 @@ describe('KaTeX overlay block detection', () => {
     } finally {
       editable.remove();
     }
+  });
+
+  it('ignores DOM mutations caused by its own overlay redraw', () => {
+    const shell = document.createElement('div');
+    const scrollParent = document.createElement('div');
+    const editable = document.createElement('div');
+    const overlayContainer = document.createElement('div');
+    const overlay = document.createElement('span');
+
+    editable.setAttribute('contenteditable', 'true');
+    overlayContainer.className = 'katex-overlay-container';
+    overlay.className = 'katex-inline-overlay';
+    overlayContainer.appendChild(overlay);
+    scrollParent.appendChild(editable);
+    shell.appendChild(scrollParent);
+
+    const overlayAddedToEditor = mutation(scrollParent, [overlayContainer]);
+    const overlayRedrawn = mutation(overlayContainer, [overlay]);
+    const contentChanged = mutation(editable, [document.createElement('p')]);
+
+    expect(isKatexOverlayMutationBatch([overlayAddedToEditor])).toBe(true);
+    expect(isKatexOverlayMutationBatch([overlayRedrawn])).toBe(true);
+    expect(isKatexOverlayMutationBatch([contentChanged])).toBe(false);
   });
 });

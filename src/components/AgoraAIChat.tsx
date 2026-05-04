@@ -7,7 +7,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
   Bot, Send, Settings, ChevronDown,
-  Loader2, Trash2, Copy, Check, AlertCircle, Sparkles, Undo2,
+  Loader2, Trash2, Copy, Check, AlertCircle, Undo2,
   History, MessageSquarePlus, Shield, Square,
   ListTree, ChevronsDownUp, ChevronsUpDown
 } from 'lucide-react';
@@ -35,8 +35,6 @@ import {
   saveAIProviderConfig,
   loadAgentAccessPolicy,
   saveAgentAccessProfile,
-  loadAgentMode,
-  saveAgentMode,
   loadAgentTraceExpanded,
   saveAgentTraceExpanded,
   type AIProviderConfig
@@ -134,6 +132,33 @@ function createStep(step: Omit<AgentTraceStep, 'startedAt'>): AgentTraceStep {
   };
 }
 
+/**
+ * Serializa un mensaje del historial al formato que esperamos enviar al
+ * modelo. Para mensajes del assistant en modo agente enriquecemos el
+ * content con un resumen breve de los tool calls ya ejecutados, así el
+ * modelo conserva contexto de qué información recabó en turnos previos
+ * (sin tener que re-ejecutar las mismas tools).
+ */
+function serializeMessageForHistory(message: { role: string; content: string; agentRun?: AgentRun | undefined }) {
+  if (message.role !== 'assistant' || !message.agentRun) {
+    return { role: message.role, content: message.content };
+  }
+  const toolSteps = message.agentRun.steps.filter(step => step.type === 'tool_result' && step.result);
+  if (toolSteps.length === 0) {
+    return { role: message.role, content: message.content };
+  }
+  const toolDigest = toolSteps
+    .slice(-12)
+    .map(step => {
+      const name = step.call?.name || step.title || 'tool';
+      const summary = step.result?.summary?.trim();
+      return summary ? `- ${name}: ${summary}` : `- ${name}`;
+    })
+    .join('\n');
+  const enriched = `${message.content}\n\n[contexto del turno previo — tools ejecutadas]\n${toolDigest}`;
+  return { role: message.role, content: enriched };
+}
+
 function truncateDebug(value: string | undefined, max = 3000) {
   if (!value) return undefined;
   return value.length > max ? `${value.slice(0, max)}\n\n[...truncado por Agora AI...]` : value;
@@ -196,15 +221,15 @@ const markdownComponents = {
   code: ({ className, children, ...props }: any) => {
     const isBlock = /language-(\w+)/.test(className || '');
     return isBlock ? (
-      <pre className="bg-surface-950 rounded-md p-3 my-2 overflow-x-auto text-xs leading-relaxed">
-        <code className={`${className || ''} text-surface-200 font-mono`} {...props}>{children}</code>
+      <pre className="bg-surface-950 rounded-md p-3 my-2 overflow-x-auto text-xs leading-relaxed max-w-full">
+        <code className={`${className || ''} text-surface-200 font-mono whitespace-pre`} {...props}>{children}</code>
       </pre>
     ) : (
-      <code className="bg-surface-700 text-sky-300 px-1 rounded text-[0.85em] font-mono" {...props}>{children}</code>
+      <code className="bg-surface-700 text-sky-300 px-1 rounded text-[0.85em] font-mono break-words" {...props}>{children}</code>
     );
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  a: (props: any) => <a {...props} className="text-sky-400 underline hover:text-sky-300" target="_blank" rel="noopener noreferrer" />,
+  a: (props: any) => <a {...props} className="text-sky-400 underline hover:text-sky-300 break-all" target="_blank" rel="noopener noreferrer" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ul: (props: any) => <ul {...props} className="list-disc pl-4 my-0.5 space-y-0" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -212,12 +237,32 @@ const markdownComponents = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   p: (props: any) => <p {...props} className="my-0.5 leading-snug" />,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  blockquote: (props: any) => <blockquote {...props} className="border-l-2 border-surface-600 pl-3 my-2 text-surface-400 italic" />
+  blockquote: (props: any) => <blockquote {...props} className="border-l-2 border-surface-600 pl-3 my-2 text-surface-400 italic" />,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  table: (props: any) => (
+    <div className="my-2 max-w-full overflow-x-auto rounded-md border border-surface-700">
+      <table {...props} className="w-full text-xs border-collapse" />
+    </div>
+  ),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  th: (props: any) => <th {...props} className="border-b border-surface-700 bg-surface-900 px-2 py-1 text-left font-semibold text-surface-200" />,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  td: (props: any) => <td {...props} className="border-b border-surface-800 px-2 py-1 text-surface-300 align-top" />,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  h1: (props: any) => <h1 {...props} className="text-base font-semibold mt-2 mb-1 text-surface-100" />,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  h2: (props: any) => <h2 {...props} className="text-sm font-semibold mt-2 mb-1 text-surface-100" />,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  h3: (props: any) => <h3 {...props} className="text-sm font-semibold mt-1.5 mb-0.5 text-surface-200" />,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  hr: (props: any) => <hr {...props} className="my-2 border-surface-700" />,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  img: (props: any) => <img {...props} className="max-w-full h-auto rounded-md my-2" loading="lazy" alt={props.alt || ''} />
 } as const;
 
 export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [config, setConfig] = useState<AIProviderConfig>(loadAIProviderConfig);
-  const [mode, setMode] = useState<AgentMode>(loadAgentMode);
+  const mode: AgentMode = 'agent';
   const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(loadAgentAccessPolicy);
   const [traceExpanded, setTraceExpanded] = useState<boolean>(loadAgentTraceExpanded);
   const [showProviderMenu, setShowProviderMenu] = useState(false);
@@ -232,7 +277,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   useEffect(() => {
     const handler = () => {
       setConfig(loadAIProviderConfig());
-      setMode(loadAgentMode());
       setAccessPolicy(loadAgentAccessPolicy());
       setTraceExpanded(loadAgentTraceExpanded());
     };
@@ -301,10 +345,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setActiveSessionId(firstSession.id);
       setMessages(firstSession.messages);
       setRollbackQueue(firstSession.rollbackQueue || []);
-      if (firstSession.mode !== sessionDefaultsRef.current.mode) {
-        setMode(firstSession.mode);
-        saveAgentMode(firstSession.mode);
-      }
+      // Modo chat eliminado: el agente siempre opera en modo 'agent'.
     } else {
       const fresh = createEmptyChatSession({
         workspaceId: resolvedWorkspaceId,
@@ -340,9 +381,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     });
   }, [activeSessionId, config.provider, messages, mode, resolvedWorkspaceId, rollbackQueue]);
 
-  const updateMode = useCallback((nextMode: AgentMode) => {
-    setMode(nextMode);
-    saveAgentMode(nextMode);
+  const updateMode = useCallback((_nextMode: AgentMode) => {
+    // Modo chat eliminado: el agente siempre opera en modo 'agent'.
   }, []);
 
   const updateAccessProfile = useCallback((profile: Exclude<AgentAccessProfileId, 'custom'>) => {
@@ -501,7 +541,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       },
       signal,
       body: JSON.stringify({
-        messages: history.map(message => ({ role: message.role, content: message.content })),
+        messages: history.map(serializeMessageForHistory),
         workspaceId: resolvedWorkspaceId,
         provider: config.provider,
         apiKey: config.apiKey,
@@ -684,7 +724,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     const rollback: AgentRollbackAction[] = [];
     const loopMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: systemMsg },
-      ...history.map(message => ({ role: message.role, content: message.content }))
+      ...history.map(serializeMessageForHistory)
     ];
 
     let finalReply = '';
@@ -1007,7 +1047,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         agentRun = streamed.agentRun;
         emitAgentWorkspaceEvents(agentRun);
       } else {
-        const chatMsgs = history.map(message => ({ role: message.role, content: message.content }));
+        const chatMsgs = history.map(serializeMessageForHistory);
         const data = await fetchZod('/api/agora-ai', agentResponseBodySchema, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1284,11 +1324,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           <div className="flex flex-col items-center justify-center h-full text-center text-surface-500 gap-4 select-none px-4">
             <Bot className="w-10 h-10 text-surface-700" />
             <div>
-              <p className="text-sm text-surface-300">{mode === 'agent' ? 'Dale una tarea al agente' : `Pregúntale a ${meta.label}`}</p>
+              <p className="text-sm text-surface-300">Dale una tarea al agente</p>
               <p className="text-xs mt-1 max-w-md text-surface-500">
-                {mode === 'agent'
-                  ? 'El agente puede trabajar con documentos, snippets, glosario semántico, tablero Kanban, formalización, ST y worker/terminal cuando esté conectado.'
-                  : 'En modo chat responderá con contexto del workspace, sin ejecutar acciones de escritura.'}
+                El agente puede trabajar con documentos, snippets, glosario semántico, tablero Kanban, formalización, ST y worker/terminal cuando esté conectado.
               </p>
               {!meta.needsKey || config.apiKey ? null : (
                 <p className="text-xs text-amber-400 mt-2 flex items-center justify-center gap-1">
@@ -1299,20 +1337,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             </div>
             {/* Quick prompts estilo Copilot — sugerencias contextuales */}
             <div className="grid grid-cols-1 gap-1.5 w-full max-w-sm select-text">
-              {(mode === 'agent'
-                ? [
-                    { icon: '📋', label: 'Resume el documento abierto' },
-                    { icon: '🗂️', label: 'Organiza los archivos por tema' },
-                    { icon: '🧮', label: 'Formaliza la última sección a ST' },
-                    { icon: '↩️', label: 'Deshaz la última acción' }
-                  ]
-                : [
-                    { icon: '💡', label: '¿Cuáles son las ideas principales del workspace?' },
-                    { icon: '🔍', label: 'Busca menciones de un concepto específico' },
-                    { icon: '📚', label: 'Explica este glosario en términos simples' },
-                    { icon: '🧪', label: 'Revisa la lógica del documento' }
-                  ]
-              ).map((prompt) => (
+              {[
+                { icon: '📋', label: 'Resume el documento abierto' },
+                { icon: '🗂️', label: 'Organiza los archivos por tema' },
+                { icon: '🧮', label: 'Formaliza la última sección a ST' },
+                { icon: '↩️', label: 'Deshaz la última acción' }
+              ].map((prompt) => (
                 <button
                   key={prompt.label}
                   type="button"
@@ -1334,7 +1364,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
           return (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`group relative max-w-[88%] min-w-0 break-words rounded-lg px-3 py-1.5 text-sm leading-normal ${
+              <div className={`group relative max-w-[88%] min-w-0 overflow-hidden break-words rounded-lg px-3 py-1.5 text-sm leading-normal [overflow-wrap:anywhere] ${
                 msg.role === 'user'
                   ? 'bg-sky-600/20 border border-sky-500/20 text-surface-100'
                   : msg.error
@@ -1347,7 +1377,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                     Error
                   </div>
                 )}
-                <div className="break-words max-w-none">
+                <div className="break-words max-w-full overflow-hidden [overflow-wrap:anywhere]">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}
@@ -1441,7 +1471,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           <div className="flex justify-start">
             <div className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 flex items-center gap-2 text-surface-400 text-sm">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>{mode === 'agent' ? (streamStatus || 'Ejecutando agente…') : 'Pensando…'}</span>
+              <span>{streamStatus || 'Ejecutando agente…'}</span>
             </div>
           </div>
         )}
@@ -1456,7 +1486,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={meta.needsKey && !config.apiKey ? 'Configura tu API key primero…' : mode === 'agent' ? 'Pídele una acción al agente…' : 'Escribe un mensaje…'}
+            placeholder={meta.needsKey && !config.apiKey ? 'Configura tu API key primero…' : 'Pídele una acción al agente…'}
             disabled={loading || !canSend}
             rows={1}
             wrap="soft"
@@ -1550,19 +1580,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                 </>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => updateMode(mode === 'agent' ? 'chat' : 'agent')}
-              title={mode === 'agent' ? 'Cambiar a modo Chat (solo lectura)' : 'Cambiar a modo Agente (con tools)'}
-              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${
-                mode === 'agent'
-                  ? 'border-violet-500/40 bg-violet-500/10 text-violet-200 hover:border-violet-500/60'
-                  : 'border-surface-700 bg-surface-900 text-surface-200 hover:border-surface-600'
-              }`}
-            >
-              {mode === 'agent' ? <Sparkles className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
-              <span>{mode === 'agent' ? 'Agente' : 'Chat'}</span>
-            </button>
             <label
               title={`Permisos: ${AGENT_ACCESS_PROFILES[accessPolicy.profile === 'custom' ? 'workspace' : accessPolicy.profile]?.description || 'Personalizado'}`}
               className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${
