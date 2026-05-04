@@ -67,8 +67,8 @@ export function useSTLinterRules() {
       const lines = text.split('\n');
 
       for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-        if (isCodeLine(lines[lineIdx])) continue;
         const line = lines[lineIdx];
+        if (line === undefined || isCodeLine(line)) continue;
 
         // Buscar nombres cualificados: MayúsculaInicial.MayúsculaInicial
         const regex = /\b[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ0-9]+\.[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ0-9]+\b/g;
@@ -151,9 +151,10 @@ export function useSTLinterRules() {
         const regex = new RegExp(`\\b${escapeRegex(shortName)}\\b`, 'g');
         let reported = false;
         for (let lineIdx = 0; lineIdx < lines.length && !reported; lineIdx++) {
-          if (isCodeLine(lines[lineIdx])) continue;
+          const line = lines[lineIdx];
+          if (line === undefined || isCodeLine(line)) continue;
           let match;
-          while ((match = regex.exec(lines[lineIdx])) !== null) {
+          while ((match = regex.exec(line)) !== null) {
             results.push({
               message: `"${name}" está definido de forma diferente en: ${files}.`,
               suggestion: 'Revisa la coherencia de las definiciones entre archivos .st del workspace.',

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ChevronLeft } from 'lucide-react';
+import './file-viewers.css';
 
 interface FileViewerShellProps {
   docName: string;

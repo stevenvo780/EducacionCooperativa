@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
+import { useFileResource, decodeText } from '@/components/file-viewers/hooks/useFileResource';
+import { sanitizeHtml } from '@/lib/safe-html';
 
 interface NotebookViewerProps {
   docName: string;
@@ -34,51 +36,28 @@ interface NotebookData {
   nbformat?: number;
 }
 
-type LoadState =
-  | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'ready'; notebook: NotebookData }
-  | { kind: 'error'; error: string };
-
 export default function NotebookViewer({ docName, fileUrl, onClose }: NotebookViewerProps) {
-  const [state, setState] = useState<LoadState>({ kind: 'idle' });
+  const transform = useCallback(async ({ buffer }: { buffer: ArrayBuffer }): Promise<NotebookData> => {
+    const json = JSON.parse(decodeText(buffer)) as NotebookData;
+    if (!json || !Array.isArray(json.cells)) throw new Error('Archivo .ipynb sin celdas válidas');
+    return json;
+  }, []);
 
-  useEffect(() => {
-    if (!fileUrl) {
-      setState({ kind: 'idle' });
-      return;
-    }
-    let cancelled = false;
-    setState({ kind: 'loading' });
-    (async () => {
-      try {
-        const response = await fetch(fileUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const text = await response.text();
-        const json = JSON.parse(text) as NotebookData;
-        if (cancelled) return;
-        if (!json || !Array.isArray(json.cells)) {
-          throw new Error('Archivo .ipynb sin celdas válidas');
-        }
-        setState({ kind: 'ready', notebook: json });
-      } catch (error) {
-        if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'Error desconocido';
-        setState({ kind: 'error', error: message });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [fileUrl]);
+  const state = useFileResource<NotebookData>(fileUrl, transform);
 
   const kernelLabel = useMemo(() => {
     if (state.kind !== 'ready') return null;
-    const k = state.notebook.metadata?.kernelspec;
+    const k = state.data.metadata?.kernelspec;
     return k?.display_name || k?.name || null;
   }, [state]);
 
   return (
-    <FileViewerShell docName={docName} fileUrl={fileUrl} onClose={onClose}
-      actions={kernelLabel ? <span className="text-xs text-slate-400">Kernel: {kernelLabel}</span> : null}>
+    <FileViewerShell
+      docName={docName}
+      fileUrl={fileUrl}
+      onClose={onClose}
+      actions={kernelLabel ? <span className="text-xs text-slate-400">Kernel: {kernelLabel}</span> : null}
+    >
       {!fileUrl ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
           <FileCode className="h-10 w-10 text-slate-600" />
@@ -96,7 +75,7 @@ export default function NotebookViewer({ docName, fileUrl, onClose }: NotebookVi
           <code className="text-xs text-slate-500">{state.error}</code>
         </div>
       ) : (
-        <NotebookCells cells={state.notebook.cells} />
+        <NotebookCells cells={state.data.cells} />
       )}
     </FileViewerShell>
   );
@@ -109,10 +88,8 @@ function joinSource(source: string | string[]): string {
 function NotebookCells({ cells }: { cells: NotebookCell[] }) {
   return (
     <div className="h-full overflow-auto bg-slate-950 px-6 py-6">
-      <div className="mx-auto flex max-w-[920px] flex-col gap-4">
-        {cells.map((cell, i) => (
-          <CellBlock key={i} cell={cell} />
-        ))}
+      <div className="viewer-virtualized mx-auto flex max-w-[920px] flex-col gap-4">
+        {cells.map((cell, i) => <CellBlock key={i} cell={cell} />)}
       </div>
     </div>
   );
@@ -136,7 +113,6 @@ function CellBlock({ cell }: { cell: NotebookCell }) {
       </pre>
     );
   }
-  // code
   return (
     <div className="overflow-hidden rounded border border-slate-800">
       <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-500">
@@ -163,7 +139,7 @@ function OutputBlock({ output }: { output: NotebookOutput }) {
     );
   }
   if (output.output_type === 'error') {
-    const trace = (output.traceback ?? []).join('\n').replace(/\[[0-9;]*m/g, '');
+    const trace = (output.traceback ?? []).join('\n').replace(/\[[0-9;]*m/g, '');
     return (
       <pre className="overflow-x-auto px-3 py-2 text-xs text-rose-300">
         <span className="font-bold">{output.ename}: </span>{output.evalue}
@@ -171,33 +147,32 @@ function OutputBlock({ output }: { output: NotebookOutput }) {
       </pre>
     );
   }
-  // display_data / execute_result
-  const data = output.data || {};
-  if (data['image/png']) {
+  const data = output.data ?? {};
+  const png = pickString(data['image/png']);
+  if (png) {
     return (
       <div className="px-3 py-2">
-        {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 from notebook output, no optimization possible */}
-        <img
-          alt="output"
-          src={`data:image/png;base64,${Array.isArray(data['image/png']) ? data['image/png'].join('') : data['image/png']}`}
-          className="max-w-full"
-        />
+        {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 */}
+        <img alt="output" src={`data:image/png;base64,${png}`} className="max-w-full" />
       </div>
     );
   }
-  if (data['image/svg+xml']) {
-    const svg = Array.isArray(data['image/svg+xml']) ? data['image/svg+xml'].join('') : data['image/svg+xml'];
-    return <div className="px-3 py-2" dangerouslySetInnerHTML={{ __html: svg }} />;
+  const svg = pickString(data['image/svg+xml']);
+  if (svg) {
+    return <div className="px-3 py-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(svg) }} />;
   }
-  if (data['text/html']) {
-    const html = Array.isArray(data['text/html']) ? data['text/html'].join('') : data['text/html'];
-    return <div className="px-3 py-2 text-sm text-slate-200" dangerouslySetInnerHTML={{ __html: html }} />;
+  const html = pickString(data['text/html']);
+  if (html) {
+    return <div className="px-3 py-2 text-sm text-slate-200" dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} />;
   }
-  if (data['text/plain']) {
-    const plain = Array.isArray(data['text/plain']) ? data['text/plain'].join('') : data['text/plain'];
-    return (
-      <pre className="overflow-x-auto px-3 py-2 text-xs text-slate-300">{plain}</pre>
-    );
+  const plain = pickString(data['text/plain']);
+  if (plain) {
+    return <pre className="overflow-x-auto px-3 py-2 text-xs text-slate-300">{plain}</pre>;
   }
   return null;
+}
+
+function pickString(value: string | string[] | undefined): string | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value.join('') : value;
 }

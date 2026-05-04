@@ -50,7 +50,10 @@ export function useSTDefinitionsLinter() {
     // Suscribirse a cambios — con comparación shallow para evitar re-renders innecesarios
     const unsub = STDefinitionsRegistry.subscribe((defs) => {
       const prev = prevDefsRef.current;
-      if (prev.length === defs.length && prev.every((d, i) => d.name === defs[i].name && d.file === defs[i].file && d.line === defs[i].line)) {
+      if (prev.length === defs.length && prev.every((d, i) => {
+        const next = defs[i];
+        return next !== undefined && d.name === next.name && d.file === next.file && d.line === next.line;
+      })) {
         return; // sin cambios reales
       }
       prevDefsRef.current = defs;
@@ -116,6 +119,7 @@ export function useSTDefinitionsLinter() {
 
       for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
         const line = lines[lineIdx];
+        if (line === undefined) continue;
 
         // Saltar líneas de código (fenced code blocks, inline code)
         if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) continue;
@@ -226,5 +230,7 @@ function buildInterpretationSearchText(phrase: string): string {
 function isQuotedInterpretation(text: string) {
   if (text.length < 2) return false;
   const quoteChars = new Set(['"', "'", '“', '”', '«', '»', '„', '‟']);
-  return quoteChars.has(text[0]) && quoteChars.has(text[text.length - 1]);
+  const first = text[0];
+  const last = text[text.length - 1];
+  return first !== undefined && last !== undefined && quoteChars.has(first) && quoteChars.has(last);
 }

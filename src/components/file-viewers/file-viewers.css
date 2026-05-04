@@ -1,0 +1,69 @@
+/* Estilos compartidos por los visualizadores de documentos.
+   Cargado una sola vez por FileViewerShell. Cualquier viewer puede
+   componer sobre las clases base. */
+
+/* ---------- DOCX (mammoth) ---------- */
+.docx-rendered { font-family: 'Times New Roman', Times, serif; line-height: 1.65; font-size: 16px; }
+.docx-rendered h1 { font-size: 1.9em; margin: 1.2em 0 0.6em; font-weight: 700; }
+.docx-rendered h2 { font-size: 1.5em; margin: 1.1em 0 0.5em; font-weight: 700; }
+.docx-rendered h3 { font-size: 1.25em; margin: 1em 0 0.4em; font-weight: 600; }
+.docx-rendered h4 { font-size: 1.1em; margin: 0.9em 0 0.3em; font-weight: 600; }
+.docx-rendered p { margin: 0.6em 0; }
+.docx-rendered blockquote { border-left: 3px solid #cbd5e1; padding-left: 1em; color: #475569; margin: 1em 0; }
+.docx-rendered blockquote.intense { border-color: #6366f1; background: #eef2ff; padding: 0.6em 1em; }
+.docx-rendered table { border-collapse: collapse; margin: 1em 0; }
+.docx-rendered table td, .docx-rendered table th { border: 1px solid #94a3b8; padding: 0.4em 0.7em; }
+.docx-rendered img { max-width: 100%; height: auto; }
+.docx-rendered ul, .docx-rendered ol { padding-left: 1.6em; margin: 0.6em 0; }
+.docx-rendered .docx-title { text-align: center; font-size: 2.2em; }
+.docx-rendered .docx-subtitle { text-align: center; color: #64748b; font-weight: 400; }
+
+/* ---------- ODT/ODS/ODP (parser propio) ---------- */
+.odt-rendered { font-family: 'Liberation Serif', 'Times New Roman', serif; line-height: 1.6; font-size: 16px; }
+.odt-rendered h1, .odt-rendered h2, .odt-rendered h3 { margin: 1em 0 0.5em; font-weight: 700; }
+.odt-rendered h1 { font-size: 1.85em; }
+.odt-rendered h2 { font-size: 1.5em; }
+.odt-rendered h3 { font-size: 1.25em; }
+.odt-rendered p { margin: 0.6em 0; }
+.odt-rendered blockquote { border-left: 3px solid #cbd5e1; padding-left: 1em; color: #475569; margin: 1em 0; }
+.odt-rendered table { border-collapse: collapse; margin: 1em 0; }
+.odt-rendered table td { border: 1px solid #cbd5e1; padding: 0.4em 0.7em; }
+.odt-rendered .odt-note { color: #2563eb; font-size: 0.7em; vertical-align: super; margin: 0 0.2em; }
+.odt-rendered .odt-image-placeholder { background: #f1f5f9; color: #64748b; padding: 1.5em; text-align: center; border-radius: 4px; margin: 1em 0; }
+.odt-rendered .ods-sheet, .odt-rendered .odp-slide { background: #f8fafc; border-radius: 4px; padding: 1em 1.5em; margin: 1em 0; }
+.odt-rendered .odp-slide header { font-weight: 600; color: #1e293b; margin-bottom: 0.5em; padding-bottom: 0.4em; border-bottom: 1px solid #cbd5e1; }
+
+/* ---------- RTF ---------- */
+.rtf-rendered { font-family: 'Times New Roman', serif; line-height: 1.6; font-size: 16px; }
+.rtf-rendered p { margin: 0.6em 0; }
+.rtf-rendered b, .rtf-rendered strong { font-weight: 700; }
+.rtf-rendered i, .rtf-rendered em { font-style: italic; }
+.rtf-rendered u { text-decoration: underline; }
+
+/* ---------- FB2 ---------- */
+.fb2-rendered { font-family: 'Georgia', serif; line-height: 1.7; font-size: 16px; color: #e2e8f0; }
+.fb2-rendered .fb2-book-title { font-size: 1.9em; text-align: center; margin: 1em 0 0.3em; color: #f8fafc; }
+.fb2-rendered .fb2-author { text-align: center; color: #94a3b8; margin: 0 0 2em; font-style: italic; }
+.fb2-rendered .fb2-annotation { font-size: 0.9em; color: #94a3b8; border-left: 3px solid #475569; padding-left: 1em; margin: 1em 0 2em; }
+.fb2-rendered h2 { font-size: 1.5em; margin: 2em 0 0.6em; color: #f1f5f9; }
+.fb2-rendered p { margin: 0.6em 0; text-indent: 1.5em; }
+.fb2-rendered .fb2-section { margin: 2em 0; }
+.fb2-rendered emphasis, .fb2-rendered em { font-style: italic; }
+.fb2-rendered strong { font-weight: 700; color: #e2e8f0; }
+.fb2-rendered .fb2-epigraph { font-size: 0.92em; color: #94a3b8; padding: 0.8em 1.2em; margin: 1em 0; border-left: 3px solid #475569; }
+
+/* ---------- TEI / XML ---------- */
+.xml-rendered { font-family: 'Georgia', serif; line-height: 1.65; font-size: 15px; color: #0f172a; }
+.xml-rendered h1 { font-size: 1.8em; margin: 1em 0 0.5em; }
+.xml-rendered h2 { font-size: 1.4em; margin: 1em 0 0.4em; color: #1e3a8a; }
+.xml-rendered h3 { font-size: 1.2em; margin: 0.8em 0 0.3em; }
+.xml-rendered p { margin: 0.5em 0; }
+.xml-rendered .tei-meta { background: #eff6ff; padding: 1em 1.2em; border-radius: 4px; margin: 1em 0 2em; font-size: 0.9em; color: #1e40af; }
+.xml-rendered .tei-lg { margin: 1em 0; padding-left: 1em; border-left: 2px solid #cbd5e1; }
+.xml-rendered .tei-l { display: block; }
+.xml-rendered .tei-note { color: #2563eb; font-size: 0.85em; }
+.xml-rendered .xml-tag { color: #475569; font-family: monospace; font-size: 0.85em; }
+.xml-rendered .xml-attr { color: #94a3b8; font-family: monospace; font-size: 0.8em; }
+
+/* ---------- Listas largas (subtítulos, notebook): renderiza solo lo visible ---------- */
+.viewer-virtualized > * { content-visibility: auto; contain-intrinsic-size: auto 80px; }
