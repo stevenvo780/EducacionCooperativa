@@ -1060,9 +1060,11 @@ function DashboardContent() {
                 }
                 return;
             }
-            if (type === 'prompt-user-choice' || type === 'show-diff' || type === 'agent-status') {
+            if (type === 'prompt-user-choice' || type === 'show-diff' || type === 'agent-status' || type === 'agent-plan') {
                 // Estos comandos se renderizan dentro del panel del agente; no
-                // requieren acción global del dashboard.
+                // requieren acción global del dashboard. Re-emitimos como
+                // evento dedicado por si AgoraAIChat lo escucha por separado.
+                window.dispatchEvent(new CustomEvent(`agora:${type}`, { detail: detail.command }));
                 return;
             }
 
