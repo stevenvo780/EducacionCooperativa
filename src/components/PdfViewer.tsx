@@ -39,10 +39,14 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
   const [useIframeFallback, setUseIframeFallback] = useState(false);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const [isCreatingSnippet, setIsCreatingSnippet] = useState(false);
+  const [placeholderSize, setPlaceholderSize] = useState<{ width: number; height: number } | null>(null);
+  const [visiblePages, setVisiblePages] = useState<Set<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const textLayerRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const renderedPagesRef = useRef<Set<number>>(new Set());
+  const renderInFlightRef = useRef<Map<number, Promise<void>>>(new Map());
   const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
   const lastKnownStateRef = useRef<PersistedPdfViewerState>(initialViewerState);
   const isRestoringRef = useRef(true);
@@ -269,127 +273,166 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
     setCurrentPage(pageNumber);
   }, []);
 
+  // Calcula tamaño base de página a partir de la página 1, usado como
+  // placeholder para todas las demás. Permite reservar espacio sin renderizar
+  // canvases de páginas fuera del viewport (la causa del OOM al abrir PDFs
+  // largos junto a otros tiles pesados como Mosaic + Markdown).
   useEffect(() => {
-    if (useIframeFallback || !pageCount || !containerWidth || !pdfDocumentRef.current) {
-      return;
-    }
-
+    if (useIframeFallback || !pageCount || !containerWidth || !pdfDocumentRef.current) return;
     let cancelled = false;
-    const renderTasks: { promise: Promise<void>; cancel?: () => void }[] = [];
     const pdfDocument = pdfDocumentRef.current;
+    const targetWidth = Math.max(containerWidth - 48, 320);
+    (async () => {
+      try {
+        const page = await pdfDocument.getPage(1);
+        if (cancelled) return;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const fitScale = targetWidth / baseViewport.width;
+        const cssViewport = page.getViewport({ scale: fitScale * zoomLevel });
+        page.cleanup?.();
+        if (!cancelled) setPlaceholderSize({ width: cssViewport.width, height: cssViewport.height });
+      } catch (error) {
+        if (!cancelled) console.warn('PDF placeholder size failed', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [containerWidth, pageCount, useIframeFallback, zoomLevel]);
+
+  // Liberar canvases cuando cambian las dimensiones (zoom/resize): hay que
+  // re-renderizar desde cero las páginas visibles con la nueva escala.
+  useEffect(() => {
+    renderedPagesRef.current.forEach((pageNumber) => {
+      const canvas = canvasRefs.current[pageNumber];
+      const textLayer = textLayerRefs.current[pageNumber];
+      if (canvas) { canvas.width = 0; canvas.height = 0; }
+      if (textLayer) textLayer.innerHTML = '';
+    });
+    renderedPagesRef.current = new Set();
+    renderInFlightRef.current = new Map();
+  }, [containerWidth, zoomLevel]);
+
+  // IntersectionObserver: marca como visible las páginas dentro de ~1.5
+  // viewports antes/después del scroll actual.
+  useEffect(() => {
+    if (useIframeFallback || !pageCount) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver((entries) => {
+      setVisiblePages((prev) => {
+        const next = new Set(prev);
+        for (const entry of entries) {
+          const page = Number(entry.target.getAttribute('data-page-number'));
+          if (!Number.isFinite(page) || page < 1) continue;
+          if (entry.isIntersecting) next.add(page);
+          else next.delete(page);
+        }
+        return next;
+      });
+    }, {
+      root: container,
+      rootMargin: '1500px 0px 1500px 0px',
+      threshold: 0
+    });
+    Object.values(pageRefs.current).forEach((node) => { if (node) observer.observe(node); });
+    return () => observer.disconnect();
+  }, [pageCount, useIframeFallback]);
+
+  // Render bajo demanda: solo páginas visibles. Las que salen del rango se
+  // descargan (canvas.width=0 libera el bitmap) para mantener la memoria
+  // acotada en PDFs largos.
+  useEffect(() => {
+    if (useIframeFallback || !pageCount || !containerWidth || !pdfDocumentRef.current) return;
+    const pdfDocument = pdfDocumentRef.current;
+    const targetWidth = Math.max(containerWidth - 48, 320);
+    let cancelled = false;
 
     const restoreScroll = (attempt = 0) => {
       const container = containerRef.current;
       if (!container) return;
-
       const saved = lastKnownStateRef.current;
       const nextTop = Math.min(saved.top, Math.max(container.scrollHeight - container.clientHeight, 0));
       const nextLeft = Math.min(saved.left, Math.max(container.scrollWidth - container.clientWidth, 0));
-
       container.scrollTop = nextTop;
       container.scrollLeft = nextLeft;
-
       if (cancelled) return;
-      if (
-        attempt >= 20
-        || (
-          Math.abs(container.scrollTop - nextTop) <= 2
-          && Math.abs(container.scrollLeft - nextLeft) <= 2
-        )
-      ) {
+      if (attempt >= 20 || (Math.abs(container.scrollTop - nextTop) <= 2 && Math.abs(container.scrollLeft - nextLeft) <= 2)) {
         isRestoringRef.current = false;
-        lastKnownStateRef.current = {
-          ...lastKnownStateRef.current,
-          top: container.scrollTop,
-          left: container.scrollLeft
-        };
+        lastKnownStateRef.current = { ...lastKnownStateRef.current, top: container.scrollTop, left: container.scrollLeft };
         saveViewerState(storageKey, lastKnownStateRef.current);
         updateCurrentPageFromScroll();
         return;
       }
-
-      requestAnimationFrame(() => {
-        restoreScroll(attempt + 1);
-      });
+      requestAnimationFrame(() => restoreScroll(attempt + 1));
     };
 
-    const renderPages = async () => {
-      const targetWidth = Math.max(containerWidth - 48, 320);
-      const pdfjs = await loadPdfJs();
+    const renderOne = async (pageNumber: number) => {
+      if (renderedPagesRef.current.has(pageNumber) || renderInFlightRef.current.has(pageNumber)) return;
+      const canvas = canvasRefs.current[pageNumber];
+      const textLayer = textLayerRefs.current[pageNumber];
+      if (!canvas || !textLayer) return;
+      const work = (async () => {
+        try {
+          const pdfjs = await loadPdfJs();
+          if (cancelled) return;
+          const page = await pdfDocument.getPage(pageNumber);
+          if (cancelled) return;
+          const baseViewport = page.getViewport({ scale: 1 });
+          const fitScale = targetWidth / baseViewport.width;
+          const actualScale = fitScale * zoomLevel;
+          const cssViewport = page.getViewport({ scale: actualScale });
+          const outputScale = window.devicePixelRatio || 1;
+          const renderViewport = page.getViewport({ scale: actualScale * outputScale });
 
-      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-        if (cancelled) return;
+          canvas.width = Math.floor(renderViewport.width);
+          canvas.height = Math.floor(renderViewport.height);
+          canvas.style.width = `${cssViewport.width}px`;
+          canvas.style.height = `${cssViewport.height}px`;
+          textLayer.style.width = `${cssViewport.width}px`;
+          textLayer.style.height = `${cssViewport.height}px`;
+          textLayer.style.setProperty('--scale-factor', String(actualScale));
+          textLayer.innerHTML = '';
 
-        const canvas = canvasRefs.current[pageNumber];
-        const textLayer = textLayerRefs.current[pageNumber];
-        if (!canvas || !textLayer) continue;
-
-        const page = await pdfDocument.getPage(pageNumber);
-        if (cancelled) return;
-
-        const baseViewport = page.getViewport({ scale: 1 });
-        const fitScale = targetWidth / baseViewport.width;
-        const actualScale = fitScale * zoomLevel;
-        const cssViewport = page.getViewport({ scale: actualScale });
-        const outputScale = window.devicePixelRatio || 1;
-        const renderViewport = page.getViewport({ scale: actualScale * outputScale });
-
-        canvas.width = Math.floor(renderViewport.width);
-        canvas.height = Math.floor(renderViewport.height);
-        canvas.style.width = `${cssViewport.width}px`;
-        canvas.style.height = `${cssViewport.height}px`;
-
-        textLayer.style.width = `${cssViewport.width}px`;
-        textLayer.style.height = `${cssViewport.height}px`;
-        // pdf.js v3+ requiere --scale-factor en el container del text layer
-        // para alinear los spans con el canvas (si falta, console warn).
-        textLayer.style.setProperty('--scale-factor', String(actualScale));
-        textLayer.innerHTML = '';
-
-        const context = canvas.getContext('2d');
-        if (!context) {
-          throw new Error('Canvas 2D context is not available');
-        }
-
-        const renderTask = page.render({ canvasContext: context, viewport: renderViewport });
-        renderTasks.push(renderTask);
-        await renderTask.promise;
-
-        if (page.streamTextContent || page.getTextContent) {
-          // API nueva: textContentSource (stream). textContent quedó deprecado
-          // y el warning generaba muchísimo ruido en consola.
-          const textContentSource = page.streamTextContent
-            ? page.streamTextContent({ includeMarkedContent: true })
-            : await page.getTextContent();
+          const context = canvas.getContext('2d');
+          if (!context) throw new Error('Canvas 2D context is not available');
+          const renderTask = page.render({ canvasContext: context, viewport: renderViewport });
+          await renderTask.promise;
           if (cancelled) return;
 
-          const textLayerTask = pdfjs.renderTextLayer({
-            textContentSource,
-            container: textLayer,
-            viewport: cssViewport
-          });
-          renderTasks.push(textLayerTask);
-          await textLayerTask.promise;
+          if (page.streamTextContent || page.getTextContent) {
+            const textContentSource = page.streamTextContent
+              ? page.streamTextContent({ includeMarkedContent: true })
+              : await page.getTextContent();
+            if (cancelled) return;
+            const textLayerTask = pdfjs.renderTextLayer({ textContentSource, container: textLayer, viewport: cssViewport });
+            await textLayerTask.promise;
+          }
+          page.cleanup?.();
+          renderedPagesRef.current.add(pageNumber);
+          if (pageNumber === 1) restoreScroll();
+        } catch (error) {
+          if (!cancelled) console.warn(`PDF page ${pageNumber} render failed`, error);
+        } finally {
+          renderInFlightRef.current.delete(pageNumber);
         }
-
-        page.cleanup?.();
-      }
-
-      restoreScroll();
+      })();
+      renderInFlightRef.current.set(pageNumber, work);
     };
 
-    void renderPages().catch((error) => {
-      if (!cancelled) {
-        console.warn('Integrated PDF rendering failed; using iframe fallback', error);
-        setUseIframeFallback(true);
-      }
+    // Renderiza páginas visibles aún no renderizadas.
+    visiblePages.forEach((p) => { void renderOne(p); });
+
+    // Libera páginas renderizadas que salieron del rango visible.
+    renderedPagesRef.current.forEach((p) => {
+      if (visiblePages.has(p)) return;
+      const canvas = canvasRefs.current[p];
+      const textLayer = textLayerRefs.current[p];
+      if (canvas) { canvas.width = 0; canvas.height = 0; }
+      if (textLayer) textLayer.innerHTML = '';
+      renderedPagesRef.current.delete(p);
     });
 
-    return () => {
-      cancelled = true;
-      renderTasks.forEach((task) => task.cancel?.());
-    };
-  }, [containerWidth, pageCount, storageKey, updateCurrentPageFromScroll, useIframeFallback, zoomLevel]);
+    return () => { cancelled = true; };
+  }, [containerWidth, pageCount, storageKey, updateCurrentPageFromScroll, useIframeFallback, visiblePages, zoomLevel]);
 
   const activeSearchPage = searchMatches[activeSearchIndex] ?? null;
 
@@ -565,6 +608,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
                         : 'border-slate-700/80'
                   }`}
                   data-page-number={pageNumber}
+                  style={placeholderSize ? { width: placeholderSize.width, height: placeholderSize.height } : undefined}
                 >
                   <div className="absolute left-3 top-3 z-10 rounded-full bg-slate-950/85 px-2 py-1 text-[11px] font-medium text-slate-200 shadow">
                     Página {pageNumber}
