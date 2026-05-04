@@ -33,7 +33,7 @@ import {
   Code
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
-import { getUpdatedAtValue } from '@/services/dashboardUtils';
+import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
 import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { FileExplorerContextMenu } from '@/components/file-explorer/FileExplorerContextMenu';
@@ -188,95 +188,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [toolbarMenuOpen]);
 
-  const docsByFolder = useMemo(() => {
-    const grouped: Record<string, DocItem[]> = {};
-    normalizedDocs.forEach(docItem => {
-      const folderName = normalizeFolderPath(docItem.folder);
-      if (!grouped[folderName]) grouped[folderName] = [];
-      grouped[folderName].push(docItem);
-    });
-    return grouped;
-  }, [normalizedDocs]);
-
-  const effectiveFolders = useMemo<FolderItem[]>(() => {
-    const byPath = new Map<string, FolderItem>();
-    const derived: FolderItem[] = [];
-
-    folders.forEach(folder => {
-      byPath.set(folder.path, folder);
-    });
-
-    const ensureFolder = (rawPath?: string) => {
-      const normalized = normalizeFolderPath(rawPath);
-      if (byPath.has(normalized)) return;
-
-      const parts = normalized.split('/');
-      let acc = '';
-      for (let i = 0; i < parts.length; i += 1) {
-        const part = parts[i];
-        acc = i === 0 ? part : `${acc}/${part}`;
-        if (byPath.has(acc)) continue;
-
-        const parentPath = i === 0 ? '' : acc.slice(0, acc.lastIndexOf('/'));
-        const virtualFolder: FolderItem = {
-          id: `virtual-${acc}`,
-          name: part,
-          path: acc,
-          parentPath,
-          kind: 'virtual'
-        };
-
-        byPath.set(acc, virtualFolder);
-        derived.push(virtualFolder);
-      }
-    };
-
-    ensureFolder(DEFAULT_FOLDER_NAME);
-    normalizedDocs.forEach(doc => ensureFolder(doc.folder));
-
-    return [...folders, ...derived];
-  }, [folders, normalizedDocs]);
-
-  const folderChildrenMap = useMemo(() => {
-    const map: Record<string, FolderItem[]> = {};
-    effectiveFolders.forEach(folder => {
-      const parent = folder.parentPath || '';
-      if (!map[parent]) map[parent] = [];
-      map[parent].push(folder);
-    });
-    Object.values(map).forEach(list => {
-      list.sort((a, b) => {
-        const orderA = typeof a.order === 'number' ? a.order : null;
-        const orderB = typeof b.order === 'number' ? b.order : null;
-        if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-        if (orderA !== null && orderB === null) return -1;
-        if (orderA === null && orderB !== null) return 1;
-        const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
-        const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
-        if (weightDiff !== 0) return weightDiff;
-        return a.name.localeCompare(b.name);
-      });
-    });
-    return map;
-  }, [effectiveFolders]);
+  const { effectiveFolders, folderChildrenMap, docsByFolder } = useMemo(
+    () => buildWorkspaceTreeModel(folders, normalizedDocs),
+    [folders, normalizedDocs]
+  );
 
   const activeChildFolders = useMemo(() => {
     return folderChildrenMap[activeFolder] ?? [];
   }, [folderChildrenMap, activeFolder]);
 
   const activeFolderDocs = useMemo(() => {
-    const list = docsByFolder[activeFolder] ?? [];
-    return list.slice().sort((a, b) => {
-      const orderA = typeof a.order === 'number' ? a.order : null;
-      const orderB = typeof b.order === 'number' ? b.order : null;
-      if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-      if (orderA !== null && orderB === null) return -1;
-      if (orderA === null && orderB !== null) return 1;
-      const dateA = getUpdatedAtValue(a.updatedAt);
-      const dateB = getUpdatedAtValue(b.updatedAt);
-      if (dateA !== dateB) return dateB - dateA;
-      return (a.name || '').localeCompare(b.name || '');
-    });
+    return docsByFolder[activeFolder] ?? [];
   }, [docsByFolder, activeFolder]);
 
   const filteredChildFolders = useMemo(() => {

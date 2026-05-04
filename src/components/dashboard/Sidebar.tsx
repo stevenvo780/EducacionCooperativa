@@ -5,7 +5,7 @@ import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, ListCollapse, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
-import { getUpdatedAtValue } from '@/services/dashboardUtils';
+import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { useIsTouchDeviceProfile } from '@/lib/device-input';
@@ -196,89 +196,10 @@ const Sidebar = ({
     setCollapsedByUser(new Set([DEFAULT_FOLDER_NAME]));
   };
 
-  const effectiveFolders = useMemo<FolderItem[]>(() => {
-    const byPath = new Map<string, FolderItem>();
-    const derived: FolderItem[] = [];
-
-    for (const folder of folders) {
-      byPath.set(folder.path, folder);
-    }
-
-    const ensureFolder = (rawPath?: string) => {
-      const normalized = normalizeFolderPath(rawPath);
-      if (byPath.has(normalized)) return;
-
-      const parts = normalized.split('/');
-      let acc = '';
-
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        acc = i === 0 ? part : `${acc}/${part}`;
-        if (byPath.has(acc)) continue;
-
-        const parentPath = i === 0 ? '' : acc.slice(0, acc.lastIndexOf('/'));
-        const virtualFolder: FolderItem = {
-          id: `virtual-${acc}`,
-          name: part,
-          path: acc,
-          parentPath,
-          kind: 'virtual'
-        };
-
-        byPath.set(acc, virtualFolder);
-        derived.push(virtualFolder);
-      }
-    };
-
-    ensureFolder(DEFAULT_FOLDER_NAME);
-    docs.forEach(doc => ensureFolder(doc.folder));
-
-    return [...folders, ...derived];
-  }, [docs, folders]);
-
-  const folderChildrenMap = useMemo(() => {
-    const map: Record<string, FolderItem[]> = { '': [] };
-    for (const folder of effectiveFolders) {
-      const parent = folder.parentPath || '';
-      if (!map[parent]) map[parent] = [];
-      map[parent].push(folder);
-    }
-    Object.values(map).forEach(list => {
-      list.sort((a, b) => {
-        const orderA = typeof a.order === 'number' ? a.order : null;
-        const orderB = typeof b.order === 'number' ? b.order : null;
-        if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-        if (orderA !== null && orderB === null) return -1;
-        if (orderA === null && orderB !== null) return 1;
-        return a.name.localeCompare(b.name);
-      });
-    });
-    return map;
-  }, [effectiveFolders]);
-
-  const docsByFolder = useMemo(() => {
-    const result: Record<string, DocItem[]> = {};
-    for (const doc of docs) {
-      if (doc.type === 'folder') continue;
-      const f = doc.folder || DEFAULT_FOLDER_NAME;
-      if (!result[f]) result[f] = [];
-      result[f].push(doc);
-    }
-    Object.values(result).forEach(list => {
-      list.sort((a, b) => {
-        const orderA = typeof a.order === 'number' ? a.order : null;
-        const orderB = typeof b.order === 'number' ? b.order : null;
-        if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-        if (orderA !== null && orderB === null) return -1;
-        if (orderA === null && orderB !== null) return 1;
-        const dateA = getUpdatedAtValue(a.updatedAt);
-        const dateB = getUpdatedAtValue(b.updatedAt);
-        if (dateA !== dateB) return dateB - dateA;
-        return (a.name || '').localeCompare(b.name || '');
-      });
-    });
-    return result;
-  }, [docs]);
+  const { effectiveFolders, folderChildrenMap, docsByFolder } = useMemo(
+    () => buildWorkspaceTreeModel(folders, docs),
+    [folders, docs]
+  );
 
   const toggleFolder = (path: string) => {
     setExpandedFolders(prev => {
