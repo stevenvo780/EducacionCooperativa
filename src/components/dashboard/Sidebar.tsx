@@ -141,7 +141,7 @@ const Sidebar = ({
   onDeleteFolder
 }: SidebarProps) => {
   const isTouchDevice = useIsTouchDeviceProfile();
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([DEFAULT_FOLDER_NAME]));
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
   const [selectedDocsIds, setSelectedDocsIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
@@ -160,8 +160,10 @@ const Sidebar = ({
   const touchHandleVisibilityClass = isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
   const iconButtonClass = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-surface-400 transition hover:bg-surface-700/70 hover:text-surface-100 active:bg-surface-700';
 
+  // Al cambiar de workspace expandimos todos los folders top-level con contenido
+  // para que el user vea la jerarquía inmediatamente (antes el alias mágico
+  // 'No estructurado' jugaba ese papel; ahora la raíz no se materializa).
   useEffect(() => {
-    setExpandedFolders(new Set([DEFAULT_FOLDER_NAME]));
     setCollapsedByUser(new Set());
   }, [currentWorkspace?.id]);
 
@@ -200,6 +202,20 @@ const Sidebar = ({
     () => buildWorkspaceTreeModel(folders, docs),
     [folders, docs]
   );
+
+  // Expandir automáticamente folders top-level al cargar el workspace,
+  // para que la jerarquía sea visible sin tener que clickear cada folder.
+  // Sólo se aplica una vez por workspace (mientras expandedFolders esté vacío).
+  useEffect(() => {
+    const topLevel = folderChildrenMap[''] ?? [];
+    if (topLevel.length === 0) return;
+    setExpandedFolders(prev => {
+      if (prev.size > 0) return prev;
+      const next = new Set<string>();
+      for (const f of topLevel) next.add(f.path);
+      return next;
+    });
+  }, [folderChildrenMap, currentWorkspace?.id]);
 
   const toggleFolder = (path: string) => {
     setExpandedFolders(prev => {
