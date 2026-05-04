@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useLayoutEffect, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, ListCollapse, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
@@ -8,41 +8,10 @@ import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/hooks/useContextMenu';
+import { useElementSize } from '@/hooks/useElementSize';
 import { useIsTouchDeviceProfile } from '@/lib/device-input';
 
 const ROW_HEIGHT = 28;
-
-const useElementSize = <T extends HTMLElement>() => {
-  const ref = useRef<T | null>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-
-    const update = () => {
-      setSize({ width: element.clientWidth, height: element.clientHeight });
-    };
-
-    update();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', update);
-      return () => window.removeEventListener('resize', update);
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
-      setSize({ width, height });
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  return [ref, size] as const;
-};
 
 type SidebarListItem =
   | { kind: 'folder'; folder: FolderItem; depth: number; hasChildren: boolean }
