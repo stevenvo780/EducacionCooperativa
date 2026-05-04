@@ -196,7 +196,7 @@ const Sidebar = ({
     setCollapsedByUser(new Set([DEFAULT_FOLDER_NAME]));
   };
 
-  const { effectiveFolders, folderChildrenMap, docsByFolder } = useMemo(
+  const { folderChildrenMap, docsByFolder } = useMemo(
     () => buildWorkspaceTreeModel(folders, docs),
     [folders, docs]
   );

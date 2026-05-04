@@ -450,18 +450,18 @@ function DashboardContent() {
             setShowMobileSidebar(false);
         }
         setIsSidebarCollapsed(prev => !prev);
-    }, [showMobileSidebar, setShowMobileSidebar]);
+    }, [showMobileSidebar, setShowMobileSidebar, setIsSidebarCollapsed]);
     const enterZenMode = useCallback(() => {
         zenRestoreRef.current = { sidebar: isSidebarCollapsed };
         setShowWorkspaceMenu(false);
         setShowMobileSidebar(false);
         setIsSidebarCollapsed(true);
         setIsZenMode(true);
-    }, [isSidebarCollapsed, setShowMobileSidebar, setShowWorkspaceMenu]);
+    }, [isSidebarCollapsed, setShowMobileSidebar, setShowWorkspaceMenu, setIsSidebarCollapsed]);
     const exitZenMode = useCallback(() => {
         setIsSidebarCollapsed(zenRestoreRef.current.sidebar);
         setIsZenMode(false);
-    }, []);
+    }, [setIsSidebarCollapsed]);
     const handleToggleZenMode = useCallback(() => {
         if (isZenMode) {
             exitZenMode();
