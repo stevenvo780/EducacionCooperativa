@@ -3,7 +3,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { BookMarked, CheckSquare, Eye, FileCode2, Library, Maximize2, Minimize2, Settings2, Sparkles } from 'lucide-react';
-import type { QuickInsert, ViewMode } from '@/components/mosaic-editor/types';
+import type { ViewMode } from '@/components/mosaic-editor/types';
 
 interface EditorUtilityMenuProps {
   anchor: {
@@ -11,7 +11,6 @@ interface EditorUtilityMenuProps {
     x: number;
     y: number;
   };
-  quickInserts: QuickInsert[];
   isFullscreen: boolean;
   showToolsPanel: boolean;
   showSnippetGallery: boolean;
@@ -25,17 +24,10 @@ interface EditorUtilityMenuProps {
   onToggleRawMode: () => void;
   onTogglePreviewMode: () => void;
   onScanPendings: () => void;
-  onInsertQuickSnippet: (markdown: string) => void;
 }
-
-const quickInsertPreview = (value: string) => value
-  .replace(/```[\s\S]*?```/g, 'bloque de código')
-  .replace(/\s+/g, ' ')
-  .trim();
 
 export function EditorUtilityMenu({
   anchor,
-  quickInserts,
   isFullscreen,
   showToolsPanel,
   showSnippetGallery,
@@ -48,8 +40,7 @@ export function EditorUtilityMenu({
   onToggleSnippetGallery,
   onToggleRawMode,
   onTogglePreviewMode,
-  onScanPendings,
-  onInsertQuickSnippet
+  onScanPendings
 }: EditorUtilityMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({ left: anchor.x, top: anchor.y, maxHeight: 420 });
@@ -93,7 +84,7 @@ export function EditorUtilityMenu({
       window.removeEventListener('resize', computePosition);
       window.visualViewport?.removeEventListener('resize', computePosition);
     };
-  }, [anchor.id, anchor.x, anchor.y, quickInserts.length, viewMode, showSnippetGallery, showToolsPanel, isFullscreen]);
+  }, [anchor.id, anchor.x, anchor.y, viewMode, showSnippetGallery, showToolsPanel, isFullscreen]);
 
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
@@ -147,28 +138,6 @@ export function EditorUtilityMenu({
         <UtilityButton icon={<FileCode2 className="h-3.5 w-3.5" />} label={viewMode === 'raw' ? 'Volver a editor visual' : 'Abrir modo raw'} onClick={onToggleRawMode} />
         <UtilityButton icon={<Eye className="h-3.5 w-3.5" />} label={viewMode === 'preview' ? 'Volver a edición' : 'Abrir vista previa'} onClick={onTogglePreviewMode} />
       </div>
-
-      {quickInserts.length > 0 && (
-        <div className="mt-3 border-t border-slate-800 pt-3">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Inserciones rápidas</div>
-          <div className="space-y-2">
-            {quickInserts.map((snippet) => (
-              <button
-                key={snippet.id}
-                type="button"
-                onClick={() => onInsertQuickSnippet(snippet.markdown)}
-                className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-left transition hover:border-blue-500/40 hover:bg-slate-900"
-              >
-                <div className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-100">
-                  <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-                  {snippet.title}
-                </div>
-                <div className="text-xs leading-5 text-slate-400">{snippet.description || quickInsertPreview(snippet.markdown).slice(0, 120)}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 

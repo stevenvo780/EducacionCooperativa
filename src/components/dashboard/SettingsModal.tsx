@@ -30,8 +30,9 @@ import {
   saveAIProviderConfig,
   loadAgentAccessPolicy,
   saveAgentAccessPolicy,
-  loadAgentMode,
-  saveAgentMode,
+  loadAgentUserInstructions,
+  saveAgentUserInstructions,
+  AGENT_USER_INSTRUCTIONS_MAX_LENGTH,
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
 import {
@@ -40,7 +41,7 @@ import {
   modelsForProvider,
   type ModelCatalog
 } from '@/lib/agora-ai/modelCatalog';
-import type { AgentAccessCapability, AgentAccessPolicy, AgentMode, AIProvider } from '@/lib/agora-ai/types';
+import type { AgentAccessCapability, AgentAccessPolicy, AIProvider } from '@/lib/agora-ai/types';
 
 export type SettingsSectionId = 'editor-md' | 'editor-st' | 'ai' | 'linter' | 'cuenta';
 
@@ -63,6 +64,7 @@ interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   initialSection?: SettingsSectionId;
+  activeWorkspaceId?: string;
   onOpenChangePassword: () => void;
   onOpenMembers: () => void;
   onOpenGitAccess: () => void;
@@ -72,6 +74,7 @@ export default function SettingsModal({
   open,
   onClose,
   initialSection = 'editor-md',
+  activeWorkspaceId,
   onOpenChangePassword,
   onOpenMembers,
   onOpenGitAccess
@@ -157,7 +160,7 @@ export default function SettingsModal({
             {section === 'editor-md' && <EditorMdSection />}
             {section === 'editor-st' && <EditorStSection />}
             {section === 'ai' && (
-              <AISection />
+              <AISection activeWorkspaceId={activeWorkspaceId} />
             )}
             {section === 'linter' && <LintersSection />}
             {section === 'cuenta' && (
@@ -233,13 +236,15 @@ const CAPABILITY_LABELS: Record<AgentAccessCapability, { label: string; descript
   }
 };
 
-function AISection() {
+function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
   const [config, setConfig] = useState<AIProviderConfig>(() => loadAIProviderConfig());
-  const [mode, setMode] = useState<AgentMode>(() => loadAgentMode());
   const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(() => loadAgentAccessPolicy());
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(getModelCatalogSync);
+  const [userInstructionsDraft, setUserInstructionsDraft] = useState<string>('');
+  const [userInstructionsSavedAt, setUserInstructionsSavedAt] = useState<number | null>(null);
   const meta = PROVIDER_META[config.provider];
   const providerModels = modelsForProvider(modelCatalog, config.provider);
+  const workspaceForInstructions = activeWorkspaceId || 'personal';
 
   useEffect(() => {
     let cancelled = false;
@@ -247,17 +252,17 @@ function AISection() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    setUserInstructionsDraft(loadAgentUserInstructions(workspaceForInstructions));
+    setUserInstructionsSavedAt(null);
+  }, [workspaceForInstructions]);
+
   const updateConfig = (partial: Partial<AIProviderConfig>) => {
     setConfig((prev) => {
       const next = { ...prev, ...partial };
       saveAIProviderConfig(next);
       return next;
     });
-  };
-
-  const updateMode = (nextMode: AgentMode) => {
-    setMode(nextMode);
-    saveAgentMode(nextMode);
   };
 
   const updatePolicy = (nextPolicy: AgentAccessPolicy) => {
@@ -380,18 +385,7 @@ function AISection() {
 
       <div className="border-t border-surface-700/40 pt-4">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h4 className="text-xs font-semibold text-surface-200">Modo y perfil de acceso</h4>
-          <button
-            type="button"
-            onClick={() => updateMode(mode === 'agent' ? 'chat' : 'agent')}
-            className={`rounded-md border px-2 py-1 text-[10px] transition ${
-              mode === 'agent'
-                ? 'border-violet-400/40 bg-violet-500/10 text-violet-200'
-                : 'border-surface-700 bg-surface-925 text-surface-300'
-            }`}
-          >
-            {mode === 'agent' ? 'Modo agente' : 'Modo chat'}
-          </button>
+          <h4 className="text-xs font-semibold text-surface-200">Perfil de acceso del agente</h4>
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
@@ -435,6 +429,48 @@ function AISection() {
               onChange={(enabled) => toggleCapability(capability, enabled)}
             />
           ))}
+        </div>
+      </div>
+
+      <div>
+        <SectionTitle>Instrucciones del workspace</SectionTitle>
+        <SectionHelper>
+          Texto extra que se inyecta al system prompt SOLO en este workspace ({workspaceForInstructions}). Útil para fijar el dominio (filosofía, programación, lógica modal, etc.), tono o reglas específicas. Máximo {AGENT_USER_INSTRUCTIONS_MAX_LENGTH} caracteres. Persiste en este navegador.
+        </SectionHelper>
+        <textarea
+          value={userInstructionsDraft}
+          onChange={(event) => {
+            setUserInstructionsDraft(event.target.value.slice(0, AGENT_USER_INSTRUCTIONS_MAX_LENGTH));
+            setUserInstructionsSavedAt(null);
+          }}
+          placeholder="Ej.: Soy estudiante de filosofía. Cuando formalice argumentos prefiere lógica modal S5 salvo que pida otra cosa. Comenta cada paso de la derivación."
+          className="mt-3 h-40 w-full resize-none rounded-md border border-surface-700 bg-surface-925 px-3 py-2 text-sm text-surface-100 placeholder:text-surface-600 focus:border-mandy-400/50 focus:outline-none"
+        />
+        <div className="mt-2 flex items-center justify-between text-xs text-surface-500">
+          <span>{userInstructionsDraft.length} / {AGENT_USER_INSTRUCTIONS_MAX_LENGTH}{userInstructionsSavedAt ? ' · guardado' : ''}</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                saveAgentUserInstructions(workspaceForInstructions, '');
+                setUserInstructionsDraft('');
+                setUserInstructionsSavedAt(Date.now());
+              }}
+              className="rounded-md border border-surface-700 bg-surface-925 px-3 py-1 text-surface-300 hover:border-surface-600"
+            >
+              Borrar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                saveAgentUserInstructions(workspaceForInstructions, userInstructionsDraft);
+                setUserInstructionsSavedAt(Date.now());
+              }}
+              className="rounded-md border border-mandy-500/40 bg-mandy-500/10 px-3 py-1 text-mandy-100 hover:border-mandy-500/60"
+            >
+              Guardar
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -785,4 +821,8 @@ function ActionRow({
 
 function SectionHelper({ children }: { children: React.ReactNode }) {
   return <p className="text-xs text-surface-400 leading-relaxed">{children}</p>;
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="mb-2 text-sm font-semibold text-surface-100">{children}</h3>;
 }

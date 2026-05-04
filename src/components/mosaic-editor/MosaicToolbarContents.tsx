@@ -37,7 +37,6 @@ import {
   Sparkles
 } from 'lucide-react';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
-import type { QuickInsert } from '@/components/mosaic-editor/types';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
 export type ToolbarGroupKey = 'history' | 'inline' | 'structure' | 'lists' | 'media' | 'insert' | 'snippets' | 'advanced';
@@ -55,7 +54,6 @@ export interface MosaicToolbarContentsProps {
   menuBtnRef: React.RefObject<HTMLButtonElement>;
   currentDocMetaRef: React.MutableRefObject<{ name?: string }>;
   DEFAULT_TOOLBAR_VISIBILITY: Record<ToolbarGroupKey, boolean>;
-  QUICK_INSERTS: QuickInsert[];
   applyToolbarVisibility: (visibility: Record<ToolbarGroupKey, boolean>) => void;
   insertSnippet: (markdown: string) => void;
   toggleCompactMenu: (e: React.MouseEvent) => void;
@@ -81,7 +79,6 @@ export function MosaicToolbarContents({
   menuBtnRef,
   currentDocMetaRef,
   DEFAULT_TOOLBAR_VISIBILITY,
-  QUICK_INSERTS,
   applyToolbarVisibility,
   insertSnippet,
   toggleCompactMenu,
@@ -253,38 +250,26 @@ export function MosaicToolbarContents({
         >
           <div
             style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 99999 }}
-            className="min-w-[200px] rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-2xl shadow-black/60"
+            className="min-w-[260px] rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-black/60"
             onClick={(e) => e.stopPropagation()}
           >
-            <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-              <Settings2 className="h-4 w-4 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
+            <button type="button" title={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} aria-label={showToolsPanel ? 'Ocultar herramientas visibles en la barra' : 'Elegir qué herramientas se muestran'} onClick={() => { setShowToolsPanel(c => !c); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
+              <Settings2 className="h-5 w-5 shrink-0 text-slate-400" />{showToolsPanel ? 'Ocultar herramientas' : 'Editar herramientas'}
             </button>
-            <button type="button" title="Abrir mesa semántica" aria-label="Abrir mesa semántica" onClick={() => { semanticBrowserBus.open(docName || currentDocMetaRef.current.name); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-              <BookMarked className="h-4 w-4 text-blue-400" />Mesa semántica
+            <button type="button" title="Abrir mesa semántica" aria-label="Abrir mesa semántica" onClick={() => { semanticBrowserBus.open(docName || currentDocMetaRef.current.name); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
+              <BookMarked className="h-5 w-5 shrink-0 text-blue-400" />Mesa semántica
             </button>
-            <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-              <Sparkles className="h-4 w-4 text-slate-400" />Restaurar barra completa
+            <button type="button" title="Restaurar todos los botones de la barra" aria-label="Restaurar todos los botones de la barra" onClick={() => { applyToolbarVisibility(DEFAULT_TOOLBAR_VISIBILITY); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
+              <Sparkles className="h-5 w-5 shrink-0 text-slate-400" />Restaurar barra completa
             </button>
-            <button type="button" title={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} onClick={() => { void toggleFullscreen(); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-              {isFullscreen ? <Minimize2 className="h-4 w-4 text-slate-400" /> : <Maximize2 className="h-4 w-4 text-slate-400" />}
+            <button type="button" title={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Abrir en pantalla completa'} onClick={() => { void toggleFullscreen(); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
+              {isFullscreen ? <Minimize2 className="h-5 w-5 shrink-0 text-slate-400" /> : <Maximize2 className="h-5 w-5 shrink-0 text-slate-400" />}
               {isFullscreen ? 'Salir pantalla completa' : 'Pantalla completa'}
             </button>
-            <div className="my-1 h-px bg-slate-700" />
-            <button type="button" title="Abrir galería de snippets" aria-label="Abrir galería de snippets" onClick={() => { setShowSnippetGallery(s => !s); setShowCompactMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800">
-              <Library className="h-4 w-4 text-blue-400" />Galería de snippets
+            <div className="my-2 h-px bg-slate-700" />
+            <button type="button" title="Abrir galería de snippets" aria-label="Abrir galería de snippets" onClick={() => { setShowSnippetGallery(s => !s); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
+              <Library className="h-5 w-5 shrink-0 text-blue-400" />Galería de snippets
             </button>
-            {QUICK_INSERTS.map((snippet) => (
-              <button
-                key={snippet.id}
-                type="button"
-                title={snippet.title}
-                aria-label={snippet.title}
-                onClick={() => { insertSnippet(snippet.markdown); setShowCompactMenu(false); }}
-                className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-              >
-                <Sparkles className="h-3 w-3 text-blue-400" />{snippet.title}
-              </button>
-            ))}
           </div>
         </div>,
         editorShellRef.current || document.body
