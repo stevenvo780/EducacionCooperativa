@@ -115,10 +115,10 @@ describe('basic domain helpers', () => {
   });
 
   it('handles folder and storage helpers', () => {
-    expect(DEFAULT_FOLDER_NAME).toBe('No estructurado');
+    expect(DEFAULT_FOLDER_NAME).toBe('');
     expect(normalizePath(undefined)).toBe('');
     expect(normalizePath('  unidad  /  tema  //  subtema  ')).toBe('unidad/tema/subtema');
-    expect(normalizeFolderPath(undefined)).toBe(DEFAULT_FOLDER_NAME);
+    expect(normalizeFolderPath(undefined)).toBe('');
     expect(normalizeFolderPath(' carpeta / interna ')).toBe('carpeta/interna');
 
     expect(sanitizeFileName('a/b\\c.md')).toBe('a_b_c.md');
@@ -132,7 +132,7 @@ describe('basic domain helpers', () => {
       workspaceId: PERSONAL_WORKSPACE_ID,
       ownerId: 'owner-1',
       fileName: 'nota.md'
-    })).toBe('users/owner-1/No estructurado/nota.md');
+    })).toBe('users/owner-1/nota.md');
     expect(buildStoragePath({
       workspaceId: 'workspace-2',
       ownerId: 'owner-1',
