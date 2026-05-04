@@ -46,7 +46,6 @@ import {
   contextWindowForModel as contextWindowFromCatalog,
   getModelCatalogSync,
   loadModelCatalog,
-  modelsForProvider,
   type ModelCatalog
 } from '@/lib/agora-ai/modelCatalog';
 import type {
