@@ -1,5 +1,6 @@
 import { DocumentType } from '@/types/documents';
-import type { AgentToolDefinition } from '@/lib/agora-ai/types';
+import { isAgentToolAllowedByPolicy } from '@/lib/agora-ai/accessPolicy';
+import type { AgentAccessPolicy, AgentToolDefinition } from '@/lib/agora-ai/types';
 import { AGENT_UI_PANEL_DESCRIPTION, AGENT_UI_PANELS } from '@/lib/agora-ai/uiPanels';
 
 export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
@@ -631,27 +632,63 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
     }
   },
   {
-    name: 'list_glossary_entries',
-    description: 'Lista entradas del glosario semántico del workspace.',
+    name: 'update_concept',
+    description: 'Edita un concepto existente del glosario semántico. Identifica por conceptId, id o title; aplica cambios parciales en title/definition/formula/logicProfile/status.',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Filtro opcional por texto.' },
-        limit: { type: 'number', description: 'Máximo de resultados, entre 1 y 50.' }
+        conceptId: { type: 'string', description: 'ID del concepto a editar (preferido).' },
+        id: { type: 'string', description: 'Alias de conceptId.' },
+        title: { type: 'string', description: 'Si conceptId no se da, busca por título exacto. Si se da junto a conceptId, renombra.' },
+        definition: { type: 'string' },
+        formula: { type: 'string' },
+        logicProfile: { type: 'string' },
+        status: { type: 'string', enum: ['draft', 'validated', 'archived'] }
       },
       additionalProperties: false
     }
   },
   {
-    name: 'search_glossary_entries',
-    description: 'Busca entradas del glosario / conceptos por nombre, definición o fórmula.',
+    name: 'delete_concept',
+    description: 'Elimina un concepto del glosario semántico y sus relaciones asociadas (cascada). Requiere confirmed:true en la segunda llamada.',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Texto de búsqueda.' },
-        limit: { type: 'number', description: 'Máximo de resultados, entre 1 y 25.' }
+        conceptId: { type: 'string', description: 'ID del concepto.' },
+        id: { type: 'string', description: 'Alias de conceptId.' },
+        title: { type: 'string', description: 'Alternativa: título exacto.' },
+        confirmed: { type: 'boolean', description: 'Pasar true tras confirmar con el usuario.' }
       },
-      required: ['query'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'update_relation',
+    description: 'Edita una relación semántica existente. Identifica por relationId; permite cambiar relationType y status.',
+    parameters: {
+      type: 'object',
+      properties: {
+        relationId: { type: 'string', description: 'ID de la relación.' },
+        id: { type: 'string', description: 'Alias de relationId.' },
+        relationType: {
+          type: 'string',
+          enum: ['supports', 'contradicts', 'implies', 'depends-on', 'defines', 'example-of', 'evidence-for', 'evidence-against', 'restates', 'questions', 'related-to']
+        },
+        status: { type: 'string', enum: ['draft', 'validated', 'archived'] }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'delete_relation',
+    description: 'Elimina una relación semántica por relationId. Requiere confirmed:true en la segunda llamada.',
+    parameters: {
+      type: 'object',
+      properties: {
+        relationId: { type: 'string' },
+        id: { type: 'string', description: 'Alias de relationId.' },
+        confirmed: { type: 'boolean' }
+      },
       additionalProperties: false
     }
   },
@@ -706,6 +743,820 @@ export const AGORA_AGENT_TOOLS: AgentToolDefinition[] = [
       required: ['documentId'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'fetch_url',
+    description: 'Descarga el contenido textual de una URL pública (http/https). Útil para consultar documentación externa, APIs públicas o recursos web. Bloquea localhost/IPs privadas. Devuelve {status, contentType, bodyText (truncado), bytesRead, truncated}. Read-only.',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'URL absoluta http(s)://... a descargar.' },
+        maxBytes: { type: 'number', description: 'Bytes máximos a leer (1024..200000, default 50000).' },
+        timeoutMs: { type: 'number', description: 'Timeout en ms (1000..30000, default 8000).' }
+      },
+      required: ['url'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'read_agora_doc',
+    description: 'Lee la documentación oficial de Agora alojada en agora.elenxos.com/docs. Sin slug devuelve los slugs disponibles (ej. "st", "st/proposicional", "st/modal-k"). Con slug devuelve el contenido textual de esa doc. Read-only.',
+    parameters: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Slug de la doc (ej. "st", "st/proposicional"). Vacío = lista los disponibles.' },
+        maxBytes: { type: 'number', description: 'Bytes máximos a leer (default 80000).' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'rename_folder',
+    description: 'Renombra una carpeta en el workspace y actualiza el folder de TODOS los documentos hijos en cascada. Atómico via batch. Read-write.',
+    parameters: {
+      type: 'object',
+      properties: {
+        fromPath: { type: 'string', description: 'Path actual de la carpeta (ej. "Cursos/Filosofía").' },
+        toName: { type: 'string', description: 'Nuevo nombre del último segmento (ej. "Lógica" para renombrar a "Cursos/Lógica").' }
+      },
+      required: ['fromPath', 'toName'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'delete_folder',
+    description: 'Elimina una carpeta. Si tiene hijos requiere cascade:true. Requiere confirmed:true. Destructivo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        folderPath: { type: 'string', description: 'Path completo de la carpeta a eliminar.' },
+        cascade: { type: 'boolean', description: 'Si true, elimina también todos los documentos hijos.' },
+        confirmed: { type: 'boolean', description: 'Confirmación explícita del usuario.' }
+      },
+      required: ['folderPath'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'list_workspaces',
+    description: 'Lista todos los workspaces compartidos a los que el usuario tiene acceso. Útil para ver dónde más puede operar.',
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Máximo a devolver (1-100, default 25).' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'get_document_content_at_revision',
+    description: 'Devuelve el contenido de una revisión específica del documento. Hoy NO está implementado en Firestore (no hay versiones); devuelve sugerencia de usar git_log + git_show del worker.',
+    parameters: {
+      type: 'object',
+      properties: {
+        documentId: { type: 'string' },
+        revision: { type: 'string', description: 'Hash o índice de revisión.' }
+      },
+      required: ['documentId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'upload_external_url',
+    description: 'Descarga una URL pública e ingiere el contenido como documento markdown nuevo. Bloquea hosts privados/localhost. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        targetFolder: { type: 'string' },
+        name: { type: 'string', description: 'Nombre del documento. Si se omite usa el último segmento del path de la URL.' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['url'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'download_workspace_bundle',
+    description: 'Devuelve el manifiesto (lista de docs con metadata) de todo el workspace o de una carpeta. Para el zip binario el cliente debe llamar /api/workspaces/:id/export. Read-only.',
+    parameters: {
+      type: 'object',
+      properties: {
+        folderPath: { type: 'string', description: 'Si se especifica, solo incluye docs bajo ese path.' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'invite_member',
+    description: 'Añade un userId/email a la lista de invitaciones pendientes del workspace. Solo el owner puede invitar. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        userIdOrEmail: { type: 'string' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['userIdOrEmail'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'remove_member',
+    description: 'Quita un miembro del workspace (no puede ser el owner). Solo el owner puede ejecutar. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['userId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'change_workspace_settings',
+    description: 'Modifica name, description o visibility del workspace activo. Solo owner.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        description: { type: 'string' },
+        visibility: { type: 'string', enum: ['private', 'shared'] }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'transfer_workspace_ownership',
+    description: 'Transfiere ownership a otro miembro existente. Pierdes permisos administrativos. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        newOwnerId: { type: 'string' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['newOwnerId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'list_members',
+    description: 'Lista miembros del workspace activo y sus roles, además de invitaciones pendientes.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'git_diff',
+    description: 'Ejecuta git diff en el worker. Soporta path específico y staged:true para ver index. Read-only.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        staged: { type: 'boolean', description: 'Si true, muestra git diff --cached.' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_pull',
+    description: 'git pull del worker desde el remote. Read-write (modifica filesystem del worker).',
+    parameters: {
+      type: 'object',
+      properties: {
+        remote: { type: 'string', description: 'Default: origin' },
+        branch: { type: 'string' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_push_branch',
+    description: 'git push del worker hacia el remote. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        remote: { type: 'string' },
+        branch: { type: 'string' },
+        confirmed: { type: 'boolean' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_create_branch',
+    description: 'git checkout -b <branch> en el worker.',
+    parameters: {
+      type: 'object',
+      properties: { branch: { type: 'string' } },
+      required: ['branch'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_checkout',
+    description: 'git checkout <target> en el worker (branch o commit hash).',
+    parameters: {
+      type: 'object',
+      properties: { target: { type: 'string' } },
+      required: ['target'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'git_revert_commit',
+    description: 'Revierte un commit (crea un nuevo commit que deshace los cambios). Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        sha: { type: 'string' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['sha'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'read_worker_file',
+    description: 'Lee un archivo dentro de /workspace del worker (head -c N). Read-only. Usa para inspeccionar archivos específicos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path relativo a /workspace.' },
+        maxBytes: { type: 'number', description: '256..200000 bytes, default 50000.' }
+      },
+      required: ['path'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'write_worker_file',
+    description: 'Escribe contenido a un archivo dentro de /workspace del worker (sobrescribe). Crea directorios padre. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        content: { type: 'string' },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['path', 'content'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'tail_worker_logs',
+    description: 'Devuelve las últimas N líneas de un archivo (tail) dentro del worker. Read-only.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        lines: { type: 'number', description: '1..500, default 100.' }
+      },
+      required: ['path'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'kill_worker_process',
+    description: 'Envía señal a un proceso por PID dentro del worker. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        pid: { type: 'string' },
+        signal: { type: 'string', enum: ['TERM', 'KILL', 'HUP', 'INT', 'QUIT'] },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['pid'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'restart_worker',
+    description: 'Reinicia el worker del workspace. Hoy devuelve sugerencia (`pkill -f /app/index.js`) — el agente desde Cloud Run no tiene control directo sobre Docker en stev-server.',
+    parameters: { type: 'object', properties: { confirmed: { type: 'boolean' } }, additionalProperties: false }
+  },
+  {
+    name: 'start_worker',
+    description: 'Crea el worker container si no existe. Requiere sudo en stev-server (no expuesto desde Cloud Run).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'prove_step',
+    description: 'Pide al runtime ST que pruebe una conclusión a partir de axiomas declarados en el program. Devuelve status (provable/unknown/unprovable).',
+    parameters: {
+      type: 'object',
+      properties: {
+        program: { type: 'string', description: 'Programa ST con `logic` y `axiom` declarados.' },
+        conclusion: { type: 'string', description: 'Fórmula a derivar.' },
+        fromAxioms: { type: 'array', items: { type: 'string' }, description: 'Nombres de axiomas a usar.' }
+      },
+      required: ['program', 'conclusion'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'compare_logic_profiles',
+    description: 'Evalúa la validez de una fórmula en múltiples perfiles ST a la vez para comparar. Útil para mostrar qué lógicas la consideran válida.',
+    parameters: {
+      type: 'object',
+      properties: {
+        formula: { type: 'string' },
+        profiles: { type: 'array', items: { type: 'string' }, description: 'IDs de perfiles. Si vacío usa los primeros 6.' }
+      },
+      required: ['formula'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'formalize_document_section',
+    description: 'Formaliza la sección de un documento (delimitada por un heading) usando autologic. Si no se da headingTitle formaliza el doc completo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        documentId: { type: 'string' },
+        headingTitle: { type: 'string' },
+        profile: { type: 'string', description: 'Perfil ST destino (default classical.propositional).' }
+      },
+      required: ['documentId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'bulk_create_board_cards',
+    description: 'Crea múltiples tarjetas Kanban en una sola llamada (máximo 50). Cada item del array debe tener al menos columnId y title.',
+    parameters: {
+      type: 'object',
+      properties: {
+        cards: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              columnId: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' }
+            },
+            required: ['columnId', 'title']
+          }
+        }
+      },
+      required: ['cards'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'outline_document',
+    description: 'Devuelve el esquema (headings markdown) de un documento.',
+    parameters: {
+      type: 'object',
+      properties: { documentId: { type: 'string' } },
+      required: ['documentId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'find_broken_links',
+    description: 'Encuentra enlaces markdown que apuntan a docs inexistentes en el workspace. Ignora URLs externas y anchors.',
+    parameters: {
+      type: 'object',
+      properties: { documentId: { type: 'string' } },
+      required: ['documentId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'find_duplicates',
+    description: 'Detecta documentos exactamente duplicados (mismo hash) y similares (Jaccard de shingles). minSimilarity 0.1-1, default 0.6.',
+    parameters: {
+      type: 'object',
+      properties: { minSimilarity: { type: 'number' } },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'apply_snippet_to_document',
+    description: 'Inserta un snippet al inicio o al final del contenido de un documento. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        documentId: { type: 'string' },
+        snippetId: { type: 'string' },
+        position: { type: 'string', enum: ['start', 'end', 'cursor'] },
+        confirmed: { type: 'boolean' }
+      },
+      required: ['documentId', 'snippetId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'focus_document_section',
+    description: 'Pide a la UI scrollear/seleccionar una sección específica del documento abierto (por heading o por número de línea).',
+    parameters: {
+      type: 'object',
+      properties: {
+        documentId: { type: 'string' },
+        headingTitle: { type: 'string' },
+        line: { type: 'number' }
+      },
+      required: ['documentId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'prompt_user_choice',
+    description: 'Presenta una pregunta con N opciones (2-8) al usuario y espera su respuesta antes de continuar.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string' },
+        choices: { type: 'array', items: { type: 'string' } }
+      },
+      required: ['question', 'choices'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'show_diff_to_user',
+    description: 'Muestra al usuario un diff before→after y le pide confirmar antes de aplicar el cambio. Útil antes de modificaciones masivas.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        before: { type: 'string' },
+        after: { type: 'string' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'report_status_to_user',
+    description: 'Envía un status persistente al usuario ("Estoy haciendo X de Y, voy en Z%"). Útil en operaciones largas.',
+    parameters: {
+      type: 'object',
+      properties: {
+        status: { type: 'string' },
+        detail: { type: 'string' }
+      },
+      required: ['status'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'list_recent_actions',
+    description: 'Devuelve las últimas N tools ejecutadas por el agente para este user/workspace, leídas del audit log.',
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number' },
+        sinceMs: { type: 'number', description: 'Timestamp ms desde el cual filtrar.' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'get_agent_audit_log',
+    description: 'Audit log persistido del agente. Filtrable por tool name.',
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number' },
+        tool: { type: 'string' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'get_subscription_status',
+    description: 'Plan actual del user (free, pro, ...) y datos de la suscripción si existe.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'list_quota',
+    description: 'Cuotas informativas: documentCount, workspacesAccessible, storageBytesUsed.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'get_workspace_quota_detail',
+    description: 'Detalle del workspace activo (name, type, plan).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'duplicate_document',
+    description: 'Clona un documento con un nuevo nombre opcional. Hidrata el contenido REAL desde MinIO antes de duplicar. Si no se da newName, usa "<original> (copia)".',
+    parameters: {
+      type: 'object',
+      properties: {
+        documentId: { type: 'string' },
+        newName: { type: 'string' },
+        targetFolder: { type: 'string' }
+      },
+      required: ['documentId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'get_storage_usage',
+    description: 'Resumen de uso de espacio del workspace activo: documentCount, totalBytes, minioBytes, firestoreBytes.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'find_large_documents',
+    description: 'Lista documentos cuyo size supera minBytes (default 100KB), ordenados desc.',
+    parameters: {
+      type: 'object',
+      properties: {
+        minBytes: { type: 'number' },
+        limit: { type: 'number', description: '1..50, default 20' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'list_recent_workspace_activity',
+    description: 'Documentos editados en las últimas N horas, ordenados por updatedAt desc.',
+    parameters: {
+      type: 'object',
+      properties: {
+        sinceHours: { type: 'number', description: '1..720, default 24' },
+        limit: { type: 'number' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'list_favorites',
+    description: 'Devuelve los documentos marcados como favoritos por el usuario en este workspace.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'add_favorite',
+    description: 'Marca un documento como favorito.',
+    parameters: { type: 'object', properties: { documentId: { type: 'string' } }, required: ['documentId'], additionalProperties: false }
+  },
+  {
+    name: 'remove_favorite',
+    description: 'Quita un documento de favoritos.',
+    parameters: { type: 'object', properties: { documentId: { type: 'string' } }, required: ['documentId'], additionalProperties: false }
+  },
+  {
+    name: 'lint_document',
+    description: 'Linter ligero (~7 reglas regex) para markdown del documento. Para las 53 reglas completas usa el panel Problemas (open_app_panel problems).',
+    parameters: { type: 'object', properties: { documentId: { type: 'string' } }, required: ['documentId'], additionalProperties: false }
+  },
+  {
+    name: 'lint_st_document',
+    description: 'Ejecuta el runtime ST sobre el documento .st y devuelve los diagnostics (errores, warnings, contramodelos). Read-only.',
+    parameters: { type: 'object', properties: { documentId: { type: 'string' } }, required: ['documentId'], additionalProperties: false }
+  },
+  {
+    name: 'list_active_terminal_sessions',
+    description: 'Sesiones de terminal/PTY activas del worker del workspace.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'kill_terminal_session',
+    description: 'Cierra una sesión de terminal por id. Hoy devuelve sugerencia (no hay endpoint REST directo desde Cloud Run).',
+    parameters: { type: 'object', properties: { sessionId: { type: 'string' }, confirmed: { type: 'boolean' } }, required: ['sessionId'], additionalProperties: false }
+  },
+  {
+    name: 'archive_board_card',
+    description: 'Archiva (oculta) o desarchiva una tarjeta Kanban. Más suave que delete.',
+    parameters: { type: 'object', properties: { cardId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['cardId'], additionalProperties: false }
+  },
+  {
+    name: 'get_repo_info',
+    description: 'Info del repo Forgejo asociado al workspace activo (org, nombre, clone hint).',
+    parameters: { type: 'object', properties: { workspaceId: { type: 'string' } }, additionalProperties: false }
+  },
+  {
+    name: 'list_workspace_repos',
+    description: 'Lista todos los repos Forgejo accesibles para el usuario.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'provision_workspace_git',
+    description: 'Idempotente: asegura que el repo Forgejo del workspace exista y el user tenga acceso. Útil si el repo se borró.',
+    parameters: { type: 'object', properties: { workspaceId: { type: 'string' } }, additionalProperties: false }
+  },
+  {
+    name: 'extract_text_from_pdf',
+    description: 'Extrae el texto plano de un documento PDF subido al workspace (requiere storagePath en MinIO). Read-only.',
+    parameters: { type: 'object', properties: { documentId: { type: 'string' } }, required: ['documentId'], additionalProperties: false }
+  },
+  {
+    name: 'inspect_sync_outbox',
+    description: 'Eventos sync pendientes del workspace en syncEventsOutbox.',
+    parameters: { type: 'object', properties: { limit: { type: 'number' } }, additionalProperties: false }
+  },
+  {
+    name: 'force_emit_sync_ping',
+    description: 'Emite manualmente un ping RTDB para refrescar clientes. op = created|updated|deleted|refresh.',
+    parameters: { type: 'object', properties: { op: { type: 'string' }, path: { type: 'string' } }, additionalProperties: false }
+  },
+  {
+    name: 'get_document_sync_state',
+    description: 'Estado de sincronización de un documento: synced | storage-only | firestore-only | empty.',
+    parameters: { type: 'object', properties: { documentId: { type: 'string' } }, required: ['documentId'], additionalProperties: false }
+  },
+  {
+    name: 'accept_invite',
+    description: 'Acepta una invitación pendiente al workspace. Requiere que el user haya sido añadido a pendingInvites.',
+    parameters: { type: 'object', properties: { workspaceId: { type: 'string' } }, additionalProperties: false }
+  },
+  {
+    name: 'decline_invite',
+    description: 'Rechaza una invitación pendiente al workspace.',
+    parameters: { type: 'object', properties: { workspaceId: { type: 'string' } }, additionalProperties: false }
+  },
+  {
+    name: 'find_orphaned_concepts',
+    description: 'Conceptos del glosario semántico que no tienen relaciones (candidatos a cleanup).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'merge_concepts',
+    description: 'Fusiona dos conceptos: las relaciones de fromId se reasignan a intoId y fromId se elimina. Requiere confirmed:true.',
+    parameters: { type: 'object', properties: { fromId: { type: 'string' }, intoId: { type: 'string' }, confirmed: { type: 'boolean' } }, required: ['fromId', 'intoId'], additionalProperties: false }
+  },
+  {
+    name: 'start_subscription_checkout',
+    description: 'Sugiere abrir el panel de pricing en el cliente. El checkout real corre en el navegador con MercadoPago Bricks.',
+    parameters: { type: 'object', properties: { plan: { type: 'string' } }, required: ['plan'], additionalProperties: false }
+  },
+  {
+    name: 'import_snippets_from_url',
+    description: 'Importa hasta 50 snippets desde una URL pública que devuelva JSON [{title, markdown, category?, description?}]. Requiere confirmed:true.',
+    parameters: { type: 'object', properties: { url: { type: 'string' }, confirmed: { type: 'boolean' } }, required: ['url'], additionalProperties: false }
+  },
+  {
+    name: 'find_unused_snippets',
+    description: 'Snippets cuyo título no aparece referenciado en ningún documento del workspace (heurística).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'list_dictionary_words',
+    description: 'Palabras del diccionario personal del linter (silencia falsos positivos del spell-check).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'add_word_to_dictionary',
+    description: 'Añade una palabra al diccionario personal del linter.',
+    parameters: { type: 'object', properties: { word: { type: 'string' } }, required: ['word'], additionalProperties: false }
+  },
+  {
+    name: 'remove_word_from_dictionary',
+    description: 'Quita una palabra del diccionario personal.',
+    parameters: { type: 'object', properties: { word: { type: 'string' } }, required: ['word'], additionalProperties: false }
+  },
+  {
+    name: 'agent_plan_set',
+    description: 'Crea/reemplaza un plan visible al usuario para una tarea multi-paso (≤30 pasos). DEBE llamarse al inicio de tareas que requieren ≥3 tools o cambios destructivos. El usuario ve el checklist en la UI.',
+    parameters: {
+      type: 'object',
+      properties: {
+        steps: { type: 'array', items: { type: 'string' }, description: 'Descripciones cortas de cada paso (≤280 chars).' }
+      },
+      required: ['steps'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_plan_update_step',
+    description: 'Actualiza el estado de un paso del plan: pending|in_progress|completed|skipped|failed. Marca in_progress al empezarlo y completed/failed al terminarlo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        stepIndex: { type: 'number' },
+        status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'skipped', 'failed'] },
+        notes: { type: 'string', description: 'Nota opcional con detalles del paso.' }
+      },
+      required: ['stepIndex', 'status'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_plan_get',
+    description: 'Devuelve el plan activo y el estado de cada paso.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'agent_plan_clear',
+    description: 'Descarta el plan activo (la tarea terminó o cambió de rumbo).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'agent_remember',
+    description: 'Guarda un hecho persistente sobre el user (scope=user) o sobre este workspace (scope=workspace, default). Útil para preferencias, dominio del user, decisiones de diseño. value puede ser cualquier JSON.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: '1..80 chars, ej. "user.field_of_study"' },
+        value: { description: 'Cualquier valor JSON serializable.' },
+        scope: { type: 'string', enum: ['user', 'workspace'] }
+      },
+      required: ['key', 'value'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_recall_memory',
+    description: 'Recupera una memoria por key o todas las del scope si key vacío.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string' },
+        scope: { type: 'string', enum: ['user', 'workspace'] }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_list_memories',
+    description: 'Lista los keys de memorias guardadas en ambos scopes (user y workspace).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'agent_forget',
+    description: 'Elimina una memoria específica.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string' },
+        scope: { type: 'string', enum: ['user', 'workspace'] }
+      },
+      required: ['key'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'spawn_subagent',
+    description: 'Stub: en el futuro lanzará un subagente con context limitado. Hoy devuelve contrato y sugiere usar agent_plan_set como fallback.',
+    parameters: {
+      type: 'object',
+      properties: {
+        task: { type: 'string' },
+        scope: { type: 'string', enum: ['read-only', 'workspace', 'full'] },
+        maxIterations: { type: 'number' }
+      },
+      required: ['task'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_set_hooks',
+    description: 'Configura hooks PreToolUse/PostToolUse/UserPromptSubmit en Firestore para que el agente los respete. Cada hook = string con instrucciones que el modelo ve antes/después de tool calls. Requiere confirmed:true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        preToolUse: { type: 'array', items: { type: 'string' } },
+        postToolUse: { type: 'array', items: { type: 'string' } },
+        userPromptSubmit: { type: 'array', items: { type: 'string' } },
+        confirmed: { type: 'boolean' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_list_hooks',
+    description: 'Lista los hooks configurados.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'agent_save_turn_snapshot',
+    description: 'Guarda un snapshot del turn actual (messages + toolCalls) en Firestore para replay futuro.',
+    parameters: {
+      type: 'object',
+      properties: {
+        turnId: { type: 'string' },
+        summary: { type: 'string' },
+        messages: { type: 'array' },
+        toolCalls: { type: 'array' }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_replay_turn',
+    description: 'Devuelve un snapshot guardado previamente para que el modelo lo use como contexto y re-ejecute. Stub: no re-ejecuta automáticamente.',
+    parameters: {
+      type: 'object',
+      properties: { turnId: { type: 'string' } },
+      required: ['turnId'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'agent_list_turn_snapshots',
+    description: 'Lista los snapshots de turns guardados.',
+    parameters: { type: 'object', properties: { limit: { type: 'number' } }, additionalProperties: false }
+  },
+  {
+    name: 'agent_clear_turn_snapshot',
+    description: 'Elimina un snapshot.',
+    parameters: { type: 'object', properties: { turnId: { type: 'string' } }, required: ['turnId'], additionalProperties: false }
+  },
+  {
+    name: 'agent_dry_run_info',
+    description: 'Devuelve si el contexto actual está en modo dry-run (tools destructivas no aplican cambios reales).',
+    parameters: { type: 'object', properties: {}, additionalProperties: false }
   }
 ];
 
@@ -715,7 +1566,11 @@ export const AGORA_AGENT_TOOL_MAP = Object.fromEntries(
 
 export const AGORA_AGENT_TOOL_NAMES = AGORA_AGENT_TOOLS.map(tool => tool.name);
 
-export const toOpenAITools = () => AGORA_AGENT_TOOLS.map(tool => ({
+const toolsForPolicy = (policy?: Partial<AgentAccessPolicy>) => (
+  policy ? AGORA_AGENT_TOOLS.filter(tool => isAgentToolAllowedByPolicy(tool.name, policy)) : AGORA_AGENT_TOOLS
+);
+
+export const toOpenAITools = (policy?: Partial<AgentAccessPolicy>) => toolsForPolicy(policy).map(tool => ({
   type: 'function' as const,
   function: {
     name: tool.name,
@@ -724,7 +1579,7 @@ export const toOpenAITools = () => AGORA_AGENT_TOOLS.map(tool => ({
   }
 }));
 
-export const toAnthropicTools = () => AGORA_AGENT_TOOLS.map(tool => ({
+export const toAnthropicTools = (policy?: Partial<AgentAccessPolicy>) => toolsForPolicy(policy).map(tool => ({
   name: tool.name,
   description: tool.description,
   input_schema: tool.parameters
@@ -748,13 +1603,14 @@ function stripAdditionalProperties(schema: Record<string, unknown>): Record<stri
   return rest;
 }
 
-export const toGeminiTools = () => [{
-  functionDeclarations: AGORA_AGENT_TOOLS.map(tool => ({
+export const toGeminiTools = (policy?: Partial<AgentAccessPolicy>) => {
+  const functionDeclarations = toolsForPolicy(policy).map(tool => ({
     name: tool.name,
     description: tool.description,
     parameters: stripAdditionalProperties(tool.parameters as unknown as Record<string, unknown>)
-  }))
-}];
+  }));
+  return functionDeclarations.length > 0 ? [{ functionDeclarations }] : [];
+};
 
 /**
  * Core tools subset for smaller models (e.g. Ollama / qwen3:14b).
@@ -791,12 +1647,15 @@ const OLLAMA_CORE_TOOL_NAMES = new Set([
   'define_concept',
   // Doc intelligence
   'summarize_document',
-  'get_workspace_info'
+  'get_workspace_info',
+  // External / docs
+  'fetch_url',
+  'read_agora_doc'
 ]);
 
 // Ollama uses OpenAI-compatible format but with a reduced tool set
-export const toOllamaTools = () =>
-  AGORA_AGENT_TOOLS
+export const toOllamaTools = (policy?: Partial<AgentAccessPolicy>) =>
+  toolsForPolicy(policy)
     .filter(tool => OLLAMA_CORE_TOOL_NAMES.has(tool.name))
     .map(tool => ({
       type: 'function' as const,
