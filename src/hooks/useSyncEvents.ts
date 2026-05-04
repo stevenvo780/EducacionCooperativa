@@ -59,7 +59,7 @@ export function useSyncEvents({
       await push(eventsRef, {
         type,
         path,
-        folder: folder || 'No estructurado',
+        folder: folder ?? '',
         docId: docId || null,
         timestamp: Date.now(),
         schemaVersion: 1,

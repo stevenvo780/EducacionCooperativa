@@ -4,7 +4,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Captions } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource, decodeText } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, decodeText, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { formatSubtitleDuration, formatSubtitleTime, parseSubtitle, type SubtitleCue, type SubtitleFormat } from '@/lib/parsers/subtitle';
 import { getFileExtension } from '@/lib/document-format';
 
@@ -28,7 +28,7 @@ export default function SubtitleViewer({ docName, fileUrl, onClose }: SubtitleVi
     return { cues, format };
   }, [docName]);
 
-  const state = useFileResource<SubtitleResult>(fileUrl, transform);
+  const state = useFileResource<SubtitleResult>(fileUrl, transform, { cacheKey: urlCacheKey('subtitle', fileUrl) });
 
   const totalDurationMs = state.kind === 'ready'
     ? state.data.cues.reduce((acc, c) => acc + (c.endMs - c.startMs), 0)

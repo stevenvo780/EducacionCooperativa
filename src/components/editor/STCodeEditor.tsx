@@ -5,10 +5,15 @@
  *
  * Usa Compartments para habilitar/deshabilitar features en caliente.
  * Mantiene la misma interfaz de props para compatibilidad con STRunner.tsx.
+ *
+ * Modo colaborativo: si recibe `collab` con un Y.Doc + Awareness, sincroniza
+ * el contenido vía y-codemirror.next y muestra los cursores remotos.
  */
 
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import type { Diagnostic } from '@stevenvo780/st-lang/api';
+import type * as Y from 'yjs';
+import type { Awareness } from 'y-protocols/awareness';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, placeholder as cmPlaceholder, drawSelection, dropCursor, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { indentOnInput } from '@codemirror/language';
@@ -29,6 +34,7 @@ import {
   loadConfig,
   isTouchDeviceProfile
 } from './codemirror';
+import { buildCollabExtension } from './codemirror/yCollabExtension';
 
 interface STCodeEditorProps {
   value: string;
@@ -39,6 +45,8 @@ interface STCodeEditorProps {
   readOnly?: boolean;
   diagnostics?: Diagnostic[];
   editorConfig?: EditorConfig;
+  /** Modo colaborativo: Yjs es la fuente de verdad. */
+  collab?: { ydoc: Y.Doc; awareness: Awareness };
 }
 
 export default function STCodeEditor({
@@ -49,7 +57,8 @@ export default function STCodeEditor({
   className = '',
   readOnly = false,
   diagnostics = [],
-  editorConfig
+  editorConfig,
+  collab
 }: STCodeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -60,7 +69,6 @@ export default function STCodeEditor({
   const isTouchDevice = useMemo(() => isTouchDeviceProfile(), []);
   const resolvedConfig = useMemo(() => editorConfig ?? loadConfig(), [editorConfig]);
 
-  // Keep refs in sync
   onChangeRef.current = onChange;
   onKeyDownRef.current = onKeyDown;
 
@@ -100,23 +108,23 @@ export default function STCodeEditor({
     EditorState.readOnly.of(readOnly),
     EditorState.tabSize.of(2),
 
-    // ST language (always on) — theme comes from Compartment (lightTheme toggle)
     stLanguageSupport(),
     ...stGotoDef(),
 
-    // Keymaps
     ...stKeymap(
       () => onRunRef.current?.(),
       () => onSaveRef.current?.(),
     ),
 
-    // onChange listener
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         onChangeRef.current(update.state.doc.toString());
       }
     })
   ], [isTouchDevice, placeholder, readOnly]);
+
+  // Reconstruimos el view cuando cambia la presencia de colab.
+  const collabKey = collab ? `${collab.ydoc.clientID}` : 'local';
 
   useEffect(() => {
     if (isTouchDevice || !containerRef.current) return;
@@ -126,11 +134,17 @@ export default function STCodeEditor({
 
     prevConfigRef.current = resolvedConfig;
 
+    // En colab Yjs maneja el contenido inicial; pasamos doc vacío para que
+    // y-codemirror.next haga el bind.
+    const initialDoc = collab ? '' : value;
+    const collabExt = collab ? [buildCollabExtension(collab.ydoc, collab.awareness)] : [];
+
     const state = EditorState.create({
-      doc: value,
+      doc: initialDoc,
       extensions: [
         ...fixedExtensions,
-        ...buildCompartmentExtensions(compartments, resolvedConfig)
+        ...buildCompartmentExtensions(compartments, resolvedConfig),
+        ...collabExt
       ]
     });
 
@@ -143,7 +157,7 @@ export default function STCodeEditor({
       compartmentsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [collabKey]);
 
   useEffect(() => {
     if (isTouchDevice) return;
@@ -153,7 +167,6 @@ export default function STCodeEditor({
     const config = editorConfig;
     if (!view || !compartments || !config) return;
 
-    // Find changed features and reconfigure them
     const features = Object.keys(config) as EditorFeature[];
     for (const feature of features) {
       if (!prev || config[feature] !== prev[feature]) {
@@ -165,6 +178,7 @@ export default function STCodeEditor({
 
   useEffect(() => {
     if (isTouchDevice) return;
+    if (collab) return; // En colab Yjs es la fuente de verdad.
     const view = viewRef.current;
     if (!view) return;
     const currentDoc = view.state.doc.toString();
@@ -173,7 +187,7 @@ export default function STCodeEditor({
         changes: { from: 0, to: currentDoc.length, insert: value }
       });
     }
-  }, [isTouchDevice, value]);
+  }, [isTouchDevice, value, collab]);
 
   useEffect(() => {
     if (isTouchDevice) return;
@@ -182,10 +196,6 @@ export default function STCodeEditor({
     dispatchDiagnostics(view, diagnostics);
   }, [diagnostics, isTouchDevice]);
 
-  // Bridge: emite los diagnostics ST al bus global vía custom event.
-  // Skip si la lista equivale a la anterior para evitar spam en cada
-  // render del padre (los diagnostics suelen ser arrays nuevos por ref
-  // aunque el contenido sea el mismo).
   const lastBridgeSigRef = useRef<string>('');
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -199,8 +209,6 @@ export default function STCodeEditor({
     }));
   }, [diagnostics]);
 
-  // Listener de jump-to-line desde Outline o Problems → centra el cursor
-  // en la línea pedida.
   useEffect(() => {
     if (isTouchDevice) return;
     const handler = (e: Event) => {
@@ -219,34 +227,19 @@ export default function STCodeEditor({
     return () => window.removeEventListener('agora:jump-to-line', handler);
   }, [isTouchDevice]);
 
-  // Android/tablet IMEs are much more reliable with a native textarea than a
-  // contenteditable-based code editor. Keep touch-first devices on the stable path.
   if (isTouchDevice) {
     return (
       <textarea
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         readOnly={readOnly}
-        wrap={resolvedConfig.lineWrapping ? 'soft' : 'off'}
+        className={`w-full h-full bg-slate-950 text-slate-200 font-mono text-sm p-3 outline-none resize-none ${className}`}
         spellCheck={false}
-        autoCorrect="off"
-        autoCapitalize="off"
-        autoComplete="off"
-        translate="no"
-        data-enable-grammarly="false"
-        data-gramm="false"
-        data-st-editor-mode="touch-textarea"
-        className={`h-full w-full resize-none overflow-auto bg-slate-950 px-4 py-3 font-mono text-[13px] leading-6 text-slate-100 outline-none ${className}`}
       />
     );
   }
 
-  return (
-    <div
-      ref={containerRef}
-      className={`h-full w-full overflow-hidden ${className}`}
-    />
-  );
+  return <div ref={containerRef} className={`h-full w-full ${className}`} />;
 }

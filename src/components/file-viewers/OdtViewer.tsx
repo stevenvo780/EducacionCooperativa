@@ -4,7 +4,7 @@ import React, { useCallback } from 'react';
 import { FileText } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { renderOdfContent, type OdfVariant } from '@/lib/parsers/odf';
 import { sanitizeHtml } from '@/lib/safe-html';
 
@@ -31,7 +31,7 @@ export default function OdtViewer({ docName, fileUrl, variant = 'odt', onClose }
     return { html: sanitizeHtml(result.html), warnings: result.warnings };
   }, [variant]);
 
-  const state = useFileResource<OdtResult>(fileUrl, transform);
+  const state = useFileResource<OdtResult>(fileUrl, transform, { cacheKey: urlCacheKey(`odf-${variant}`, fileUrl) });
 
   return (
     <FileViewerShell docName={docName} fileUrl={fileUrl} onClose={onClose}>

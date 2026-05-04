@@ -4,7 +4,7 @@ import React, { useCallback } from 'react';
 import { BookOpen } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource, decodeText } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, decodeText, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { parseFb2, type Fb2Render } from '@/lib/parsers/fb2';
 import { sanitizeHtml } from '@/lib/safe-html';
 
@@ -31,7 +31,7 @@ export default function Fb2Viewer({ docName, fileUrl, onClose }: Fb2ViewerProps)
     };
   }, []);
 
-  const state = useFileResource<Fb2State>(fileUrl, transform);
+  const state = useFileResource<Fb2State>(fileUrl, transform, { cacheKey: urlCacheKey('fb2', fileUrl) });
 
   return (
     <FileViewerShell docName={docName} fileUrl={fileUrl} onClose={onClose}>

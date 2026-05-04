@@ -4,7 +4,7 @@ import React, { useCallback } from 'react';
 import { FileText } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource, decodeText } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, decodeText, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { rtfToHtml } from '@/lib/parsers/rtf';
 import { sanitizeHtml } from '@/lib/safe-html';
 
@@ -19,7 +19,7 @@ export default function RtfViewer({ docName, fileUrl, onClose }: RtfViewerProps)
     return sanitizeHtml(rtfToHtml(decodeText(buffer)));
   }, []);
 
-  const state = useFileResource<string>(fileUrl, transform, { maxBytes: 5 * 1024 * 1024 });
+  const state = useFileResource<string>(fileUrl, transform, { maxBytes: 5 * 1024 * 1024, cacheKey: urlCacheKey('rtf', fileUrl) });
 
   return (
     <FileViewerShell docName={docName} fileUrl={fileUrl} onClose={onClose}>

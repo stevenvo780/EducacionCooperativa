@@ -417,7 +417,7 @@ export const uploadFileApi = async (formData: FormData) => {
   const workspaceId = typeof workspaceIdEntry === 'string' && workspaceIdEntry
     ? workspaceIdEntry
     : PERSONAL_WORKSPACE_ID;
-  const folder = (formData.get('folder') as string) || 'No estructurado';
+  const folder = (formData.get('folder') as string) || '';
 
   if (!(fileEntry instanceof File)) {
     throw new Error('No file provided');
