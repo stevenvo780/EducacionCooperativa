@@ -34,6 +34,12 @@ import {
   saveAgentMode,
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
+import {
+  getModelCatalogSync,
+  loadModelCatalog,
+  modelsForProvider,
+  type ModelCatalog
+} from '@/lib/agora-ai/modelCatalog';
 import type { AgentAccessCapability, AgentAccessPolicy, AgentMode, AIProvider } from '@/lib/agora-ai/types';
 
 export type SettingsSectionId = 'editor-md' | 'editor-st' | 'ai' | 'linter' | 'cuenta';
@@ -231,7 +237,15 @@ function AISection() {
   const [config, setConfig] = useState<AIProviderConfig>(() => loadAIProviderConfig());
   const [mode, setMode] = useState<AgentMode>(() => loadAgentMode());
   const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(() => loadAgentAccessPolicy());
+  const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(getModelCatalogSync);
   const meta = PROVIDER_META[config.provider];
+  const providerModels = modelsForProvider(modelCatalog, config.provider);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadModelCatalog().then((catalog) => { if (!cancelled) setModelCatalog(catalog); });
+    return () => { cancelled = true; };
+  }, []);
 
   const updateConfig = (partial: Partial<AIProviderConfig>) => {
     setConfig((prev) => {
@@ -323,14 +337,44 @@ function AISection() {
 
         <label className="block text-xs">
           <span className="mb-1 block text-surface-400">Modelo</span>
-          <input
-            type="text"
-            value={config.model}
-            onChange={(e) => updateConfig({ model: e.target.value })}
-            placeholder={meta.modelPlaceholder}
-            className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
-          />
-          <span className="mt-1 block text-[10px] text-surface-500">Por defecto: {meta.defaultModel}</span>
+          {providerModels.length > 0 ? (
+            <>
+              <select
+                value={providerModels.some((m) => m.id === config.model) ? config.model : '__custom__'}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') return;
+                  updateConfig({ model: e.target.value });
+                }}
+                className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
+              >
+                {providerModels.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-surface-900 text-surface-100">
+                    {m.label} — {(m.contextWindow / 1000).toFixed(0)}K ctx{m.verified === 'unverified' ? ' (no verificado)' : ''}
+                  </option>
+                ))}
+                <option value="__custom__" className="bg-surface-900 text-surface-100">— Otro (escribir abajo) —</option>
+              </select>
+              <input
+                type="text"
+                value={config.model}
+                onChange={(e) => updateConfig({ model: e.target.value })}
+                placeholder={meta.modelPlaceholder}
+                className="mt-1 w-full rounded-md border border-surface-700/50 bg-surface-900 px-2 py-1 font-mono text-[11px] text-surface-200 placeholder:text-surface-500 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
+              />
+            </>
+          ) : (
+            <input
+              type="text"
+              value={config.model}
+              onChange={(e) => updateConfig({ model: e.target.value })}
+              placeholder={meta.modelPlaceholder}
+              className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
+            />
+          )}
+          <span className="mt-1 block text-[10px] text-surface-500">
+            Por defecto: {meta.defaultModel}
+            {modelCatalog.lastUpdated !== 'fallback' ? ` · catálogo ${modelCatalog.lastUpdated}` : ''}
+          </span>
         </label>
       </div>
 
