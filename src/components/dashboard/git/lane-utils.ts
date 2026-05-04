@@ -110,7 +110,7 @@ export const laneColor = (lane: number): string => {
     '#ec4899', // pink
     '#06b6d4', // cyan
     '#84cc16', // lime
-    '#ef4444'  // red
+    '#ef4444' // red
   ];
   const i = ((lane % palette.length) + palette.length) % palette.length;
   return palette[i] ?? palette[0]!;
