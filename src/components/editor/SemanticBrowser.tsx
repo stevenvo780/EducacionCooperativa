@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -142,10 +142,10 @@ function ActionCard({ icon, title, description, onClick, variant }: {
   );
 }
 
-function ConceptCard({ concept, relationsCount, fragments, onDelete, onEdit }: {
+const ConceptCard = React.memo(function ConceptCard({ concept, relationsCount, relatedFragments, onDelete, onEdit }: {
   concept: SemanticConceptRecord;
   relationsCount: number;
-  fragments: SemanticFragmentRecord[];
+  relatedFragments: SemanticFragmentRecord[];
   onDelete?: (id: string) => void;
   onEdit?: (id: string, updates: { title?: string; definition?: string; formula?: string }) => void;
 }) {
@@ -155,7 +155,6 @@ function ConceptCard({ concept, relationsCount, fragments, onDelete, onEdit }: {
   const [editTitle, setEditTitle] = useState(concept.title);
   const [editDef, setEditDef] = useState(concept.definition || '');
   const [editFormula, setEditFormula] = useState(concept.formula || '');
-  const relatedFragments = fragments.filter(f => f.conceptId === concept.id);
 
   const handleSave = () => {
     onEdit?.(concept.id, { title: editTitle, definition: editDef || undefined, formula: editFormula || undefined });
@@ -329,7 +328,7 @@ function ConceptCard({ concept, relationsCount, fragments, onDelete, onEdit }: {
       )}
     </div>
   );
-}
+});
 
 function FragmentCard({ fragment, onDelete, onEdit }: {
   fragment: SemanticFragmentRecord;
@@ -697,6 +696,27 @@ export function SemanticBrowser({
     return Array.from(linked.entries()).map(([id, v]) => ({ id, ...v }));
   }, [state.fragments]);
 
+  // Index fragments por conceptId una sola vez. Antes cada ConceptCard
+  // hacía fragments.filter(f => f.conceptId === concept.id) en cada
+  // render: con N conceptos y M fragments eso era O(N*M) en cada cambio
+  // de estado y mataba la pestaña con muchos elementos en la mesa semántica.
+  const fragmentsByConceptId = useMemo(() => {
+    const map = new Map<string, SemanticFragmentRecord[]>();
+    for (const f of state.fragments) {
+      if (!f.conceptId) continue;
+      const list = map.get(f.conceptId);
+      if (list) list.push(f);
+      else map.set(f.conceptId, [f]);
+    }
+    return map;
+  }, [state.fragments]);
+  const fragmentsById = useMemo(() => {
+    const map = new Map<string, SemanticFragmentRecord>();
+    for (const f of state.fragments) map.set(f.id, f);
+    return map;
+  }, [state.fragments]);
+  const EMPTY_FRAGMENTS: SemanticFragmentRecord[] = useMemo(() => [], []);
+
   const lowerQuery = searchQuery.toLowerCase().trim();
 
   const filteredConcepts = useMemo(() => {
@@ -973,7 +993,7 @@ export function SemanticBrowser({
                       key={concept.id}
                       concept={concept}
                       relationsCount={relationCounts.get(concept.id) ?? 0}
-                      fragments={state.fragments}
+                      relatedFragments={fragmentsByConceptId.get(concept.id) ?? EMPTY_FRAGMENTS}
                     />
                   ))}
                 </div>
@@ -1023,7 +1043,7 @@ export function SemanticBrowser({
                   key={concept.id}
                   concept={concept}
                   relationsCount={relationCounts.get(concept.id) ?? 0}
-                  fragments={state.fragments}
+                  relatedFragments={fragmentsByConceptId.get(concept.id) ?? EMPTY_FRAGMENTS}
                   onDelete={onDeleteConcept}
                   onEdit={onEditConcept}
                 />
@@ -1101,7 +1121,7 @@ export function SemanticBrowser({
                 <RelationCard
                   key={relation.id}
                   relation={relation}
-                  fragment={state.fragments.find(f => f.id === relation.fragmentId)}
+                  fragment={fragmentsById.get(relation.fragmentId)}
                   onDelete={onDeleteRelation}
                 />
               ))
