@@ -40,14 +40,14 @@ function renderNodes(elements: Element[]): string {
 
 function renderNode(el: Element): string {
   switch (el.localName.toLowerCase()) {
-    case 'div':       return `<section>${renderNodes(Array.from(el.children))}</section>`;
-    case 'head':      return `<h2>${renderInline(el)}</h2>`;
-    case 'p':         return `<p>${renderInline(el)}</p>`;
-    case 'lg':        return `<div class="tei-lg">${renderNodes(Array.from(el.children))}</div>`;
-    case 'l':         return `<span class="tei-l">${renderInline(el)}</span>`;
+    case 'div': return `<section>${renderNodes(Array.from(el.children))}</section>`;
+    case 'head': return `<h2>${renderInline(el)}</h2>`;
+    case 'p': return `<p>${renderInline(el)}</p>`;
+    case 'lg': return `<div class="tei-lg">${renderNodes(Array.from(el.children))}</div>`;
+    case 'l': return `<span class="tei-l">${renderInline(el)}</span>`;
     case 'q':
-    case 'quote':     return `<blockquote>${renderInline(el)}</blockquote>`;
-    default:          return renderNodes(Array.from(el.children));
+    case 'quote': return `<blockquote>${renderInline(el)}</blockquote>`;
+    default: return renderNodes(Array.from(el.children));
   }
 }
 

@@ -27,11 +27,19 @@ export function rtfToHtml(rtf: string): string {
   };
 
   while (i < len) {
-    const c = rtf[i];
+    const c = rtf[i] ?? '';
     if (c === '\\') {
       i++;
       const ch = rtf[i] ?? '';
-      if (/[a-zA-Z]/.test(ch)) {
+      if (ch === "'") {
+        // Hex escape \'XX (single byte, normalmente cp1252 pero usamos
+        // fromCharCode que mapea a U+00XX — válido para latin-1 común).
+        i++;
+        const hex = rtf.slice(i, i + 2);
+        i += 2;
+        const code = parseInt(hex, 16);
+        if (Number.isFinite(code)) para += escapeHtml(String.fromCharCode(code));
+      } else if (/[a-zA-Z]/.test(ch)) {
         let cw = '';
         while (i < len && /[a-zA-Z]/.test(rtf[i] ?? '')) { cw += rtf[i]; i++; }
         let param = '';
@@ -46,11 +54,6 @@ export function rtfToHtml(rtf: string): string {
         else if (cw === 'ul') setStyle('underline', true);
         else if (cw === 'ulnone') setStyle('underline', false);
         else if (cw === 'tab') para += '    ';
-        else if (cw === "'") {
-          const hex = rtf.slice(i, i + 2);
-          i += 2;
-          para += escapeHtml(String.fromCharCode(parseInt(hex, 16)));
-        }
         else if (cw === 'u') {
           const code = parseInt(param || '0', 10);
           if (Number.isFinite(code)) para += escapeHtml(String.fromCharCode(code & 0xffff));
