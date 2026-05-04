@@ -4,6 +4,8 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Play, RotateCcw, Trash2, Zap, BookOpen, Terminal, AlertTriangle, List, Info, ChevronUp, ChevronDown, Check, X, Lightbulb } from 'lucide-react';
 import { useSTInterpreter, type STHistoryEntry } from '@/hooks/useSTInterpreter';
 import type { Diagnostic, STEvalResult, SymbolInfo } from '@stevenvo780/st-lang/api';
+import type * as Y from 'yjs';
+import type { Awareness } from 'y-protocols/awareness';
 import STCodeEditor from '@/components/editor/STCodeEditor';
 import EditorSettingsMenu from '@/components/editor/EditorSettingsMenu';
 import { type EditorConfig, loadConfig, isTouchDeviceProfile } from '@/components/editor/codemirror';
@@ -252,6 +254,9 @@ interface STRunnerProps {
    * es compartida entre Terminal, Problemas, ST output, etc.
    */
   dockToWorkspace?: boolean;
+
+  /** Modo colaborativo: Yjs sincronizado vía Firebase RTDB. */
+  collab?: { ydoc: Y.Doc; awareness: Awareness };
 }
 
 export default function STRunner({
@@ -264,7 +269,8 @@ export default function STRunner({
   autoRun = false,
   initialOutputHeight = 300,
   fileMode,
-  dockToWorkspace = false
+  dockToWorkspace = false,
+  collab
 }: STRunnerProps) {
   const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles: _profiles, isRunning, getSymbols, validate, lastDiagnostics } =
     useSTInterpreter();
@@ -715,6 +721,7 @@ export default function STRunner({
                   className="bg-slate-950 h-full"
                   diagnostics={lastDiagnostics}
                   editorConfig={editorConfig}
+                  collab={collab}
                 />
               </div>
 

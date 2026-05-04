@@ -4,7 +4,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { FileCode, Eye, Code as CodeIcon } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource, decodeText } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, decodeText, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { detectTei, formatXmlSource, renderGenericXml, renderTei } from '@/lib/parsers/tei';
 import { sanitizeHtml } from '@/lib/safe-html';
 
@@ -29,7 +29,7 @@ export default function TeiXmlViewer({ docName, fileUrl, onClose }: TeiXmlViewer
     return { raw, isTei: detectTei(raw) };
   }, []);
 
-  const state = useFileResource<TeiState>(fileUrl, transform);
+  const state = useFileResource<TeiState>(fileUrl, transform, { cacheKey: urlCacheKey('tei', fileUrl) });
 
   const actions = state.kind === 'ready' ? (
     <ModeToggle mode={mode} onChange={setMode} />

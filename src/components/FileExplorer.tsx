@@ -467,7 +467,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const handleShowProperties = (doc: DocItem) => setPropertiesDoc(doc);
 
   const handleCopyPath = async (doc: DocItem) => {
-    const folder = doc.folder && doc.folder !== 'No estructurado' ? `${doc.folder}/` : '';
+    const folder = doc.folder ? `${doc.folder}/` : '';
     const path = `${folder}${doc.name ?? 'untitled'}`;
     try { await navigator.clipboard.writeText(path); } catch { /* noop */ }
   };
@@ -475,7 +475,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const handleOpenInForgejo = (doc: DocItem) => {
     const repoFullName = (doc as unknown as { git?: { repoFullName?: string } }).git?.repoFullName;
     if (!repoFullName) return;
-    const folder = doc.folder && doc.folder !== 'No estructurado' ? `${doc.folder}/` : '';
+    const folder = doc.folder ? `${doc.folder}/` : '';
     const repoPath = encodeURI(`${folder}${doc.name ?? ''}`).replace(/'/g, '%27');
     const apiBase = process.env.NEXT_PUBLIC_FORGEJO_WEB_URL ?? 'https://git.proxy.humanizar-dev.cloud';
     window.open(`${apiBase}/${repoFullName}/src/branch/main/${repoPath}`, '_blank', 'noopener,noreferrer');

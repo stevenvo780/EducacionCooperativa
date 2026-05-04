@@ -1,4 +1,12 @@
-const DEFAULT_FOLDER_NAME = 'No estructurado';
+/**
+ * Folder root es `""`. No hay folder default mágico — los docs sin folder
+ * cuelgan directamente de la raíz del workspace.
+ *
+ * `DEFAULT_FOLDER_NAME` queda como alias de `""` para los consumidores que
+ * todavía lo importen. Comparar `path === DEFAULT_FOLDER_NAME` significa
+ * "está en la raíz".
+ */
+const DEFAULT_FOLDER_NAME = '';
 
 const normalizePath = (value?: string) => {
   if (!value) return '';
@@ -9,9 +17,6 @@ const normalizePath = (value?: string) => {
     .join('/');
 };
 
-const normalizeFolderPath = (value?: string) => {
-  const normalized = normalizePath(value);
-  return normalized || DEFAULT_FOLDER_NAME;
-};
+const normalizeFolderPath = (value?: string) => normalizePath(value);
 
 export { DEFAULT_FOLDER_NAME, normalizePath, normalizeFolderPath };

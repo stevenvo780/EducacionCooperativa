@@ -4,7 +4,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
-import { useFileResource, decodeText } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, decodeText, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { sanitizeHtml } from '@/lib/safe-html';
 
 interface NotebookViewerProps {
@@ -43,7 +43,7 @@ export default function NotebookViewer({ docName, fileUrl, onClose }: NotebookVi
     return json;
   }, []);
 
-  const state = useFileResource<NotebookData>(fileUrl, transform);
+  const state = useFileResource<NotebookData>(fileUrl, transform, { cacheKey: urlCacheKey('ipynb', fileUrl) });
 
   const kernelLabel = useMemo(() => {
     if (state.kind !== 'ready') return null;

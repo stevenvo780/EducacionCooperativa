@@ -122,7 +122,7 @@ export default function FilePropertiesModal({ doc, onClose }: FilePropertiesModa
                     <Section title="General">
                         <Field label="Nombre" value={doc.name ?? manifest?.name ?? '—'} onCopy={(v) => copy('name', v)} copied={copied === 'name'} />
                         <Field label="Tipo" value={doc.type ?? manifest?.type ?? '—'} />
-                        <Field label="Carpeta" value={doc.folder ?? manifest?.folder ?? 'No estructurado'} />
+                        <Field label="Carpeta" value={(doc.folder || manifest?.folder) ?? '(raíz)'} />
                         <Field label="MIME" value={manifest?.mimeType ?? null} />
                         <Field label="Tamaño" value={formatBytes(manifest?.size ?? null)} />
                         <Field label="Modificado" value={formatDate(manifest?.updatedAt)} />

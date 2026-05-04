@@ -1,14 +1,14 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
 import { getFirestore, Firestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
-import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getDatabase, Database } from 'firebase/database';
 
+// Firebase Storage NO se usa en Agora — los blobs viven en MinIO (NAS).
+// Mantenemos sólo Auth + Firestore + RTDB de Firebase.
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.replace(/\\n/g, '').trim(),
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.replace(/\\n/g, '').trim(),
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.replace(/\\n/g, '').trim(),
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.replace(/\\n/g, '').trim(),
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.replace(/\\n/g, '').trim(),
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.replace(/\\n/g, '').trim(),
   databaseURL: `https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.replace(/\\n/g, '').trim()}-default-rtdb.firebaseio.com`
@@ -17,7 +17,6 @@ const firebaseConfig = {
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
-let storage: FirebaseStorage | null = null;
 let rtdb: Database | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
@@ -38,8 +37,6 @@ function getFirebaseAuth(): Auth {
   }
   if (!auth) {
     auth = getAuth(getFirebaseApp());
-    // IndexedDB sobrevive a recargas, cierre del browser y modos incógnito de
-    // algunos navegadores; localStorage es el fallback.
     setPersistence(auth, indexedDBLocalPersistence).catch(() => {
       setPersistence(auth!, browserLocalPersistence).catch(() => undefined);
     });
@@ -58,16 +55,6 @@ function getFirebaseDb(): Firestore {
     });
   }
   return db;
-}
-
-function getFirebaseStorage(): FirebaseStorage {
-  if (typeof window === 'undefined') {
-    return {} as FirebaseStorage;
-  }
-  if (!storage) {
-    storage = getStorage(getFirebaseApp());
-  }
-  return storage;
 }
 
 function getFirebaseRTDB(): Database {
@@ -98,7 +85,6 @@ async function signInWithCustomTokenWrapper(customToken: string) {
 export {
   getFirebaseAuth as auth,
   getFirebaseDb as db,
-  getFirebaseStorage as storage,
   getFirebaseRTDB as rtdb,
   getGoogleProvider as googleProvider,
   signInWithCustomTokenWrapper as signInWithCustomToken

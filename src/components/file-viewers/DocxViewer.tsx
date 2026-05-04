@@ -4,7 +4,7 @@ import React, { useCallback } from 'react';
 import { FileText } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewers/ViewerStates';
-import { useFileResource } from '@/components/file-viewers/hooks/useFileResource';
+import { useFileResource, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { sanitizeHtml } from '@/lib/safe-html';
 
 interface DocxViewerProps {
@@ -40,7 +40,7 @@ export default function DocxViewer({ docName, fileUrl, onClose }: DocxViewerProp
     return { html: sanitizeHtml(result.value), warnings };
   }, []);
 
-  const state = useFileResource<DocxResult>(fileUrl, transform);
+  const state = useFileResource<DocxResult>(fileUrl, transform, { cacheKey: urlCacheKey('docx', fileUrl) });
 
   return (
     <FileViewerShell docName={docName} fileUrl={fileUrl} onClose={onClose}>

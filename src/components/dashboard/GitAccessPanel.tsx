@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Loader2, RefreshCcw, X } from 'lucide-react';
+import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Loader2, RefreshCcw, Terminal, X, Check, Download } from 'lucide-react';
 import { fetchZod } from '@/lib/fetch-zod';
 import { gitMeResponseSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
@@ -39,6 +39,12 @@ export default function GitAccessPanel({ onClose }: GitAccessPanelProps) {
     const [showToken, setShowToken] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
     const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [importOpen, setImportOpen] = useState(false);
+    const [importUrl, setImportUrl] = useState('');
+    const [importName, setImportName] = useState('');
+    const [importToken, setImportToken] = useState('');
+    const [importBusy, setImportBusy] = useState(false);
+    const [importError, setImportError] = useState<string | null>(null);
 
     useEffect(() => () => {
         if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
@@ -78,6 +84,33 @@ export default function GitAccessPanel({ onClose }: GitAccessPanelProps) {
             if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
             copiedTimerRef.current = setTimeout(() => setCopied(null), 1500);
         } catch { /* noop */ }
+    };
+
+    const submitImport = async () => {
+        const url = importUrl.trim();
+        if (!url) { setImportError('URL requerida'); return; }
+        setImportBusy(true);
+        setImportError(null);
+        try {
+            const res = await authFetch('/api/git/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url,
+                    name: importName.trim() || undefined,
+                    authToken: importToken.trim() || undefined,
+                    private: true,
+                    mirror: false
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+            setImportOpen(false);
+            setImportUrl(''); setImportName(''); setImportToken('');
+            await load();
+        } catch (e) {
+            setImportError(e instanceof Error ? e.message : String(e));
+        } finally { setImportBusy(false); }
     };
 
     const buildAuthedClone = (cloneUrl: string | null, login: string, token: string) => {
@@ -172,52 +205,132 @@ export default function GitAccessPanel({ onClose }: GitAccessPanelProps) {
                         </section>
 
                         <section className="space-y-2 rounded border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-                            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                                Repositorios ({info.repos.length})
-                            </h3>
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                                    Repositorios ({info.repos.length})
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => { setImportOpen(true); setImportError(null); }}
+                                    className="flex items-center gap-1 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-700"
+                                >
+                                    <Download className="h-3 w-3" /> Importar repo
+                                </button>
+                            </div>
+                            {importOpen && (
+                                <div className="space-y-2 rounded border border-sky-300 bg-sky-50 p-2 dark:border-sky-700 dark:bg-sky-900/20">
+                                    <p className="text-[11px] font-medium text-sky-900 dark:text-sky-200">Importar repositorio externo</p>
+                                    <input
+                                        type="url"
+                                        value={importUrl}
+                                        onChange={(e) => setImportUrl(e.target.value)}
+                                        placeholder="https://github.com/usuario/repo.git"
+                                        className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={importName}
+                                        onChange={(e) => setImportName(e.target.value)}
+                                        placeholder="Nombre opcional (default: del URL)"
+                                        className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900"
+                                    />
+                                    <input
+                                        type="password"
+                                        value={importToken}
+                                        onChange={(e) => setImportToken(e.target.value)}
+                                        placeholder="Token de acceso (sólo si el repo es privado)"
+                                        className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900"
+                                    />
+                                    {importError && <p className="text-[10px] text-red-600 dark:text-red-400">{importError}</p>}
+                                    <div className="flex gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => void submitImport()}
+                                            disabled={importBusy || !importUrl.trim()}
+                                            className="flex-1 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+                                        >
+                                            {importBusy ? <Loader2 className="inline h-3 w-3 animate-spin" /> : 'Importar'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setImportOpen(false); setImportError(null); }}
+                                            disabled={importBusy}
+                                            className="rounded border border-zinc-300 px-2 py-1 text-[11px] dark:border-zinc-700"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                             {info.repos.length === 0 && (
                                 <p className="text-[11px] text-zinc-500">Aún no tienes repos. Cada workspace genera uno al activar Git.</p>
                             )}
-                            {info.repos.map((r) => (
-                                <div key={r.fullName} className="rounded border border-zinc-200 p-2 dark:border-zinc-800">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="truncate font-medium text-zinc-800 dark:text-zinc-200">{r.fullName}</span>
-                                        {r.htmlUrl && (
-                                            <a href={r.htmlUrl} target="_blank" rel="noreferrer noopener" className="text-emerald-700 hover:underline dark:text-emerald-400">
-                                                <ExternalLink className="h-3.5 w-3.5" />
-                                            </a>
+                            {info.repos.map((r) => {
+                                const httpsUrl = r.cloneUrl
+                                    ? (issuedToken ? buildAuthedClone(r.cloneUrl, issuedToken.login, issuedToken.token) : r.cloneUrl)
+                                    : '';
+                                const cloneCommand = httpsUrl ? `git clone ${httpsUrl}` : '';
+                                const vscodeUrl = r.cloneUrl ? `vscode://vscode.git/clone?url=${encodeURIComponent(r.cloneUrl)}` : '';
+                                return (
+                                    <div key={r.fullName} className="rounded border border-zinc-200 p-2 dark:border-zinc-800">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="truncate font-medium text-zinc-800 dark:text-zinc-200">{r.fullName}</span>
+                                            {r.htmlUrl && (
+                                                <a href={r.htmlUrl} target="_blank" rel="noreferrer noopener" className="text-emerald-700 hover:underline dark:text-emerald-400">
+                                                    <ExternalLink className="h-3.5 w-3.5" />
+                                                </a>
+                                            )}
+                                        </div>
+                                        {cloneCommand && (
+                                            <div className="mt-2 flex gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copy(`cmd-${r.fullName}`, cloneCommand)}
+                                                    className="flex flex-1 items-center justify-center gap-1 rounded bg-emerald-600 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-emerald-700"
+                                                >
+                                                    {copied === `cmd-${r.fullName}` ? <Check className="h-3 w-3" /> : <Terminal className="h-3 w-3" />}
+                                                    {copied === `cmd-${r.fullName}` ? 'Copiado' : 'Copiar git clone'}
+                                                </button>
+                                                {vscodeUrl && (
+                                                    <a
+                                                        href={vscodeUrl}
+                                                        className="flex items-center justify-center gap-1 rounded border border-zinc-300 bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                                        title="Abrir en VS Code (requiere VS Code instalado)"
+                                                    >
+                                                        VS Code
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
+                                        {!issuedToken && cloneCommand && (
+                                            <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-400">
+                                                Sin token, te pedirá usuario+contraseña. Genera uno arriba para copiar el comando con auth incluida.
+                                            </p>
+                                        )}
+                                        {httpsUrl && (
+                                            <Field
+                                                label="HTTPS"
+                                                value={httpsUrl}
+                                                mono
+                                                small
+                                                onCopy={(v) => copy(`https-${r.fullName}`, v)}
+                                                copied={copied === `https-${r.fullName}`}
+                                            />
+                                        )}
+                                        {r.sshUrl && (
+                                            <Field
+                                                label="SSH"
+                                                value={r.sshUrl}
+                                                mono
+                                                small
+                                                onCopy={(v) => copy(`ssh-${r.fullName}`, v)}
+                                                copied={copied === `ssh-${r.fullName}`}
+                                            />
                                         )}
                                     </div>
-                                    {r.cloneUrl && (
-                                        <Field
-                                            label="HTTPS"
-                                            value={issuedToken ? buildAuthedClone(r.cloneUrl, issuedToken.login, issuedToken.token) : r.cloneUrl}
-                                            mono
-                                            small
-                                            onCopy={(v) => copy(`https-${r.fullName}`, v)}
-                                            copied={copied === `https-${r.fullName}`}
-                                        />
-                                    )}
-                                    {r.sshUrl && (
-                                        <Field
-                                            label="SSH"
-                                            value={r.sshUrl}
-                                            mono
-                                            small
-                                            onCopy={(v) => copy(`ssh-${r.fullName}`, v)}
-                                            copied={copied === `ssh-${r.fullName}`}
-                                        />
-                                    )}
-                                </div>
-                            ))}
+                                );
+                            })}
                         </section>
-
-                        <p className="mt-4 text-[10px] leading-relaxed text-zinc-500">
-                            Para clonar:
-                            <code className="ml-1 rounded bg-zinc-100 px-1 dark:bg-zinc-800">git clone &lt;HTTPS&gt;</code>
-                            — pedirá tu usuario ({info.login}) y como contraseña, el token. Si generas un token aquí mismo,
-                            los HTTPS de arriba ya incluyen las credenciales para copiar+pegar.
-                        </p>
                     </>
                 )}
             </div>
