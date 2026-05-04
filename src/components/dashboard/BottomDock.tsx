@@ -98,6 +98,19 @@ export default function BottomDock(props: BottomDockProps) {
     if (open && initialTab) setActive(initialTab);
   }, [open, initialTab]);
 
+  // Si el dock ya está abierto y dockInitialTab no cambia entre ejecuciones,
+  // el efecto de arriba no dispara. Escuchamos el evento directo para
+  // forzar el switch (ej: ejecutar ST dos veces seguidas debe volver a
+  // mostrar 'st-output' aunque el usuario haya clickeado Terminal en medio).
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const tab = (event as CustomEvent<{ tab?: string }>).detail?.tab;
+      if (tab) setActive(tab);
+    };
+    window.addEventListener('agora:open-bottom-dock', handler);
+    return () => window.removeEventListener('agora:open-bottom-dock', handler);
+  }, []);
+
   // Si el tab activo desaparece del registro, cae al primero disponible.
   useEffect(() => {
     if (!allTabs.some((t) => t.id === active)) {

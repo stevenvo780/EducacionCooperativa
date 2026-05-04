@@ -1,17 +1,28 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import GenericFileViewer from '@/components/file-viewers/GenericFileViewer';
 import MediaFileViewer from '@/components/file-viewers/MediaFileViewer';
 import PdfDocumentViewer from '@/components/file-viewers/PdfDocumentViewer';
 import PowerPointViewer from '@/components/file-viewers/PowerPointViewer';
 import {
   isAudioMime,
+  isBibtexDocument,
+  isEpubDocument,
   isImageMime,
+  isLatexDocument,
+  isNotebookDocument,
   isPdfMime,
   isPowerPointDocument,
-  isVideoMime
+  isVideoMime,
+  isWordDocument
 } from '@/lib/document-format';
+
+const DocxViewer = dynamic(() => import('@/components/file-viewers/DocxViewer'), { ssr: false });
+const EpubViewer = dynamic(() => import('@/components/file-viewers/EpubViewer'), { ssr: false });
+const NotebookViewer = dynamic(() => import('@/components/file-viewers/NotebookViewer'), { ssr: false });
+const SourceTextViewer = dynamic(() => import('@/components/file-viewers/SourceTextViewer'), { ssr: false });
 
 interface FileDocumentViewerProps {
   docId: string;
@@ -47,6 +58,58 @@ export default function FileDocumentViewer({
       <PowerPointViewer
         docName={docName}
         fileUrl={fileUrl ?? null}
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (isWordDocument(docName, mimeType)) {
+    return (
+      <DocxViewer
+        docName={docName}
+        fileUrl={fileUrl ?? null}
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (isEpubDocument(docName, mimeType)) {
+    return (
+      <EpubViewer
+        docName={docName}
+        fileUrl={fileUrl ?? null}
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (isNotebookDocument(docName, mimeType)) {
+    return (
+      <NotebookViewer
+        docName={docName}
+        fileUrl={fileUrl ?? null}
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (isLatexDocument(docName)) {
+    return (
+      <SourceTextViewer
+        docName={docName}
+        fileUrl={fileUrl ?? null}
+        language="latex"
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (isBibtexDocument(docName)) {
+    return (
+      <SourceTextViewer
+        docName={docName}
+        fileUrl={fileUrl ?? null}
+        language="bibtex"
         onClose={onClose}
       />
     );

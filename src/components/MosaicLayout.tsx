@@ -983,11 +983,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           transition: border-color 180ms ease, box-shadow 180ms ease;
         }
         .mosaic-custom-dark .mosaic-window.mosaic-window-active {
-          border-color: rgba(96, 165, 250, 0.62) !important;
-          box-shadow:
-            0 0 0 1px rgba(96, 165, 250, 0.34),
-            0 0 22px rgba(59, 130, 246, 0.2),
-            0 0 54px rgba(14, 165, 233, 0.1);
+          border-color: rgba(96, 165, 250, 0.7) !important;
+          box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.45);
         }
         .mosaic-window-compact .mosaic-window-toolbar {
           height: 28px !important;
@@ -996,8 +993,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           border-bottom: 1px solid rgb(55 55 65) !important;
         }
         .mosaic-window-compact.mosaic-window-active .mosaic-window-toolbar {
-          background: linear-gradient(90deg, rgba(30, 64, 175, 0.36), rgba(30, 30, 35, 0.96)) !important;
-          border-bottom-color: rgba(96, 165, 250, 0.45) !important;
+          background: rgb(30 30 35) !important;
+          border-bottom-color: rgba(96, 165, 250, 0.55) !important;
         }
         .mosaic-window-compact .mosaic-window-title {
           font-size: 11px !important;
