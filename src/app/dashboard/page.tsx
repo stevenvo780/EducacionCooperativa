@@ -2070,6 +2070,7 @@ function DashboardContent() {
                     open={settingsOpen}
                     onClose={() => setSettingsOpen(false)}
                     initialSection={settingsInitialSection}
+                    activeWorkspaceId={currentWorkspace?.id}
                     onOpenChangePassword={() => {
                         setPasswordForm({ current: '', new: '', confirm: '' });
                         setPasswordError('');

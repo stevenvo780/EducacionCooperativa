@@ -1,15 +1,35 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Hash, Heading1, Heading2, Heading3, FileQuestion } from 'lucide-react';
+import { Hash, Heading1, Heading2, Heading3, FileQuestion, Sigma, BookCheck, Cog } from 'lucide-react';
 import type { DocItem } from '@/components/dashboard/types';
 import { authFetch } from '@/services/apiClient';
-import { parseMarkdownOutline } from '@/lib/markdown-outline';
+import { parseMarkdownOutline, type OutlineHeading } from '@/lib/markdown-outline';
+import { parseSTOutline, type STOutlineEntry } from '@/lib/st-outline';
 
 interface OutlineViewProps {
   selectedDoc: DocItem | null;
   onJumpTo?: (line: number) => void;
 }
+
+const TEXTUAL_DOC_TYPES = new Set<string>(['text', 'file', undefined as unknown as string]);
+
+const isLikelyST = (doc: DocItem): boolean => {
+  const name = (doc.name || '').toLowerCase();
+  const mime = (doc.mimeType || '').toLowerCase();
+  if (name.endsWith('.st')) return true;
+  if (mime === 'text/x-st' || mime.includes('st-lang')) return true;
+  return false;
+};
+
+const isOutlineableDoc = (doc: DocItem): boolean => {
+  if (!doc) return false;
+  const type = doc.type ?? 'text';
+  if (type === 'folder') return false;
+  if (TEXTUAL_DOC_TYPES.has(type)) return true;
+  // Other DocItem types (terminal, board, etc.) son paneles virtuales sin contenido textual.
+  return false;
+};
 
 export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps) {
   const [content, setContent] = useState<string>('');
@@ -17,7 +37,7 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!selectedDoc || selectedDoc.type !== 'file') {
+    if (!selectedDoc || !isOutlineableDoc(selectedDoc)) {
       setContent('');
       setError(null);
       return;
@@ -63,12 +83,21 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
     };
   }, [selectedDoc]);
 
-  const headings = useMemo(() => parseMarkdownOutline(content), [content]);
+  const isST = !!selectedDoc && isLikelyST(selectedDoc);
+  const mdHeadings = useMemo<OutlineHeading[]>(() => isST ? [] : parseMarkdownOutline(content), [content, isST]);
+  const stEntries = useMemo<STOutlineEntry[]>(() => isST ? parseSTOutline(content) : [], [content, isST]);
+  const isEmpty = isST ? stEntries.length === 0 : mdHeadings.length === 0;
 
   return (
     <div className="flex h-full w-full flex-col bg-surface-900">
-      <header className="flex h-9 shrink-0 items-center border-b border-surface-700/60 px-3 text-[11px] font-semibold uppercase tracking-wider text-surface-400">
-        Esquema
+      <header className="flex h-9 shrink-0 items-center justify-between border-b border-surface-700/60 px-3 text-[11px] font-semibold uppercase tracking-wider text-surface-400">
+        <span>Esquema</span>
+        {selectedDoc && (
+          <span className="text-[10px] text-surface-500">
+            {isST ? 'ST' : 'Markdown'}
+            {!isEmpty && ` · ${isST ? stEntries.length : mdHeadings.length}`}
+          </span>
+        )}
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto py-1">
@@ -76,21 +105,49 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
           <Empty
             icon={<FileQuestion className="h-4 w-4" />}
             text="Sin documento abierto"
-            hint="Abre un archivo Markdown para ver su estructura."
+            hint="Abre un archivo Markdown o .st para ver su estructura."
+          />
+        ) : !isOutlineableDoc(selectedDoc) ? (
+          <Empty
+            icon={<FileQuestion className="h-4 w-4" />}
+            text="Tipo no soportado"
+            hint="El esquema soporta documentos de texto (.md, .st)."
           />
         ) : loading ? (
           <p className="px-3 py-3 text-[11px] text-surface-500">Cargando…</p>
         ) : error ? (
           <p className="px-3 py-3 text-[11px] text-rose-300">No se pudo cargar: {error}</p>
-        ) : headings.length === 0 ? (
+        ) : isEmpty ? (
           <Empty
             icon={<Hash className="h-4 w-4" />}
-            text="Sin encabezados"
-            hint="Este documento no tiene títulos (#, ##, ###)."
+            text={isST ? 'Sin elementos ST' : 'Sin encabezados'}
+            hint={isST
+              ? 'Define logic, axiom, derive o check para que aparezcan aquí.'
+              : 'Este documento no tiene títulos (#, ##, ###).'}
           />
+        ) : isST ? (
+          <ul className="space-y-px text-[12px]">
+            {stEntries.map((entry) => (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  onClick={() => onJumpTo?.(entry.line)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-surface-200 transition hover:bg-surface-800/60 hover:text-white"
+                  style={{ paddingLeft: `${8 + entry.depth * 12}px` }}
+                  title={`Línea ${entry.line} · ${entry.kind}`}
+                >
+                  <STKindIcon kind={entry.kind} />
+                  <span className="truncate">
+                    <span className="text-surface-500 mr-1">{entry.kind}</span>
+                    {entry.label}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         ) : (
           <ul className="space-y-px text-[12px]">
-            {headings.map((h) => (
+            {mdHeadings.map((h) => (
               <li key={h.id}>
                 <button
                   type="button"
@@ -109,6 +166,14 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
       </div>
     </div>
   );
+}
+
+function STKindIcon({ kind }: { kind: STOutlineEntry['kind'] }) {
+  const cls = 'h-3 w-3 shrink-0';
+  if (kind === 'logic') return <Cog className={`${cls} text-mandy-300`} />;
+  if (kind === 'axiom') return <BookCheck className={`${cls} text-sky-300`} />;
+  if (kind === 'derive') return <Sigma className={`${cls} text-emerald-300`} />;
+  return <Hash className={`${cls} text-surface-500`} />;
 }
 
 function HeadingIcon({ level }: { level: number }) {

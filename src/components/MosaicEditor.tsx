@@ -1300,11 +1300,6 @@ export default function MosaicEditor({
     closeEditorUtilityMenu();
   }, [closeEditorUtilityMenu, scanPendings]);
 
-  const handleInsertQuickSnippetFromContextMenu = useCallback((markdown: string) => {
-    appendMarkdownBlock(markdown);
-    closeEditorUtilityMenu();
-  }, [appendMarkdownBlock, closeEditorUtilityMenu]);
-
   const handleConfirmDefineConcept = useCallback(() => {
     if (!defineConceptDraft) return;
     void runSemanticAction('define-concept', async () => {
@@ -1445,7 +1440,6 @@ export default function MosaicEditor({
         menuBtnRef={menuBtnRef}
         currentDocMetaRef={currentDocMetaRef}
         DEFAULT_TOOLBAR_VISIBILITY={DEFAULT_TOOLBAR_VISIBILITY as Record<ToolbarGroupKey, boolean>}
-        QUICK_INSERTS={QUICK_INSERTS}
         applyToolbarVisibility={applyToolbarVisibility}
         insertSnippet={insertSnippet}
         toggleCompactMenu={toggleCompactMenu}
@@ -2035,7 +2029,6 @@ export default function MosaicEditor({
       {editorUtilityMenu && !semanticSelection && viewMode !== 'preview' && (
         <EditorUtilityMenu
           anchor={editorUtilityMenu}
-          quickInserts={QUICK_INSERTS}
           isFullscreen={isFullscreen}
           showToolsPanel={showToolsPanel}
           showSnippetGallery={showSnippetGallery}
@@ -2049,7 +2042,6 @@ export default function MosaicEditor({
           onToggleRawMode={handleToggleRawModeFromContextMenu}
           onTogglePreviewMode={handleTogglePreviewFromContextMenu}
           onScanPendings={handleScanPendingsFromContextMenu}
-          onInsertQuickSnippet={handleInsertQuickSnippetFromContextMenu}
         />
       )}
 
