@@ -86,17 +86,23 @@ export function usePdfGestures({ containerRef, useIframeFallback, setZoomLevel }
   // Pellizco táctil para zoom
   const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
     if (event.touches.length === 2) {
-      const dx = event.touches[0].clientX - event.touches[1].clientX;
-      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      const t0 = event.touches[0];
+      const t1 = event.touches[1];
+      if (!t0 || !t1) return;
+      const dx = t0.clientX - t1.clientX;
+      const dy = t0.clientY - t1.clientY;
       lastTouchDistRef.current = Math.hypot(dx, dy);
     }
   }, []);
 
   const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
     if (event.touches.length !== 2 || lastTouchDistRef.current === null) return;
+    const t0 = event.touches[0];
+    const t1 = event.touches[1];
+    if (!t0 || !t1) return;
     event.preventDefault();
-    const dx = event.touches[0].clientX - event.touches[1].clientX;
-    const dy = event.touches[0].clientY - event.touches[1].clientY;
+    const dx = t0.clientX - t1.clientX;
+    const dy = t0.clientY - t1.clientY;
     const dist = Math.hypot(dx, dy);
     const ratio = dist / lastTouchDistRef.current;
     lastTouchDistRef.current = dist;

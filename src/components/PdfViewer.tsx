@@ -47,6 +47,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
   const textLayerRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const renderedPagesRef = useRef<Set<number>>(new Set());
   const renderInFlightRef = useRef<Map<number, Promise<void>>>(new Map());
+  const renderCancelersRef = useRef<Map<number, () => void>>(new Map());
   const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
   const lastKnownStateRef = useRef<PersistedPdfViewerState>(initialViewerState);
   const isRestoringRef = useRef(true);
@@ -301,6 +302,10 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
   // Liberar canvases cuando cambian las dimensiones (zoom/resize): hay que
   // re-renderizar desde cero las páginas visibles con la nueva escala.
   useEffect(() => {
+    renderCancelersRef.current.forEach((cancel) => {
+      try { cancel(); } catch { /* ignore */ }
+    });
+    renderCancelersRef.current.clear();
     renderedPagesRef.current.forEach((pageNumber) => {
       const canvas = canvasRefs.current[pageNumber];
       const textLayer = textLayerRefs.current[pageNumber];
@@ -395,6 +400,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
           const context = canvas.getContext('2d');
           if (!context) throw new Error('Canvas 2D context is not available');
           const renderTask = page.render({ canvasContext: context, viewport: renderViewport });
+          renderCancelersRef.current.set(pageNumber, () => { renderTask.cancel?.(); });
           await renderTask.promise;
           if (cancelled) return;
 
@@ -404,6 +410,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
               : await page.getTextContent();
             if (cancelled) return;
             const textLayerTask = pdfjs.renderTextLayer({ textContentSource, container: textLayer, viewport: cssViewport });
+            renderCancelersRef.current.set(pageNumber, () => { textLayerTask.cancel?.(); });
             await textLayerTask.promise;
           }
           page.cleanup?.();
@@ -413,6 +420,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
           if (!cancelled) console.warn(`PDF page ${pageNumber} render failed`, error);
         } finally {
           renderInFlightRef.current.delete(pageNumber);
+          renderCancelersRef.current.delete(pageNumber);
         }
       })();
       renderInFlightRef.current.set(pageNumber, work);
@@ -431,7 +439,14 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
       renderedPagesRef.current.delete(p);
     });
 
-    return () => { cancelled = true; };
+    const cancelers = renderCancelersRef.current;
+    return () => {
+      cancelled = true;
+      cancelers.forEach((cancel) => {
+        try { cancel(); } catch { /* ignore */ }
+      });
+      cancelers.clear();
+    };
   }, [containerWidth, pageCount, storageKey, updateCurrentPageFromScroll, useIframeFallback, visiblePages, zoomLevel]);
 
   const activeSearchPage = searchMatches[activeSearchIndex] ?? null;
@@ -664,6 +679,7 @@ export default function PdfViewer({ fileUrl, fileName, storageKey, workspaceId, 
         </div>
       )}
 
+      {/* @ts-ignore styled-jsx props */}
       <style jsx global>{`
         .textLayer {
           position: absolute;

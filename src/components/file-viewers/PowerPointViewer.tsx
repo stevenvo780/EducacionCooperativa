@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Presentation, ExternalLink, Download } from 'lucide-react';
 import FileViewerShell from '@/components/file-viewers/FileViewerShell';
 
@@ -21,6 +21,15 @@ export default function PowerPointViewer({
 }: PowerPointViewerProps) {
   const [status, setStatus] = useState<ViewerStatus>('loading');
   const [iframeKey, setIframeKey] = useState(0);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => () => {
+    // Antes de desmontar, apuntamos el iframe a about:blank para detener
+    // cualquier request en vuelo del viewer de Office Online.
+    if (iframeRef.current) {
+      try { iframeRef.current.src = 'about:blank'; } catch { /* ignore */ }
+    }
+  }, []);
 
   const officeUrl = useMemo(() => {
     if (!fileUrl) return null;
@@ -66,6 +75,7 @@ export default function PowerPointViewer({
         {status !== 'fallback' ? (
           <iframe
             key={iframeKey}
+            ref={iframeRef}
             src={officeUrl}
             title={docName}
             className="h-full w-full border-0 bg-slate-950"
