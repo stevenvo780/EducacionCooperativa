@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { fetchDocsApi } from '@/services/dashboardApi';
 import type { User as FirebaseUser } from 'firebase/auth';
-import type { AgentDocumentsMutatedEventDetail } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
 
 interface SyncRequestOptions {
   delayMs?: number;
@@ -280,15 +280,13 @@ export const useDashboardDocsSync = ({
       scheduleSyncFetch();
     };
 
-    const docsChangedHandler = () => triggerRefresh('agora:docs-changed');
-    const docsMutatedHandler = (event: Event) => {
-      const detail = (event as CustomEvent<AgentDocumentsMutatedEventDetail>).detail;
+    const unsubDocsChanged = subscribeAgoraEvent(AGORA_EVENTS.docsChanged, () => {
+      triggerRefresh('agora:docs-changed');
+    });
+    const unsubDocsMutated = subscribeAgoraEvent(AGORA_EVENTS.documentsMutated, (detail) => {
       if (!matchesActiveWorkspace(detail?.workspaceId)) return;
       triggerRefresh('agora:documents-mutated');
-    };
-
-    window.addEventListener('agora:docs-changed', docsChangedHandler);
-    window.addEventListener('agora:documents-mutated', docsMutatedHandler as EventListener);
+    });
 
     let unsubscribeDocChange: (() => void) | null = null;
     if (onDocChangeCallback) {
@@ -301,8 +299,8 @@ export const useDashboardDocsSync = ({
     }
 
     return () => {
-      window.removeEventListener('agora:docs-changed', docsChangedHandler);
-      window.removeEventListener('agora:documents-mutated', docsMutatedHandler as EventListener);
+      unsubDocsChanged();
+      unsubDocsMutated();
       unsubscribeDocChange?.();
     };
   }, [currentWorkspace, user, onDocChangeCallback, personalWorkspaceId, scheduleSyncFetch]);

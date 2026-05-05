@@ -12,6 +12,7 @@ import { useAppSelector } from '@/store/hooks';
 import useSyncEvents from '@/hooks/useSyncEvents';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 import type { SyncEvent } from '@/types/sync';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 export default function SyncEventsBridge() {
     const { user } = useAuth();
@@ -20,9 +21,8 @@ export default function SyncEventsBridge() {
     const isPersonal = !wsId || wsId === PERSONAL_WORKSPACE_ID;
 
     const reemit = useCallback((event: SyncEvent) => {
-        if (typeof window === 'undefined') return;
-        window.dispatchEvent(new CustomEvent('agora:rtdb-event', { detail: event }));
-        window.dispatchEvent(new Event('agora:docs-changed'));
+        dispatchAgoraEvent(AGORA_EVENTS.rtdbEvent, event);
+        dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
     }, []);
 
     useSyncEvents({

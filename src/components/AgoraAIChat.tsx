@@ -198,17 +198,14 @@ function publishAgentProblem(detail: {
   detail?: string;
   code?: string;
 }) {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent('agora:problem', {
-    detail: {
-      source: 'agora-ai',
-      uri: 'global',
-      severity: detail.severity ?? 'warning',
-      message: detail.message,
-      detail: truncateDebug(detail.detail),
-      code: detail.code
-    }
-  }));
+  dispatchAgoraEvent(AGORA_EVENTS.problem, {
+    source: 'agora-ai',
+    uri: 'global',
+    severity: detail.severity ?? 'warning',
+    message: detail.message,
+    detail: truncateDebug(detail.detail),
+    code: detail.code
+  });
 }
 
 async function runWithConcurrency<T, R>(
