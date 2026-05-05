@@ -28,7 +28,7 @@ import { buildAgoraSystemPrompt, extractThinkingSegments } from '@/lib/agora-ai/
 import { toOllamaTools } from '@/lib/agora-ai/toolDefinitions';
 import { collectAgentWorkspaceEffects } from '@/lib/agora-ai/uiEvents';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
-import { parseSlashCommand, type SlashCommandHelp } from '@/lib/agora-ai/slashCommands';
+import { parseSlashCommand, SLASH_COMMANDS, type SlashCommandHelp } from '@/lib/agora-ai/slashCommands';
 import {
   AI_SETTINGS_CHANGED_EVENT,
   PROVIDER_META,
@@ -1763,7 +1763,19 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              const next = e.target.value;
+              setInput(next);
+              // Autocomplete en vivo: mostrar lista filtrada cuando empieza con /.
+              const trimmed = next.trim();
+              if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
+                const q = trimmed.toLowerCase();
+                const filtered = SLASH_COMMANDS.filter(c => c.command.toLowerCase().startsWith(q));
+                setShowSlashHelp(filtered.length > 0 ? filtered : SLASH_COMMANDS);
+              } else if (showSlashHelp) {
+                setShowSlashHelp(null);
+              }
+            }}
             onKeyDown={handleKeyDown}
             placeholder={meta.needsKey && !config.apiKey ? 'Configura tu API key primero…' : 'Pídele una acción al agente…'}
             disabled={loading || !canSend}

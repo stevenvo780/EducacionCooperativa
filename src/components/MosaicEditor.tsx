@@ -695,6 +695,29 @@ export default function MosaicEditor({
     }
   }, [clearSemanticSelection, viewMode]);
 
+  // Jump-to-line desde panel Problemas / linter overlay. MDXEditor no expone
+  // API de scroll por línea; aproximamos por proporción line/totalLines sobre
+  // el contenedor scrollable. Si el evento incluye docId, ignorar si no es
+  // este editor.
+  useEffect(() => {
+    if (!roomId) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ docId?: string; line: number; column?: number }>).detail;
+      if (!detail) return;
+      if (detail.docId && detail.docId !== roomId) return;
+      const shell = editorShellRef.current;
+      if (!shell) return;
+      const scrollable = shell.querySelector<HTMLElement>('[contenteditable="true"]') ?? shell;
+      const totalLines = Math.max(1, contentRef.current.split('\n').length);
+      const line = Math.max(1, detail.line);
+      const ratio = Math.min(1, (line - 1) / totalLines);
+      const target = Math.max(0, Math.round(scrollable.scrollHeight * ratio) - scrollable.clientHeight / 3);
+      scrollable.scrollTo({ top: target, behavior: 'smooth' });
+    };
+    window.addEventListener('agora:jump-to-line', handler as EventListener);
+    return () => window.removeEventListener('agora:jump-to-line', handler as EventListener);
+  }, [roomId]);
+
   const handleContentChange = useCallback((val: string) => {
     contentRef.current = val;
     setStatsContent(val);

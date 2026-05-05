@@ -26,6 +26,7 @@ import { DialogKind, type DocItem, type FolderItem, type ViewMode, type Workspac
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { shallowEqual } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 import {
     setShowWorkspaceMenu as setShowWorkspaceMenuAction,
     setShowNewWorkspaceModal as setShowNewWorkspaceModalAction,
@@ -2926,9 +2927,20 @@ function DashboardContent() {
                                       if (s) void promptRenameTerminalSession(s);
                                     }}
                                     resolveDocName={(uri) => docs.find(d => d.id === uri)?.name ?? null}
-                                    onOpenDocument={(uri) => {
+                                    onOpenDocument={(uri, range) => {
                                       const doc = docs.find(d => d.id === uri);
-                                      if (doc) void openDocument(doc);
+                                      if (!doc) return;
+                                      void openDocument(doc);
+                                      if (range && typeof range.line === 'number') {
+                                        // Esperar a que el editor monte y luego pedir jump.
+                                        setTimeout(() => {
+                                          dispatchAgoraEvent(AGORA_EVENTS.jumpToLine, {
+                                            docId: doc.id,
+                                            line: range.line,
+                                            ...(typeof range.column === 'number' ? { column: range.column } : {})
+                                          });
+                                        }, 350);
+                                      }
                                     }}
                                   />
                                 </Panel>
