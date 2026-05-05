@@ -697,8 +697,8 @@ export default function MosaicEditor({
 
   // Jump-to-line desde panel Problemas / linter overlay. MDXEditor no expone
   // API de scroll por línea; aproximamos por proporción line/totalLines sobre
-  // el contenedor scrollable. Si el evento incluye docId, ignorar si no es
-  // este editor.
+  // el wrapper scrollable real (.mdxeditor-root-contentEditable). Si el evento
+  // incluye docId, ignorar si no es este editor (multi-editor en mosaic).
   useEffect(() => {
     if (!roomId) return;
     const handler = (event: Event) => {
@@ -707,7 +707,11 @@ export default function MosaicEditor({
       if (detail.docId && detail.docId !== roomId) return;
       const shell = editorShellRef.current;
       if (!shell) return;
-      const scrollable = shell.querySelector<HTMLElement>('[contenteditable="true"]') ?? shell;
+      // Buscar primero el wrapper que sí es scrollable (max>0).
+      const candidates = Array.from(shell.querySelectorAll<HTMLElement>(
+        '[class*="rootContentEditableWrapper"], [class*="mdxeditor-root"], .mdxeditor, [contenteditable="true"]'
+      ));
+      const scrollable = candidates.find(el => el.scrollHeight > el.clientHeight) ?? shell;
       const totalLines = Math.max(1, contentRef.current.split('\n').length);
       const line = Math.max(1, detail.line);
       const ratio = Math.min(1, (line - 1) / totalLines);
