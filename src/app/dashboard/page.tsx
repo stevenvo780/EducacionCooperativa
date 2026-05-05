@@ -24,6 +24,7 @@ import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
 import { DialogKind, type DocItem, type FolderItem, type ViewMode, type Workspace, type DialogConfig, type DialogResult } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
+import { shallowEqual } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
     setShowWorkspaceMenu as setShowWorkspaceMenuAction,
@@ -290,22 +291,44 @@ function DashboardContent() {
         };
     }, [user]);
 
-    const workspaces = useAppSelector(state => state.dashboard.workspaces);
-    const invites = useAppSelector(state => state.dashboard.invites);
-    const currentWorkspace = useAppSelector(state => state.dashboard.currentWorkspace);
-    const showNewWorkspaceModal = useAppSelector(state => state.dashboard.showNewWorkspaceModal);
-    const showMembersModal = useAppSelector(state => state.dashboard.showMembersModal);
-    const showPasswordModal = useAppSelector(state => state.dashboard.showPasswordModal);
-    const passwordForm = useAppSelector(state => state.dashboard.passwordForm);
-    const passwordError = useAppSelector(state => state.dashboard.passwordError);
-    const passwordSuccess = useAppSelector(state => state.dashboard.passwordSuccess);
-    const isChangingPassword = useAppSelector(state => state.dashboard.isChangingPassword);
-    const showQuickSearch = useAppSelector(state => state.dashboard.showQuickSearch);
-    const quickSearchQuery = useAppSelector(state => state.dashboard.quickSearchQuery);
-    const quickSearchIndex = useAppSelector(state => state.dashboard.quickSearchIndex);
-    const sidebarSearchQuery = useAppSelector(state => state.dashboard.sidebarSearchQuery);
-    const showMobileSidebar = useAppSelector(state => state.dashboard.showMobileSidebar);
-    const deletingWorkspaceId = useAppSelector(state => state.dashboard.deletingWorkspaceId);
+    // Una sola subscription a Redux con shallowEqual; antes eran 16 selectors
+    // separados que disparaban 16 comparaciones por dispatch y render-cascada
+    // de los hijos sensibles.
+    const {
+        workspaces,
+        invites,
+        currentWorkspace,
+        showNewWorkspaceModal,
+        showMembersModal,
+        showPasswordModal,
+        passwordForm,
+        passwordError,
+        passwordSuccess,
+        isChangingPassword,
+        showQuickSearch,
+        quickSearchQuery,
+        quickSearchIndex,
+        sidebarSearchQuery,
+        showMobileSidebar,
+        deletingWorkspaceId
+    } = useAppSelector(state => ({
+        workspaces: state.dashboard.workspaces,
+        invites: state.dashboard.invites,
+        currentWorkspace: state.dashboard.currentWorkspace,
+        showNewWorkspaceModal: state.dashboard.showNewWorkspaceModal,
+        showMembersModal: state.dashboard.showMembersModal,
+        showPasswordModal: state.dashboard.showPasswordModal,
+        passwordForm: state.dashboard.passwordForm,
+        passwordError: state.dashboard.passwordError,
+        passwordSuccess: state.dashboard.passwordSuccess,
+        isChangingPassword: state.dashboard.isChangingPassword,
+        showQuickSearch: state.dashboard.showQuickSearch,
+        quickSearchQuery: state.dashboard.quickSearchQuery,
+        quickSearchIndex: state.dashboard.quickSearchIndex,
+        sidebarSearchQuery: state.dashboard.sidebarSearchQuery,
+        showMobileSidebar: state.dashboard.showMobileSidebar,
+        deletingWorkspaceId: state.dashboard.deletingWorkspaceId
+    }), shallowEqual);
 
     useEffect(() => {
         let cancelled = false;
