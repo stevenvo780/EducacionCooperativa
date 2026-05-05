@@ -320,10 +320,8 @@ const Sidebar = ({
           <div
             onClick={(e) => handleDocClick(e, index, item.doc)}
             draggable={!isTouchDevice}
-            {...(!isTouchDevice ? {
-              'data-drag-doc-id': item.doc.id,
-              'data-drag-label': item.doc.name
-            } : {})}
+            data-drag-doc-id={item.doc.id}
+            data-drag-label={item.doc.name}
             onDragStart={!isTouchDevice ? ((e) => handleDocDragStart(e, item.doc)) : undefined}
             onDragEnd={!isTouchDevice ? handleDocDragEnd : undefined}
             {...getDocContextMenuProps(item.doc)}
@@ -396,10 +394,8 @@ const Sidebar = ({
         <div
           onClick={(e) => handleDocClick(e, index, item.doc)}
           draggable={!isTouchDevice}
-          {...(!isTouchDevice ? {
-            'data-drag-doc-id': item.doc.id,
-            'data-drag-label': item.doc.name
-          } : {})}
+          data-drag-doc-id={item.doc.id}
+          data-drag-label={item.doc.name}
           onDragStart={!isTouchDevice ? ((e) => handleDocDragStart(e, item.doc)) : undefined}
           onDragEnd={!isTouchDevice ? handleDocDragEnd : undefined}
           {...getDocContextMenuProps(item.doc)}
