@@ -233,7 +233,7 @@ function LandingPage() {
 
   return (
     <LazyMotion features={domAnimation}>
-    <div className="min-h-screen flex flex-col bg-surface-900 text-white">
+    <div className="min-h-[100dvh] flex flex-col bg-surface-900 text-white">
 
       {/* ══════════════ Header ══════════════ */}
       <header className="sticky top-0 z-50 w-full border-b border-surface-600/50 bg-surface-900/80 backdrop-blur-xl">

@@ -215,7 +215,7 @@ export default function WorkspacePathResolverPage() {
   }, [loading, params.slug, router, slug, user, userEmail]);
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-slate-950 px-6 text-center text-slate-300">
+    <div className="flex h-[100dvh] w-full items-center justify-center bg-slate-950 px-6 text-center text-slate-300">
       <div>
         <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Agora</div>
         <h1 className="mb-2 text-xl font-semibold text-slate-100">Abriendo referencia…</h1>
