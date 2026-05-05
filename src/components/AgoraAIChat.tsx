@@ -166,6 +166,32 @@ function truncateDebug(value: string | undefined, max = 3000) {
   return value.length > max ? `${value.slice(0, max)}\n\n[...truncado por Agora AI...]` : value;
 }
 
+function parseAgentStreamEvent(raw: string): AgentStreamEvent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const obj = parsed as Record<string, unknown>;
+  const type = obj.type;
+  if (type === 'connected') return { type: 'connected' };
+  if (type === 'status' && typeof obj.status === 'string') {
+    return { type: 'status', status: obj.status };
+  }
+  if (type === 'step' && obj.step && typeof obj.step === 'object') {
+    return { type: 'step', step: obj.step as AgentTraceStep };
+  }
+  if (type === 'complete' && typeof obj.reply === 'string' && obj.agentRun && typeof obj.agentRun === 'object') {
+    return { type: 'complete', reply: obj.reply, agentRun: obj.agentRun as AgentRun };
+  }
+  if (type === 'error' && typeof obj.error === 'string') {
+    return { type: 'error', error: obj.error };
+  }
+  return null;
+}
+
 function publishAgentProblem(detail: {
   severity?: 'error' | 'warning' | 'info' | 'hint';
   message: string;
@@ -314,6 +340,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [loading, setLoading] = useState(false);
   const [streamStatus, setStreamStatus] = useState<string>('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [rollbackQueue, setRollbackQueue] = useState<AgentRollbackAction[]>([]);
   const [dryRun, setDryRun] = useState<boolean>(() => {
@@ -354,8 +381,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   useEffect(() => {
     const loaded = loadChatSessions(resolvedWorkspaceId);
-    if (loaded.length > 0) {
-      const [firstSession] = loaded;
+    const firstSession = loaded[0];
+    if (firstSession) {
       setSessions(loaded);
       setActiveSessionId(firstSession.id);
       setMessages(firstSession.messages);
@@ -628,7 +655,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
         if (!dataLine) continue;
 
-        const event = JSON.parse(dataLine.slice(6)) as AgentStreamEvent;
+        const event = parseAgentStreamEvent(dataLine.slice(6));
+        if (!event) {
+          console.warn('[agora-ai] evento SSE inválido, ignorado');
+          continue;
+        }
         if (event.type === 'status') {
           latestStatus = event.status;
           setStreamStatus(event.status);
@@ -711,11 +742,14 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       stream: false
     };
     if (useTools) {
-      payload.tools = toOllamaTools();
-      // Disable extended thinking when tools are available — qwen3 often
-      // wastes the thinking budget concluding "I don't have access" instead
-      // of invoking the tools.  Disabling think forces tool-first behaviour.
-      payload.think = false;
+      const availableTools = toOllamaTools(accessPolicy);
+      if (availableTools.length > 0) {
+        payload.tools = availableTools;
+        // Disable extended thinking when tools are available — qwen3 often
+        // wastes the thinking budget concluding "I don't have access" instead
+        // of invoking the tools.  Disabling think forces tool-first behaviour.
+        payload.think = false;
+      }
     }
     const res = await fetch(url, {
       method: 'POST',
@@ -725,7 +759,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     });
     if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
     return await res.json() as OllamaChatResponse;
-  }, [config.endpoint, config.model, meta.defaultModel]);
+  }, [accessPolicy, config.endpoint, config.model, meta.defaultModel]);
 
   const runOllamaLoop = useCallback(async (
     history: UIChatMessage[],
@@ -884,7 +918,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       }
 
       if (pendingConfirmation) {
-        finalReply = visible || toolResults[0].result.summary;
+        finalReply = visible || toolResults[0]?.result.summary || '';
         return {
           mode,
           provider: 'ollama',
@@ -919,7 +953,15 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const copyMessage = useCallback(async (id: string, content: string) => {
     await navigator.clipboard.writeText(content);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1500);
+    if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+    copiedTimeoutRef.current = setTimeout(() => {
+      setCopiedId(null);
+      copiedTimeoutRef.current = null;
+    }, 1500);
+  }, []);
+
+  useEffect(() => () => {
+    if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
   }, []);
 
   const activateSession = useCallback((sessionId: string) => {
@@ -968,8 +1010,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
 
     const saved = saveChatSessions(resolvedWorkspaceId, remaining);
-    const [nextActive] = saved;
+    const nextActive = saved[0];
     setSessions(saved);
+    if (!nextActive) return;
     setActiveSessionId(nextActive.id);
     setMessages(nextActive.messages);
     setRollbackQueue(nextActive.rollbackQueue || []);
@@ -1089,10 +1132,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     setLoading(true);
     setStreamStatus('');
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
 
       if (isUndoRequest) {
         const undoReply = await runRollback(controller.signal);
@@ -1185,7 +1229,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       }
     } finally {
       sendingRef.current = false;
-      abortRef.current = null;
+      // Sólo limpiamos abortRef si todavía apunta al controller que creamos
+      // en este turno: si llegó otro sendMessage y reasignó la ref, dejarla.
+      if (abortRef.current === controller) abortRef.current = null;
       setLoading(false);
       setStreamStatus('');
       textareaRef.current?.focus();

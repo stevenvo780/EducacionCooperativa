@@ -142,9 +142,14 @@ export function normalizeAgentAccessPolicy(
     : AGENT_ACCESS_PROFILES[profile].capabilities;
   const toolPermissions = policy?.toolPermissions && typeof policy.toolPermissions === 'object'
     ? Object.fromEntries(
-        Object.entries(policy.toolPermissions).filter((entry): entry is [string, boolean] => (
-          typeof entry[0] === 'string' && typeof entry[1] === 'boolean'
-        ))
+        Object.entries(policy.toolPermissions).filter((entry): entry is [string, boolean] => {
+          if (typeof entry[0] !== 'string' || typeof entry[1] !== 'boolean') return false;
+          if (!KNOWN_AGENT_TOOL_NAMES.has(entry[0])) {
+            console.warn(`[accessPolicy] toolPermissions ignora tool desconocida: ${entry[0]}`);
+            return false;
+          }
+          return true;
+        })
       )
     : undefined;
 
@@ -331,6 +336,31 @@ const UI_EXTENDED_TOOLS = new Set([
   'agent_dry_run_info'
 ]);
 
+const KNOWN_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
+  ...DOCUMENT_READ_TOOLS,
+  ...DOCUMENT_WRITE_TOOLS,
+  ...DOCUMENT_DELETE_TOOLS,
+  ...SNIPPET_TOOLS,
+  ...BOARD_TOOLS,
+  ...SEMANTIC_TOOLS,
+  ...LOGIC_TOOLS,
+  ...ADMIN_TOOLS,
+  ...OBSERVABILITY_TOOLS,
+  ...UI_EXTENDED_TOOLS,
+  'git_status', 'git_log', 'git_diff',
+  'git_commit_workspace', 'git_pull', 'git_push_branch',
+  'git_create_branch', 'git_checkout', 'git_revert_commit',
+  'get_worker_status', 'list_worker_files', 'sync_status',
+  'read_worker_file', 'tail_worker_logs',
+  'run_worker_command', 'write_worker_file', 'kill_worker_process',
+  'restart_worker', 'start_worker', 'kill_terminal_session',
+  'report_debug'
+]);
+
+export function isKnownAgentTool(toolName: string): boolean {
+  return KNOWN_AGENT_TOOL_NAMES.has(toolName);
+}
+
 export function getRequiredAgentCapability(call: AgentToolCall): AgentAccessCapability | null {
   if (DOCUMENT_READ_TOOLS.has(call.name)) return 'documentsRead';
   if (DOCUMENT_WRITE_TOOLS.has(call.name)) return 'documentsWrite';
@@ -385,7 +415,14 @@ export function getAgentToolAccessState(
     return { enabled: override, capability, source: 'tool' };
   }
   if (!capability) {
-    return { enabled: true, capability: null, source: 'unrestricted' };
+    // Tool no mapeada: sólo el perfil developer la deja pasar (acceso total).
+    // El resto de perfiles la bloquea para evitar default-allow accidental
+    // cuando se añaden tools nuevas y se olvida mapearlas.
+    const allow = normalized.profile === 'developer';
+    if (!allow) {
+      console.warn(`[accessPolicy] tool sin mapping bloqueada: ${toolName}`);
+    }
+    return { enabled: allow, capability: null, source: 'unrestricted' };
   }
   return { enabled: normalized.capabilities[capability] === true, capability, source: 'capability' };
 }
@@ -413,7 +450,15 @@ export function getAgentAccessDenial(
     };
   }
   if (toolOverride === true) return null;
-  if (!capability) return null;
+  if (!capability) {
+    if (normalized.profile === 'developer') return null;
+    return {
+      capability: null,
+      profile: normalized.profile,
+      toolName: call.name,
+      message: `Tool sin mapping de capability: ${call.name}. Sólo el perfil "developer" puede ejecutarla.`
+    };
+  }
   if (normalized.capabilities[capability]) return null;
   return {
     capability,
