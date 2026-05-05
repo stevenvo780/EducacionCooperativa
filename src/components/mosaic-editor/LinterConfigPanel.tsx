@@ -33,7 +33,7 @@ export function LinterConfigPanel({ linterStatus = 'ready' }: LinterConfigPanelP
             ? 'text-blue-400 hover:bg-slate-800'
             : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
       }`}
-      title={isLoading ? 'Inicializando linter…' : isLinting ? 'Analizando…' : 'Abrir Configuración > Linter Markdown'}
+      title={isLoading ? 'Inicializando linter…' : isLinting ? 'Analizando…' : `Reglas markdown activas: ${countLabel}. Click para abrir Configuración > Linter Markdown`}
       aria-label="Abrir configuración del linter Markdown"
     >
       {isLoading && (
@@ -54,7 +54,7 @@ export function LinterConfigPanel({ linterStatus = 'ready' }: LinterConfigPanelP
         ) : isLinting ? (
           <span className="text-blue-400">Analizando…</span>
         ) : (
-          <>Linter {countLabel}</>
+          <>Reglas {countLabel}</>
         )}
       </span>
     </button>
