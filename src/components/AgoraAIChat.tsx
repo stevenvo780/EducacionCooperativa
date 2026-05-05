@@ -491,6 +491,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const sessionDefaultsRef = useRef({ provider: config.provider, mode });
   const sendingRef = useRef(false);
   const lastSendAtRef = useRef(0);
+  const userScrolledUpRef = useRef(false);
+  const scrollRafRef = useRef<number | null>(null);
 
   const meta = PROVIDER_META[config.provider];
   const resolvedWorkspaceId = workspaceId || PERSONAL_WORKSPACE_ID;
@@ -507,11 +509,34 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   }, [config.provider, mode]);
 
   useEffect(() => {
-    return () => { abortRef.current?.abort(); };
+    return () => {
+      abortRef.current?.abort();
+      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+    };
   }, []);
 
+  // Detecta si el usuario hizo scroll-up manual; si lo hizo, no autoscrolleamos
+  // (no peleamos con su lectura). Vuelve al modo seguir-fondo cuando llega abajo.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const node = bottomRef.current?.parentElement;
+    if (!node) return;
+    const onScroll = () => {
+      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+      userScrolledUpRef.current = distanceFromBottom > 80;
+    };
+    node.addEventListener('scroll', onScroll, { passive: true });
+    return () => node.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Scroll al fondo coalescido por rAF + behavior 'auto' para no pelear con la
+  // lectura durante streaming SSE (antes 'smooth' por cada token).
+  useEffect(() => {
+    if (userScrolledUpRef.current) return;
+    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+    });
   }, [messages, loading]);
 
   useEffect(() => {
@@ -1296,7 +1321,54 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         reply = agentRun.finalReply;
         emitAgentWorkspaceEvents(agentRun);
       } else if (shouldStreamServerAgent && assistantMessageId) {
-        const streamed = await runServerAgentStream(history, assistantMessageId, controller.signal, effectiveUserInstructions, dryRun);
+        // Reintento con backoff exponencial ante errores de red transitorios
+        // (NetBird drop, lock screen del iPad). Sólo reintenta si el server
+        // no recibió la request o devolvió 5xx — nunca si el user abortó.
+        const MAX_RETRIES = 2;
+        const BASE_BACKOFF_MS = 1500;
+        let attempt = 0;
+        let streamed: AgentResponseBody | null = null;
+        while (true) {
+          try {
+            streamed = await runServerAgentStream(
+              history,
+              assistantMessageId,
+              controller.signal,
+              effectiveUserInstructions,
+              dryRun
+            );
+            break;
+          } catch (streamErr) {
+            if (controller.signal.aborted) throw streamErr;
+            const isAbort = streamErr instanceof DOMException && streamErr.name === 'AbortError';
+            if (isAbort) throw streamErr;
+            const message = streamErr instanceof Error ? streamErr.message : String(streamErr);
+            const isTransient = /failed to fetch|network|timeout|ECONNRESET|EAI_AGAIN|HTTP\/2|stream|reset/i.test(message)
+              || /\b5\d\d\b/.test(message);
+            if (!isTransient || attempt >= MAX_RETRIES) throw streamErr;
+            attempt += 1;
+            const delay = BASE_BACKOFF_MS * Math.pow(2, attempt - 1);
+            setStreamStatus(`Reconectando con Agora AI (intento ${attempt}/${MAX_RETRIES})…`);
+            publishAgentProblem({
+              severity: 'warning',
+              message: `Reintentando stream de Agora AI (intento ${attempt}/${MAX_RETRIES})`,
+              detail: message,
+              code: 'agora-ai-stream-retry'
+            });
+            await new Promise<void>((resolve, reject) => {
+              const timer = setTimeout(() => {
+                controller.signal.removeEventListener('abort', onAbort);
+                resolve();
+              }, delay);
+              const onAbort = () => {
+                clearTimeout(timer);
+                reject(new DOMException('Aborted', 'AbortError'));
+              };
+              controller.signal.addEventListener('abort', onAbort, { once: true });
+            });
+          }
+        }
+        if (!streamed) throw new Error('Stream de Agora AI no devolvió payload');
         reply = streamed.reply;
         agentRun = streamed.agentRun;
         emitAgentWorkspaceEvents(agentRun);
