@@ -1257,6 +1257,8 @@ function DashboardContent() {
         isDragActive,
         dismissDragOverlay,
         setUploadTargetFolder,
+        handleFileUpload,
+        handleFolderUpload,
         handleDragEnter,
         handleDragLeave,
         handleDragOver,
@@ -2579,7 +2581,24 @@ function DashboardContent() {
                     modalPop={modalPop}
                 />
 
-                {/* HeaderBar eliminada: workspace, tools, terminales y user menu viven ahora en ActivityBar/LeftPanel. */}
+                {/* HeaderBar eliminada: workspace, tools, terminales y user menu viven ahora en ActivityBar/LeftPanel.
+                    Los inputs file/folder antes vivían en HeaderBar; sin ellos los refs quedaban null y los botones
+                    "Subir archivos/carpeta" no respondían. Los renderizamos aquí ocultos. */}
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    multiple
+                />
+                <input
+                    type="file"
+                    ref={folderInputRef}
+                    className="hidden"
+                    onChange={handleFolderUpload}
+                    multiple
+                />
+
                 {!isZenMode && (
                     <MobileTopBar
                         workspaceLabel={currentWorkspace?.name ?? 'Sin workspace'}
