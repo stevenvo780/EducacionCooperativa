@@ -19,6 +19,32 @@ type DocumentRecord = {
   type?: string;
 };
 
+function parseWorkspaceListResponse(raw: unknown): { workspaces?: WorkspaceRecord[]; invites?: WorkspaceRecord[] } {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new Error('parseWorkspaceListResponse: respuesta no es un objeto');
+  }
+  const r = raw as Record<string, unknown>;
+  const toRecords = (v: unknown): WorkspaceRecord[] => {
+    if (!Array.isArray(v)) return [];
+    return v.filter((item): item is WorkspaceRecord =>
+      typeof item === 'object' && item !== null && typeof (item as Record<string, unknown>)['id'] === 'string'
+    );
+  };
+  return {
+    workspaces: toRecords(r['workspaces']),
+    invites: toRecords(r['invites'])
+  };
+}
+
+function parseDocumentListResponse(raw: unknown): DocumentRecord[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('parseDocumentListResponse: respuesta no es un array');
+  }
+  return raw.filter((item): item is DocumentRecord =>
+    typeof item === 'object' && item !== null && typeof (item as Record<string, unknown>)['id'] === 'string'
+  );
+}
+
 const normalizeRelativeMarkdownPath = (value: string) => {
   const parts = value.split('/');
   const normalized: string[] = [];
@@ -145,7 +171,7 @@ export default function WorkspacePathResolverPage() {
             return;
           }
 
-          const workspaceData = await workspaceRes.json() as { workspaces?: WorkspaceRecord[]; invites?: WorkspaceRecord[] };
+          const workspaceData = parseWorkspaceListResponse(await workspaceRes.json());
           workspacePool = [
             ...(Array.isArray(workspaceData.workspaces) ? workspaceData.workspaces : []),
             ...(Array.isArray(workspaceData.invites) ? workspaceData.invites : [])
@@ -184,7 +210,7 @@ export default function WorkspacePathResolverPage() {
             continue;
           }
 
-          const docs = await docsRes.json() as DocumentRecord[];
+          const docs = parseDocumentListResponse(await docsRes.json());
           matchedDoc = findMatchingDoc(docs, targetPath);
           if (matchedDoc) {
             break;

@@ -36,6 +36,35 @@ interface FilePropertiesModalProps {
     onClose: () => void;
 }
 
+function parseManifestResponse(raw: unknown): ManifestResponse {
+    if (typeof raw !== 'object' || raw === null) {
+        throw new Error('parseManifestResponse: respuesta no es un objeto');
+    }
+    const r = raw as Record<string, unknown>;
+    if (typeof r['id'] !== 'string') {
+        throw new Error('parseManifestResponse: id ausente o inválido');
+    }
+    const str = (k: string): string | null => typeof r[k] === 'string' ? r[k] as string : null;
+    const num = (k: string): number | null => typeof r[k] === 'number' ? r[k] as number : null;
+    return {
+        id: r['id'] as string,
+        name: str('name'),
+        type: str('type'),
+        workspaceId: str('workspaceId'),
+        ownerId: str('ownerId'),
+        folder: str('folder'),
+        mimeType: str('mimeType'),
+        size: num('size'),
+        storagePath: str('storagePath'),
+        storageBackend: typeof r['storageBackend'] === 'string' ? r['storageBackend'] as string : '',
+        contentHash: str('contentHash'),
+        version: num('version'),
+        syncState: str('syncState'),
+        updatedAt: str('updatedAt'),
+        signedUrl: str('signedUrl')
+    };
+}
+
 const formatBytes = (n: number | null): string => {
     if (n === null || n === undefined) return '—';
     if (n < 1024) return `${n} B`;
@@ -66,7 +95,7 @@ export default function FilePropertiesModal({ doc, onClose }: FilePropertiesModa
         (async () => {
             try {
                 const m = await authFetch(`/api/sync/manifest?docId=${encodeURIComponent(doc.id)}&includeUrl=false`);
-                if (m.ok && !cancelled) setManifest(await m.json() as ManifestResponse);
+                if (m.ok && !cancelled) setManifest(parseManifestResponse(await m.json()));
                 else if (!cancelled) setError(`manifest HTTP ${m.status}`);
             } catch (e) {
                 if (!cancelled) setError(e instanceof Error ? e.message : String(e));

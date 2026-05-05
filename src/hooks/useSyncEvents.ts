@@ -78,7 +78,11 @@ export function useSyncEvents({
   useEffect(() => {
     if (!enabled) return;
 
-    const syncPath = getSyncPath();
+    const syncPath = workspaceType === WorkspaceType.Personal && userId
+      ? `sync-events/personal_${userId}`
+      : workspaceId
+        ? `sync-events/${workspaceId}`
+        : null;
     if (!syncPath) return;
 
     const database = rtdb();
@@ -133,7 +137,7 @@ export function useSyncEvents({
         listenerRef.current = null;
       }
     };
-  }, [enabled, getSyncPath]);
+  }, [enabled, workspaceId, userId, workspaceType]);
 
   return {
     publishEvent,

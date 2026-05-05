@@ -15,6 +15,36 @@ import { gitWorkbenchStatusSchema, gitWorkbenchCommitsSchema } from '@agora/cont
 import { authFetch } from '@/services/apiClient';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
+function parseGitInfo(raw: unknown): { cloneUrl?: string; repoFullName?: string } {
+    if (typeof raw !== 'object' || raw === null) throw new Error('parseGitInfo: respuesta no es un objeto');
+    const r = raw as Record<string, unknown>;
+    return {
+        cloneUrl: typeof r['cloneUrl'] === 'string' ? r['cloneUrl'] : undefined,
+        repoFullName: typeof r['repoFullName'] === 'string' ? r['repoFullName'] : undefined
+    };
+}
+
+function parseSignedUrlForGit(raw: unknown): { url: string } {
+    if (typeof raw !== 'object' || raw === null) throw new Error('parseSignedUrlForGit: respuesta no es un objeto');
+    const r = raw as Record<string, unknown>;
+    if (typeof r['url'] !== 'string' || !r['url']) throw new Error('parseSignedUrlForGit: url ausente');
+    return { url: r['url'] };
+}
+
+function parseForgejoFileMeta(raw: unknown): { sha?: string } {
+    if (typeof raw !== 'object' || raw === null) return {};
+    const r = raw as Record<string, unknown>;
+    return { sha: typeof r['sha'] === 'string' ? r['sha'] : undefined };
+}
+
+function parseForgejoCommitResult(raw: unknown): { commit?: { sha: string } } {
+    if (typeof raw !== 'object' || raw === null) return {};
+    const r = raw as Record<string, unknown>;
+    if (typeof r['commit'] !== 'object' || r['commit'] === null) return {};
+    const c = r['commit'] as Record<string, unknown>;
+    return { commit: typeof c['sha'] === 'string' ? { sha: c['sha'] } : undefined };
+}
+
 const GITIGNORE_TEMPLATE = `# .gitignore — reglas para excluir archivos del commit Git.
 # Una regla por línea, formato gitignore estándar.
 # Ejemplos (descomenta los que apliquen):
@@ -268,7 +298,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             // Resolver datos del repo (URL Forgejo + commits previos para mostrar info).
             const infoRes = await authFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/git-info`);
             if (!infoRes.ok) throw new Error(`git-info HTTP ${infoRes.status}`);
-            const info = await infoRes.json() as { cloneUrl?: string; repoFullName?: string };
+            const info = parseGitInfo(await infoRes.json());
             const repoApiBase = info.cloneUrl?.replace(/^https:\/\/([^/]+)\/(.+)\.git$/, 'https://$1/api/v1/repos/$2');
             if (!repoApiBase) throw new Error('No se pudo derivar la URL API del repo.');
 
@@ -280,7 +310,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                     body: JSON.stringify({ op: 'get', docId })
                 });
                 if (!r.ok) return null;
-                const { url } = await r.json() as { url: string };
+                const { url } = parseSignedUrlForGit(await r.json());
                 const blob = await fetch(url);
                 if (!blob.ok) return null;
                 const buf = await blob.arrayBuffer();
@@ -392,7 +422,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                         try {
                             const meta = await fetch(`${url}?ref=main`, { headers: { 'Authorization': `token ${forgejoToken}` } });
                             if (meta.ok) {
-                                const m = await meta.json() as { sha?: string };
+                                const m = parseForgejoFileMeta(await meta.json());
                                 if (m.sha) {
                                     fr2 = await fetch(url, {
                                         method: 'PUT',
@@ -416,7 +446,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                         continue;
                     }
 
-                    const result = await fr2.json() as { commit?: { sha: string } };
+                    const result = parseForgejoCommitResult(await fr2.json());
                     if (result.commit?.sha) commitSha = result.commit.sha;
                     successfulBlobs.push(blob);
                 }

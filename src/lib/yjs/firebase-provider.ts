@@ -51,6 +51,9 @@ export interface FirebaseYjsProviderOptions {
 }
 
 const COMPACTION_THRESHOLD = 200;
+const FLUSH_DEBOUNCE_MS = 80;
+const FLUSH_MAX_UPDATES = 50;
+const FLUSH_MAX_BYTES = 64 * 1024;
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -80,6 +83,9 @@ export class FirebaseYjsProvider {
   private unsubscribeFns: Array<() => void> = [];
   private destroyed = false;
   private updateCount = 0;
+  private pendingUpdates: Uint8Array[] = [];
+  private pendingBytes = 0;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: FirebaseYjsProviderOptions) {
     this.opts = opts;
@@ -148,19 +154,40 @@ export class FirebaseYjsProvider {
   private bindLocalUpdates(): void {
     const onUpdate = (update: Uint8Array, origin: unknown) => {
       if (origin === ORIGIN_REMOTE) return;
-      const record: UpdateRecord = {
-        data: bytesToBase64(update),
-        clientId: this.ydoc.clientID,
-        ts: Date.now()
-      };
-      push(this.updatesRef, record).catch((err) =>
-        console.warn('[yjs-firebase] push update failed', err)
-      );
-      this.updateCount += 1;
-      void this.maybeCompact();
+      this.pendingUpdates.push(update);
+      this.pendingBytes += update.byteLength;
+      if (this.pendingUpdates.length >= FLUSH_MAX_UPDATES || this.pendingBytes >= FLUSH_MAX_BYTES) {
+        this.flushUpdates();
+        return;
+      }
+      if (this.flushTimer) clearTimeout(this.flushTimer);
+      this.flushTimer = setTimeout(() => this.flushUpdates(), FLUSH_DEBOUNCE_MS);
     };
     this.ydoc.on('update', onUpdate);
     this.unsubscribeFns.push(() => this.ydoc.off('update', onUpdate));
+  }
+
+  private flushUpdates(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.pendingUpdates.length === 0) return;
+    const merged = this.pendingUpdates.length === 1
+      ? this.pendingUpdates[0]!
+      : Y.mergeUpdates(this.pendingUpdates);
+    this.pendingUpdates = [];
+    this.pendingBytes = 0;
+    const record: UpdateRecord = {
+      data: bytesToBase64(merged),
+      clientId: this.ydoc.clientID,
+      ts: Date.now()
+    };
+    push(this.updatesRef, record).catch((err) =>
+      console.warn('[yjs-firebase] push update failed', err)
+    );
+    this.updateCount += 1;
+    void this.maybeCompact();
   }
 
   private subscribeToAwareness(): void {
@@ -226,17 +253,33 @@ export class FirebaseYjsProvider {
     const localCount = this.updateCount;
     this.updateCount = 0;
     try {
-      const snap = await get(this.updatesRef);
-      if (!snap.exists()) return;
-      const all = (snap.val() ?? {}) as Record<string, UpdateRecord>;
-      if (Object.keys(all).length < COMPACTION_THRESHOLD) return;
+      const cutoff = Date.now();
       const stateVector = Y.encodeStateAsUpdate(this.ydoc);
       const compactRecord: UpdateRecord = {
         data: bytesToBase64(stateVector),
         clientId: this.ydoc.clientID,
-        ts: Date.now()
+        ts: cutoff
       };
-      await set(this.updatesRef, { compacted: compactRecord });
+
+      const result = await runTransaction(this.updatesRef, (current) => {
+        if (current === null || current === undefined) return undefined;
+        const entries = current as Record<string, UpdateRecord | null>;
+        const keys = Object.keys(entries);
+        if (keys.length < COMPACTION_THRESHOLD) return undefined;
+
+        const next: Record<string, UpdateRecord> = { compacted: compactRecord };
+        for (const [key, rec] of Object.entries(entries)) {
+          if (key === 'compacted' || !rec) continue;
+          if (typeof rec.ts === 'number' && rec.ts >= cutoff) {
+            next[key] = rec;
+          }
+        }
+        return next;
+      });
+
+      if (!result.committed) {
+        this.updateCount = localCount;
+      }
     } catch (e) {
       console.warn('[yjs-firebase] compaction failed', e);
       this.updateCount = localCount;
@@ -245,6 +288,11 @@ export class FirebaseYjsProvider {
 
   destroy(): void {
     this.destroyed = true;
+    try { this.flushUpdates(); } catch { /* ignore */ }
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
     for (const fn of this.unsubscribeFns) {
       try { fn(); } catch { /* ignore */ }
     }

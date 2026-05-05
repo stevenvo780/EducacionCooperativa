@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { EMPTY_SEMANTIC_WORKSPACE_STATE } from '@/lib/semantic/workspace-state';
 import type { SemanticWorkspaceState } from '@/services/editorSemanticStore';
 
@@ -17,23 +17,26 @@ export function useSemanticStateSyncer({
   loadSemanticStateFromWorkspace,
   setSemanticState
 }: UseSemanticStateSyncerOptions) {
+  const fnRef = useRef(loadSemanticStateFromWorkspace);
+  useEffect(() => { fnRef.current = loadSemanticStateFromWorkspace; });
+
   // Initial load when authenticated
   useEffect(() => {
     if (!userId) {
       setSemanticState(EMPTY_SEMANTIC_WORKSPACE_STATE);
       return;
     }
-    void loadSemanticStateFromWorkspace({ seedFromLocal: true, persistMerged: true });
-  }, [loadSemanticStateFromWorkspace, userId, setSemanticState]);
+    void fnRef.current({ seedFromLocal: true, persistMerged: true });
+  }, [userId, setSemanticState]);
 
   // Periodic polling when the tab is visible
   useEffect(() => {
     if (!userId || !isPageVisible) return;
-    void loadSemanticStateFromWorkspace({ seedFromLocal: false, persistMerged: false });
+    void fnRef.current({ seedFromLocal: false, persistMerged: false });
     const interval = window.setInterval(
-      () => void loadSemanticStateFromWorkspace({ seedFromLocal: false, persistMerged: false }),
+      () => void fnRef.current({ seedFromLocal: false, persistMerged: false }),
       POLL_INTERVAL_MS
     );
     return () => window.clearInterval(interval);
-  }, [isPageVisible, loadSemanticStateFromWorkspace, userId]);
+  }, [isPageVisible, userId]);
 }

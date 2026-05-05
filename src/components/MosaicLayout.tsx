@@ -177,6 +177,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
   const dragLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchNavRefs = useRef<Record<string, { next: () => void; prev: () => void } | null>>({});
   const mosaicContainerRef = useRef<HTMLDivElement | null>(null);
+  const isActiveGestureRef = useRef(false);
+  isActiveGestureRef.current = isDraggingDoc || isResizingMosaic;
   const tileRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { menu: tabContextMenu, close: closeTabContextMenu, getTriggerProps: getTabContextTriggerProps } = useContextMenu<string>();
 
@@ -364,6 +366,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       setDragOverEmpty(false);
     };
     const handlePointerMove = (event: PointerEvent) => {
+      if (!isActiveGestureRef.current) return;
       if (event.buttons === 0) clearStuckOverlays();
     };
     const handleKeyUp = (event: KeyboardEvent) => {

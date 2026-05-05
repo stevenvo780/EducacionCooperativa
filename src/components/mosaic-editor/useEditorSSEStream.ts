@@ -38,22 +38,38 @@ export function useEditorSSEStream({
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = '';
+
+        const processEvent = (rawEvent: string) => {
+          const dataLine = rawEvent
+            .split('\n')
+            .find(line => line.startsWith(SSE_DATA_PREFIX));
+          if (!dataLine) return;
+          try {
+            const data = JSON.parse(dataLine.substring(SSE_DATA_PREFIX.length));
+            if (data?.type === 'snapshot') {
+              onSnapshot(data.data);
+            } else if (data?.type === 'deleted') {
+              onDeleted();
+            }
+          } catch { /* ignore parse errors */ }
+        };
 
         while (!cancelled) {
           const { value, done } = await reader.read();
           if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          for (const line of chunk.split('\n')) {
-            if (!line.startsWith(SSE_DATA_PREFIX)) continue;
-            try {
-              const data = JSON.parse(line.substring(SSE_DATA_PREFIX.length));
-              if (data?.type === 'snapshot') {
-                onSnapshot(data.data);
-              } else if (data?.type === 'deleted') {
-                onDeleted();
-              }
-            } catch { /* ignore parse errors */ }
+          buffer += decoder.decode(value, { stream: true });
+
+          const events = buffer.split('\n\n');
+          buffer = events.pop() ?? '';
+          for (const rawEvent of events) {
+            if (rawEvent.length === 0) continue;
+            processEvent(rawEvent);
           }
+        }
+
+        if (!cancelled && buffer.length > 0) {
+          processEvent(buffer);
         }
       } catch (error: unknown) {
         if (!isAbortError(error) && !cancelled) {

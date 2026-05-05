@@ -18,6 +18,53 @@ import {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+function parseCurrentUser(raw: unknown): { uid: string; email?: string | null; role?: string } {
+  if (typeof raw !== 'object' || raw === null) throw new Error('parseCurrentUser: respuesta no es un objeto');
+  const r = raw as Record<string, unknown>;
+  if (typeof r['uid'] !== 'string' || !r['uid']) throw new Error('parseCurrentUser: uid ausente');
+  return {
+    uid: r['uid'],
+    email: typeof r['email'] === 'string' ? r['email'] : null,
+    role: typeof r['role'] === 'string' ? r['role'] : undefined,
+  };
+}
+
+function parseWorkspacesResponse(raw: unknown): { workspaces: Workspace[]; invites: Workspace[] } {
+  if (typeof raw !== 'object' || raw === null) throw new Error('parseWorkspacesResponse: respuesta no es un objeto');
+  const r = raw as Record<string, unknown>;
+  return {
+    workspaces: Array.isArray(r['workspaces']) ? (r['workspaces'] as Workspace[]) : [],
+    invites: Array.isArray(r['invites']) ? (r['invites'] as Workspace[]) : [],
+  };
+}
+
+function parseCreateWorkspace(raw: unknown): { id: string; name?: string; ownerId?: string; members?: string[] } {
+  if (typeof raw !== 'object' || raw === null) throw new Error('parseCreateWorkspace: respuesta no es un objeto');
+  const r = raw as Record<string, unknown>;
+  if (typeof r['id'] !== 'string' || !r['id']) throw new Error('parseCreateWorkspace: id ausente');
+  return {
+    id: r['id'],
+    name: typeof r['name'] === 'string' ? r['name'] : undefined,
+    ownerId: typeof r['ownerId'] === 'string' ? r['ownerId'] : undefined,
+    members: Array.isArray(r['members']) ? (r['members'] as string[]) : undefined,
+  };
+}
+
+function parseRenameWorkspace(raw: unknown): { status: 'renamed'; id: string; name: string } {
+  if (typeof raw !== 'object' || raw === null) throw new Error('parseRenameWorkspace: respuesta no es un objeto');
+  const r = raw as Record<string, unknown>;
+  if (typeof r['id'] !== 'string' || !r['id']) throw new Error('parseRenameWorkspace: id ausente');
+  if (typeof r['name'] !== 'string') throw new Error('parseRenameWorkspace: name ausente');
+  return { status: 'renamed', id: r['id'], name: r['name'] };
+}
+
+function parseUserProfiles(raw: unknown): { users: { uid: string; email?: string | null; displayName?: string | null }[] } {
+  if (typeof raw !== 'object' || raw === null) throw new Error('parseUserProfiles: respuesta no es un objeto');
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r['users'])) throw new Error('parseUserProfiles: users ausente');
+  return { users: r['users'] as { uid: string; email?: string | null; displayName?: string | null }[] };
+}
+
 // Debounce document updates — longer window reduces Firestore writes/costs
 const UPDATE_DEBOUNCE_MS = 1500;
 type PendingUpdate = {
@@ -37,10 +84,29 @@ const assertOk = (res: Response, fallbackMessage: string) => {
   }
 };
 
+function parseSignedUrlResponse(raw: unknown): { signedUrl: string; mimeType?: string; storagePath?: string; fileName?: string; originalName?: string; workspaceId?: string; folder?: string } {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new Error('parseSignedUrlResponse: respuesta no es un objeto');
+  }
+  const r = raw as Record<string, unknown>;
+  if (typeof r['signedUrl'] !== 'string' || !r['signedUrl']) {
+    throw new Error('parseSignedUrlResponse: signedUrl ausente o inválido');
+  }
+  return {
+    signedUrl: r['signedUrl'],
+    mimeType: typeof r['mimeType'] === 'string' ? r['mimeType'] : undefined,
+    storagePath: typeof r['storagePath'] === 'string' ? r['storagePath'] : undefined,
+    fileName: typeof r['fileName'] === 'string' ? r['fileName'] : undefined,
+    originalName: typeof r['originalName'] === 'string' ? r['originalName'] : undefined,
+    workspaceId: typeof r['workspaceId'] === 'string' ? r['workspaceId'] : undefined,
+    folder: typeof r['folder'] === 'string' ? r['folder'] : undefined,
+  };
+}
+
 export const fetchCurrentUserApi = async () => {
   const res = await authFetch('/api/users/me');
   assertOk(res, 'Failed to fetch current user');
-  return (await res.json()) as { uid: string; email?: string | null; role?: string };
+  return parseCurrentUser(await res.json());
 };
 
 export const fetchWorkspacesApi = async (params: { ownerId: string; email?: string | null }) => {
@@ -51,11 +117,7 @@ export const fetchWorkspacesApi = async (params: { ownerId: string; email?: stri
   }
   const res = await authFetch(`/api/workspaces?${search.toString()}`);
   assertOk(res, 'Failed to fetch workspaces');
-  const data = (await res.json()) as { workspaces?: Workspace[]; invites?: Workspace[] };
-  return {
-    workspaces: Array.isArray(data.workspaces) ? data.workspaces : [],
-    invites: Array.isArray(data.invites) ? data.invites : []
-  };
+  return parseWorkspacesResponse(await res.json());
 };
 
 export const acceptInviteApi = async (params: { workspaceId: string; userId: string; email: string }) => {
@@ -105,7 +167,7 @@ export const createWorkspaceApi = async (params: { name: string; ownerId: string
     })
   });
   assertOk(res, 'Failed to create workspace');
-  return (await res.json()) as { id: string; name?: string; ownerId?: string; members?: string[] };
+  return parseCreateWorkspace(await res.json());
 };
 
 export const deleteWorkspaceApi = async (params: { workspaceId: string; ownerId: string }) => {
@@ -127,7 +189,7 @@ export const renameWorkspaceApi = async (params: { workspaceId: string; name: st
     })
   });
   assertOk(res, 'Failed to rename workspace');
-  return (await res.json()) as { status: 'renamed'; id: string; name: string };
+  return parseRenameWorkspace(await res.json());
 };
 
 export const duplicateWorkspaceApi = async (params: { workspaceId: string; name: string }) => {
@@ -284,7 +346,7 @@ export const replaceDocumentFileApi = async (params: {
   }
 
   assertOk(signedUrlRes, 'Failed to get replacement upload URL');
-  const uploadInfo = await signedUrlRes.json() as { signedUrl: string };
+  const uploadInfo = parseSignedUrlResponse(await signedUrlRes.json());
 
   const uploadRes = await fetch(uploadInfo.signedUrl, {
     method: 'PUT',
@@ -317,7 +379,7 @@ export const fetchUserProfilesApi = async (params: { workspaceId: string; userId
     body: JSON.stringify(params)
   });
   assertOk(res, 'Failed to fetch user profiles');
-  return (await res.json()) as { users: { uid: string; email?: string | null; displayName?: string | null }[] };
+  return parseUserProfiles(await res.json());
 };
 
 export const createDocumentApi = async (payload: Record<string, unknown>) => {
@@ -448,7 +510,7 @@ export const uploadFileApi = async (formData: FormData) => {
   }
 
   assertOk(signedUrlRes, 'Failed to get upload URL');
-  const uploadInfo = await signedUrlRes.json();
+  const uploadInfo = parseSignedUrlResponse(await signedUrlRes.json());
   const signedMimeType: string = typeof uploadInfo.mimeType === 'string' && uploadInfo.mimeType
     ? uploadInfo.mimeType
     : mimeType;
