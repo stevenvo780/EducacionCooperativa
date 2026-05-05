@@ -172,6 +172,7 @@ export default function MosaicEditor({
   const mdxEditorRef = useRef<MDXEditorMethods>(null);
   const isNormalizingRef = useRef(false);
   const saveRequestIdRef = useRef(0);
+  const saveAbortRef = useRef<AbortController | null>(null);
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const currentDocMetaRef = useRef<MarkdownDocMeta>({ workspaceId: null, folder: '', name: '' });
 
@@ -654,28 +655,39 @@ export default function MosaicEditor({
     loadDoc();
   }, [roomId, loadDoc]);
 
-  // Listen for real-time document changes
+  // Listen for real-time document changes via TerminalContext.
+  // Skip if hay edits locales sin guardar — un loadDoc en ese estado pisa
+  // lo que el usuario está escribiendo. El autosave eventualmente sincroniza.
   useEffect(() => {
     if (!onDocChangeCallback || !roomId || !isPageVisible) return;
     return onDocChangeCallback((event) => {
-      if (event.docId === roomId && (event.action === 'updated' || event.action === 'created')) {
-        loadDoc();
-      }
+      if (event.docId !== roomId) return;
+      if (event.action !== 'updated' && event.action !== 'created') return;
+      if (pendingLocalChangeRef.current || hasUnsavedLocalChanges()) return;
+      loadDoc();
     });
-  }, [onDocChangeCallback, roomId, loadDoc, isPageVisible]);
+  }, [onDocChangeCallback, roomId, loadDoc, isPageVisible, hasUnsavedLocalChanges]);
 
-  // SSE stream for real-time updates (Firestore onSnapshot via server)
+  // SSE stream for real-time updates (Firestore onSnapshot via server).
+  // Igual: si hay cambios locales pendientes, ignorar el snapshot remoto.
+  const handleSSESnapshot = useCallback((data: unknown) => {
+    if (pendingLocalChangeRef.current || hasUnsavedLocalChanges()) return;
+    applyDocData(data as Parameters<typeof applyDocData>[0]);
+  }, [applyDocData, hasUnsavedLocalChanges]);
+
   useEditorSSEStream({
     roomId,
     isPageVisible,
-    onSnapshot: (data) => applyDocData(data as Parameters<typeof applyDocData>[0]),
+    onSnapshot: handleSSESnapshot,
     onDeleted: resetDocState
   });
 
+  // Refresh al volver a la pestaña, también condicionado a no pisar edits.
   useEffect(() => {
     if (!isPageVisible || !roomId) return;
+    if (pendingLocalChangeRef.current || hasUnsavedLocalChanges()) return;
     loadDoc();
-  }, [isPageVisible, roomId, loadDoc]);
+  }, [isPageVisible, roomId, loadDoc, hasUnsavedLocalChanges]);
 
   useEffect(() => {
     if (viewMode === 'preview') {
@@ -712,45 +724,55 @@ export default function MosaicEditor({
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       const requestId = ++saveRequestIdRef.current;
+      // Cancela el PUT en vuelo anterior (si lo hay) antes de iniciar el nuevo
+      // para que un save viejo no pueda completar después y pisar lastSynced.
+      saveAbortRef.current?.abort();
+      const controller = new AbortController();
+      saveAbortRef.current = controller;
       let saveError: Error | null = null;
       try {
         const res = await authFetch(`/api/documents/${roomId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             content: val,
             type: DocumentType.Text,
             lastUpdatedBy: user?.uid
           })
         });
+        if (requestId !== saveRequestIdRef.current) {
+          // Llegó un save más nuevo; descartá esta respuesta sin tocar estado.
+          return;
+        }
         if (!res.ok) {
-          // Leer el body para distinguir refused-empty-overwrite (409) vs error real.
           let body: { error?: string; message?: string } | null = null;
           try { body = await res.json(); } catch { /* not json */ }
           if (res.status === 409 && body?.error === 'refused-empty-overwrite') {
-            // El servidor protegió el doc — marcar como sincronizado para evitar
-            // reintentos infinitos. El texto vacío local NO se guardará.
             lastSyncedContentRef.current = val;
             pendingLocalChangeRef.current = false;
           } else {
             saveError = new Error(`Save failed (${res.status}): ${body?.message ?? body?.error ?? res.statusText}`);
           }
-        } else if (requestId === saveRequestIdRef.current && contentRef.current === val) {
+        } else if (contentRef.current === val) {
           lastSyncedContentRef.current = val;
           pendingLocalChangeRef.current = false;
         }
       } catch (e) {
+        if ((e as { name?: string })?.name === 'AbortError') {
+          return;
+        }
         saveError = e instanceof Error ? e : new Error(String(e));
         console.error('Error saving:', saveError);
       } finally {
+        if (saveAbortRef.current === controller) {
+          saveAbortRef.current = null;
+        }
         if (requestId === saveRequestIdRef.current) {
           const stillUnsaved = contentRef.current !== lastSyncedContentRef.current;
           pendingLocalChangeRef.current = stillUnsaved;
-          // Si hubo error, NO dejamos saving=true infinito: el indicador
-          // refleja "hay cambios pendientes locales", no "request en vuelo".
           setSaving(stillUnsaved);
           if (saveError) {
-            // El error queda en consola; UI muestra "pendiente" pero no bloquea.
             console.warn('[autosave] continuing with local changes:', saveError.message);
           }
         }
@@ -760,6 +782,8 @@ export default function MosaicEditor({
 
   useEffect(() => () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveAbortRef.current?.abort();
+    saveAbortRef.current = null;
   }, []);
 
   const deferredStatsContent = useDeferredValue(statsContent);
