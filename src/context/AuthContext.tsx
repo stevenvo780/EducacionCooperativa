@@ -10,6 +10,7 @@ import {
 import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomToken } from '@/lib/firebase';
 import { apiUrl } from '@/services/apiClient';
+import { env as envHelper } from '@/lib/env';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -42,12 +43,32 @@ const allowInsecureAuth = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true'
 const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
 const LOCAL_DEV_USER_STORAGE_KEY = 'agora_local_dev_user';
 
-const createLocalDevUser = (userData: {
+interface StoredLocalUser {
     uid: string;
     email?: string | null;
     displayName?: string | null;
     photoURL?: string | null;
-}, token: string) => ({
+}
+
+function safeParseStoredUser(raw: string | null): StoredLocalUser | null {
+    if (!raw) return null;
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        const obj = parsed as Record<string, unknown>;
+        if (typeof obj.uid !== 'string' || obj.uid.length === 0) return null;
+        return {
+            uid: obj.uid,
+            email: typeof obj.email === 'string' ? obj.email : null,
+            displayName: typeof obj.displayName === 'string' ? obj.displayName : null,
+            photoURL: typeof obj.photoURL === 'string' ? obj.photoURL : null
+        };
+    } catch {
+        return null;
+    }
+}
+
+const createLocalDevUser = (userData: StoredLocalUser, token: string) => ({
     uid: userData.uid,
     email: userData.email ?? null,
     displayName: userData.displayName ?? null,
@@ -69,42 +90,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const storedLocalDevToken = localStorage.getItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
-        const storedLocalDevUser = localStorage.getItem(LOCAL_DEV_USER_STORAGE_KEY);
-        if (storedLocalDevToken && storedLocalDevUser) {
-            try {
-                const parsedUser = JSON.parse(storedLocalDevUser) as {
-                    uid: string;
-                    email?: string | null;
-                    displayName?: string | null;
-                    photoURL?: string | null;
-                };
+        const storedLocalDevUserRaw = localStorage.getItem(LOCAL_DEV_USER_STORAGE_KEY);
+        if (storedLocalDevToken && storedLocalDevUserRaw) {
+            const parsedUser = safeParseStoredUser(storedLocalDevUserRaw);
+            if (parsedUser) {
                 setUser(createLocalDevUser(parsedUser, storedLocalDevToken));
                 setUserEmail(parsedUser.email || storedEmail);
                 setLoading(false);
                 return;
-            } catch {
-                localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
-                localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
             }
+            localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
         }
 
         if (allowInsecureAuth) {
-            const storedUser = localStorage.getItem('agora_user');
-            if (storedUser) {
-                try {
-                    const parsedUser = JSON.parse(storedUser);
-                    const restoredUserObj = {
-                        ...parsedUser,
-                        getIdToken: async () => parsedUser.uid
-                    } as unknown as User;
-                    setUser(restoredUserObj);
-                    setUserEmail(parsedUser.email || storedEmail);
-                    setLoading(false);
-                    return;
-                } catch (_e) {
-                    localStorage.removeItem('agora_user');
-                }
+            const storedUserRaw = localStorage.getItem('agora_user');
+            const parsedUser = safeParseStoredUser(storedUserRaw);
+            if (parsedUser) {
+                const restoredUserObj = {
+                    ...parsedUser,
+                    getIdToken: async () => parsedUser.uid
+                } as unknown as User;
+                setUser(restoredUserObj);
+                setUserEmail(parsedUser.email || storedEmail);
+                setLoading(false);
+                return;
             }
+            if (storedUserRaw) localStorage.removeItem('agora_user');
         }
 
         let cancelled = false;
@@ -149,7 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const signInWithGoogle = async () => {
-        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+        const apiKey = envHelper.NEXT_PUBLIC_FIREBASE_API_KEY();
         if (!apiKey) {
             throw new Error('Google Sign-In no está configurado. Por favor usa email/contraseña.');
         }

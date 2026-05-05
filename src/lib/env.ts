@@ -7,7 +7,7 @@
  * Uso: importa el helper, no leas process.env disperso.
  */
 
-const trim = (k: string): string => (process.env[k] ?? '').trim();
+const trim = (k: string): string => (process.env[k] ?? '').replace(/\\n/g, '').trim();
 const flag = (k: string): boolean => trim(k) === 'true';
 
 const isProd = (): boolean => process.env.NODE_ENV === 'production';
@@ -28,6 +28,12 @@ export const env = {
   MERCADOPAGO_WEBHOOK_SECRET: () => trim('MERCADOPAGO_WEBHOOK_SECRET'),
   ADMIN_PASSWORD: () => trim('APP_PASSWORD'),
   APP_BASE_URL: () => (trim('NEXT_PUBLIC_APP_URL') || trim('APP_BASE_URL') || 'https://agora.elenxos.com').replace(/\/+$/, ''),
+
+  NEXT_PUBLIC_FIREBASE_API_KEY: () => trim('NEXT_PUBLIC_FIREBASE_API_KEY'),
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: () => trim('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN'),
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: () => trim('NEXT_PUBLIC_FIREBASE_PROJECT_ID'),
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: () => trim('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'),
+  NEXT_PUBLIC_FIREBASE_APP_ID: () => trim('NEXT_PUBLIC_FIREBASE_APP_ID'),
 
   ALLOW_INSECURE_AUTH: () => flag('NEXT_PUBLIC_ALLOW_INSECURE_AUTH'),
   AGORA_USE_NAS: () => flag('AGORA_USE_NAS'),

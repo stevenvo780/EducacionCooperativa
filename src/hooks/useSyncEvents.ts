@@ -112,6 +112,11 @@ export function useSyncEvents({
         source: event.source === 'hub' ? SyncEventSource.Worker : event.source
       };
       onEventRef.current?.(legacy);
+    }, (error) => {
+      // Sin este callback, fallos de RTDB (red caída, reglas denegadas,
+      // canal mal formado) son invisibles. Logueamos para que aparezcan
+      // en console y, en dev, en el toast del GlobalErrorCatcher si bubblea.
+      console.error('[useSyncEvents] RTDB onChildAdded error:', getErrorMessage(error));
     });
 
     listenerRef.current = () => {
