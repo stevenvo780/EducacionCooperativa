@@ -17,6 +17,7 @@ import {
   type DiagnosticSeverity,
   type ResolvedDiagnostic
 } from '@/lib/diagnostics-bus';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 const SEVERITIES: DiagnosticSeverity[] = ['error', 'warning', 'info', 'hint'];
 
@@ -197,6 +198,17 @@ export default function ProblemsPane({ resolveDocName, onOpenDocument, onRunActi
                         onClick={() => {
                           if (uri !== 'global' && onOpenDocument) {
                             onOpenDocument(uri, d.range ? { line: d.range.startLine, column: d.range.startColumn } : undefined);
+                          }
+                          // Fallback: dispara jump-to-line directo aunque onOpenDocument
+                          // no esté wired o el doc ya esté abierto. El listener del editor
+                          // (MosaicEditor / STCodeEditor) ignora si docId no coincide.
+                          if (d.range && typeof d.range.startLine === 'number') {
+                            const detail: { docId?: string; line: number; column?: number } = {
+                              line: d.range.startLine
+                            };
+                            if (uri && uri !== 'global') detail.docId = uri;
+                            if (typeof d.range.startColumn === 'number') detail.column = d.range.startColumn;
+                            dispatchAgoraEvent(AGORA_EVENTS.jumpToLine, detail);
                           }
                         }}
                         className="flex min-w-0 flex-1 flex-col text-left"
