@@ -46,6 +46,26 @@ const PROVIDER_TO_FAMILY: Record<string, ModelFamily> = {
 
 let cachedCatalog: ModelCatalog | null = null;
 let inFlight: Promise<ModelCatalog> | null = null;
+let lastFailureAt = 0;
+const FAILURE_BACKOFF_MS = 60_000;
+
+function parseModelCatalog(raw: unknown): ModelCatalog {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new Error('parseModelCatalog: respuesta no es un objeto');
+  }
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r['models'])) {
+    throw new Error('parseModelCatalog: models no es un array');
+  }
+  const models = r['models'].filter(
+    (m): m is CatalogModel =>
+      typeof m === 'object' && m !== null && typeof (m as Record<string, unknown>)['id'] === 'string'
+  );
+  return {
+    lastUpdated: typeof r['lastUpdated'] === 'string' ? r['lastUpdated'] : new Date().toISOString(),
+    models
+  };
+}
 
 function loadFromStorage(): ModelCatalog | null {
   if (typeof window === 'undefined') return null;
@@ -74,18 +94,21 @@ export async function loadModelCatalog(): Promise<ModelCatalog> {
     cachedCatalog = stored;
     return stored;
   }
+  if (Date.now() - lastFailureAt < FAILURE_BACKOFF_MS) {
+    return FALLBACK_CATALOG;
+  }
   if (!inFlight) {
     inFlight = (async () => {
       try {
         const url = apiUrl('/api/agora-ai/models');
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json() as ModelCatalog;
-        cachedCatalog = json;
-        saveToStorage(json);
-        return json;
+        const catalog = parseModelCatalog(await res.json());
+        cachedCatalog = catalog;
+        saveToStorage(catalog);
+        return catalog;
       } catch {
-        cachedCatalog = FALLBACK_CATALOG;
+        lastFailureAt = Date.now();
         return FALLBACK_CATALOG;
       } finally {
         inFlight = null;
@@ -146,8 +169,8 @@ export async function refreshModelCatalog(keys: { anthropicApiKey?: string; gemi
     body: JSON.stringify(keys)
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json() as ModelCatalog;
-  cachedCatalog = json;
-  saveToStorage(json);
-  return json;
+  const catalog = parseModelCatalog(await res.json());
+  cachedCatalog = catalog;
+  saveToStorage(catalog);
+  return catalog;
 }

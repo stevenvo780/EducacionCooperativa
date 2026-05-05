@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -287,6 +287,141 @@ const markdownComponents = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @next/next/no-img-element
   img: (props: any) => <img {...props} className="max-w-full h-auto rounded-md my-2" loading="lazy" alt={props.alt || ''} />
 } as const;
+
+interface ChatMessageProps {
+  msg: UIChatMessage;
+  traceExpanded: boolean;
+  confirmingId: string | null;
+  copiedId: string | null;
+  onConfirm: (messageId: string, approve: boolean) => void;
+  onCopy: (id: string, content: string) => void;
+}
+
+function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm, onCopy }: ChatMessageProps) {
+  const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
+  return (
+    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      <div className={`group relative max-w-[88%] min-w-0 overflow-hidden rounded-lg px-3 py-1.5 text-sm leading-normal [overflow-wrap:anywhere] ${
+        msg.role === 'user'
+          ? 'bg-sky-600/20 border border-sky-500/20 text-surface-100'
+          : msg.error
+            ? 'bg-mandy-900/30 border border-mandy-500/20 text-mandy-300'
+            : 'bg-surface-800 border border-surface-700 text-surface-200'
+      }`}>
+        {msg.error && (
+          <div className="flex items-center gap-1 mb-1 text-xs text-mandy-400">
+            <AlertCircle className="w-3 h-3" />
+            Error
+          </div>
+        )}
+        <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+            components={markdownComponents}
+          >
+            {msg.content}
+          </ReactMarkdown>
+        </div>
+
+        {msg.agentRun?.mode === 'agent' && msg.role === 'assistant' && (
+          <div className="mt-2">
+            {visibleSteps.map(step => {
+              if (step.type === 'thinking' && step.content) {
+                return <AgentThinkingBlock key={step.id} content={step.content} defaultOpen={traceExpanded} />;
+              }
+              if (step.type === 'plan' && step.content) {
+                return (
+                  <div key={step.id} className="mt-1.5 rounded-md border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5 text-xs text-sky-100">
+                    <div className="font-medium text-sky-300 mb-1">{step.title}</div>
+                    <div className="break-words leading-snug">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={markdownComponents}
+                      >
+                        {step.content || ''}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                );
+              }
+              return <ToolCallBlock key={step.id} step={step} defaultOpen={traceExpanded} />;
+            })}
+
+            {msg.pendingConfirmation && (
+              <InlineConfirmation
+                pending={msg.pendingConfirmation}
+                busy={confirmingId === msg.id}
+                onConfirm={() => onConfirm(msg.id, true)}
+                onReject={() => onConfirm(msg.id, false)}
+              />
+            )}
+
+            {msg.agentRun.rollback?.length ? (
+              <div className="mt-2 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/15 rounded-md px-2 py-1.5 inline-flex items-center gap-1.5">
+                <Undo2 className="w-3.5 h-3.5" />
+                Puedes escribir <code className="font-mono">deshaz eso</code> para revertir el último turno.
+              </div>
+            ) : null}
+
+            {msg.agentRun.truncated ? (
+              <div className="mt-2 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/15 rounded-md px-2 py-1.5 inline-flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Respuesta truncada por presupuesto de tiempo. Pídela en pasos más pequeños.
+              </div>
+            ) : null}
+
+            {msg.agentRun.usage ? (
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-surface-500">
+                {typeof msg.agentRun.usage.totalTokens === 'number' && (
+                  <span>{msg.agentRun.usage.totalTokens.toLocaleString()} tokens</span>
+                )}
+                {typeof msg.agentRun.usage.estimatedCostUsd === 'number' && msg.agentRun.usage.estimatedCostUsd > 0 && (
+                  <span>· ${msg.agentRun.usage.estimatedCostUsd.toFixed(4)}</span>
+                )}
+                {typeof msg.agentRun.iterations === 'number' && msg.agentRun.iterations > 0 && (
+                  <span>· {msg.agentRun.iterations} {msg.agentRun.iterations === 1 ? 'iter' : 'iters'}</span>
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {msg.role === 'assistant' && !msg.error && (
+          <button
+            onClick={() => onCopy(msg.id, msg.content)}
+            className="absolute top-1.5 right-1.5 p-0.5 rounded opacity-0 group-hover:opacity-100 text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
+            title="Copiar respuesta"
+          >
+            {copiedId === msg.id
+              ? <Check className="w-3 h-3 text-emerald-400" />
+              : <Copy className="w-3 h-3" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const ChatMessage = memo(ChatMessageImpl, (prev, next) => {
+  if (prev.msg.id !== next.msg.id) return false;
+  if (prev.msg.content !== next.msg.content) return false;
+  if ((prev.msg.agentRun?.steps?.length ?? 0) !== (next.msg.agentRun?.steps?.length ?? 0)) return false;
+  if (prev.msg.error !== next.msg.error) return false;
+  if (prev.msg.pendingConfirmation !== next.msg.pendingConfirmation) return false;
+  if (prev.msg.agentRun?.truncated !== next.msg.agentRun?.truncated) return false;
+  if (prev.msg.agentRun?.usage !== next.msg.agentRun?.usage) return false;
+  if (prev.msg.agentRun?.rollback?.length !== next.msg.agentRun?.rollback?.length) return false;
+  if (prev.traceExpanded !== next.traceExpanded) return false;
+  const prevConfirming = prev.confirmingId === prev.msg.id;
+  const nextConfirming = next.confirmingId === next.msg.id;
+  if (prevConfirming !== nextConfirming) return false;
+  const prevCopied = prev.copiedId === prev.msg.id;
+  const nextCopied = next.copiedId === next.msg.id;
+  if (prevCopied !== nextCopied) return false;
+  return true;
+});
 
 export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [config, setConfig] = useState<AIProviderConfig>(loadAIProviderConfig);
@@ -1308,6 +1443,14 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
   }, [messages, clearPendingConfirmation, executeAgoraTool, config.provider, emitAgentWorkspaceEvents]);
 
+  const handleConfirmStable = useCallback((messageId: string, approve: boolean) => {
+    void handleConfirmation(messageId, approve);
+  }, [handleConfirmation]);
+
+  const handleCopyStable = useCallback((id: string, content: string) => {
+    void copyMessage(id, content);
+  }, [copyMessage]);
+
   // Auto-confirm en god mode: si llega un pendingConfirmation y el perfil
   // activo lo permite, se aprueba sin pedir input al usuario.
   const autoConfirmedRef = useRef<Set<string>>(new Set());
@@ -1483,112 +1626,17 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           </div>
         )}
 
-        {messages.map(msg => {
-          const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
-          return (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`group relative max-w-[88%] min-w-0 overflow-hidden rounded-lg px-3 py-1.5 text-sm leading-normal [overflow-wrap:anywhere] ${
-                msg.role === 'user'
-                  ? 'bg-sky-600/20 border border-sky-500/20 text-surface-100'
-                  : msg.error
-                    ? 'bg-mandy-900/30 border border-mandy-500/20 text-mandy-300'
-                    : 'bg-surface-800 border border-surface-700 text-surface-200'
-              }`}>
-                {msg.error && (
-                  <div className="flex items-center gap-1 mb-1 text-xs text-mandy-400">
-                    <AlertCircle className="w-3 h-3" />
-                    Error
-                  </div>
-                )}
-                <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
-                    components={markdownComponents}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
-
-                {msg.agentRun?.mode === 'agent' && msg.role === 'assistant' && (
-                  <div className="mt-2">
-                    {visibleSteps.map(step => {
-                      if (step.type === 'thinking' && step.content) {
-                        return <AgentThinkingBlock key={step.id} content={step.content} defaultOpen={traceExpanded} />;
-                      }
-                      if (step.type === 'plan' && step.content) {
-                        return (
-                          <div key={step.id} className="mt-1.5 rounded-md border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5 text-xs text-sky-100">
-                            <div className="font-medium text-sky-300 mb-1">{step.title}</div>
-                            <div className="break-words leading-snug">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm, remarkMath]}
-                                rehypePlugins={[rehypeKatex]}
-                                components={markdownComponents}
-                              >
-                                {step.content || ''}
-                              </ReactMarkdown>
-                            </div>
-                          </div>
-                        );
-                      }
-                      return <ToolCallBlock key={step.id} step={step} defaultOpen={traceExpanded} />;
-                    })}
-
-                    {msg.pendingConfirmation && (
-                      <InlineConfirmation
-                        pending={msg.pendingConfirmation}
-                        busy={confirmingId === msg.id}
-                        onConfirm={() => void handleConfirmation(msg.id, true)}
-                        onReject={() => void handleConfirmation(msg.id, false)}
-                      />
-                    )}
-
-                    {msg.agentRun.rollback?.length ? (
-                      <div className="mt-2 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/15 rounded-md px-2 py-1.5 inline-flex items-center gap-1.5">
-                        <Undo2 className="w-3.5 h-3.5" />
-                        Puedes escribir <code className="font-mono">deshaz eso</code> para revertir el último turno.
-                      </div>
-                    ) : null}
-
-                    {msg.agentRun.truncated ? (
-                      <div className="mt-2 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/15 rounded-md px-2 py-1.5 inline-flex items-center gap-1.5">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        Respuesta truncada por presupuesto de tiempo. Pídela en pasos más pequeños.
-                      </div>
-                    ) : null}
-
-                    {msg.agentRun.usage ? (
-                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-surface-500">
-                        {typeof msg.agentRun.usage.totalTokens === 'number' && (
-                          <span>{msg.agentRun.usage.totalTokens.toLocaleString()} tokens</span>
-                        )}
-                        {typeof msg.agentRun.usage.estimatedCostUsd === 'number' && msg.agentRun.usage.estimatedCostUsd > 0 && (
-                          <span>· ${msg.agentRun.usage.estimatedCostUsd.toFixed(4)}</span>
-                        )}
-                        {typeof msg.agentRun.iterations === 'number' && msg.agentRun.iterations > 0 && (
-                          <span>· {msg.agentRun.iterations} {msg.agentRun.iterations === 1 ? 'iter' : 'iters'}</span>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-
-                {msg.role === 'assistant' && !msg.error && (
-                  <button
-                    onClick={() => void copyMessage(msg.id, msg.content)}
-                    className="absolute top-1.5 right-1.5 p-0.5 rounded opacity-0 group-hover:opacity-100 text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
-                    title="Copiar respuesta"
-                  >
-                    {copiedId === msg.id
-                      ? <Check className="w-3 h-3 text-emerald-400" />
-                      : <Copy className="w-3 h-3" />}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {messages.map(msg => (
+          <ChatMessage
+            key={msg.id}
+            msg={msg}
+            traceExpanded={traceExpanded}
+            confirmingId={confirmingId}
+            copiedId={copiedId}
+            onConfirm={handleConfirmStable}
+            onCopy={handleCopyStable}
+          />
+        ))}
 
         {loading && (
           <div className="flex justify-start">

@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import {
     onAuthStateChanged,
     User,
@@ -159,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, []);
 
-    const signInWithGoogle = async () => {
+    const signInWithGoogle = useCallback(async () => {
         const apiKey = (process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '').replace(/\\n/g, '').trim();
         if (!apiKey) {
             throw new Error('Google Sign-In no está configurado. Por favor usa email/contraseña.');
@@ -182,9 +182,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
             throw new Error(getErrorMessage(error, 'Error al iniciar sesión con Google'));
         }
-    };
+    }, [router]);
 
-    const loginWithEmail = async (email: string, pass: string) => {
+    const loginWithEmail = useCallback(async (email: string, pass: string) => {
         const normalizedEmail = email.toLowerCase().trim();
         const res = await fetch(apiUrl('/api/auth/login'), {
             method: 'POST',
@@ -260,9 +260,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }));
 
         router.push('/dashboard');
-    };
+    }, [router]);
 
-    const registerWithEmail = async (email: string, pass: string) => {
+    const registerWithEmail = useCallback(async (email: string, pass: string) => {
         const normalizedEmail = email.toLowerCase().trim();
         const res = await fetch(apiUrl('/api/auth/register'), {
             method: 'POST',
@@ -338,9 +338,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }));
 
         router.push('/dashboard');
-    };
+    }, [router]);
 
-    const changePassword = async (currentPassword: string, newPassword: string) => {
+    const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
         if (!user?.uid) {
             throw new Error('No hay usuario autenticado');
         }
@@ -364,9 +364,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         return res.json();
-    };
+    }, [user]);
 
-    const resetPassword = async (email: string) => {
+    const resetPassword = useCallback(async (email: string) => {
         try {
             const normalizedEmail = email.toLowerCase().trim();
             const prepareRes = await fetch(apiUrl('/api/auth/prepare-reset'), {
@@ -394,13 +394,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
             throw new Error(getErrorMessage(error, 'Error al enviar el correo de recuperación'));
         }
-    };
+    }, []);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         try {
             const firebaseAuth = getAuth();
             await signOut(firebaseAuth);
-        } catch (_error) {
+        } catch (error) {
+            console.error('[auth] signOut failed', error);
         }
         setUser(null);
         setUserEmail(null);
@@ -409,10 +410,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
         localStorage.removeItem('agora_user_email');
         router.push('/');
-    };
+    }, [router]);
+
+    const value = useMemo<AuthContextType>(() => ({
+        user,
+        userEmail,
+        loading,
+        signInWithGoogle,
+        loginWithEmail,
+        registerWithEmail,
+        changePassword,
+        resetPassword,
+        logout
+    }), [user, userEmail, loading, signInWithGoogle, loginWithEmail, registerWithEmail, changePassword, resetPassword, logout]);
 
     return (
-        <AuthContext.Provider value={{ user, userEmail, loading, signInWithGoogle, loginWithEmail, registerWithEmail, changePassword, resetPassword, logout }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

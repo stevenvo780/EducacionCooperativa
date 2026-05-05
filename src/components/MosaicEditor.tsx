@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import ReactDOM from 'react-dom';
 import {
   AdmonitionDirectiveDescriptor,
@@ -105,6 +105,15 @@ import {
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
 import { registerStatusSegment, forceUnregisterStatusSegment } from '@/lib/status-bus';
 import { dispatchOpenSettings } from '@/lib/settings-events';
+
+function parseWorkspacesForEditor(raw: unknown): { workspaces: Array<{ id: string; name?: string }>; invites: Array<{ id: string; name?: string }> } {
+  if (typeof raw !== 'object' || raw === null) throw new Error('parseWorkspacesForEditor: respuesta no es un objeto');
+  const r = raw as Record<string, unknown>;
+  return {
+    workspaces: Array.isArray(r['workspaces']) ? (r['workspaces'] as Array<{ id: string; name?: string }>) : [],
+    invites: Array.isArray(r['invites']) ? (r['invites'] as Array<{ id: string; name?: string }>) : []
+  };
+}
 
 export default function MosaicEditor({
   initialContent = '',
@@ -753,12 +762,13 @@ export default function MosaicEditor({
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
+  const deferredStatsContent = useDeferredValue(statsContent);
   const stats = useMemo(() => {
-    const trimmed = statsContent.trim();
+    const trimmed = deferredStatsContent.trim();
     const words = trimmed ? trimmed.split(/\s+/).length : 0;
-    const lines = statsContent ? statsContent.split('\n').length : 0;
-    return { words, chars: statsContent.length, lines };
-  }, [statsContent]);
+    const lines = deferredStatsContent ? deferredStatsContent.split('\n').length : 0;
+    return { words, chars: deferredStatsContent.length, lines };
+  }, [deferredStatsContent]);
 
   useEffect(() => {
     if (!hideInlineStatus) return;
@@ -869,7 +879,7 @@ export default function MosaicEditor({
       if (wsSegments && wsSegments.targetPath) {
         const wsRes = await authFetch('/api/workspaces', { cache: 'no-store' });
         if (wsRes.ok) {
-          const wsData = await wsRes.json() as { workspaces?: Array<{ id: string; name?: string }>; invites?: Array<{ id: string; name?: string }> };
+          const wsData = parseWorkspacesForEditor(await wsRes.json());
           const allWorkspaces = [
             ...(Array.isArray(wsData.workspaces) ? wsData.workspaces : []),
             ...(Array.isArray(wsData.invites) ? wsData.invites : [])

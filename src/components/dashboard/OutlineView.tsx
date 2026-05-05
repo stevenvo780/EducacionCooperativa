@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Hash, Heading1, Heading2, Heading3, FileQuestion, Sigma, BookCheck, Cog } from 'lucide-react';
 import type { DocItem } from '@/components/dashboard/types';
 import { authFetch } from '@/services/apiClient';
@@ -35,6 +35,7 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastLiveUpdateAt = useRef(0);
 
   useEffect(() => {
     if (!selectedDoc || !isOutlineableDoc(selectedDoc)) {
@@ -63,14 +64,17 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
     };
 
     void fetchContent(false);
-    // Auto-refresh suave cada 30s como respaldo si no hay edición en vivo.
-    pollTimer = setInterval(() => { void fetchContent(true); }, 30_000);
+    pollTimer = setInterval(() => {
+      if (Date.now() - lastLiveUpdateAt.current < 60_000) return;
+      void fetchContent(true);
+    }, 30_000);
 
     // Live: cuando el editor activo dispara cambios, actualizamos el outline
     // de inmediato sin esperar al save ni al poll.
     const liveHandler = (event: Event) => {
       const detail = (event as CustomEvent<{ docId?: string; content?: string }>).detail;
       if (!detail || detail.docId !== selectedDoc.id || typeof detail.content !== 'string') return;
+      lastLiveUpdateAt.current = Date.now();
       setContent(detail.content);
       setError(null);
     };

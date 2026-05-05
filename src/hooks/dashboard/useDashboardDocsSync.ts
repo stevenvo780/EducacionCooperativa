@@ -170,6 +170,8 @@ export const useDashboardDocsSync = ({
 
   fetchDocsRef.current = fetchDocs;
 
+  const requestDocsRefreshRef = useRef<((options?: SyncRequestOptions) => Promise<void>) | null>(null);
+
   const requestDocsRefresh = useCallback((options?: SyncRequestOptions) => {
     const delayMs = options?.delayMs ?? 250;
     const showLoading = options?.showLoading ?? false;
@@ -192,6 +194,8 @@ export const useDashboardDocsSync = ({
       }, effectiveDelay);
     });
   }, [fetchDocs]);
+
+  requestDocsRefreshRef.current = requestDocsRefresh;
 
   useEffect(() => {
     if (!currentWorkspace || !user) return;
@@ -216,9 +220,9 @@ export const useDashboardDocsSync = ({
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[Sync] debounced fetch triggered');
       }
-      void requestDocsRefresh({ delayMs: 0 });
+      void requestDocsRefreshRef.current?.({ delayMs: 0 });
     }, 600);
-  }, [isPageVisible, requestDocsRefresh]);
+  }, [isPageVisible]);
 
   // RTDB listener vive en SyncEventsBridge (layout root) y dispara
   // `agora:docs-changed`, escuchado abajo.
@@ -232,7 +236,7 @@ export const useDashboardDocsSync = ({
         if (process.env.NODE_ENV !== 'production') {
           console.warn('[Sync] fallback polling triggered (no RTDB event in 60s)');
         }
-        void requestDocsRefresh({ force: true, delayMs: 0 });
+        void requestDocsRefreshRef.current?.({ force: true, delayMs: 0 });
       }
     }, 60000);
 
@@ -243,7 +247,7 @@ export const useDashboardDocsSync = ({
         syncFetchTimerRef.current = null;
       }
     };
-  }, [currentWorkspace, user, isPageVisible, requestDocsRefresh]);
+  }, [currentWorkspace, user, isPageVisible]);
 
   useEffect(() => {
     if (!isPageVisible || !currentWorkspace || !user) return;

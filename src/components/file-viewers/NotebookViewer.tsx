@@ -153,7 +153,7 @@ function OutputBlock({ output }: { output: NotebookOutput }) {
     return (
       <div className="px-3 py-2">
         {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 */}
-        <img alt="output" src={`data:image/png;base64,${png}`} className="max-w-full" />
+        <img alt="output" src={`data:image/png;base64,${png}`} className="max-w-full" loading="lazy" />
       </div>
     );
   }
