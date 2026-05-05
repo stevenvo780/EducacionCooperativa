@@ -423,6 +423,7 @@ export const uploadFileApi = async (formData: FormData) => {
     throw new Error('No file provided');
   }
   const file = fileEntry;
+  const mimeType = (file.type && file.type.trim()) || 'application/octet-stream';
 
   // Step 1: Get signed URL for direct upload
   const signedUrlRes = await authFetch('/api/upload/signed-url', {
@@ -430,7 +431,7 @@ export const uploadFileApi = async (formData: FormData) => {
     headers: JSON_HEADERS,
     body: JSON.stringify({
       fileName: file.name,
-      mimeType: file.type || 'application/octet-stream',
+      mimeType,
       workspaceId,
       folder,
       fileSize: file.size
@@ -448,18 +449,44 @@ export const uploadFileApi = async (formData: FormData) => {
 
   assertOk(signedUrlRes, 'Failed to get upload URL');
   const uploadInfo = await signedUrlRes.json();
+  const signedMimeType: string = typeof uploadInfo.mimeType === 'string' && uploadInfo.mimeType
+    ? uploadInfo.mimeType
+    : mimeType;
 
-  // Step 2: Upload directly to Firebase Storage using the signed URL
+  // Step 2: Upload directly to MinIO using the signed URL.
+  // El Content-Type DEBE coincidir exactamente con el firmado server-side
+  // (SigV4) o MinIO devuelve 400 SignatureDoesNotMatch.
   const uploadRes = await fetch(uploadInfo.signedUrl, {
     method: 'PUT',
     headers: {
-      'Content-Type': file.type || 'application/octet-stream'
+      'Content-Type': signedMimeType
     },
     body: file
   });
 
   if (!uploadRes.ok) {
-    throw new Error(`Direct upload failed: ${uploadRes.status}`);
+    let detail = '';
+    try {
+      const txt = await uploadRes.text();
+      detail = txt ? ` — body: ${txt.slice(0, 400)}` : '';
+    } catch { /* ignore */ }
+    const diagHeaders = ['x-amz-request-id', 'x-amz-id-2', 'x-minio-error-code', 'x-minio-error-desc', 'x-ratelimit-remaining', 'server', 'cf-ray'];
+    const headerInfo = diagHeaders
+      .map(h => {
+        const v = uploadRes.headers.get(h);
+        return v ? `${h}=${v}` : null;
+      })
+      .filter(Boolean)
+      .join(' ');
+    const headerSuffix = headerInfo ? ` [${headerInfo}]` : '';
+    console.error('[uploadFileApi] PUT MinIO failed', {
+      status: uploadRes.status,
+      url: uploadInfo.signedUrl?.split('?')[0],
+      mimeType: signedMimeType,
+      fileSize: file.size,
+      headerInfo
+    });
+    throw new Error(`Direct upload failed: ${uploadRes.status}${headerSuffix}${detail}`);
   }
 
   // Step 3: Register the uploaded file in Firestore

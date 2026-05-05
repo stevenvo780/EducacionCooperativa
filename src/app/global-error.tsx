@@ -20,7 +20,7 @@ export default function GlobalError({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          minHeight: '100vh',
+          minHeight: '100dvh',
           padding: '24px',
           fontFamily: 'system-ui, sans-serif',
           background: '#0a0a0a',

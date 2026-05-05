@@ -2462,7 +2462,7 @@ function DashboardContent() {
 
     if (loading || !user) {
         return (
-            <div className="flex h-screen items-center justify-center bg-surface-900">
+            <div className="flex h-[100dvh] items-center justify-center bg-surface-900">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500" />
             </div>
         );
@@ -2471,7 +2471,7 @@ function DashboardContent() {
     return (
         <LazyMotion features={domAnimation}>
             <div
-                className="h-screen bg-surface-900 flex flex-col text-white overflow-hidden relative"
+                className="h-[100dvh] bg-surface-900 flex flex-col text-white overflow-hidden relative"
                 onDragEnter={handleDragEnter}
                 onDragLeave={handleDragLeave}
                 onDragOver={handleDragOver}
@@ -3043,7 +3043,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
     return (
-        <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400" /></div>}>
+        <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400" /></div>}>
             <DashboardContent />
         </Suspense>
     );

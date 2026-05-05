@@ -102,7 +102,7 @@ export default function DocsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-surface-900 text-surface-200 selection:bg-mandy-500/30">
+    <div className="min-h-[100dvh] bg-surface-900 text-surface-200 selection:bg-mandy-500/30">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-surface-900/90 backdrop-blur border-b border-surface-700/50">
         <div className="max-w-6xl mx-auto flex items-center gap-4 px-6 py-3">

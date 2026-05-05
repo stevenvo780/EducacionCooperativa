@@ -69,7 +69,7 @@ function LoginPage() {
   if (showResetPassword) {
     return (
       <LazyMotion features={domAnimation}>
-        <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
+        <div className="min-h-[100dvh] bg-surface-900 flex items-center justify-center p-4 relative">
           <div className="absolute inset-0 bg-gradient-glow opacity-40" />
 
           <div className="w-full max-w-md relative z-10">
@@ -169,7 +169,7 @@ function LoginPage() {
 
   return (
     <LazyMotion features={domAnimation}>
-      <div className="min-h-screen bg-surface-900 flex items-center justify-center p-4 relative">
+      <div className="min-h-[100dvh] bg-surface-900 flex items-center justify-center p-4 relative">
         <div className="absolute inset-0 bg-gradient-glow opacity-40" />
 
         <div className="w-full max-w-md relative z-10">
