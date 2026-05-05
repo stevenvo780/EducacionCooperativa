@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { FileText, Code, X } from 'lucide-react';
 
@@ -45,6 +46,13 @@ interface NewFileModalProps {
 }
 
 const NewFileModal = ({ open, onClose, onSelect, modalFade, modalPop }: NewFileModalProps) => {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
   return (
     <AnimatePresence>
       {open && (
