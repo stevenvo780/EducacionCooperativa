@@ -325,6 +325,15 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       const splitHandle = target.closest('.mosaic-split');
       if (!splitHandle || !mosaicContainerRef.current?.contains(splitHandle)) return;
 
+      // Si el click cae sobre un elemento interactivo dentro del split
+      // (botones, inputs, links que viven en toolbars cercanas), NO activar
+      // resize — sino el overlay z-[80] inset-0 captura el mouseup y el
+      // click nunca llega al botón. Bug crítico que mataba upload, etc.
+      const interactive = target.closest(
+        'button, input, textarea, select, a, [role="button"], [contenteditable], label'
+      );
+      if (interactive && splitHandle.contains(interactive)) return;
+
       setIsResizingMosaic(true);
       setResizeCursor(splitHandle.classList.contains('-column') ? 'row-resize' : 'col-resize');
     };
