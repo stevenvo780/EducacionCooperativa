@@ -2954,10 +2954,16 @@ function DashboardContent() {
                         )}
                       </PanelGroup>
                       {rightPanelOpen && isCompact && (
-                        <div className="fixed inset-0 z-50 flex bg-surface-900">
+                        <div
+                          className="fixed inset-0 z-50 flex bg-surface-900"
+                          role="dialog"
+                          aria-modal="true"
+                          aria-label="Panel Agora AI"
+                        >
                           <RightPanel
                             open
                             currentWorkspace={currentWorkspace}
+                            onClose={() => setRightPanelOpen(false)}
                           />
                         </div>
                       )}
