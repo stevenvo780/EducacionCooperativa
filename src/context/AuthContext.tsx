@@ -10,7 +10,6 @@ import {
 import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomToken } from '@/lib/firebase';
 import { apiUrl } from '@/services/apiClient';
-import { env as envHelper } from '@/lib/env';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -161,7 +160,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const signInWithGoogle = async () => {
-        const apiKey = envHelper.NEXT_PUBLIC_FIREBASE_API_KEY();
+        const apiKey = (process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '').replace(/\\n/g, '').trim();
         if (!apiKey) {
             throw new Error('Google Sign-In no está configurado. Por favor usa email/contraseña.');
         }

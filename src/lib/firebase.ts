@@ -2,17 +2,21 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
 import { getFirestore, Firestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getDatabase, Database } from 'firebase/database';
-import { env } from '@/lib/env';
+
+// Lectura literal: Next sólo inlinea process.env.NEXT_PUBLIC_* si el acceso
+// es por nombre exacto en el bundle del cliente. Cualquier indirección
+// (process.env[k]) deja la var como undefined en runtime del browser.
+const cleanEnv = (raw: string | undefined): string => (raw ?? '').replace(/\\n/g, '').trim();
 
 // Firebase Storage NO se usa en Agora — los blobs viven en MinIO (NAS).
 // Mantenemos sólo Auth + Firestore + RTDB de Firebase.
-const projectId = env.NEXT_PUBLIC_FIREBASE_PROJECT_ID();
+const projectId = cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 const firebaseConfig = {
-  apiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY(),
-  authDomain: env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN(),
+  apiKey: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+  authDomain: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
   projectId,
-  messagingSenderId: env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID(),
-  appId: env.NEXT_PUBLIC_FIREBASE_APP_ID(),
+  messagingSenderId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+  appId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
   databaseURL: projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined
 };
 
