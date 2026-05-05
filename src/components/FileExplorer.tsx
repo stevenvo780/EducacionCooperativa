@@ -405,6 +405,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
        for (let i = start; i <= end; i++) {
           const item = contentItems[i];
+          if (!item) continue;
           if (item.kind === 'folder') nextKeys.add(`folder:${item.folder.path}`);
           else nextKeys.add(`doc:${item.doc.id}`);
        }
@@ -437,6 +438,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
          const nextKeys = new Set(selectedKeys);
          for (let i = start; i <= end; i++) {
             const item = contentItems[i];
+            if (!item) continue;
             if (item.kind === 'folder') nextKeys.add(`folder:${item.folder.path}`);
             else nextKeys.add(`doc:${item.doc.id}`);
          }

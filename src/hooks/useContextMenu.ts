@@ -39,6 +39,7 @@ export function useContextMenu<T>() {
     onTouchStart: (e: TouchEvent) => {
       if (shouldIgnoreTarget(e.target) || e.touches.length !== 1) return;
       const touch = e.touches[0];
+      if (!touch) return;
       touchStartPos.current = { x: touch.clientX, y: touch.clientY };
       isDragging.current = false;
       longPressTimer.current = setTimeout(() => {
@@ -50,6 +51,7 @@ export function useContextMenu<T>() {
     onTouchMove: (e: TouchEvent) => {
       if (!touchStartPos.current) return;
       const touch = e.touches[0];
+      if (!touch) return;
       const dx = Math.abs(touch.clientX - touchStartPos.current.x);
       const dy = Math.abs(touch.clientY - touchStartPos.current.y);
       if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX) {

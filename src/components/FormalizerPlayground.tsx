@@ -869,7 +869,7 @@ function colorize(line: string): React.ReactNode {
           <span className="text-red-400 font-semibold">axiom</span>
           <span className="text-amber-300"> {match[1]}</span>
           <span className="text-slate-500"> = </span>
-          <span className="text-cyan-300">{highlightFormula(match[2])}</span>
+          <span className="text-cyan-300">{highlightFormula(match[2] ?? '')}</span>
         </span>
       );
     }
@@ -893,7 +893,7 @@ function colorize(line: string): React.ReactNode {
       return (
         <span>
           <span className="text-green-400 font-semibold">derive</span>
-          <span className="text-cyan-300"> {highlightFormula(match[1])}</span>
+          <span className="text-cyan-300"> {highlightFormula(match[1] ?? '')}</span>
           <span className="text-green-400"> from</span>
           <span className="text-slate-500"> {'{'}</span>
           <span className="text-amber-300">{match[2]}</span>

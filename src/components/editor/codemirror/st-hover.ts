@@ -70,10 +70,10 @@ function getWordRangeAtColumn(lineText: string, column: number): { start: number
   if (column < 0 || column >= lineText.length) return null;
 
   let start = column;
-  while (start > 0 && /[a-zA-Z0-9_.\u00C0-\u024F]/.test(lineText[start - 1])) start--;
+  while (start > 0 && /[a-zA-Z0-9_.\u00C0-\u024F]/.test(lineText.charAt(start - 1))) start--;
 
   let end = column;
-  while (end < lineText.length && /[a-zA-Z0-9_.\u00C0-\u024F]/.test(lineText[end])) end++;
+  while (end < lineText.length && /[a-zA-Z0-9_.\u00C0-\u024F]/.test(lineText.charAt(end))) end++;
 
   return start === end ? null : { start, end };
 }

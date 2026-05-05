@@ -38,6 +38,12 @@ function collectAssociativeArgs(
   return items;
 }
 
+function binary(f: Formula, sym: string, fallback: string): string {
+  const [a, b] = f.args ?? [];
+  if (!a || !b) return fallback;
+  return `(${formulaToUnicode(a)} ${sym} ${formulaToUnicode(b)})`;
+}
+
 function formulaToUnicode(f: Formula): string {
   if (!f) return '?';
   switch (f.kind) {
@@ -64,21 +70,13 @@ function formulaToUnicode(f: Formula): string {
         ? `(${collectAssociativeArgs(f, 'xor').map(formulaToUnicode).join(' ⊕ ')})`
         : '⊕?';
     case 'nand':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} ↑ ${formulaToUnicode(f.args[1])})`
-        : '↑?';
+      return binary(f, '↑', '↑?');
     case 'nor':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} ↓ ${formulaToUnicode(f.args[1])})`
-        : '↓?';
+      return binary(f, '↓', '↓?');
     case 'implies':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} → ${formulaToUnicode(f.args[1])})`
-        : '→?';
+      return binary(f, '→', '→?');
     case 'biconditional':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} ↔ ${formulaToUnicode(f.args[1])})`
-        : '↔?';
+      return binary(f, '↔', '↔?');
     case 'modal_necessity':
       return f.args?.[0] ? `□(${formulaToUnicode(f.args[0])})` : '□?';
     case 'modal_possibility':
@@ -86,9 +84,7 @@ function formulaToUnicode(f: Formula): string {
     case 'temporal_next':
       return f.args?.[0] ? `X(${formulaToUnicode(f.args[0])})` : 'X?';
     case 'temporal_until':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} U ${formulaToUnicode(f.args[1])})`
-        : 'U?';
+      return binary(f, 'U', 'U?');
     case 'forall':
       return f.args?.[0]
         ? `∀${f.variable ?? '?'}(${formulaToUnicode(f.args[0])})`
@@ -102,47 +98,27 @@ function formulaToUnicode(f: Formula): string {
         ? `${f.name}(${(f.params ?? f.terms ?? []).join(', ')})`
         : 'P?';
     case 'equals':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} = ${formulaToUnicode(f.args[1])})`
-        : '=?';
+      return binary(f, '=', '=?');
     case 'number':
       return String(f.value ?? '?');
     case 'add':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} + ${formulaToUnicode(f.args[1])})`
-        : '+?';
+      return binary(f, '+', '+?');
     case 'subtract':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} - ${formulaToUnicode(f.args[1])})`
-        : '-?';
+      return binary(f, '-', '-?');
     case 'multiply':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} * ${formulaToUnicode(f.args[1])})`
-        : '*?';
+      return binary(f, '*', '*?');
     case 'divide':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} / ${formulaToUnicode(f.args[1])})`
-        : '/?';
+      return binary(f, '/', '/?');
     case 'modulo':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} % ${formulaToUnicode(f.args[1])})`
-        : '%?';
+      return binary(f, '%', '%?');
     case 'less':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} < ${formulaToUnicode(f.args[1])})`
-        : '<?';
+      return binary(f, '<', '<?');
     case 'greater':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} > ${formulaToUnicode(f.args[1])})`
-        : '>?';
+      return binary(f, '>', '>?');
     case 'less_eq':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} ≤ ${formulaToUnicode(f.args[1])})`
-        : '≤?';
+      return binary(f, '≤', '≤?');
     case 'greater_eq':
-      return f.args?.length === 2
-        ? `(${formulaToUnicode(f.args[0])} ≥ ${formulaToUnicode(f.args[1])})`
-        : '≥?';
+      return binary(f, '≥', '≥?');
     case 'fn_call': {
       const renderedArgs = (f.args ?? []).map(formulaToUnicode).join(', ');
       return `${f.name ?? 'fn'}(${renderedArgs})`;
@@ -278,7 +254,7 @@ function StatusChip({ status }: { status: string }) {
     unknown: { bg: 'bg-slate-500/20', text: 'text-slate-400', icon: null, label: '? Desconocido' },
     error: { bg: 'bg-red-600/20', text: 'text-red-500', icon: <AlertTriangle className="w-2.5 h-2.5" />, label: 'Error' }
   };
-  const s = map[status] ?? map['unknown'];
+  const s = map[status] ?? map['unknown']!;
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${s.bg} ${s.text}`}>
       {s.icon}{s.label}
@@ -317,8 +293,9 @@ function truthValueLabel(value: unknown, isBelnap: boolean): string {
 
 /** Tabla de verdad visual (soporta clásica V/F y Belnap T/F/B/N) */
 function TruthTableView({ table }: { table: TruthTableResult }) {
-  const isBelnap = table.rows.length > 0 && typeof table.rows[0].result === 'string'
-    && ['T', 'F', 'B', 'N'].includes(table.rows[0].result as string);
+  const firstRow = table.rows[0];
+  const isBelnap = !!firstRow && typeof firstRow.result === 'string'
+    && ['T', 'F', 'B', 'N'].includes(firstRow.result);
   const hasSubFormulaColumns = Boolean(table.subFormulas?.length && table.subFormulaValues?.length === table.rows.length);
   const belnapDesignated = new Set(['T', 'B']);
 

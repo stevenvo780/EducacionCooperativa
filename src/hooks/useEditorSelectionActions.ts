@@ -336,6 +336,7 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
 
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
+      if (!touch) return;
       touchStartPos = { x: touch.clientX, y: touch.clientY };
       isDragging = false;
       longPressTimer = setTimeout(() => {
@@ -352,6 +353,7 @@ export function useEditorSelectionActions({ editorShellRef, docId, enabled, onCo
     const handleTouchMove = (e: TouchEvent) => {
       if (!touchStartPos) return;
       const touch = e.touches[0];
+      if (!touch) return;
       const dx = Math.abs(touch.clientX - touchStartPos.x);
       const dy = Math.abs(touch.clientY - touchStartPos.y);
       if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX) {

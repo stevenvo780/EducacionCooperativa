@@ -115,7 +115,9 @@ export function LinterOverlay({
 }: LinterOverlayProps) {
   const _lines = useMemo(() => content.split('\n'), [content]);
   const orderedDiagnosticGroups = useMemo(
-    () => groupDiagnosticsByRange(diagnostics).sort((left, right) => compareDiagnosticsForOverlay(left[0], right[0])),
+    () => groupDiagnosticsByRange(diagnostics)
+      .filter((g): g is [GenericDiagnostic, ...GenericDiagnostic[]] => g.length > 0)
+      .sort((left, right) => compareDiagnosticsForOverlay(left[0], right[0])),
     [diagnostics]
   );
   const [openTooltipKey, setOpenTooltipKey] = useState<string | null>(null);

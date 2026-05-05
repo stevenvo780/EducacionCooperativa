@@ -92,7 +92,7 @@ const buildExportMatrix = (sheet: SheetData) => {
     ...sheet.rows.map((row) => [...row.cells])
   ].map(trimTrailingEmptyCells);
 
-  while (rawRows.length > 0 && rawRows[rawRows.length - 1].length === 0) {
+  while (rawRows.length > 0 && (rawRows[rawRows.length - 1] ?? []).length === 0) {
     rawRows.pop();
   }
 
@@ -158,7 +158,7 @@ export default function SpreadsheetViewer({
           const rows = parseCsv(text, delimiter);
           parsedSheets = rows.length === 0
             ? [buildSheet('Datos', [], [])]
-            : [buildSheet('Datos', rows[0].map((cell) => String(cell ?? '')), rows.slice(1))];
+            : [buildSheet('Datos', (rows[0] ?? []).map((cell) => String(cell ?? '')), rows.slice(1))];
         } else {
           const XLSX = await loadXlsx();
           const arrayBuffer = await blob.arrayBuffer();
@@ -176,7 +176,7 @@ export default function SpreadsheetViewer({
               return buildSheet(sheetName, [], []);
             }
 
-            const headers = raw[0].map((cell) => String(cell ?? ''));
+            const headers = (raw[0] ?? []).map((cell) => String(cell ?? ''));
             const rows = raw.slice(1).map((row) => row.map((cell) => String(cell ?? '')));
             return buildSheet(sheetName, headers, rows);
           });
