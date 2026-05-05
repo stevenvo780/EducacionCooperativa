@@ -11,9 +11,9 @@
       }
     },
     "presence": {
-      "$userId": {
+      "$wsId": {
         ".read": "auth != null",
-        ".write": "auth != null && auth.uid == $userId"
+        ".write": "auth != null && (!$wsId.beginsWith('personal_') || $wsId === 'personal_' + auth.uid)"
       }
     }
   }
