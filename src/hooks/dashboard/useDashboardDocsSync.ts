@@ -56,13 +56,15 @@ export const useDashboardDocsSync = ({
     setLoadingDocs
   });
 
-  latestStateRef.current = {
-    user,
-    currentWorkspace,
-    docsLength,
-    applyDocsSnapshot,
-    setLoadingDocs
-  };
+  useEffect(() => {
+    latestStateRef.current = {
+      user,
+      currentWorkspace,
+      docsLength,
+      applyDocsSnapshot,
+      setLoadingDocs
+    };
+  }, [user, currentWorkspace, docsLength, applyDocsSnapshot, setLoadingDocs]);
 
   useEffect(() => {
     return () => {
@@ -254,54 +256,56 @@ export const useDashboardDocsSync = ({
     void requestDocsRefresh({ force: true, delayMs: 0 });
   }, [isPageVisible, currentWorkspace, user, requestDocsRefresh]);
 
+  // Coalescer único: todos los triggers externos (RTDB via TerminalContext,
+  // agora:docs-changed, agora:documents-mutated) entran por el mismo handler
+  // que dedupe + throttle vía requestDocsRefresh. Antes había 3 effects
+  // separados; cada uno disparaba su propio refresh y a veces se sumaban.
   useEffect(() => {
-    if (!currentWorkspace || !user || !onDocChangeCallback) return;
+    if (!currentWorkspace || !user) return;
 
-    const unsubscribe = onDocChangeCallback((event) => {
-      const eventWorkspaceId = event.workspaceId;
-      const currentWorkspaceToken = currentWorkspace.id === personalWorkspaceId
-        ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
-        : currentWorkspace.id;
-
-      if (eventWorkspaceId === currentWorkspaceToken || eventWorkspaceId === currentWorkspace.id) {
-        scheduleSyncFetch();
+    const matchesActiveWorkspace = (eventWorkspaceId: string | null | undefined): boolean => {
+      if (!eventWorkspaceId) return false;
+      if (eventWorkspaceId === currentWorkspace.id) return true;
+      if (currentWorkspace.id === personalWorkspaceId) {
+        if (eventWorkspaceId === PERSONAL_WORKSPACE_ID) return true;
+        if (eventWorkspaceId === `${PERSONAL_WORKSPACE_ID}:${user.uid}`) return true;
       }
-    });
-
-    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
-  }, [currentWorkspace, user, onDocChangeCallback, personalWorkspaceId, scheduleSyncFetch]);
-
-  // Escuchar evento global para refrescar docs (usado por MosaicEditor al crear .st companions)
-  useEffect(() => {
-    const handler = () => {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[Sync] agora:docs-changed event received, refreshing…');
-      }
-      void requestDocsRefresh({ force: true, delayMs: 0 });
+      return false;
     };
-    window.addEventListener('agora:docs-changed', handler);
-    return () => window.removeEventListener('agora:docs-changed', handler);
-  }, [requestDocsRefresh]);
 
-  useEffect(() => {
-    const handler = (event: Event) => {
+    const triggerRefresh = (source: string) => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`[Sync] coalesced refresh from ${source}`);
+      }
+      scheduleSyncFetch();
+    };
+
+    const docsChangedHandler = () => triggerRefresh('agora:docs-changed');
+    const docsMutatedHandler = (event: Event) => {
       const detail = (event as CustomEvent<AgentDocumentsMutatedEventDetail>).detail;
-      if (!detail?.workspaceId || !currentWorkspace || !user) return;
-
-      const matchesCurrentWorkspace = detail.workspaceId === currentWorkspace.id
-        || (currentWorkspace.id === personalWorkspaceId && detail.workspaceId === PERSONAL_WORKSPACE_ID);
-
-      if (!matchesCurrentWorkspace) return;
-
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[Sync] agora:documents-mutated event received, refreshing…');
-      }
-      void requestDocsRefresh({ force: true, delayMs: 0 });
+      if (!matchesActiveWorkspace(detail?.workspaceId)) return;
+      triggerRefresh('agora:documents-mutated');
     };
 
-    window.addEventListener('agora:documents-mutated', handler as EventListener);
-    return () => window.removeEventListener('agora:documents-mutated', handler as EventListener);
-  }, [currentWorkspace, personalWorkspaceId, requestDocsRefresh, user]);
+    window.addEventListener('agora:docs-changed', docsChangedHandler);
+    window.addEventListener('agora:documents-mutated', docsMutatedHandler as EventListener);
+
+    let unsubscribeDocChange: (() => void) | null = null;
+    if (onDocChangeCallback) {
+      const unsubscribe = onDocChangeCallback((event) => {
+        if (matchesActiveWorkspace(event.workspaceId)) {
+          triggerRefresh('terminal:doc-change');
+        }
+      });
+      if (typeof unsubscribe === 'function') unsubscribeDocChange = unsubscribe;
+    }
+
+    return () => {
+      window.removeEventListener('agora:docs-changed', docsChangedHandler);
+      window.removeEventListener('agora:documents-mutated', docsMutatedHandler as EventListener);
+      unsubscribeDocChange?.();
+    };
+  }, [currentWorkspace, user, onDocChangeCallback, personalWorkspaceId, scheduleSyncFetch]);
 
   return {
     fetchDocs,
