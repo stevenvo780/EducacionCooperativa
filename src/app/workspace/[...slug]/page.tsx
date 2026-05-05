@@ -138,8 +138,18 @@ export default function WorkspacePathResolverPage() {
       return;
     }
 
-    if (slug.length < 2) {
+    if (slug.length === 0) {
       setMessage('La referencia no tiene una ruta válida.');
+      return;
+    }
+
+    // /workspace/<wsId> sin más segmentos → entrar al dashboard de ese workspace.
+    if (slug.length === 1) {
+      const wsSegment = decodeURIComponent(slug[0] || '');
+      const wsId = normalizeWorkspaceName(wsSegment) === PERSONAL_WORKSPACE_ID
+        ? PERSONAL_WORKSPACE_ID
+        : wsSegment;
+      router.replace(`/dashboard?workspaceId=${encodeURIComponent(wsId)}`);
       return;
     }
 
