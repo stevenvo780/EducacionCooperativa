@@ -67,6 +67,7 @@ function resolveTextPosition(segments: TextNodeSegment[], absoluteOffset: number
     }
   }
   const lastSegment = segments[segments.length - 1];
+  if (!lastSegment) return null;
   return { node: lastSegment.node, offset: lastSegment.text.length };
 }
 
@@ -95,7 +96,7 @@ function findDiagnosticRange(
     if (lineIdx < 0 || lineIdx >= lines.length) return null;
     const colStart = diag.column - 1;
     const colEnd = (diag.endColumn ?? diag.column + 1) - 1;
-    targetText = lines[lineIdx].substring(colStart, colEnd);
+    targetText = (lines[lineIdx] ?? '').substring(colStart, colEnd);
   }
 
   if (!targetText || !targetText.trim()) return null;
@@ -567,6 +568,7 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
       const isInteractive = interactiveRef.current;
 
       const groupedDiags = groupDiagnosticsByRange(currentDiags)
+        .filter((g): g is [LinterDiagnostic, ...LinterDiagnostic[]] => g.length > 0)
         .sort((left, right) => compareDiagnosticsForSharedRange(left[0], right[0]));
       const usedPositions = new Set<string>();
       const textIndex = buildDocumentTextIndex(editable);

@@ -7,6 +7,7 @@ import { ViewerEmpty, ViewerError, ViewerLoading } from '@/components/file-viewe
 import { useFileResource, decodeText, urlCacheKey } from '@/components/file-viewers/hooks/useFileResource';
 import { parseBibtex, type BibEntry } from '@/lib/parsers/bibtex';
 import { escapeHtml } from '@/lib/html-utils';
+import { sanitizeHtml } from '@/lib/safe-html';
 
 interface SourceTextViewerProps {
   docName: string;
@@ -96,20 +97,23 @@ function BibEntryCard({ entry }: { entry: BibEntry }) {
 
 function highlightLines(text: string, language: string): string[] {
   const lines = text.split('\n');
-  if (language === 'latex') {
-    return lines.map((line) => escapeHtml(line)
-      .replace(/(%.*$)/g, '<span style="color:#64748b">$1</span>')
-      .replace(/(\\[a-zA-Z]+\*?)/g, '<span style="color:#60a5fa">$1</span>')
-      .replace(/(\{[^{}]*\})/g, '<span style="color:#fcd34d">$1</span>')
-      .replace(/(\$[^$]*\$)/g, '<span style="color:#a78bfa">$1</span>')
-    );
-  }
-  if (language === 'bibtex') {
-    return lines.map((line) => escapeHtml(line)
-      .replace(/(@\w+)/g, '<span style="color:#34d399">$1</span>')
-      .replace(/(\w+)\s*=/g, '<span style="color:#60a5fa">$1</span>=')
-      .replace(/(\{[^{}]*\})/g, '<span style="color:#fcd34d">$1</span>')
-    );
-  }
-  return lines.map(escapeHtml);
+  const colored = (() => {
+    if (language === 'latex') {
+      return lines.map((line) => escapeHtml(line)
+        .replace(/(%.*$)/g, '<span style="color:#64748b">$1</span>')
+        .replace(/(\\[a-zA-Z]+\*?)/g, '<span style="color:#60a5fa">$1</span>')
+        .replace(/(\{[^{}]*\})/g, '<span style="color:#fcd34d">$1</span>')
+        .replace(/(\$[^$]*\$)/g, '<span style="color:#a78bfa">$1</span>')
+      );
+    }
+    if (language === 'bibtex') {
+      return lines.map((line) => escapeHtml(line)
+        .replace(/(@\w+)/g, '<span style="color:#34d399">$1</span>')
+        .replace(/(\w+)\s*=/g, '<span style="color:#60a5fa">$1</span>=')
+        .replace(/(\{[^{}]*\})/g, '<span style="color:#fcd34d">$1</span>')
+      );
+    }
+    return lines.map(escapeHtml);
+  })();
+  return colored.map(sanitizeHtml);
 }

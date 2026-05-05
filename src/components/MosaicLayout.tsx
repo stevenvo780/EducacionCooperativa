@@ -337,11 +337,30 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       stopResize();
     };
 
+    // Safety net: si los flags de drag/resize quedan colgados (dragend que no
+    // dispara, gestos touch interrumpidos), los overlays bloquean el wheel y
+    // matan el scroll en los editores. Limpiar cuando no hay botón presionado
+    // o se pulsa Escape destraba esos estados zombi.
+    const clearStuckOverlays = () => {
+      setIsDraggingDoc(false);
+      setIsResizingMosaic(false);
+      setDragOverInfo(null);
+      setDragOverEmpty(false);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.buttons === 0) clearStuckOverlays();
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') clearStuckOverlays();
+    };
+
     document.addEventListener('mousedown', handlePointerDown, true);
     document.addEventListener('touchstart', handlePointerDown, true);
     document.addEventListener('mouseup', stopResize, true);
     document.addEventListener('touchend', stopResize, true);
     document.addEventListener('touchcancel', stopResize, true);
+    document.addEventListener('pointermove', handlePointerMove, { passive: true });
+    document.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', handleWindowBlur);
 
     return () => {
@@ -350,6 +369,8 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       document.removeEventListener('mouseup', stopResize, true);
       document.removeEventListener('touchend', stopResize, true);
       document.removeEventListener('touchcancel', stopResize, true);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
     };
   }, []);
@@ -956,6 +977,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           ]}
         />
       )}
+      {/* @ts-ignore styled-jsx props */}
       <style jsx global>{`
         body.mosaic-resizing-active,
         body.mosaic-resizing-active * {

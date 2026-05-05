@@ -223,7 +223,7 @@ export default function MosaicEditor({
          const before = statsContent.substring(0, idx);
          const lines = before.split('\n');
          const line = lines.length;
-         const column = lines[lines.length - 1].length + 1;
+         const column = (lines[lines.length - 1] ?? '').length + 1;
 
          // Multi-line aware end column for single line fallbacks
          const textLines = n.text.split('\n');
@@ -700,6 +700,7 @@ export default function MosaicEditor({
 
     setSaving(true);
 
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       const requestId = ++saveRequestIdRef.current;
       let saveError: Error | null = null;
@@ -1158,7 +1159,7 @@ export default function MosaicEditor({
     const docName = currentDocMetaRef.current.name || 'Documento';
 
     // Fallback to doc name if no selection
-    const title = selection ? selection.split('\n')[0].substring(0, 100) : `Revisar: ${docName}`;
+    const title = selection ? (selection.split('\n')[0] ?? '').substring(0, 100) : `Revisar: ${docName}`;
     const description = selection || `Tarea creada desde el documento ${docName}`;
 
     if (!roomId) return;
@@ -1301,7 +1302,7 @@ export default function MosaicEditor({
       let formulaToUse = defineConceptDraft.formula.trim();
       if (!formulaToUse && autologicPreview?.ok && autologicPreview.formulaCount > 0) {
         const axiomMatch = autologicPreview.stCode.match(/axiom\s+\w+\s*=\s*(.+)/);
-        if (axiomMatch) formulaToUse = axiomMatch[1].trim();
+        if (axiomMatch?.[1]) formulaToUse = axiomMatch[1].trim();
       }
 
       const payload = getSemanticPayload(defineConceptDraft.selectionText);
@@ -1502,6 +1503,7 @@ export default function MosaicEditor({
     if (lineIdx < 0 || lineIdx >= lines.length) return;
 
     const line = lines[lineIdx];
+    if (line === undefined) return;
     const startCol = diag.column - 1;
     const endCol = (diag.endColumn ?? diag.column) - 1;
     lines[lineIdx] = line.slice(0, startCol) + replacement + line.slice(endCol);
@@ -2079,6 +2081,7 @@ export default function MosaicEditor({
         />
       )}
 
+      {/* @ts-ignore styled-jsx props */}
       <style jsx global>{mosaicEditorStyles}</style>
     </div>
   );

@@ -233,7 +233,7 @@ export const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<E
 
   for (let idx = 0; idx < candidates.length; idx += 1) {
     const firstEl = candidates[idx];
-    if (blockParagraphs.has(firstEl)) continue;
+    if (!firstEl || blockParagraphs.has(firstEl)) continue;
 
     const firstText = firstEl.textContent || '';
     const openDelimiter = findNextBlockDelimiter(firstText);
@@ -265,13 +265,14 @@ export const collectBlockMath = (editable: HTMLElement, paragraphs: NodeListOf<E
       continue;
     }
 
-    const blockElements = [firstEl];
+    const blockElements: HTMLElement[] = [firstEl];
     const latexSegments = [firstText.slice(openDelimiter.index + openDelimiter.length)];
     let closeMatch: ReturnType<typeof findNextBlockDelimiter> = null;
-    let lastEl = firstEl;
+    let lastEl: HTMLElement = firstEl;
 
     for (let nextIdx = idx + 1; nextIdx < candidates.length; nextIdx += 1) {
       const candidate = candidates[nextIdx];
+      if (!candidate) continue;
       blockElements.push(candidate);
 
       const candidateText = candidate.textContent || '';
@@ -331,7 +332,7 @@ const collectInlineMath = (
     let match: RegExpExecArray | null;
     while ((match = inlineRegex.exec(text)) !== null) {
       const latex = match[1];
-      if (!latex.trim()) continue;
+      if (!latex || !latex.trim()) continue;
 
       const start = findTextNodeAtOffset(el, match.index);
       const end = findTextNodeAtOffset(el, match.index + match[0].length);

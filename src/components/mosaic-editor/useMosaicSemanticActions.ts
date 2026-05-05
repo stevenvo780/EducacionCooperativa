@@ -203,6 +203,7 @@ export function useMosaicSemanticActions({
       if (!workbench) {
         const board = await fetchBoardApi({ workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID });
         const backlogColumn = board.columns.find(c => /backlog|ideas/i.test(c.name)) ?? board.columns[0];
+        if (!backlogColumn) throw new Error('No hay columnas en el tablero');
         workbench = await createBoardCardApi({
           workspaceId: currentWorkspaceId || PERSONAL_WORKSPACE_ID,
           columnId: backlogColumn.id,
