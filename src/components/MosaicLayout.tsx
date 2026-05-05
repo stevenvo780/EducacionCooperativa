@@ -334,6 +334,13 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       );
       if (interactive && splitHandle.contains(interactive)) return;
 
+      // En táctil, sin preventDefault el browser dispara el menú contextual
+      // nativo (long-press → "Descargar"/"Compartir") y además genera
+      // touch-callout. Cancelamos el default sólo para split-bar real.
+      if (event.cancelable) {
+        try { event.preventDefault(); } catch { /* ignore */ }
+      }
+
       setIsResizingMosaic(true);
       setResizeCursor(splitHandle.classList.contains('-column') ? 'row-resize' : 'col-resize');
     };
@@ -996,6 +1003,9 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           z-index: 30 !important;
           background: rgba(148, 163, 184, 0.18) !important;
           touch-action: none !important;
+          -webkit-touch-callout: none !important;
+          -webkit-user-select: none !important;
+          user-select: none !important;
         }
         .mosaic-custom-dark .mosaic-split:hover,
         .mosaic-custom-dark .mosaic-split.-active {
