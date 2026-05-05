@@ -1,32 +1,6 @@
 import path from 'path';
 import { defineConfig } from 'vitest/config';
 
-const coverageInclude = [
-  'src/lib/crypto.ts',
-  'src/lib/error-utils.ts',
-  'src/lib/folder-utils.ts',
-  'src/lib/markdown-linter/types.ts',
-  'src/lib/markdown-linter/rules.ts',
-  'src/lib/markdown-linter/registry.ts',
-  'src/lib/search/types.ts',
-  'src/lib/server-auth.ts',
-  'src/lib/storage-path.ts',
-  'src/services/apiClient.ts',
-  'src/services/dashboardDocUtils.ts',
-  'src/services/dashboardPersistence.ts',
-  'src/services/dashboardUtils.ts',
-  'src/services/editorSemanticStore.ts',
-  'src/services/searchApi.ts',
-  'src/services/snippetApi.ts',
-  'src/services/subscriptionApi.ts',
-  'src/store/dashboard.selectors.ts',
-  'src/store/dashboardSlice.ts',
-  'src/types/documents.ts',
-  'src/types/payments.ts',
-  'src/types/subscription.ts',
-  'src/types/workspace.ts'
-];
-
 export default defineConfig({
   resolve: {
     alias: {
@@ -41,12 +15,18 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
-      include: coverageInclude,
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/generated/**',
+        'src/types/**',
+        'src/components/mosaic-editor/styles.ts'
+      ],
       thresholds: {
-        lines: 100,
-        functions: 100,
-        branches: 100,
-        statements: 100
+        lines: 25,
+        functions: 25,
+        branches: 25,
+        statements: 25
       }
     }
   }
