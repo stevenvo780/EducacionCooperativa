@@ -228,8 +228,10 @@ function DashboardContent() {
         };
 
         const handler = (e: Event) => {
-            const detail = (e as CustomEvent<{ diagnostics: { line: number; column: number; severity: string; message: string; ruleId?: string }[] }>).detail;
-            const docId = selectedDocIdRef.current;
+            const detail = (e as CustomEvent<{ diagnostics: { line: number; column: number; severity: string; message: string; ruleId?: string }[]; docId?: string | null }>).detail;
+            // Preferir docId del evento (emitido por useMarkdownLinter del editor real)
+            // sobre selectedDocIdRef.current, que puede haber cambiado entre lint y emit.
+            const docId = detail?.docId ?? selectedDocIdRef.current;
             if (!docId || !collection) return;
             if (lastDocId && lastDocId !== docId) {
                 collection.clear(lastDocId);

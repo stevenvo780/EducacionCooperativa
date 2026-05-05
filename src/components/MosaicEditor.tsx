@@ -220,7 +220,7 @@ export default function MosaicEditor({
     () => [stDefinitionsRule, stUndefinedRefRule, stUnusedTheoremRule, stCrossDocConflictRule],
     [stDefinitionsRule, stUndefinedRefRule, stUnusedTheoremRule, stCrossDocConflictRule]
   );
-  const { diagnostics: markdownDiagnostics, runLint, linterStatus } = useMarkdownLinter(statsContent, linterRules);
+  const { diagnostics: markdownDiagnostics, runLint, linterStatus } = useMarkdownLinter(statsContent, linterRules, roomId ?? null);
 
   const noteDiagnostics = useMemo<LinterDiagnostic[]>(() => {
     const diags: LinterDiagnostic[] = [];
@@ -1595,6 +1595,9 @@ export default function MosaicEditor({
   return (
     <div
       ref={editorShellRef}
+      role="region"
+      aria-label={`Editor: ${docName || currentDocMetaRef.current.name || 'Documento'}`}
+      data-editor-room-id={roomId ?? undefined}
       className={clsx(
         'flex flex-col h-full bg-slate-950 text-slate-300 relative mdx-editor-dark',
         embedded && 'editor-embedded',

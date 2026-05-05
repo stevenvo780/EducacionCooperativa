@@ -109,7 +109,7 @@ type ParagraphCacheEntry = { diagnostics: LinterDiagnostic[] };
  * - Reglas custom en hilo principal (p.ej. STDefinitions)
  * - Linting incremental por párrafo para ediciones parciales
  */
-export function useMarkdownLinter(content: string, customRules: LinterRule[] = []) {
+export function useMarkdownLinter(content: string, customRules: LinterRule[] = [], docId: string | null = null) {
   const [diagnostics, setDiagnostics] = useState<LinterDiagnostic[]>([]);
   const [linterStatus, setLinterStatus] = useState<LinterStatus>('initializing');
   const contentRef = useRef(content);
@@ -381,9 +381,9 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
     if (lastBridgeSigRef.current === sig) return;
     lastBridgeSigRef.current = sig;
     window.dispatchEvent(new CustomEvent('agora:md-diagnostics', {
-      detail: { diagnostics }
+      detail: { diagnostics, docId }
     }));
-  }, [diagnostics]);
+  }, [diagnostics, docId]);
 
   return { diagnostics, runLint, linterStatus };
 }
