@@ -180,7 +180,7 @@ const stIndentService = indentService.of((context, pos) => {
 
   const prevLine = doc.line(currentLine.number - 1);
   const prevText = prevLine.text.trimEnd();
-  const prevIndent = prevLine.text.match(/^(\s*)/)?.[1].length ?? 0;
+  const prevIndent = prevLine.text.match(/^(\s*)/)?.[1]?.length ?? 0;
 
   // After lines ending with "{" → indent +2
   if (prevText.endsWith('{')) {

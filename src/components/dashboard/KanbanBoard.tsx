@@ -59,8 +59,8 @@ const groupCardsByColumn = (cards: BoardCard[], columns: BoardColumn[]) => {
     grouped[col.id] = [];
   });
   cards.forEach(card => {
-    if (!grouped[card.columnId]) grouped[card.columnId] = [];
-    grouped[card.columnId].push(card);
+    const list = grouped[card.columnId] ?? (grouped[card.columnId] = []);
+    list.push(card);
   });
   Object.values(grouped).forEach(list => list.sort((a, b) => a.order - b.order));
   return grouped;

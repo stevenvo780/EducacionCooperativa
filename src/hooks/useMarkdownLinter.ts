@@ -25,7 +25,10 @@ function subscribeRegistry(onStoreChange: () => void): () => void {
 function diagnosticsEqual(a: LinterDiagnostic[], b: LinterDiagnostic[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].line !== b[i].line || a[i].column !== b[i].column || a[i].message !== b[i].message) return false;
+    const ai = a[i];
+    const bi = b[i];
+    if (!ai || !bi) return false;
+    if (ai.line !== bi.line || ai.column !== bi.column || ai.message !== bi.message) return false;
   }
   return true;
 }
@@ -68,7 +71,7 @@ function splitIntoParagraphs(text: string): Paragraph[] {
   };
 
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = (lines[i] ?? '').trim();
     if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) inFence = !inFence;
 
     if (!inFence && trimmed === '') {

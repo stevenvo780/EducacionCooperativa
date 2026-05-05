@@ -48,7 +48,7 @@ export function getSemanticDefinition(
   if (exactMatch?.location) return exactMatch.location;
 
   const suffixMatches = getSemanticSymbols(source).filter((symbol) => symbol.name.endsWith(`.${name}`));
-  if (suffixMatches.length === 1 && suffixMatches[0].location) {
+  if (suffixMatches.length === 1 && suffixMatches[0]?.location) {
     return suffixMatches[0].location;
   }
 

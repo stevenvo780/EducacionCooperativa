@@ -71,134 +71,134 @@ export function tokenizeLine(
   let depth = parenDepth;
 
   while (i < line.length) {
-    if (line[i] === '/' && line[i + 1] === '/') {
+    if (line.charAt(i) === '/' && line.charAt(i + 1) === '/') {
       tokens.push({ text: line.slice(i), category: 'comment' });
       return { tokens, parenDepth: depth };
     }
 
-    if (line[i] === '/' && line[i + 1] === '*') {
+    if (line.charAt(i) === '/' && line.charAt(i + 1) === '*') {
       let j = i + 2;
-      while (j < line.length - 1 && !(line[j] === '*' && line[j + 1] === '/')) j++;
+      while (j < line.length - 1 && !(line.charAt(j) === '*' && line.charAt(j + 1) === '/')) j++;
       if (j < line.length - 1) j += 2; else j = line.length;
       tokens.push({ text: line.slice(i, j), category: 'comment' });
       i = j;
       continue;
     }
 
-    if (line[i] === '"') {
+    if (line.charAt(i) === '"') {
       let j = i + 1;
-      while (j < line.length && line[j] !== '"') j++;
+      while (j < line.length && line.charAt(j) !== '"') j++;
       if (j < line.length) j++;
       tokens.push({ text: line.slice(i, j), category: 'string' });
       i = j;
       continue;
     }
 
-    if (line[i] === '[' && line[i + 1] === '[') {
+    if (line.charAt(i) === '[' && line.charAt(i + 1) === '[') {
       let j = i + 2;
-      while (j < line.length - 1 && !(line[j] === ']' && line[j + 1] === ']')) j++;
+      while (j < line.length - 1 && !(line.charAt(j) === ']' && line.charAt(j + 1) === ']')) j++;
       if (j < line.length - 1) j += 2; else j = line.length;
       tokens.push({ text: line.slice(i, j), category: 'string' });
       i = j;
       continue;
     }
 
-    if (OPEN_PARENS.has(line[i])) {
-      tokens.push({ text: line[i], category: 'paren', depth });
+    if (OPEN_PARENS.has(line.charAt(i))) {
+      tokens.push({ text: line.charAt(i), category: 'paren', depth });
       depth++;
       i++;
       continue;
     }
-    if (CLOSE_PARENS.has(line[i])) {
+    if (CLOSE_PARENS.has(line.charAt(i))) {
       depth = Math.max(0, depth - 1);
-      tokens.push({ text: line[i], category: 'paren', depth });
+      tokens.push({ text: line.charAt(i), category: 'paren', depth });
       i++;
       continue;
     }
 
-    if (line[i] === '[' && line[i + 1] === ']') {
+    if (line.charAt(i) === '[' && line.charAt(i + 1) === ']') {
       tokens.push({ text: '[]', category: 'operator' });
       i += 2;
       continue;
     }
-    if (line[i] === '<' && line[i + 1] === '-' && line[i + 2] === '>') {
+    if (line.charAt(i) === '<' && line.charAt(i + 1) === '-' && line.charAt(i + 2) === '>') {
       tokens.push({ text: '<->', category: 'operator' });
       i += 3;
       continue;
     }
-    if (line[i] === '<' && line[i + 1] === '=') {
+    if (line.charAt(i) === '<' && line.charAt(i + 1) === '=') {
       tokens.push({ text: '<=', category: 'operator' });
       i += 2;
       continue;
     }
-    if (line[i] === '>' && line[i + 1] === '=') {
+    if (line.charAt(i) === '>' && line.charAt(i + 1) === '=') {
       tokens.push({ text: '>=', category: 'operator' });
       i += 2;
       continue;
     }
-    if (line[i] === '<' && line[i + 1] === '>') {
+    if (line.charAt(i) === '<' && line.charAt(i + 1) === '>') {
       tokens.push({ text: '<>', category: 'operator' });
       i += 2;
       continue;
     }
-    if (line[i] === '!' && line[i + 1] === '&') {
+    if (line.charAt(i) === '!' && line.charAt(i + 1) === '&') {
       tokens.push({ text: '!&', category: 'operator' });
       i += 2;
       continue;
     }
-    if (line[i] === '!' && line[i + 1] === '|') {
+    if (line.charAt(i) === '!' && line.charAt(i + 1) === '|') {
       tokens.push({ text: '!|', category: 'operator' });
       i += 2;
       continue;
     }
-    if (line[i] === '-' && line[i + 1] === '>') {
+    if (line.charAt(i) === '-' && line.charAt(i + 1) === '>') {
       tokens.push({ text: '->', category: 'operator' });
       i += 2;
       continue;
     }
-    if (line[i] === '<' && line[i + 1] === '-') {
+    if (line.charAt(i) === '<' && line.charAt(i + 1) === '-') {
       tokens.push({ text: '<-', category: 'operator' });
       i += 2;
       continue;
     }
     if (
-      '~&|!=+-*/%^<>'.includes(line[i])
-      || line[i] === '≤'
-      || line[i] === '≥'
-      || line[i] === '⊕'
-      || line[i] === '↑'
-      || line[i] === '↓'
-      || line[i] === '¬'
-      || line[i] === '∧'
-      || line[i] === '∨'
-      || line[i] === '→'
-      || line[i] === '↔'
-      || line[i] === '⊢'
-      || line[i] === '⊥'
-      || line[i] === '⊤'
+      '~&|!=+-*/%^<>'.includes(line.charAt(i))
+      || line.charAt(i) === '≤'
+      || line.charAt(i) === '≥'
+      || line.charAt(i) === '⊕'
+      || line.charAt(i) === '↑'
+      || line.charAt(i) === '↓'
+      || line.charAt(i) === '¬'
+      || line.charAt(i) === '∧'
+      || line.charAt(i) === '∨'
+      || line.charAt(i) === '→'
+      || line.charAt(i) === '↔'
+      || line.charAt(i) === '⊢'
+      || line.charAt(i) === '⊥'
+      || line.charAt(i) === '⊤'
     ) {
-      tokens.push({ text: line[i], category: 'operator' });
+      tokens.push({ text: line.charAt(i), category: 'operator' });
       i++;
       continue;
     }
 
-    if ('[],:;#'.includes(line[i])) {
-      tokens.push({ text: line[i], category: 'punctuation' });
+    if ('[],:;#'.includes(line.charAt(i))) {
+      tokens.push({ text: line.charAt(i), category: 'punctuation' });
       i++;
       continue;
     }
 
-    if (/\d/.test(line[i])) {
+    if (/\d/.test(line.charAt(i))) {
       let j = i;
-      while (j < line.length && /[\d.]/.test(line[j])) j++;
+      while (j < line.length && /[\d.]/.test(line.charAt(j))) j++;
       tokens.push({ text: line.slice(i, j), category: 'number' });
       i = j;
       continue;
     }
 
-    if (/[a-zA-Z_]/.test(line[i])) {
+    if (/[a-zA-Z_]/.test(line.charAt(i))) {
       let j = i;
-      while (j < line.length && /[a-zA-Z0-9_.]/.test(line[j])) j++;
+      while (j < line.length && /[a-zA-Z0-9_.]/.test(line.charAt(j))) j++;
       const word = line.slice(i, j);
 
       if (PROFILES.has(word as Parameters<typeof PROFILES.has>[0])) {
@@ -208,7 +208,7 @@ export function tokenizeLine(
         if (parts.length > 1 && !PROFILES.has(word as Parameters<typeof PROFILES.has>[0])) {
           for (let p = 0; p < parts.length; p++) {
             if (p > 0) tokens.push({ text: '.', category: 'punctuation' });
-            tokens.push(classifyWord(parts[p]));
+            tokens.push(classifyWord(parts[p] ?? ''));
           }
         } else {
           tokens.push(classifyWord(word));
@@ -218,15 +218,15 @@ export function tokenizeLine(
       continue;
     }
 
-    if (/\s/.test(line[i])) {
+    if (/\s/.test(line.charAt(i))) {
       let j = i;
-      while (j < line.length && /\s/.test(line[j])) j++;
+      while (j < line.length && /\s/.test(line.charAt(j))) j++;
       tokens.push({ text: line.slice(i, j), category: 'plain' });
       i = j;
       continue;
     }
 
-    tokens.push({ text: line[i], category: 'plain' });
+    tokens.push({ text: line.charAt(i), category: 'plain' });
     i++;
   }
 
@@ -293,35 +293,35 @@ export function extractDynamicCompletions(code: string): CompletionItem[] {
     const trimmed = line.trim();
     const axiomMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:axiom|axioma)\s+(\w+)\s*[=:]/i);
     if (axiomMatch) {
-      items.push({ label: axiomMatch[1], kind: 'variable', detail: 'axiom (definido en script)' });
+      items.push({ label: axiomMatch[1]!, kind: 'variable', detail: 'axiom (definido en script)' });
     }
     const theoremMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:theorem|teorema)\s+(\w+)\s*[=:]/i);
     if (theoremMatch) {
-      items.push({ label: theoremMatch[1], kind: 'variable', detail: 'theorem (definido en script)' });
+      items.push({ label: theoremMatch[1]!, kind: 'variable', detail: 'theorem (definido en script)' });
     }
     const letMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:let|sea)\s+(\w+)\s*=/i);
     if (letMatch) {
-      items.push({ label: letMatch[1], kind: 'variable', detail: 'let (definido en script)' });
+      items.push({ label: letMatch[1]!, kind: 'variable', detail: 'let (definido en script)' });
     }
     const claimMatch = trimmed.match(/^(?:claim|afirmacion)\s+(\w+)\s*=/i);
     if (claimMatch) {
-      items.push({ label: claimMatch[1], kind: 'variable', detail: 'claim (definido en script)' });
+      items.push({ label: claimMatch[1]!, kind: 'variable', detail: 'claim (definido en script)' });
     }
     const theoryMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:theory|teoria)\s+(\w+)/i);
     if (theoryMatch) {
-      items.push({ label: theoryMatch[1], kind: 'type', detail: 'theory (definida en script)' });
+      items.push({ label: theoryMatch[1]!, kind: 'type', detail: 'theory (definida en script)' });
     }
     const fnMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:fn|funcion)\s+(\w+)\s*\(/i);
     if (fnMatch) {
-      items.push({ label: fnMatch[1], kind: 'function', detail: 'función (definida en script)' });
+      items.push({ label: fnMatch[1]!, kind: 'function', detail: 'función (definida en script)' });
     }
     const defineMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:define|definir)\s+(\w+)/i);
     if (defineMatch) {
-      items.push({ label: defineMatch[1], kind: 'variable', detail: 'define (definido en script)' });
+      items.push({ label: defineMatch[1]!, kind: 'variable', detail: 'define (definido en script)' });
     }
     const sourceMatch = trimmed.match(/^(?:(?:export|exportar)\s+)?(?:source|fuente)\s+(\w+)/i);
     if (sourceMatch) {
-      items.push({ label: sourceMatch[1], kind: 'variable', detail: 'source (definido en script)' });
+      items.push({ label: sourceMatch[1]!, kind: 'variable', detail: 'source (definido en script)' });
     }
   }
   return items;
@@ -341,7 +341,7 @@ export interface TokenAtPosition {
 export function getTokenAtPosition(code: string, line: number, col: number): TokenAtPosition | null {
   const lines = code.split('\n');
   if (line < 1 || line > lines.length) return null;
-  const lineText = lines[line - 1];
+  const lineText = lines[line - 1] ?? '';
   const { tokens } = tokenizeLine(lineText);
   let offset = 0;
   for (const t of tokens) {

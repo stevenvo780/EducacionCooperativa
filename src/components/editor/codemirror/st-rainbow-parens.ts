@@ -37,12 +37,12 @@ function buildRainbowDecorations(view: EditorView): DecorationSet {
       const ch = text.charAt(pos);
       if (OPEN.has(ch)) {
         const d = depth % 4;
-        builder.add(pos, pos + 1, parenDecos[d]);
+        builder.add(pos, pos + 1, parenDecos[d]!);
         depth++;
       } else if (CLOSE.has(ch)) {
         depth = Math.max(0, depth - 1);
         const d = depth % 4;
-        builder.add(pos, pos + 1, parenDecos[d]);
+        builder.add(pos, pos + 1, parenDecos[d]!);
       }
     }
   }
