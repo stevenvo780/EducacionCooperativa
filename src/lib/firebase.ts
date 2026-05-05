@@ -2,16 +2,18 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
 import { getFirestore, Firestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getDatabase, Database } from 'firebase/database';
+import { env } from '@/lib/env';
 
 // Firebase Storage NO se usa en Agora — los blobs viven en MinIO (NAS).
 // Mantenemos sólo Auth + Firestore + RTDB de Firebase.
+const projectId = env.NEXT_PUBLIC_FIREBASE_PROJECT_ID();
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.replace(/\\n/g, '').trim(),
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.replace(/\\n/g, '').trim(),
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.replace(/\\n/g, '').trim(),
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.replace(/\\n/g, '').trim(),
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.replace(/\\n/g, '').trim(),
-  databaseURL: `https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.replace(/\\n/g, '').trim()}-default-rtdb.firebaseio.com`
+  apiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY(),
+  authDomain: env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN(),
+  projectId,
+  messagingSenderId: env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID(),
+  appId: env.NEXT_PUBLIC_FIREBASE_APP_ID(),
+  databaseURL: projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined
 };
 
 let app: FirebaseApp | null = null;
