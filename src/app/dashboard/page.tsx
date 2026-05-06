@@ -2772,7 +2772,28 @@ function DashboardContent() {
                             isStRunnerOpen={isStRunnerOpen}
                             isSemanticBrowserOpen={isSemanticBrowserOpen}
                             isFormalizerOpen={isFormalizerOpen}
-                            selectedDoc={selectedDocId ? docs.find(d => d.id === selectedDocId) ?? null : null}
+                            selectedDoc={(() => {
+                              // El panel Esquema necesita un doc TEXTUAL (.md/.st). Si el
+                              // selectedDocId apunta a un panel virtual del mosaico (Mesa Semántica,
+                              // Tablero, ST Logic, Formalizador, etc.) caemos a un doc real.
+                              const isTextualName = (n?: string) => !!n && /\.(md|markdown|mdx|st|txt)$/i.test(n);
+                              const isVirtualPanel = (t?: { type?: string }) => !!t && [
+                                'semantic-browser', 'board', 'kanban', 'st-runner', 'formalizer',
+                                'agora-ai', 'snippets', 'file-explorer', 'terminal', 'folder'
+                              ].includes(t.type ?? '');
+
+                              if (selectedDocId) {
+                                const found = docs.find(d => d.id === selectedDocId)
+                                  ?? openTabs.find(t => t.id === selectedDocId);
+                                // Si el selected es un panel virtual, no sirve para Esquema:
+                                // continuar al fallback.
+                                if (found && !isVirtualPanel(found)) return found;
+                              }
+                              const fromTabs = openTabs.find(t => isTextualName(t.name) && !isVirtualPanel(t));
+                              if (fromTabs) return fromTabs;
+                              const fromDocs = docs.find(d => isTextualName(d.name) && !isVirtualPanel(d));
+                              return fromDocs ?? null;
+                            })()}
                             onJumpToLine={(line) => {
                               dispatchAgoraEvent(AGORA_EVENTS.jumpToLine, { line });
                             }}
