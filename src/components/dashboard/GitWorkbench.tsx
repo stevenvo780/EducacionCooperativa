@@ -358,7 +358,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             const errors: Array<{ path: string; status: number; raw: string }> = [];
 
             for (let ci = 0; ci < chunks.length; ci++) {
-                const chunk = chunks[ci];
+                const chunk = chunks[ci]!;
                 const partMessage = chunks.length === 1 ? message.trim() : `${message.trim()} (parte ${ci + 1}/${chunks.length})`;
                 setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: descargando…` });
 
@@ -397,7 +397,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                 const successfulBlobs: typeof blobs = [];
                 let commitSha: string | undefined;
                 for (let fi = 0; fi < files.length; fi++) {
-                    const f = files[fi];
+                    const f = files[fi]!;
                     const blob = blobs.filter((x): x is NonNullable<typeof x> => x !== null).find(b => b.p.repoPath === f.path);
                     if (!blob) continue;
                     setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: archivo ${fi + 1}/${files.length}…` });

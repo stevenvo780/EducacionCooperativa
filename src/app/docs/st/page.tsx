@@ -947,7 +947,7 @@ const RESERVED_WORD_GROUPS: ReservedWordGroup[] = [
   }
 ];
 
-const COURSE_PAGE_HREFS: Record<string, string> = {
+const COURSE_PAGE_HREFS = {
   propositional: '/docs/st/proposicional',
   'course-fol': '/docs/st/primer-orden',
   'course-modal': '/docs/st/modal-k',
@@ -959,7 +959,7 @@ const COURSE_PAGE_HREFS: Record<string, string> = {
   'course-aristotelian': '/docs/st/aristotelica',
   'course-belnap': '/docs/st/belnap',
   'course-probabilistic': '/docs/st/probabilistica'
-};
+} as const satisfies Record<string, string>;
 
 const COURSE_SCRIPT_DOWNLOADS: Record<string, string> = {
   propositional: '/downloads/st/01-clasica-proposicional.st',
@@ -1435,13 +1435,13 @@ function CourseIndexCard({ course }: { course: LogicCourse }) {
 
         <div className="flex flex-wrap gap-2 pt-1">
           <Link
-            href={COURSE_PAGE_HREFS[course.id]}
+            href={COURSE_PAGE_HREFS[course.id as keyof typeof COURSE_PAGE_HREFS] ?? '#'}
             className="px-3 py-2 rounded-lg border border-mandy-500/30 bg-mandy-500/10 text-mandy-300 hover:text-mandy-200 transition text-xs font-semibold"
           >
             Abrir guía
           </Link>
           <a
-            href={COURSE_SCRIPT_DOWNLOADS[course.id]}
+            href={COURSE_SCRIPT_DOWNLOADS[course.id] ?? '#'}
             download
             className="px-3 py-2 rounded-lg border border-surface-700/40 bg-surface-800/50 text-surface-300 hover:text-white transition text-xs font-semibold"
           >

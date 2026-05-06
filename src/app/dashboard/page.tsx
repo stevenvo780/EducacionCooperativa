@@ -1263,6 +1263,7 @@ function DashboardContent() {
 
             const next = prev.slice();
             const [moved] = next.splice(currentIndex, 1);
+            if (moved === undefined) return prev;
             next.splice(targetIndex, 0, moved);
             return next;
         });

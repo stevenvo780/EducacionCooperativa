@@ -29,7 +29,7 @@ export const isMarkdownDocItem = (doc: DocItem) => {
 export const getFileExtension = (name: string) => {
   const parts = name.split('.');
   if (parts.length < 2) return '';
-  return parts[parts.length - 1].toUpperCase();
+  return parts[parts.length - 1]!.toUpperCase();
 };
 
 export const getDocBadge = (doc: DocItem) => {

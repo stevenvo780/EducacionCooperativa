@@ -158,7 +158,7 @@ export default function WorkspacePathResolverPage() {
     const resolvePath = async () => {
       try {
         const [workspaceSegment, ...pathSegments] = slug.map((part) => decodeURIComponent(part));
-        const normalizedWorkspaceSegment = normalizeWorkspaceName(workspaceSegment);
+        const normalizedWorkspaceSegment = normalizeWorkspaceName(workspaceSegment!);
         const targetPath = normalizeRelativeMarkdownPath(pathSegments.join('/'));
 
         if (!targetPath) {

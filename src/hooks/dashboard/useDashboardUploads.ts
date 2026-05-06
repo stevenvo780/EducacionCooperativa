@@ -193,7 +193,7 @@ export const useDashboardUploads = ({
     try {
       const createdDocs: DocItem[] = [];
       for (let i = 0; i < allowedFiles.length; i += 1) {
-        const file = allowedFiles[i];
+        const file = allowedFiles[i]!;
         setUploadStatus(prev => prev ? {
           ...prev,
           currentIndex: i + 1,
