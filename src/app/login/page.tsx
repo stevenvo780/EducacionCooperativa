@@ -179,14 +179,22 @@ function LoginPage() {
 
         <div className="w-full max-w-md relative z-10">
           <div className="bg-surface-800 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden border border-surface-600/50">
-            <div className="flex border-b border-surface-600/50">
+            <div role="tablist" aria-label="Modo de autenticación" className="flex border-b border-surface-600/50">
                 <button
+                    type="button"
+                    role="tab"
+                    aria-selected={isLogin}
+                    aria-controls="auth-form"
                     onClick={() => setIsLogin(true)}
                     className={`flex-1 py-4 text-sm font-medium transition ${isLogin ? 'text-mandy-500 border-b-2 border-mandy-500 bg-mandy-500/5' : 'text-surface-400 hover:text-surface-200'}`}
                 >
                     Iniciar Sesión
                 </button>
                 <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!isLogin}
+                    aria-controls="auth-form"
                     onClick={() => setIsLogin(false)}
                     className={`flex-1 py-4 text-sm font-medium transition ${!isLogin ? 'text-mandy-500 border-b-2 border-mandy-500 bg-mandy-500/5' : 'text-surface-400 hover:text-surface-200'}`}
                 >
@@ -220,7 +228,7 @@ function LoginPage() {
                     </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form id="auth-form" onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
                         <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Correo Electrónico</label>
                         <div className="relative">
