@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { DocItem, Workspace } from '@/components/dashboard/types';
 import { fetchDocsApi } from '@/services/dashboardApi';
+import { getCachedDocuments } from '@/lib/offlineStorage';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
@@ -114,6 +115,26 @@ export const useDashboardDocsSync = ({
     }
 
     const requestWorkspaceId = request.workspaceId;
+
+    // Stale-while-revalidate: si tenemos cache IDB, mostrarlo inmediatamente
+    // mientras el fetch fresh se completa en background. Reduce el TTI del
+    // sidebar de ~10s a ~50ms cuando hay cache previa.
+    if (showLoading) {
+      try {
+        const cached = await getCachedDocuments(requestWorkspaceId);
+        if (cached.length > 0) {
+          const activeRequest = resolveWorkspaceRequest(
+            latestStateRef.current.currentWorkspace,
+            latestStateRef.current.user
+          );
+          if (activeRequest?.workspaceId === requestWorkspaceId) {
+            latestStateRef.current.applyDocsSnapshot(cached as unknown as DocItem[]);
+            latestStateRef.current.setLoadingDocs(false);
+          }
+        }
+      } catch { /* IDB not available */ }
+    }
+
     const fetchPromise = (async () => {
       try {
         const fetched = await fetchDocsApi({
