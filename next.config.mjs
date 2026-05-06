@@ -56,6 +56,10 @@ const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: useStandaloneOutput ? 'standalone' : undefined,
+  // Silenciar el warning de "multiple lockfiles": el wrapper EducacionCooperativa
+  // tiene su propio package-lock.json (sin workspaces) y AgoraFront es un repo
+  // independiente con el suyo. Anclamos el tracing a este repo.
+  outputFileTracingRoot: new URL('.', import.meta.url).pathname,
   transpilePackages: ['react-mosaic-component', 'firebase', 'undici', '@stevenvo780/st-lang', '@stevenvo780/autologic'],
   experimental: {
     serverActions: {

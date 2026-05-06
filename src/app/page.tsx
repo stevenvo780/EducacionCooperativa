@@ -299,7 +299,7 @@ function LandingPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...fast, delay: 0.1 }}
-                className="text-4xl sm:text-5xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]"
+                className="text-3xl sm:text-5xl lg:text-7xl font-extrabold tracking-tight leading-[1.1] break-words"
               >
                 El nuevo estándar para{' '}
                 <span className="text-gradient-mandy">investigación rigurosa</span>
@@ -375,24 +375,24 @@ function LandingPage() {
             >
               <div className="grid lg:grid-cols-2 gap-4">
                 {/* ST Runner — live interactive */}
-                <div className="rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden">
+                <div className="min-w-0 rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-700/60 bg-surface-800/50">
-                    <Code2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs text-surface-400 font-mono">Motor ST — Pruébalo en vivo</span>
-                    <span className="ml-auto text-[10px] text-emerald-400/80 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium">Interactivo</span>
+                    <Code2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-xs text-surface-400 font-mono truncate">Motor ST — Pruébalo en vivo</span>
+                    <span className="ml-auto text-[10px] text-emerald-400/80 bg-emerald-500/10 px-2 py-0.5 rounded-full font-medium shrink-0">Interactivo</span>
                   </div>
-                  <div className="h-[420px]">
+                  <div className="h-[420px] overflow-hidden">
                     <STRunner initialCode={ST_DEMO} autoRun height="100%" initialOutputHeight={150} className="rounded-none border-0" />
                   </div>
                 </div>
                 {/* Markdown Preview — live rendered */}
-                <div className="rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden">
+                <div className="min-w-0 rounded-xl border border-surface-600/60 bg-surface-800/80 backdrop-blur overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-700/60 bg-surface-800/50">
-                    <FileText className="w-4 h-4 text-violet-400" />
-                    <span className="text-xs text-surface-400 font-mono">Vista previa Markdown — KaTeX + Mermaid</span>
-                    <span className="ml-auto text-[10px] text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full font-medium">Renderizado</span>
+                    <FileText className="w-4 h-4 text-violet-400 shrink-0" />
+                    <span className="text-xs text-surface-400 font-mono truncate">Vista previa Markdown — KaTeX + Mermaid</span>
+                    <span className="ml-auto text-[10px] text-violet-400/80 bg-violet-500/10 px-2 py-0.5 rounded-full font-medium shrink-0">Renderizado</span>
                   </div>
-                  <div className="h-[420px] overflow-y-auto p-5 prose prose-invert prose-sm max-w-none">
+                  <div className="h-[420px] overflow-y-auto overflow-x-hidden p-5 prose prose-invert prose-sm max-w-none">
                     <MarkdownPreview content={MD_DEMO} />
                   </div>
                 </div>
@@ -543,7 +543,7 @@ function LandingPage() {
                       <span className="w-8 h-px bg-mandy-500/50" />
                       Motor de Lógica Formal
                     </div>
-                    <h2 className="text-3xl lg:text-4xl font-bold">
+                    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold break-words">
                       ST: Symbolic Theory Language
                     </h2>
                     <p className="text-surface-300 text-lg leading-relaxed">

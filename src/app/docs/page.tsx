@@ -106,7 +106,7 @@ export default function DocsPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-surface-900/90 backdrop-blur border-b border-surface-700/50">
         <div className="max-w-6xl mx-auto flex items-center gap-4 px-6 py-3">
-          <Link href="/dashboard" className="p-2 rounded-lg hover:bg-surface-700/50 transition text-surface-400 hover:text-white">
+          <Link href="/dashboard" aria-label="Volver al dashboard" title="Volver al dashboard" className="p-2 rounded-lg hover:bg-surface-700/50 transition text-surface-400 hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="flex items-center gap-2.5">
@@ -173,21 +173,21 @@ export default function DocsPage() {
           <Section id="overview" icon={Server} title="Arquitectura Distribuida" defaultOpen={true}>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 hover:bg-surface-800/80 transition group">
-                <h4 className="font-bold text-emerald-400 text-sm mb-2 flex items-center gap-2 group-hover:translate-x-1 transition-transform">
+                <h3 className="font-bold text-emerald-400 text-sm mb-2 flex items-center gap-2 group-hover:translate-x-1 transition-transform">
                   <Monitor className="w-4 h-4" /> Frontend (Next.js)
-                </h4>
+                </h3>
                 <p className="text-xs text-surface-400 leading-relaxed">Núcleo de la experiencia de usuario. Gestiona el editor visual, la lógica offline, y la interfaz de mosaicos adaptable.</p>
               </div>
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 hover:bg-surface-800/80 transition group">
-                <h4 className="font-bold text-blue-400 text-sm mb-2 flex items-center gap-2 group-hover:translate-x-1 transition-transform">
+                <h3 className="font-bold text-blue-400 text-sm mb-2 flex items-center gap-2 group-hover:translate-x-1 transition-transform">
                   <ExternalLink className="w-4 h-4" /> Nexus Hub (Node)
-                </h4>
+                </h3>
                 <p className="text-xs text-surface-400 leading-relaxed">Servidor central de tiempo real. Coordina las conexiones WebSocket entre el navegador y los Workers Docker distribuidos.</p>
               </div>
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 hover:bg-surface-800/80 transition group">
-                <h4 className="font-bold text-mandy-400 text-sm mb-2 flex items-center gap-2 group-hover:translate-x-1 transition-transform">
+                <h3 className="font-bold text-mandy-400 text-sm mb-2 flex items-center gap-2 group-hover:translate-x-1 transition-transform">
                   <HardDrive className="w-4 h-4" /> Edu Worker (Docker)
-                </h4>
+                </h3>
                 <p className="text-xs text-surface-400 leading-relaxed">Contenedores aislados que ejecutan procesos de terminal y sincronizan archivos locales con Firebase en tiempo real.</p>
               </div>
             </div>

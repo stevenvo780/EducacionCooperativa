@@ -1461,7 +1461,7 @@ export default function STDocsPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-surface-900/90 backdrop-blur border-b border-surface-700/50">
         <div className="max-w-6xl mx-auto flex items-center gap-4 px-6 py-3">
-          <Link href="/docs" className="p-2 rounded-lg hover:bg-surface-700/50 transition text-surface-400 hover:text-white">
+          <Link href="/docs" aria-label="Volver al manual de Ágora" title="Volver al manual de Ágora" className="p-2 rounded-lg hover:bg-surface-700/50 transition text-surface-400 hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="flex items-center gap-2.5">

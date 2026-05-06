@@ -347,21 +347,45 @@ export const DEFAULT_SNIPPETS: Omit<SnippetInput, 'workspaceId'>[] = [
 const buildSnippetKey = (snippet: Pick<Snippet, 'title' | 'category'> | Omit<SnippetInput, 'workspaceId'>) =>
   `${snippet.category}::${snippet.title}`.trim().toLowerCase();
 
+// Dedupe global: si SnippetGallery monta en múltiples paneles del dashboard
+// simultáneamente, cada instancia llamaba seedDefaultSnippets concurrentemente
+// y la condición de carrera causaba 14×N POSTs creando duplicados (los famosos
+// 7+ "LaTeX inline" que aparecían en la galería). Con esta promesa por
+// workspace todos los callers comparten el mismo seeding.
+const seedingPromises = new Map<string, Promise<Snippet[]>>();
+
 export const seedDefaultSnippets = async (workspaceId: string, existingSnippets?: Snippet[]): Promise<Snippet[]> => {
-  const current = Array.isArray(existingSnippets)
-    ? existingSnippets
-    : await fetchSnippets(workspaceId);
-  const existingKeys = new Set(current.map((snippet) => buildSnippetKey(snippet)));
-  const missing = DEFAULT_SNIPPETS.filter((snippet) => !existingKeys.has(buildSnippetKey(snippet)));
+  const cached = seedingPromises.get(workspaceId);
+  if (cached) return cached;
 
-  if (missing.length === 0) {
-    return current.slice().sort((a, b) => a.order - b.order);
-  }
+  const promise = (async (): Promise<Snippet[]> => {
+    const current = Array.isArray(existingSnippets)
+      ? existingSnippets
+      : await fetchSnippets(workspaceId);
+    const existingKeys = new Set(current.map((snippet) => buildSnippetKey(snippet)));
+    const missing = DEFAULT_SNIPPETS.filter((snippet) => !existingKeys.has(buildSnippetKey(snippet)));
 
-  const created = await Promise.all(
-    missing.map((snippet) => createSnippet({ ...snippet, workspaceId }))
-  );
+    if (missing.length === 0) {
+      return current.slice().sort((a, b) => a.order - b.order);
+    }
 
-  return [...current, ...created.filter((snippet): snippet is Snippet => snippet !== null)]
-    .sort((a, b) => a.order - b.order);
+    const created = await Promise.all(
+      missing.map((snippet) => createSnippet({ ...snippet, workspaceId }))
+    );
+
+    return [...current, ...created.filter((snippet): snippet is Snippet => snippet !== null)]
+      .sort((a, b) => a.order - b.order);
+  })();
+
+  seedingPromises.set(workspaceId, promise);
+  // Mantener el dedupe ~30s tras completar para cubrir re-mounts cercanos del
+  // mismo workspace; cualquier fetch posterior pasa fresh.
+  promise.finally(() => {
+    setTimeout(() => {
+      if (seedingPromises.get(workspaceId) === promise) {
+        seedingPromises.delete(workspaceId);
+      }
+    }, 30_000);
+  });
+  return promise;
 };

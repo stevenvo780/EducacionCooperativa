@@ -61,6 +61,10 @@ export default function MembersModal({
                             <div className="flex gap-2">
                                 <input
                                     type="email"
+                                    inputMode="email"
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
                                     placeholder="usuario@ejemplo.com"
                                     value={inviteEmail}
                                     onChange={(e) => setInviteEmail(e.target.value)}

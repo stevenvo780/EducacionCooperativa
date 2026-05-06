@@ -232,6 +232,7 @@ const SortableCard = ({
           {isEditing ? (
             <input
               type="text"
+              aria-label={`Editar título: ${card.title}`}
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
               onBlur={() => {
@@ -401,6 +402,7 @@ const SortableColumn = ({
                 onDraftChange(column.name);
               }
             }}
+            aria-label={`Renombrar columna ${column.name}`}
             className="text-sm font-semibold text-surface-200 bg-transparent focus:outline-none focus:ring-1 focus:ring-mandy-500/40 rounded px-1 flex-1"
           />
         </div>
@@ -440,6 +442,7 @@ const SortableColumn = ({
       <form onSubmit={onAddCard} className="mt-3 flex gap-2">
         <input
           type="text"
+          aria-label="Nueva tarjeta"
           value={newCardTitle}
           onChange={(e) => onNewCardTitleChange(e.target.value)}
           placeholder="Nueva tarjeta"
@@ -758,6 +761,7 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
                     <span className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Nueva columna</span>
                     <input
                       type="text"
+                      aria-label="Nombre de la nueva columna"
                       value={newColumnName}
                       onChange={(e) => setNewColumnName(e.target.value)}
                       placeholder="Ej: Revisar"

@@ -66,6 +66,9 @@ const NewFileModal = ({ open, onClose, onSelect, modalFade, modalPop }: NewFileM
           onClick={onClose}
         >
           <m.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Nuevo archivo"
             initial={{ scale: 0.96, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.96, opacity: 0 }}
