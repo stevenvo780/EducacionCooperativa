@@ -13,7 +13,11 @@ interface OutlineViewProps {
   onJumpTo?: (line: number) => void;
 }
 
-const TEXTUAL_DOC_TYPES = new Set<string>(['text', 'file', undefined as unknown as string]);
+// Tipos textuales que el outline soporta. 'text' y 'file' son los canónicos
+// post-NAS; 'markdown' aparece en docs migrados/legacy y por algunos creadores;
+// undefined cae en el default 'text'.
+const TEXTUAL_DOC_TYPES = new Set<string>(['text', 'file', 'markdown', 'md', 'st', undefined as unknown as string]);
+const NON_TEXTUAL_DOC_TYPES = new Set<string>(['folder', 'terminal', 'board', 'kanban', 'st-runner', 'semantic-browser', 'formalizer', 'agora-ai', 'snippets', 'file-explorer']);
 
 const isLikelyST = (doc: DocItem): boolean => {
   const name = (doc.name || '').toLowerCase();
@@ -23,12 +27,22 @@ const isLikelyST = (doc: DocItem): boolean => {
   return false;
 };
 
+const isLikelyTextual = (doc: DocItem): boolean => {
+  const name = (doc.name || '').toLowerCase();
+  const mime = (doc.mimeType || '').toLowerCase();
+  if (/\.(md|markdown|mdx|st|txt)$/i.test(name)) return true;
+  if (mime.startsWith('text/') || mime.includes('markdown')) return true;
+  return false;
+};
+
 const isOutlineableDoc = (doc: DocItem): boolean => {
   if (!doc) return false;
   const type = doc.type ?? 'text';
-  if (type === 'folder') return false;
+  if (NON_TEXTUAL_DOC_TYPES.has(type)) return false;
+  // Si el nombre o mime aparenta texto, soportado SIEMPRE (cubre docs migrados
+  // con `type='document'` o similar que no encajan en TEXTUAL_DOC_TYPES).
+  if (isLikelyTextual(doc)) return true;
   if (TEXTUAL_DOC_TYPES.has(type)) return true;
-  // Other DocItem types (terminal, board, etc.) son paneles virtuales sin contenido textual.
   return false;
 };
 
