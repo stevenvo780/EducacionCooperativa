@@ -130,7 +130,7 @@ export default function WelcomeView({
     { id: 'new-doc', label: 'Nuevo archivo', icon: FilePlus, shortcut: 'Ctrl+N', onClick: onCreateDoc, accent: 'text-mandy-300' },
     { id: 'new-folder', label: 'Nueva carpeta', icon: FolderPlus, onClick: onCreateFolder, accent: 'text-amber-300' },
     { id: 'upload', label: 'Subir archivo', icon: Upload, onClick: onUploadFile, accent: 'text-emerald-300' },
-    { id: 'search', label: 'Buscar', icon: Search, shortcut: 'Ctrl+K', onClick: onOpenSearch, accent: 'text-sky-300' }
+    { id: 'search', label: 'Buscar', icon: Search, shortcut: 'Ctrl+P', onClick: onOpenSearch, accent: 'text-sky-300' }
   ];
 
   const tools: QuickAction[] = [

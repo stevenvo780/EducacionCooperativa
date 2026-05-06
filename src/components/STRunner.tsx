@@ -734,9 +734,12 @@ export default function STRunner({
                   title="Redimensionar salida"
                 />
 
-                <div className="flex items-center gap-0 border-b border-slate-800 px-1">
+                <div role="tablist" aria-label="Salida ST" className="flex items-center gap-0 border-b border-slate-800 px-1">
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'output'}
+                    aria-controls="st-runner-tabpanel"
                     onClick={() => setActiveTab('output')}
                     className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
                       activeTab === 'output'
@@ -749,6 +752,9 @@ export default function STRunner({
                   </button>
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'problems'}
+                    aria-controls="st-runner-tabpanel"
                     onClick={() => setActiveTab('problems')}
                     className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
                       activeTab === 'problems'
@@ -770,6 +776,9 @@ export default function STRunner({
                   </button>
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'symbols'}
+                    aria-controls="st-runner-tabpanel"
                     onClick={() => setActiveTab('symbols')}
                     className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
                       activeTab === 'symbols'
@@ -800,7 +809,7 @@ export default function STRunner({
                 </div>
 
                 {showOutput && (
-                  <div style={{ height: outputHeight }} className="flex flex-col bg-slate-900/50 overflow-hidden flex-shrink-0">
+                  <div id="st-runner-tabpanel" role="tabpanel" style={{ height: outputHeight }} className="flex flex-col bg-slate-900/50 overflow-hidden flex-shrink-0">
                     {activeTab === 'output' && <HistoryPanel entries={history} viewMode={viewMode} />}
                     {activeTab === 'problems' && <ProblemsPanel diagnostics={lastDiagnostics} />}
                     {activeTab === 'symbols' && <SymbolsPanel symbolsList={currentSymbols} />}

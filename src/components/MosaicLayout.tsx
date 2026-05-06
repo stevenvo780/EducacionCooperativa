@@ -197,6 +197,26 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // ESC fallback: si por algún motivo (Playwright headless, requestFullscreen rechazado,
+  // o navegador sin Fullscreen API) el state de fullscreenDocId queda activo sin que el
+  // browser haga el match del Fullscreen real, cae aquí y resetea para que el user no
+  // quede atrapado. Captura early para no chocar con handlers de modales o editor.
+  useEffect(() => {
+    if (!fullscreenDocId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-prevent-modal-escape="true"]')) return;
+      e.preventDefault();
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined);
+      }
+      setFullscreenDocId(null);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [fullscreenDocId]);
+
   const toggleFullscreen = useCallback(async (docId: string) => {
     if (typeof document === 'undefined') return;
 

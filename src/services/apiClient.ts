@@ -8,6 +8,25 @@ const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
 const REQUEST_ID_HEADER = 'X-Request-Id';
 
+if (!apiBaseUrl && typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+  console.warn(
+    '[apiClient] NEXT_PUBLIC_API_BASE_URL no está definida. Las llamadas a /api/* irán al mismo origen y fallarán si el backend no está aquí. Añade `NEXT_PUBLIC_API_BASE_URL=https://...` a .env.local (dev) o al entorno de Vercel.'
+  );
+}
+
+export const parseApiResponse = async <T = unknown>(res: Response): Promise<T> => {
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const text = (await res.text().catch(() => '')).slice(0, 200);
+    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ''}`);
+  }
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new Error(`HTTP ${res.status} ${res.statusText} — respuesta JSON inválida`);
+  }
+};
+
 const createRequestId = () => {
   const cryptoApi = globalThis.crypto;
   if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
