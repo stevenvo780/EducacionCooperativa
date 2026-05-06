@@ -15,6 +15,7 @@ import SnippetGallery from '@/components/SnippetGallery';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { collectSTDiagnostics, hasSTExecutionErrors } from '@/lib/st-execution';
 import { registerChannel, forceUnregisterChannel } from '@/lib/output-channels';
+import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 
 const DEFAULT_SCRIPT = `// ST — Motor de Lógica Formal
 // Escribe tu script ST aquí
@@ -304,9 +305,7 @@ export default function STRunner({
   const currentFileId = fileMode?.docName || 'st-runner-scratch';
 
   useEffect(() => {
-    const handler = () => setEditorConfig(loadConfig());
-    window.addEventListener('agora:st-editor-config-changed', handler);
-    return () => window.removeEventListener('agora:st-editor-config-changed', handler);
+    return subscribeAgoraEvent(AGORA_EVENTS.stEditorConfigChanged, () => setEditorConfig(loadConfig()));
   }, []);
 
   // Publica los outputs al BottomDock global cuando se monta dentro del
@@ -450,9 +449,9 @@ export default function STRunner({
     } else {
       setActiveTab('output');
     }
-    if (dockToWorkspace && typeof window !== 'undefined') {
+    if (dockToWorkspace) {
       const tab = diagnostics.length > 0 ? 'problems' : 'st-output';
-      window.dispatchEvent(new CustomEvent('agora:open-bottom-dock', { detail: { tab } }));
+      dispatchAgoraEvent(AGORA_EVENTS.openBottomDock, { tab });
     }
     onExecute?.(code, result);
   }, [code, run, getEnrichedSymbols, onExecute, dockToWorkspace]);

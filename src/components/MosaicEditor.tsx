@@ -105,6 +105,7 @@ import {
 import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
 import { registerStatusSegment, forceUnregisterStatusSegment } from '@/lib/status-bus';
 import { dispatchOpenSettings } from '@/lib/settings-events';
+import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 
 function parseWorkspacesForEditor(raw: unknown): { workspaces: Array<{ id: string; name?: string }>; invites: Array<{ id: string; name?: string }> } {
   if (typeof raw !== 'object' || raw === null) throw new Error('parseWorkspacesForEditor: respuesta no es un objeto');
@@ -701,13 +702,11 @@ export default function MosaicEditor({
   // incluye docId, ignorar si no es este editor (multi-editor en mosaic).
   useEffect(() => {
     if (!roomId) return;
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ docId?: string; line: number; column?: number }>).detail;
+    return subscribeAgoraEvent(AGORA_EVENTS.jumpToLine, (detail) => {
       if (!detail) return;
       if (detail.docId && detail.docId !== roomId) return;
       const shell = editorShellRef.current;
       if (!shell) return;
-      // Buscar primero el wrapper que sí es scrollable (max>0).
       const candidates = Array.from(shell.querySelectorAll<HTMLElement>(
         '[class*="rootContentEditableWrapper"], [class*="mdxeditor-root"], .mdxeditor, [contenteditable="true"]'
       ));
@@ -717,18 +716,14 @@ export default function MosaicEditor({
       const ratio = Math.min(1, (line - 1) / totalLines);
       const target = Math.max(0, Math.round(scrollable.scrollHeight * ratio) - scrollable.clientHeight / 3);
       scrollable.scrollTo({ top: target, behavior: 'smooth' });
-    };
-    window.addEventListener('agora:jump-to-line', handler as EventListener);
-    return () => window.removeEventListener('agora:jump-to-line', handler as EventListener);
+    });
   }, [roomId]);
 
   const handleContentChange = useCallback((val: string) => {
     contentRef.current = val;
     setStatsContent(val);
-    if (typeof window !== 'undefined' && roomId) {
-      window.dispatchEvent(new CustomEvent('agora:document-content', {
-        detail: { docId: roomId, content: val }
-      }));
+    if (roomId) {
+      dispatchAgoraEvent(AGORA_EVENTS.documentContent, { docId: roomId, content: val });
     }
     if (!roomId || docType === DocumentType.File) return;
     if (!hasLoadedRef.current) return;
@@ -1057,14 +1052,11 @@ export default function MosaicEditor({
   }, [handleContentChange, insertSnippet, statsContent, viewMode]);
 
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ markdown?: unknown }>).detail;
+    return subscribeAgoraEvent(AGORA_EVENTS.insertSnippet, (detail) => {
       if (detail && typeof detail.markdown === 'string') {
         appendMarkdownBlock(detail.markdown);
       }
-    };
-    window.addEventListener('agora:insert-snippet' as keyof WindowEventMap, handler);
-    return () => window.removeEventListener('agora:insert-snippet' as keyof WindowEventMap, handler);
+    });
   }, [appendMarkdownBlock]);
 
   const updateSemanticState = useCallback((nextState: SemanticWorkspaceState) => {

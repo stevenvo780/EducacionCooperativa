@@ -39,6 +39,7 @@
  */
 
 import { markInternalDragStart, markInternalDragEnd } from './internal-drag-flag';
+import { AGORA_EVENTS, dispatchAgoraEvent } from './agora-events';
 
 const MOVE_THRESHOLD = 10; // px before drag is confirmed
 const LONG_PRESS_DELAY = 180; // ms hold before drag activates (vs tap)
@@ -180,9 +181,7 @@ function onTouchMove(e: TouchEvent): void {
     dispatchSyntheticDragEvent('dragstart', _sourceEl, touch);
 
     if (_dragDocId) {
-      window.dispatchEvent(new CustomEvent('agora:touch-drag-start', {
-        detail: { docId: _dragDocId }
-      }));
+      dispatchAgoraEvent(AGORA_EVENTS.touchDragStart, { docId: _dragDocId });
     }
   }
 
@@ -202,7 +201,7 @@ function onTouchMove(e: TouchEvent): void {
 
   if (tileId !== _lastDropZone) {
     if (_lastDropZone) {
-      window.dispatchEvent(new CustomEvent('agora:touch-drag-leave', { detail: {} }));
+      dispatchAgoraEvent(AGORA_EVENTS.touchDragLeave, {});
     }
     _lastDropZone = tileId;
   }
@@ -211,9 +210,7 @@ function onTouchMove(e: TouchEvent): void {
     const rect = dropZone.getBoundingClientRect();
     const position = calcDropPosition(touch.clientX, touch.clientY, rect);
     _lastResolvedDropTarget = { element: dropZone, tileId, position };
-    window.dispatchEvent(new CustomEvent('agora:touch-drag-over', {
-      detail: { tileId, position }
-    }));
+    dispatchAgoraEvent(AGORA_EVENTS.touchDragOver, { tileId, position });
   } else {
     _lastResolvedDropTarget = null;
   }
@@ -279,13 +276,11 @@ function onTouchEnd(e: TouchEvent): void {
   }
 
   if (willEmitCustomDrop) {
-    window.dispatchEvent(new CustomEvent('agora:touch-drop', {
-      detail: {
-        docId: _dragDocId,
-        tileId: dropTarget!.tileId,
-        position: dropTarget!.position
-      }
-    }));
+    dispatchAgoraEvent(AGORA_EVENTS.touchDrop, {
+      docId: _dragDocId!,
+      tileId: dropTarget!.tileId!,
+      position: dropTarget!.position
+    });
   }
 
   dispatchSyntheticDragEvent('dragend', _sourceEl, touch);
@@ -528,7 +523,7 @@ function cleanup(): void {
   }
   if (_dragging) {
     markInternalDragEnd();
-    window.dispatchEvent(new CustomEvent('agora:touch-drag-end', { detail: {} }));
+    dispatchAgoraEvent(AGORA_EVENTS.touchDragEnd, {});
   }
   _dragging = false;
   _dragDocId = null;

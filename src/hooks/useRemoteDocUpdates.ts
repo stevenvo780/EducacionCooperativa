@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { SyncEventType, type SyncEvent } from '@/types/sync';
+import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
 
 interface UseRemoteDocUpdatesArgs {
   /** ID del documento abierto en el editor; null si no hay ninguno. */
@@ -22,14 +23,11 @@ interface UseRemoteDocUpdatesArgs {
 export function useRemoteDocUpdates({ docId, onRemoteUpdate, onRemoteDelete }: UseRemoteDocUpdatesArgs) {
   useEffect(() => {
     if (!docId) return;
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<SyncEvent>).detail;
+    return subscribeAgoraEvent(AGORA_EVENTS.rtdbEvent, (detail) => {
       if (!detail || detail.docId !== docId) return;
       if (detail.type === SyncEventType.Updated) onRemoteUpdate(detail);
       else if (detail.type === SyncEventType.Deleted) onRemoteDelete?.(detail);
-    };
-    window.addEventListener('agora:rtdb-event', handler as EventListener);
-    return () => window.removeEventListener('agora:rtdb-event', handler as EventListener);
+    });
   }, [docId, onRemoteUpdate, onRemoteDelete]);
 }
 

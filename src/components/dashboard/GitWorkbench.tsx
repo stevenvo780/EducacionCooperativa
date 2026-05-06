@@ -14,6 +14,7 @@ import { fetchZod } from '@/lib/fetch-zod';
 import { gitWorkbenchStatusSchema, gitWorkbenchCommitsSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 function parseGitInfo(raw: unknown): { cloneUrl?: string; repoFullName?: string } {
     if (typeof raw !== 'object' || raw === null) throw new Error('parseGitInfo: respuesta no es un objeto');
@@ -244,9 +245,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             // Dispara el evento global que el dashboard escucha para refrescar
             // la jerarquía sin recargar la página (mismo bus que usa MosaicEditor).
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new Event('agora:docs-changed'));
-            }
+            dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
             await refreshAll();
             setToast('.gitignore creado en la raíz. Búscalo en el explorador para editarlo.');
         } catch (e) {

@@ -7,6 +7,7 @@ import type {
   AgentWorkerCommandEventDetail
 } from '@/lib/agora-ai/types';
 import type { SyncEvent } from '@/types/sync';
+import type { LinterDiagnostic } from '@/lib/markdown-linter/types';
 
 export const AGORA_EVENTS = {
   agentToolResult: 'agora:agent-tool-result',
@@ -31,8 +32,19 @@ export const AGORA_EVENTS = {
   stEditorConfigChanged: 'agora:st-editor-config-changed',
   stSourceSaved: 'agora:st-source-saved',
   semanticPreferencesChanged: 'agora:semantic-preferences-changed',
-  focusDocumentSection: 'agora:focus-document-section'
+  focusDocumentSection: 'agora:focus-document-section',
+  touchDragStart: 'agora:touch-drag-start',
+  touchDragOver: 'agora:touch-drag-over',
+  touchDragLeave: 'agora:touch-drag-leave',
+  touchDrop: 'agora:touch-drop',
+  touchDragEnd: 'agora:touch-drag-end',
+  promptUserChoice: 'agora:prompt-user-choice',
+  showDiff: 'agora:show-diff',
+  agentStatus: 'agora:agent-status',
+  agentPlan: 'agora:agent-plan'
 } as const;
+
+export type TouchDropPosition = 'left' | 'right' | 'top' | 'bottom' | 'replace';
 
 export interface AgoraProblemEventDetail {
   severity?: 'error' | 'warning' | 'info' | 'hint';
@@ -48,6 +60,12 @@ export interface AgoraDocumentContentDetail {
   content: string;
 }
 
+export interface AgoraDocContentUpdatedDetail {
+  docId: string;
+  docName?: string;
+  updatedAt?: number;
+}
+
 type AgoraWindowEventMap = {
   [AGORA_EVENTS.agentToolResult]: AgentToolResultEventDetail;
   [AGORA_EVENTS.workerCommandResult]: AgentWorkerCommandEventDetail;
@@ -59,19 +77,59 @@ type AgoraWindowEventMap = {
   [AGORA_EVENTS.rtdbEvent]: SyncEvent;
   [AGORA_EVENTS.problem]: AgoraProblemEventDetail;
   [AGORA_EVENTS.documentContent]: AgoraDocumentContentDetail;
-  [AGORA_EVENTS.docContentUpdated]: { docId: string; updatedAt?: number };
+  [AGORA_EVENTS.docContentUpdated]: AgoraDocContentUpdatedDetail;
   [AGORA_EVENTS.jumpToLine]: { docId?: string; line: number; column?: number };
-  [AGORA_EVENTS.insertSnippet]: { docId?: string; snippet: string };
+  [AGORA_EVENTS.insertSnippet]: { markdown: string; docId?: string };
   [AGORA_EVENTS.openAiConfig]: void;
   [AGORA_EVENTS.openLinterConfig]: void;
   [AGORA_EVENTS.openBottomDock]: { tab?: string };
-  [AGORA_EVENTS.planRequired]: { reason?: string };
-  [AGORA_EVENTS.mdDiagnostics]: { docId?: string; count?: number };
-  [AGORA_EVENTS.stDiagnostics]: { docId?: string; count?: number };
-  [AGORA_EVENTS.stEditorConfigChanged]: Record<string, unknown>;
-  [AGORA_EVENTS.stSourceSaved]: { docId: string };
-  [AGORA_EVENTS.semanticPreferencesChanged]: Record<string, unknown>;
-  [AGORA_EVENTS.focusDocumentSection]: { docId: string; section?: string };
+  [AGORA_EVENTS.planRequired]: {
+    kind?: 'plan' | 'quota';
+    currentPlan?: string;
+    feature?: string;
+    message?: string;
+    reason?: string;
+  };
+  [AGORA_EVENTS.mdDiagnostics]: {
+    diagnostics: LinterDiagnostic[];
+    docId?: string | null;
+  };
+  [AGORA_EVENTS.stDiagnostics]: {
+    diagnostics: Array<{
+      line?: number;
+      column?: number;
+      endLine?: number;
+      endColumn?: number;
+      severity: string;
+      message: string;
+      code?: string;
+    }>;
+    docId?: string | null;
+  };
+  [AGORA_EVENTS.stEditorConfigChanged]: unknown;
+  [AGORA_EVENTS.stSourceSaved]: { docId: string; docName?: string; content?: string };
+  [AGORA_EVENTS.semanticPreferencesChanged]: {
+    workspaceId?: string;
+    preferences?: unknown;
+  };
+  [AGORA_EVENTS.focusDocumentSection]: {
+    documentId: string;
+    headingTitle?: string | null;
+    line?: number | null;
+  };
+  [AGORA_EVENTS.touchDragStart]: { docId: string };
+  [AGORA_EVENTS.touchDragOver]: { tileId: string; position: TouchDropPosition };
+  [AGORA_EVENTS.touchDragLeave]: Record<string, never>;
+  [AGORA_EVENTS.touchDrop]: {
+    docId: string;
+    tileId: string;
+    position: TouchDropPosition;
+  };
+  [AGORA_EVENTS.touchDragEnd]: Record<string, never>;
+  [AGORA_EVENTS.promptUserChoice]: unknown;
+  [AGORA_EVENTS.showDiff]: unknown;
+  [AGORA_EVENTS.agentStatus]: unknown;
+  [AGORA_EVENTS.agentPlan]: unknown;
 };
 
 type AgoraEventName = keyof AgoraWindowEventMap;

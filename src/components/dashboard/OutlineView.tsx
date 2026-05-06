@@ -6,6 +6,7 @@ import type { DocItem } from '@/components/dashboard/types';
 import { authFetch } from '@/services/apiClient';
 import { parseMarkdownOutline, type OutlineHeading } from '@/lib/markdown-outline';
 import { parseSTOutline, type STOutlineEntry } from '@/lib/st-outline';
+import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
 
 interface OutlineViewProps {
   selectedDoc: DocItem | null;
@@ -71,19 +72,17 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
 
     // Live: cuando el editor activo dispara cambios, actualizamos el outline
     // de inmediato sin esperar al save ni al poll.
-    const liveHandler = (event: Event) => {
-      const detail = (event as CustomEvent<{ docId?: string; content?: string }>).detail;
+    const unsubscribeLive = subscribeAgoraEvent(AGORA_EVENTS.documentContent, (detail) => {
       if (!detail || detail.docId !== selectedDoc.id || typeof detail.content !== 'string') return;
       lastLiveUpdateAt.current = Date.now();
       setContent(detail.content);
       setError(null);
-    };
-    window.addEventListener('agora:document-content', liveHandler);
+    });
 
     return () => {
       active = false;
       if (pollTimer) clearInterval(pollTimer);
-      window.removeEventListener('agora:document-content', liveHandler);
+      unsubscribeLive();
     };
   }, [selectedDoc]);
 

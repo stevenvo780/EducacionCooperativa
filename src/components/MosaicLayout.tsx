@@ -13,6 +13,7 @@ import { isMarkdownDocument } from '@/lib/document-format';
 import { CompatMosaicWindow } from '@/components/mosaic/CompatMosaicWindow';
 import { useIsTouchDeviceProfile } from '@/lib/device-input';
 import { PanelErrorBoundary } from '@/components/dashboard/PanelErrorBoundary';
+import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false });
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
@@ -264,10 +265,12 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
     const handleGlobalDragEnd = () => setIsDraggingDoc(false);
     const handleGlobalDrop = () => setIsDraggingDoc(false);
 
-    // Touch drag polyfill events
-    const handleTouchDragStart = () => setIsDraggingDoc(true);
-    const handleTouchDragOver = (e: Event) => {
-      const { tileId, position } = (e as CustomEvent).detail;
+    document.addEventListener('dragstart', handleGlobalDragStart);
+    document.addEventListener('dragend', handleGlobalDragEnd);
+    document.addEventListener('drop', handleGlobalDrop);
+    const offTouchDragStart = subscribeAgoraEvent(AGORA_EVENTS.touchDragStart, () => setIsDraggingDoc(true));
+    const offTouchDragOver = subscribeAgoraEvent(AGORA_EVENTS.touchDragOver, (detail) => {
+      const { tileId, position } = detail;
       if (tileId === '__empty__') {
         setDragOverEmpty(true);
         setDragOverInfo(null);
@@ -278,13 +281,13 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
           return { tileId, position };
         });
       }
-    };
-    const handleTouchDragLeave = () => {
+    });
+    const offTouchDragLeave = subscribeAgoraEvent(AGORA_EVENTS.touchDragLeave, () => {
       setDragOverInfo(null);
       setDragOverEmpty(false);
-    };
-    const handleTouchDrop = (e: Event) => {
-      const { docId, tileId, position } = (e as CustomEvent).detail;
+    });
+    const offTouchDrop = subscribeAgoraEvent(AGORA_EVENTS.touchDrop, (detail) => {
+      const { docId, tileId, position } = detail;
       setDragOverInfo(null);
       setIsDraggingDoc(false);
       if (tileId === '__empty__') {
@@ -292,30 +295,21 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
       } else if (docId && tileId && docId !== tileId) {
         onDropDocOnTile?.(docId, tileId, position);
       }
-    };
-    const handleTouchDragEnd = () => {
+    });
+    const offTouchDragEnd = subscribeAgoraEvent(AGORA_EVENTS.touchDragEnd, () => {
       setDragOverInfo(null);
       setDragOverEmpty(false);
       setIsDraggingDoc(false);
-    };
-
-    document.addEventListener('dragstart', handleGlobalDragStart);
-    document.addEventListener('dragend', handleGlobalDragEnd);
-    document.addEventListener('drop', handleGlobalDrop);
-    window.addEventListener('agora:touch-drag-start', handleTouchDragStart);
-    window.addEventListener('agora:touch-drag-over', handleTouchDragOver);
-    window.addEventListener('agora:touch-drag-leave', handleTouchDragLeave);
-    window.addEventListener('agora:touch-drop', handleTouchDrop);
-    window.addEventListener('agora:touch-drag-end', handleTouchDragEnd);
+    });
     return () => {
       document.removeEventListener('dragstart', handleGlobalDragStart);
       document.removeEventListener('dragend', handleGlobalDragEnd);
       document.removeEventListener('drop', handleGlobalDrop);
-      window.removeEventListener('agora:touch-drag-start', handleTouchDragStart);
-      window.removeEventListener('agora:touch-drag-over', handleTouchDragOver);
-      window.removeEventListener('agora:touch-drag-leave', handleTouchDragLeave);
-      window.removeEventListener('agora:touch-drop', handleTouchDrop);
-      window.removeEventListener('agora:touch-drag-end', handleTouchDragEnd);
+      offTouchDragStart();
+      offTouchDragOver();
+      offTouchDragLeave();
+      offTouchDrop();
+      offTouchDragEnd();
     };
   }, [onDropDocOnTile, onDropDocOnEmpty]);
 
@@ -891,7 +885,7 @@ const MosaicLayout: React.FC<MosaicLayoutProps> = ({
                         onInsert={(markdown) => {
                           // Find an active editor to insert into if possible,
                           // or just show a message. For now, we use a global event.
-                          window.dispatchEvent(new CustomEvent('agora:insert-snippet', { detail: { markdown } }));
+                          dispatchAgoraEvent(AGORA_EVENTS.insertSnippet, { markdown });
                         }}
                         hideClose
                       />

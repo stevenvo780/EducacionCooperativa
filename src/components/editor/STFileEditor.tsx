@@ -12,6 +12,7 @@ import { Loader2, Cloud, Check, Users } from 'lucide-react';
 import useYjsDoc from '@/hooks/useYjsDoc';
 import useRemoteDocUpdates from '@/hooks/useRemoteDocUpdates';
 import RemoteUpdateBanner from '@/components/dashboard/RemoteUpdateBanner';
+import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 
 interface STFileEditorProps {
   docId: string;
@@ -171,8 +172,7 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
 
   useEffect(() => {
     if (!docId) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ docId?: string; docName?: string }>).detail;
+    return subscribeAgoraEvent(AGORA_EVENTS.docContentUpdated, (detail) => {
       /* Match by docId OR by docName (covers duplicate companion files) */
       const matchesId = detail?.docId === docId;
       const matchesName = !!docName && !!detail?.docName && detail.docName === docName;
@@ -187,9 +187,7 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
           setDirty(false);
         }
       });
-    };
-    window.addEventListener('agora:doc-content-updated', handler);
-    return () => window.removeEventListener('agora:doc-content-updated', handler);
+    });
   }, [docId, docName, fetchContent]);
 
   useEffect(() => {
@@ -215,11 +213,7 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
         await updateDocumentApi(docId, { content: value });
         lastSyncedRef.current = value;
         setDirty(false);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('agora:st-source-saved', {
-            detail: { docId, docName, content: value }
-          }));
-        }
+        dispatchAgoraEvent(AGORA_EVENTS.stSourceSaved, { docId, docName, content: value });
       } catch (err) {
         console.error('[STFileEditor] Auto-save failed', err);
       } finally {

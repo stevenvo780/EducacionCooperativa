@@ -26,7 +26,7 @@ import { DialogKind, type DocItem, type FolderItem, type ViewMode, type Workspac
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { shallowEqual } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
+import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 import {
     setShowWorkspaceMenu as setShowWorkspaceMenuAction,
     setShowNewWorkspaceModal as setShowNewWorkspaceModalAction,
@@ -98,7 +98,7 @@ import { useDocumentActions } from '@/hooks/dashboard/useDocumentActions';
 import { useSidebarLayout } from '@/hooks/dashboard/useSidebarLayout';
 import { useWorkspaceActions } from '@/hooks/dashboard/useWorkspaceActions';
 import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
-import type { AgentDocumentTarget, AgentOpenDocumentsEventDetail, AgentUiCommandEventDetail } from '@/lib/agora-ai/types';
+import type { AgentDocumentTarget, AgentUiCommandEventDetail } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
@@ -133,16 +133,13 @@ function DashboardContent() {
     const { currentPlan, subscriptionEndDate, showPricingModal, setShowPricingModal } = useSubscription(user, searchParams);
 
     useEffect(() => {
-        const handler = (event: Event) => {
-            const detail = (event as CustomEvent<{ kind?: string; message?: string }>).detail;
+        return subscribeAgoraEvent(AGORA_EVENTS.planRequired, (detail) => {
             const isQuota = detail?.kind === 'quota';
             toast.error(isQuota ? 'Cuota excedida' : 'Plan requerido', {
                 description: detail?.message || 'Esta acción requiere un plan superior.',
                 action: { label: 'Ver planes', onClick: () => setShowPricingModal(true) }
             });
-        };
-        window.addEventListener('agora:plan-required', handler as EventListener);
-        return () => window.removeEventListener('agora:plan-required', handler as EventListener);
+        });
     }, [setShowPricingModal]);
     const reduceMotion = useReducedMotion();
     const modalFade = useMemo<Transition>(() => ({
@@ -181,8 +178,7 @@ function DashboardContent() {
             return `${items.length}:${items[0]?.severity ?? ''}:${items[0]?.message?.slice(0, 40) ?? ''}`;
         };
 
-        const handler = (e: Event) => {
-            const detail = (e as CustomEvent<{ diagnostics: { line?: number; column?: number; endLine?: number; endColumn?: number; severity: string; message: string; code?: string }[] }>).detail;
+        const unsubscribe = subscribeAgoraEvent(AGORA_EVENTS.stDiagnostics, (detail) => {
             const docId = selectedDocIdRef.current;
             if (!docId || !collection) return;
             if (lastDocId && lastDocId !== docId) {
@@ -203,10 +199,9 @@ function DashboardContent() {
             lastSig.set(docId, newSig);
             if (items.length === 0) collection.clear(docId);
             else collection.set(docId, items);
-        };
-        window.addEventListener('agora:st-diagnostics', handler);
+        });
         return () => {
-            window.removeEventListener('agora:st-diagnostics', handler);
+            unsubscribe();
             if (collection && lastDocId) collection.clear(lastDocId);
         };
     }, []);
@@ -227,8 +222,7 @@ function DashboardContent() {
             return `${items.length}:${items[0]?.severity ?? ''}:${items[0]?.message?.slice(0, 40) ?? ''}`;
         };
 
-        const handler = (e: Event) => {
-            const detail = (e as CustomEvent<{ diagnostics: { line: number; column: number; severity: string; message: string; ruleId?: string }[]; docId?: string | null }>).detail;
+        const unsubscribe = subscribeAgoraEvent(AGORA_EVENTS.mdDiagnostics, (detail) => {
             // Preferir docId del evento (emitido por useMarkdownLinter del editor real)
             // sobre selectedDocIdRef.current, que puede haber cambiado entre lint y emit.
             const docId = detail?.docId ?? selectedDocIdRef.current;
@@ -251,10 +245,9 @@ function DashboardContent() {
             lastSig.set(docId, newSig);
             if (items.length === 0) collection.clear(docId);
             else collection.set(docId, items);
-        };
-        window.addEventListener('agora:md-diagnostics', handler);
+        });
         return () => {
-            window.removeEventListener('agora:md-diagnostics', handler);
+            unsubscribe();
             if (collection && lastDocId) collection.clear(lastDocId);
         };
     }, []);
@@ -892,8 +885,7 @@ function DashboardContent() {
     }, [docs]);
 
     useEffect(() => {
-        const handler = (event: Event) => {
-            const detail = (event as CustomEvent<AgentOpenDocumentsEventDetail>).detail;
+        return subscribeAgoraEvent(AGORA_EVENTS.openDocuments, (detail) => {
             if (!detail?.workspaceId || !currentWorkspaceId) return;
             if (detail.workspaceId !== currentWorkspaceId && !(currentWorkspaceId === PERSONAL_WORKSPACE_ID && detail.workspaceId === PERSONAL_WORKSPACE_ID)) {
                 return;
@@ -925,10 +917,7 @@ function DashboardContent() {
             };
 
             void openTargets();
-        };
-
-        window.addEventListener('agora:open-documents', handler as EventListener);
-        return () => window.removeEventListener('agora:open-documents', handler as EventListener);
+        });
     }, [currentWorkspaceId, docs, openTabs, setActiveFolderSafe, user?.uid]);
 
     const sidebarFilteredDocs = useMemo(() => {
@@ -1027,31 +1016,26 @@ function DashboardContent() {
     }, [openSemanticBrowser]);
 
     useEffect(() => {
-        const aiHandler = () => openSettings('ai');
-        const linterHandler = () => openSettings('linter');
+        const offAi = subscribeAgoraEvent(AGORA_EVENTS.openAiConfig, () => openSettings('ai'));
+        const offLinter = subscribeAgoraEvent(AGORA_EVENTS.openLinterConfig, () => openSettings('linter'));
         const genericHandler = (event: Event) => {
             const detail = (event as CustomEvent<{ section?: unknown }>).detail;
             openSettings(isSettingsSectionId(detail?.section) ? detail.section : undefined);
         };
-        window.addEventListener('agora:open-ai-config', aiHandler);
-        window.addEventListener('agora:open-linter-config', linterHandler);
         window.addEventListener(OPEN_SETTINGS_EVENT, genericHandler);
         return () => {
-            window.removeEventListener('agora:open-ai-config', aiHandler);
-            window.removeEventListener('agora:open-linter-config', linterHandler);
+            offAi();
+            offLinter();
             window.removeEventListener(OPEN_SETTINGS_EVENT, genericHandler);
         };
     }, [openSettings]);
 
     useEffect(() => {
-        const handler = (event: Event) => {
-            const detail = (event as CustomEvent<{ tab?: string }>).detail;
+        return subscribeAgoraEvent(AGORA_EVENTS.openBottomDock, (detail) => {
             const tab = detail?.tab;
             if (tab) setDockInitialTab(tab);
             setBottomDockOpen(true);
-        };
-        window.addEventListener('agora:open-bottom-dock', handler);
-        return () => window.removeEventListener('agora:open-bottom-dock', handler);
+        });
     }, []);
 
     useEffect(() => {
@@ -1066,8 +1050,7 @@ function DashboardContent() {
             if (isCompact) setShowMobileSidebar(true);
         };
 
-        const handler = (event: Event) => {
-            const detail = (event as CustomEvent<AgentUiCommandEventDetail>).detail;
+        const handler = (detail: AgentUiCommandEventDetail) => {
             if (!workspaceMatches(detail?.workspaceId)) return;
 
             const panel = detail.command.panel;
@@ -1101,18 +1084,26 @@ function DashboardContent() {
                 const headingTitle = cmd.headingTitle as string | null | undefined;
                 const line = cmd.line as number | null | undefined;
                 if (docId) {
-                    window.dispatchEvent(new CustomEvent('agora:focus-document-section', {
-                        detail: { documentId: docId, headingTitle: headingTitle ?? null, line: line ?? null }
-                    }));
+                    dispatchAgoraEvent(AGORA_EVENTS.focusDocumentSection, {
+                        documentId: docId,
+                        headingTitle: headingTitle ?? null,
+                        line: line ?? null
+                    });
                 }
                 return;
             }
-            const dynamicTypes = new Set<string>(['prompt-user-choice', 'show-diff', 'agent-status', 'agent-plan']);
-            if (dynamicTypes.has(type as string)) {
+            const dynamicTypes: Record<string, typeof AGORA_EVENTS[keyof typeof AGORA_EVENTS]> = {
+                'prompt-user-choice': AGORA_EVENTS.promptUserChoice,
+                'show-diff': AGORA_EVENTS.showDiff,
+                'agent-status': AGORA_EVENTS.agentStatus,
+                'agent-plan': AGORA_EVENTS.agentPlan
+            };
+            const dynamicEventName = dynamicTypes[type as string];
+            if (dynamicEventName) {
                 // Estos comandos se renderizan dentro del panel del agente; no
                 // requieren acción global del dashboard. Re-emitimos como
                 // evento dedicado por si AgoraAIChat lo escucha por separado.
-                window.dispatchEvent(new CustomEvent(`agora:${type}`, { detail: detail.command }));
+                dispatchAgoraEvent(dynamicEventName, detail.command);
                 return;
             }
 
@@ -1153,8 +1144,7 @@ function DashboardContent() {
             }
         };
 
-        window.addEventListener('agora:agent-ui-command', handler as EventListener);
-        return () => window.removeEventListener('agora:agent-ui-command', handler as EventListener);
+        return subscribeAgoraEvent(AGORA_EVENTS.agentUiCommand, handler);
     }, [
         currentWorkspaceId,
         isCompact,
@@ -2783,7 +2773,7 @@ function DashboardContent() {
                             isFormalizerOpen={isFormalizerOpen}
                             selectedDoc={selectedDocId ? docs.find(d => d.id === selectedDocId) ?? null : null}
                             onJumpToLine={(line) => {
-                              window.dispatchEvent(new CustomEvent('agora:jump-to-line', { detail: { line } }));
+                              dispatchAgoraEvent(AGORA_EVENTS.jumpToLine, { line });
                             }}
                             filesContent={null}
                           />
