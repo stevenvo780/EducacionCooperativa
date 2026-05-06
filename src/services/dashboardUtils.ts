@@ -24,8 +24,8 @@ export const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
 export const areDocsEquivalent = (prev: DocItem[], next: DocItem[]) => {
   if (prev.length !== next.length) return false;
   for (let i = 0; i < prev.length; i += 1) {
-    const a = prev[i];
-    const b = next[i];
+    const a = prev[i]!;
+    const b = next[i]!;
     if (a.id !== b.id) return false;
     if (a.name !== b.name) return false;
     if (a.type !== b.type) return false;
@@ -45,8 +45,8 @@ export const areDocsEquivalent = (prev: DocItem[], next: DocItem[]) => {
 export const areFoldersEquivalent = (prev: FolderItem[], next: FolderItem[]) => {
   if (prev.length !== next.length) return false;
   for (let i = 0; i < prev.length; i += 1) {
-    const a = prev[i];
-    const b = next[i];
+    const a = prev[i]!;
+    const b = next[i]!;
     if (a.id !== b.id) return false;
     if (a.name !== b.name) return false;
     if (a.path !== b.path) return false;

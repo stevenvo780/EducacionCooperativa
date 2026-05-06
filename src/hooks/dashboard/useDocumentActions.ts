@@ -350,7 +350,7 @@ export function useDocumentActions({
 
         if (targetPath !== DEFAULT_FOLDER_NAME) {
             const segments = targetPath.split('/');
-            const leafName = segments[segments.length - 1];
+            const leafName = segments[segments.length - 1]!;
             const parentPath = segments.slice(0, -1).join('/');
             const exists = folders.some(folder => folder.path.toLowerCase() === targetPath.toLowerCase());
             if (!exists) {

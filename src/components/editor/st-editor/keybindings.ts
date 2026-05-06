@@ -55,9 +55,10 @@ export function handleToggleComment(
   let startLine = 0;
   let endLine = 0;
   for (let i = 0; i < lines.length; i++) {
-    if (charCount + lines[i].length >= selectionStart && startLine === 0) startLine = i;
-    if (charCount + lines[i].length >= selectionEnd) { endLine = i; break; }
-    charCount += lines[i].length + 1;
+    const line = lines[i]!;
+    if (charCount + line.length >= selectionStart && startLine === 0) startLine = i;
+    if (charCount + line.length >= selectionEnd) { endLine = i; break; }
+    charCount += line.length + 1;
   }
   if (endLine < startLine) endLine = startLine;
 
@@ -67,16 +68,18 @@ export function handleToggleComment(
 
   let offsetDelta = 0;
   for (let i = startLine; i <= endLine; i++) {
+    const line = lines[i]!;
     if (allCommented) {
       // Remove comment
-      const match = lines[i].match(/^(\s*)\/\/\s?/);
+      const match = line.match(/^(\s*)\/\/\s?/);
       if (match) {
-        lines[i] = lines[i].slice(0, match[1].length) + lines[i].slice(match[0].length);
-        offsetDelta -= match[0].length - match[1].length;
+        const leading = match[1] ?? '';
+        lines[i] = line.slice(0, leading.length) + line.slice(match[0].length);
+        offsetDelta -= match[0].length - leading.length;
       }
     } else {
       // Add comment
-      lines[i] = `// ${lines[i]}`;
+      lines[i] = `// ${line}`;
       offsetDelta += 3;
     }
   }
@@ -99,25 +102,25 @@ export function handleMoveLine(
   let charCount = 0;
   let currentLine = 0;
   for (let i = 0; i < lines.length; i++) {
-    if (charCount + lines[i].length >= selectionStart) { currentLine = i; break; }
-    charCount += lines[i].length + 1;
+    if (charCount + lines[i]!.length >= selectionStart) { currentLine = i; break; }
+    charCount += lines[i]!.length + 1;
   }
 
   if (direction === 'up' && currentLine === 0) return true;
   if (direction === 'down' && currentLine >= lines.length - 1) return true;
 
   const swapWith = direction === 'up' ? currentLine - 1 : currentLine + 1;
-  const temp = lines[currentLine];
-  lines[currentLine] = lines[swapWith];
+  const temp = lines[currentLine]!;
+  lines[currentLine] = lines[swapWith]!;
   lines[swapWith] = temp;
 
   const newValue = lines.join('\n');
 
   // Calculate new cursor position
   let newCharCount = 0;
-  for (let i = 0; i < swapWith; i++) newCharCount += lines[i].length + 1;
+  for (let i = 0; i < swapWith; i++) newCharCount += lines[i]!.length + 1;
   const colOffset = selectionStart - charCount;
-  const newCursor = newCharCount + Math.min(colOffset, lines[swapWith].length);
+  const newCursor = newCharCount + Math.min(colOffset, lines[swapWith]!.length);
 
   setTextareaValue(ta, newValue, newCursor, newCursor, onChange);
   return true;
@@ -155,22 +158,24 @@ export function handleIndent(
   let startLine = 0;
   let endLine = 0;
   for (let i = 0; i < lines.length; i++) {
-    if (charCount <= selectionStart && charCount + lines[i].length >= selectionStart) startLine = i;
-    if (charCount <= selectionEnd && charCount + lines[i].length >= selectionEnd) { endLine = i; break; }
-    charCount += lines[i].length + 1;
+    const len = lines[i]!.length;
+    if (charCount <= selectionStart && charCount + len >= selectionStart) startLine = i;
+    if (charCount <= selectionEnd && charCount + len >= selectionEnd) { endLine = i; break; }
+    charCount += len + 1;
   }
 
   let offsetDelta = 0;
   for (let i = startLine; i <= endLine; i++) {
+    const line = lines[i]!;
     if (direction === 'indent') {
-      lines[i] = `${INDENT}${lines[i]}`;
+      lines[i] = `${INDENT}${line}`;
       offsetDelta += 2;
     } else {
-      if (lines[i].startsWith(INDENT)) {
-        lines[i] = lines[i].slice(2);
+      if (line.startsWith(INDENT)) {
+        lines[i] = line.slice(2);
         offsetDelta -= 2;
-      } else if (lines[i].startsWith(' ')) {
-        lines[i] = lines[i].slice(1);
+      } else if (line.startsWith(' ')) {
+        lines[i] = line.slice(1);
         offsetDelta -= 1;
       }
     }
@@ -191,7 +196,7 @@ export function handleSmartNewline(
 
   // Current indentation
   const indentMatch = lineText.match(/^(\s*)/);
-  const currentIndent = indentMatch ? indentMatch[1] : '';
+  const currentIndent = indentMatch?.[1] ?? '';
 
   // Increase indent after block openers and proof headers
   const trimmed = lineText.trim();
@@ -273,7 +278,7 @@ export function handleBackspacePair(
 
   const before = value[selectionStart - 1];
   const after = value[selectionStart];
-  if (BRACKET_PAIRS[before] === after) {
+  if (before !== undefined && BRACKET_PAIRS[before] === after) {
     const newValue = value.slice(0, selectionStart - 1) + value.slice(selectionStart + 1);
     setTextareaValue(ta, newValue, selectionStart - 1, selectionStart - 1, onChange);
     return true;
