@@ -14,6 +14,13 @@ html, body {
   height: 100%;
 }
 
+/* Anti-overflow horizontal por elementos absolutos / cards anchos en mobile <360px.
+ * Mantiene scroll vertical normal. No-op en desktop porque ningún flow
+ * razonable supera el viewport. */
+html {
+  overflow-x: hidden;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(
@@ -23,6 +30,7 @@ body {
     );
   min-height: 100vh;
   min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 ::selection {

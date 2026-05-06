@@ -43,7 +43,7 @@ export default function FileViewerShell({
               <a
                 href={fileUrl}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
               >
                 Abrir

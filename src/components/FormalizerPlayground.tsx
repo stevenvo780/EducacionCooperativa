@@ -396,6 +396,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
               <select
                 value={profile}
                 onChange={(e) => setProfile(e.target.value as LogicProfile)}
+                aria-label="Perfil lógico"
                 className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 outline-none focus:border-cyan-500/60"
               >
                 {PROFILES.map(p => (

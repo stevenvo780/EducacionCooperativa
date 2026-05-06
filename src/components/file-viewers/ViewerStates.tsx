@@ -60,7 +60,7 @@ export function ViewerUnsupported({
           <a
             href={fileUrl}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs hover:bg-slate-700"
           >
             Abrir externo

@@ -119,6 +119,11 @@ function LoginPage() {
                         <input
                           type="email"
                           required
+                          autoComplete="email"
+                          inputMode="email"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
                           value={resetEmail}
                           onChange={(e) => setResetEmail(e.target.value)}
                           className="w-full pl-10 pr-4 py-3 bg-surface-700 border border-surface-600 rounded-lg focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none transition text-white placeholder:text-surface-500"
@@ -223,6 +228,11 @@ function LoginPage() {
                             <input
                                 type="email"
                                 required
+                                autoComplete="email"
+                                inputMode="email"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 bg-surface-700 border border-surface-600 rounded-lg focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none transition text-white placeholder:text-surface-500"
@@ -238,6 +248,7 @@ function LoginPage() {
                             <input
                                 type="password"
                                 required
+                                autoComplete={isLogin ? 'current-password' : 'new-password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 bg-surface-700 border border-surface-600 rounded-lg focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none transition text-white placeholder:text-surface-500"

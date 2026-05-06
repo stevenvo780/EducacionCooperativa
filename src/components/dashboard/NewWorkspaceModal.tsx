@@ -38,6 +38,7 @@ export default function NewWorkspaceModal({
                         <h2 className="text-lg font-bold mb-4 text-white">Nuevo Espacio de Trabajo</h2>
                         <input
                             type="text"
+                            aria-label="Nombre del nuevo espacio de trabajo"
                             placeholder="Nombre, ej: Grupo Física"
                             value={workspaceName}
                             onChange={(e) => setWorkspaceName(e.target.value)}

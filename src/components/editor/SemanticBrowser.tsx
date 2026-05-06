@@ -44,6 +44,21 @@ import { dispatchOpenSettings } from '@/lib/settings-events';
 
 export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
 
+// Salvavidas anti-crash: workspaces con miles de items intentaban renderizar
+// todas las cards de un solo golpe, lockeando el main thread y crasheando
+// la pestaña. Cap defensivo + banner sugiriendo búsqueda. Si necesitas ver
+// más, filtra por término. Sube si la app se vuelve lenta pero no crashea.
+const RENDER_SAFETY_LIMIT = 500;
+
+function TruncatedBanner({ shown, total, label }: { shown: number; total: number; label: string }) {
+  if (total <= shown) return null;
+  return (
+    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+      Mostrando los primeros <strong>{shown}</strong> de <strong>{total}</strong> {label}. Usa la búsqueda para filtrar resultados.
+    </div>
+  );
+}
+
 const TABS: { key: SemanticTab; label: string; icon: React.ReactNode }[] = [
   { key: 'resumen', label: 'Resumen', icon: <BookMarked className="h-3.5 w-3.5" /> },
   { key: 'conceptos', label: 'Conceptos', icon: <Network className="h-3.5 w-3.5" /> },
@@ -1038,16 +1053,19 @@ export function SemanticBrowser({
                   : 'Selecciona texto en el editor y usa "Definir concepto" para crear tu primer concepto.'}
               />
             ) : (
-              filteredConcepts.map(concept => (
-                <ConceptCard
-                  key={concept.id}
-                  concept={concept}
-                  relationsCount={relationCounts.get(concept.id) ?? 0}
-                  relatedFragments={fragmentsByConceptId.get(concept.id) ?? EMPTY_FRAGMENTS}
-                  onDelete={onDeleteConcept}
-                  onEdit={onEditConcept}
-                />
-              ))
+              <>
+                <TruncatedBanner shown={Math.min(filteredConcepts.length, RENDER_SAFETY_LIMIT)} total={filteredConcepts.length} label="conceptos" />
+                {filteredConcepts.slice(0, RENDER_SAFETY_LIMIT).map(concept => (
+                  <ConceptCard
+                    key={concept.id}
+                    concept={concept}
+                    relationsCount={relationCounts.get(concept.id) ?? 0}
+                    relatedFragments={fragmentsByConceptId.get(concept.id) ?? EMPTY_FRAGMENTS}
+                    onDelete={onDeleteConcept}
+                    onEdit={onEditConcept}
+                  />
+                ))}
+              </>
             )}
           </div>
         )}
@@ -1063,9 +1081,12 @@ export function SemanticBrowser({
                   : 'Selecciona texto en el editor y usa “Guardar nota” para dejar comentarios persistentes.'}
               />
             ) : (
-              filteredNotes.map(fragment => (
-                <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
-              ))
+              <>
+                <TruncatedBanner shown={Math.min(filteredNotes.length, RENDER_SAFETY_LIMIT)} total={filteredNotes.length} label="notas" />
+                {filteredNotes.slice(0, RENDER_SAFETY_LIMIT).map(fragment => (
+                  <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
+                ))}
+              </>
             )}
           </div>
         )}
@@ -1081,9 +1102,12 @@ export function SemanticBrowser({
                   : 'Selecciona texto en el editor y usa "Marcar como evidencia" para comenzar.'}
               />
             ) : (
-              filteredEvidence.map(fragment => (
-                <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
-              ))
+              <>
+                <TruncatedBanner shown={Math.min(filteredEvidence.length, RENDER_SAFETY_LIMIT)} total={filteredEvidence.length} label="evidencias" />
+                {filteredEvidence.slice(0, RENDER_SAFETY_LIMIT).map(fragment => (
+                  <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
+                ))}
+              </>
             )}
           </div>
         )}
@@ -1099,9 +1123,12 @@ export function SemanticBrowser({
                   : 'Selecciona texto en el editor y usa "Fijar fragmento" para acceso rápido.'}
               />
             ) : (
-              filteredPinned.map(fragment => (
-                <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
-              ))
+              <>
+                <TruncatedBanner shown={Math.min(filteredPinned.length, RENDER_SAFETY_LIMIT)} total={filteredPinned.length} label="fijados" />
+                {filteredPinned.slice(0, RENDER_SAFETY_LIMIT).map(fragment => (
+                  <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
+                ))}
+              </>
             )}
           </div>
         )}
@@ -1117,14 +1144,17 @@ export function SemanticBrowser({
                   : 'Selecciona texto y relacíonalo con un concepto existente.'}
               />
             ) : (
-              filteredRelations.map(relation => (
-                <RelationCard
-                  key={relation.id}
-                  relation={relation}
-                  fragment={fragmentsById.get(relation.fragmentId)}
-                  onDelete={onDeleteRelation}
-                />
-              ))
+              <>
+                <TruncatedBanner shown={Math.min(filteredRelations.length, RENDER_SAFETY_LIMIT)} total={filteredRelations.length} label="relaciones" />
+                {filteredRelations.slice(0, RENDER_SAFETY_LIMIT).map(relation => (
+                  <RelationCard
+                    key={relation.id}
+                    relation={relation}
+                    fragment={fragmentsById.get(relation.fragmentId)}
+                    onDelete={onDeleteRelation}
+                  />
+                ))}
+              </>
             )}
           </div>
         )}

@@ -126,6 +126,7 @@ export default function ChangePasswordModal({
                                     <div className="relative">
                                         <input
                                             type="password"
+                                            autoComplete="current-password"
                                             value={passwordForm.current}
                                             onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
                                             className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
@@ -141,6 +142,7 @@ export default function ChangePasswordModal({
                                     </label>
                                     <input
                                         type="password"
+                                        autoComplete="new-password"
                                         value={passwordForm.new}
                                         onChange={(e) => setPasswordForm({ ...passwordForm, new: e.target.value })}
                                         className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
@@ -156,6 +158,7 @@ export default function ChangePasswordModal({
                                     </label>
                                     <input
                                         type="password"
+                                        autoComplete="new-password"
                                         value={passwordForm.confirm}
                                         onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
                                         className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"

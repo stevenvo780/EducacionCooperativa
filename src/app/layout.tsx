@@ -11,12 +11,13 @@ import GlobalErrorCatcher from '@/components/GlobalErrorCatcher';
 import { PRODUCT_BRAND } from '@/lib/branding';
 
 export const viewport: Viewport = {
-  themeColor: '#000000',
+  themeColor: '#0a0a0f',
   width: 'device-width',
   initialScale: 1
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://agora.elenxos.com'),
   title: PRODUCT_BRAND.title,
   description: PRODUCT_BRAND.metadataDescription,
   manifest: '/manifest.json',
@@ -31,6 +32,24 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false
+  },
+  openGraph: {
+    type: 'website',
+    siteName: PRODUCT_BRAND.name,
+    title: PRODUCT_BRAND.title,
+    description: PRODUCT_BRAND.metadataDescription,
+    url: 'https://agora.elenxos.com',
+    locale: 'es_ES'
+  },
+  twitter: {
+    card: 'summary',
+    title: PRODUCT_BRAND.title,
+    description: PRODUCT_BRAND.metadataDescription
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true }
   }
 };
 

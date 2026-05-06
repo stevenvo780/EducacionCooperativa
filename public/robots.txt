@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Allow: /docs
+Allow: /docs/st
+Disallow: /dashboard
+Disallow: /editor/
+Disallow: /workspace/
+Disallow: /api/
+
+Sitemap: https://agora.elenxos.com/sitemap.xml

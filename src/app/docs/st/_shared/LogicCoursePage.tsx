@@ -51,7 +51,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
     <div className="min-h-[100dvh] bg-surface-900 text-surface-200 selection:bg-mandy-500/30">
       <header className="sticky top-0 z-50 bg-surface-900/90 backdrop-blur border-b border-surface-700/50">
         <div className="max-w-7xl mx-auto flex items-center gap-4 px-6 py-3">
-          <Link href="/docs/st" className="p-2 rounded-lg hover:bg-surface-700/50 transition text-surface-400 hover:text-white">
+          <Link href="/docs/st" aria-label="Volver al manual ST" title="Volver al manual ST" className="p-2 rounded-lg hover:bg-surface-700/50 transition text-surface-400 hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="flex items-center gap-2.5 min-w-0">

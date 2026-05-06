@@ -182,6 +182,7 @@ export function SnippetEditorModal({
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
+              aria-label="Categoría del snippet"
               className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
             >
               {CATEGORIES.filter((c) => c.id !== 'all').map((c) => (

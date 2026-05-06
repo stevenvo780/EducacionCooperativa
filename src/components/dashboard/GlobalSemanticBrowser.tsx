@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from 'react';
 import { SemanticBrowser, type SemanticTab } from '@/components/editor/SemanticBrowser';
 import {
   loadSemanticWorkspaceState,
@@ -256,11 +256,17 @@ export default function GlobalSemanticBrowser({
 
   const noop = useMemo(() => () => {}, []);
 
-  const theoryGraph = useMemo(() => buildTheoryGraphFromSemanticState(state, {
-    sourceDocument: { docName: filterDocName || 'Espacio de trabajo' }
-  }), [filterDocName, state]);
+  // Deferred state: en workspaces grandes (cientos/miles de conceptos)
+  // buildTheoryGraphFromSemanticState y buildSTFromSemantic son sincrónicos
+  // y bloquean el main thread. useDeferredValue permite que React renderize
+  // la UI primero con el estado anterior y compute las derivadas en idle.
+  const deferredState = useDeferredValue(state);
 
-  const stPreviewContent = useMemo(() => buildSTFromSemantic(state, filterDocName || 'Espacio de trabajo'), [filterDocName, state]);
+  const theoryGraph = useMemo(() => buildTheoryGraphFromSemanticState(deferredState, {
+    sourceDocument: { docName: filterDocName || 'Espacio de trabajo' }
+  }), [filterDocName, deferredState]);
+
+  const stPreviewContent = useMemo(() => buildSTFromSemantic(deferredState, filterDocName || 'Espacio de trabajo'), [filterDocName, deferredState]);
 
   const handleExperienceModeChange = useCallback((mode: 'assisted' | 'hybrid' | 'expert') => {
     if (!ctx) return;
