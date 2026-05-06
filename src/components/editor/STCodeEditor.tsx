@@ -35,6 +35,7 @@ import {
   isTouchDeviceProfile
 } from './codemirror';
 import { buildCollabExtension } from './codemirror/yCollabExtension';
+import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 
 interface STCodeEditorProps {
   value: string;
@@ -204,15 +205,12 @@ export default function STCodeEditor({
       : `${diagnostics.length}:${diagnostics[0]?.severity ?? ''}:${(diagnostics[0]?.message ?? '').slice(0, 40)}`;
     if (lastBridgeSigRef.current === sig) return;
     lastBridgeSigRef.current = sig;
-    window.dispatchEvent(new CustomEvent('agora:st-diagnostics', {
-      detail: { diagnostics }
-    }));
+    dispatchAgoraEvent(AGORA_EVENTS.stDiagnostics, { diagnostics });
   }, [diagnostics]);
 
   useEffect(() => {
     if (isTouchDevice) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ line: number; column?: number }>).detail;
+    return subscribeAgoraEvent(AGORA_EVENTS.jumpToLine, (detail) => {
       const view = viewRef.current;
       if (!view || !detail) return;
       const total = view.state.doc.lines;
@@ -222,9 +220,7 @@ export default function STCodeEditor({
       const pos = lineInfo.from + col;
       view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
       view.focus();
-    };
-    window.addEventListener('agora:jump-to-line', handler);
-    return () => window.removeEventListener('agora:jump-to-line', handler);
+    });
   }, [isTouchDevice]);
 
   if (isTouchDevice) {

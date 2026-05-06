@@ -2,9 +2,9 @@
 
 /**
  * Listener RTDB global montado en el layout root. Suscribe al canal personal
- * del usuario y al del workspace activo, y reemite cada evento como
- * `window.dispatchEvent('agora:rtdb-event' | 'agora:docs-changed')` para que
- * cualquier página lo consuma.
+ * del usuario y al del workspace activo, y reemite cada evento via
+ * dispatchAgoraEvent(rtdbEvent | docsChanged) para que cualquier página
+ * lo consuma.
  */
 import { useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';

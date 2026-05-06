@@ -23,6 +23,7 @@ import {
 import type { BoardCard } from '@/components/dashboard/types';
 import { fetchSemanticWorkspaceStateApi, saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
 import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
+import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
 import { syncSTSourceToSemanticWorkspace } from '@/services/semanticSyncService';
 import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
 import { buildTheoryGraphFromSemanticState, type TheoryGraphQuickFix } from '@/lib/semantic/theory-graph';
@@ -89,25 +90,23 @@ export default function GlobalSemanticBrowser({
     if (!workspaceId) return;
 
     const handleWindowSync = () => scheduleReload();
-    const handleSemanticPreferencesSync = (event: Event) => {
-      const detail = (event as CustomEvent<{ workspaceId?: string }>).detail;
-      if (!detail?.workspaceId || detail.workspaceId === workspaceId) scheduleReload(true);
-    };
     const handleVisibilitySync = () => {
       if (!document.hidden) scheduleReload(true);
     };
 
-    window.addEventListener('agora:docs-changed', handleWindowSync);
-    window.addEventListener('agora:doc-content-updated', handleWindowSync);
-    window.addEventListener('agora:semantic-preferences-changed', handleSemanticPreferencesSync);
+    const offDocsChanged = subscribeAgoraEvent(AGORA_EVENTS.docsChanged, () => scheduleReload());
+    const offDocContentUpdated = subscribeAgoraEvent(AGORA_EVENTS.docContentUpdated, () => scheduleReload());
+    const offSemanticPrefs = subscribeAgoraEvent(AGORA_EVENTS.semanticPreferencesChanged, (detail) => {
+      if (!detail?.workspaceId || detail.workspaceId === workspaceId) scheduleReload(true);
+    });
     window.addEventListener('focus', handleWindowSync);
     window.addEventListener('online', handleWindowSync);
     document.addEventListener('visibilitychange', handleVisibilitySync);
 
     return () => {
-      window.removeEventListener('agora:docs-changed', handleWindowSync);
-      window.removeEventListener('agora:doc-content-updated', handleWindowSync);
-      window.removeEventListener('agora:semantic-preferences-changed', handleSemanticPreferencesSync);
+      offDocsChanged();
+      offDocContentUpdated();
+      offSemanticPrefs();
       window.removeEventListener('focus', handleWindowSync);
       window.removeEventListener('online', handleWindowSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
@@ -117,8 +116,7 @@ export default function GlobalSemanticBrowser({
   /* Round-trip: when a .md.st companion is saved, sync its content back into the semantic workspace */
   useEffect(() => {
     if (!workspaceId) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ docId?: string; docName?: string; content?: string }>).detail;
+    return subscribeAgoraEvent(AGORA_EVENTS.stSourceSaved, (detail) => {
       if (!detail?.docName?.endsWith('.md.st') || !detail.content) return;
       void syncSTSourceToSemanticWorkspace({
         workspaceId,
@@ -130,9 +128,7 @@ export default function GlobalSemanticBrowser({
       }).then(() => scheduleReload(true)).catch((err) => {
         console.error('[GlobalSemanticBrowser] Round-trip sync failed', err);
       });
-    };
-    window.addEventListener('agora:st-source-saved', handler);
-    return () => window.removeEventListener('agora:st-source-saved', handler);
+    });
   }, [workspaceId, userId, scheduleReload]);
 
   const ctx = useMemo(() => workspaceId ? { workspaceId, userId: userId ?? undefined } : null, [workspaceId, userId]);

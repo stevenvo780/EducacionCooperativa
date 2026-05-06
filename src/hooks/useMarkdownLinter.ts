@@ -7,6 +7,7 @@ import { getPersonalDictionary, initSpellEngine, isSpellEngineReady } from '@/li
 import { isSuppressed } from '@/lib/markdown-linter/suppressions';
 import { LinterRegistry } from '@/lib/linters/registry';
 import type { LinterDiagnostic, LinterRule } from '@/lib/markdown-linter/types';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 // Re-export types for backward compatibility
 export type { LinterDiagnostic, LinterRule };
@@ -374,15 +375,12 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   // para no spamear publishes en cada re-render del editor.
   const lastBridgeSigRef = useRef<string>('');
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     const sig = diagnostics.length === 0
       ? 'empty'
       : `${diagnostics.length}:${diagnostics[0]?.severity ?? ''}:${(diagnostics[0]?.message ?? '').slice(0, 40)}`;
     if (lastBridgeSigRef.current === sig) return;
     lastBridgeSigRef.current = sig;
-    window.dispatchEvent(new CustomEvent('agora:md-diagnostics', {
-      detail: { diagnostics, docId }
-    }));
+    dispatchAgoraEvent(AGORA_EVENTS.mdDiagnostics, { diagnostics, docId });
   }, [diagnostics, docId]);
 
   return { diagnostics, runLint, linterStatus };

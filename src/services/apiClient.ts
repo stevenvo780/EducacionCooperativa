@@ -1,6 +1,7 @@
 import { auth as getAuth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { toast } from 'sonner';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
 
@@ -139,15 +140,13 @@ export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}
       // PricingModal en vez de mostrar solo el toast.
       const isPlanGate = response.status === 403 && errorPayload?.error === 'plan-required';
       const isQuotaGate = response.status === 413 && errorPayload?.error === 'storage-quota-exceeded';
-      if ((isPlanGate || isQuotaGate) && typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('agora:plan-required', {
-          detail: {
-            kind: isQuotaGate ? 'quota' : 'plan',
-            currentPlan: errorPayload?.currentPlan,
-            feature: errorPayload?.feature,
-            message: errorMessage
-          }
-        }));
+      if (isPlanGate || isQuotaGate) {
+        dispatchAgoraEvent(AGORA_EVENTS.planRequired, {
+          kind: isQuotaGate ? 'quota' : 'plan',
+          currentPlan: errorPayload?.currentPlan,
+          feature: errorPayload?.feature,
+          message: errorMessage
+        });
         return response;
       }
       toast.error('Error en la petición', { description: errorMessage });

@@ -1,5 +1,7 @@
 'use client';
 
+import { AGORA_EVENTS, subscribeAgoraEvent } from './agora-events';
+
 /**
  * Diagnostics Bus — arquitectura modular inspirada en `vscode.languages`
  * y la API de `DiagnosticCollection`.
@@ -318,11 +320,10 @@ export function installDiagnosticsBus() {
 
   // Compat con eventos legacy 'agora:problem' que ya emitían algunos
   // subsistemas (tratados como source=app, uri=global).
-  window.addEventListener('agora:problem', ((e: Event) => {
-    const d = (e as CustomEvent<{ severity?: DiagnosticSeverity; source?: string; uri?: string; message: string; detail?: string; code?: string }>).detail;
+  subscribeAgoraEvent(AGORA_EVENTS.problem, (d) => {
     if (!d) return;
     pushProblemEvent(d);
-  }) as EventListener);
+  });
 }
 
 /* ──────────────────────────────────────────────────────────────────

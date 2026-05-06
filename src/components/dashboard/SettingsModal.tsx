@@ -18,6 +18,7 @@ import {
 } from '@/components/editor/codemirror/st-editor-config';
 import { LinterRegistry } from '@/lib/linters/registry';
 import { MarkdownLinterRegistry, type RuleState } from '@/lib/markdown-linter/registry';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 import { RULE_CATEGORY_LABELS, type RuleCategory } from '@/lib/markdown-linter/types';
 import {
   AGENT_ACCESS_CAPABILITIES,
@@ -668,7 +669,7 @@ function EditorStSection() {
       if (!prev) return prev;
       const next = { ...prev, [key]: value };
       saveStEditorConfig(next);
-      window.dispatchEvent(new CustomEvent('agora:st-editor-config-changed', { detail: next }));
+      dispatchAgoraEvent(AGORA_EVENTS.stEditorConfigChanged, next);
       return next;
     });
   };
@@ -676,7 +677,7 @@ function EditorStSection() {
   const resetDefaults = () => {
     const next = getDefaultStEditorConfig();
     saveStEditorConfig(next);
-    window.dispatchEvent(new CustomEvent('agora:st-editor-config-changed', { detail: next }));
+    dispatchAgoraEvent(AGORA_EVENTS.stEditorConfigChanged, next);
     setConfig(next);
   };
 
@@ -748,11 +749,7 @@ function SemanticSection({
   const persistPreferences = (updates: Partial<SemanticWorkspacePreferences>) => {
     const nextState = setSemanticWorkspacePreferences(context, updates);
     setState(nextState);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('agora:semantic-preferences-changed', {
-        detail: { workspaceId, preferences: nextState.preferences }
-      }));
-    }
+    dispatchAgoraEvent(AGORA_EVENTS.semanticPreferencesChanged, { workspaceId, preferences: nextState.preferences });
     void saveSemanticWorkspaceStateApi(workspaceId, nextState).catch((error) => {
       console.warn('[settings] no se pudieron sincronizar preferencias semánticas', error);
     });

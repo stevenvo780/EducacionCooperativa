@@ -23,6 +23,7 @@ import {
   updateDocumentApi
 } from '@/services/dashboardApi';
 import { loadSemanticWorkspaceState, saveSemanticWorkspaceState } from '@/services/editorSemanticStore';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 import { saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
 
 interface SyncSemanticCompanionFilesOptions {
@@ -79,11 +80,9 @@ const syncRegistryFromContent = (fileName: string, content: string) => {
 const emitCompanionEvents = (companionName: string, companionDocIds: string[]) => {
   if (typeof window === 'undefined' || companionDocIds.length === 0) return;
 
-  window.dispatchEvent(new CustomEvent('agora:docs-changed'));
+  dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
   companionDocIds.forEach((docId) => {
-    window.dispatchEvent(new CustomEvent('agora:doc-content-updated', {
-      detail: { docId, docName: companionName }
-    }));
+    dispatchAgoraEvent(AGORA_EVENTS.docContentUpdated, { docId, docName: companionName });
   });
 };
 

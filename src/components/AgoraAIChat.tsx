@@ -1644,7 +1644,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             </button>
           )}
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent('agora:open-ai-config'))}
+            onClick={() => dispatchAgoraEvent(AGORA_EVENTS.openAiConfig)}
             className="p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
             title="Configuración de IA"
             aria-label="Configuración"
@@ -1821,7 +1821,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                 title="Cambiar proveedor (click derecho para configurar)"
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  window.dispatchEvent(new CustomEvent('agora:open-ai-config'));
+                  dispatchAgoraEvent(AGORA_EVENTS.openAiConfig);
                 }}
                 className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-surface-200 transition hover:border-sky-500/40 hover:text-white"
               >
@@ -1860,7 +1860,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                       type="button"
                       onClick={() => {
                         setShowProviderMenu(false);
-                        window.dispatchEvent(new CustomEvent('agora:open-ai-config'));
+                        dispatchAgoraEvent(AGORA_EVENTS.openAiConfig);
                       }}
                       className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[11px] text-surface-300 hover:bg-surface-800 transition"
                     >

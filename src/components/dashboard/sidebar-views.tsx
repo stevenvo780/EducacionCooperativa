@@ -9,6 +9,7 @@ import type { SearchResultFilter, SearchResultItem } from '@/lib/search/types';
 import ToolsGallery from './ToolsGallery';
 import SearchPanel from './SearchPanel';
 import OutlineView from './OutlineView';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 const GitWorkbench = dynamic(() => import('@/components/dashboard/GitWorkbench'), { ssr: false });
 const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
@@ -174,7 +175,7 @@ export const SIDEBAR_VIEWS: SidebarView[] = [
           <SnippetGallery
             workspaceId={ctx.currentWorkspace.id}
             onInsert={(markdown) => {
-              window.dispatchEvent(new CustomEvent('agora:insert-snippet', { detail: { markdown } }));
+              dispatchAgoraEvent(AGORA_EVENTS.insertSnippet, { markdown });
             }}
             hideClose
           />

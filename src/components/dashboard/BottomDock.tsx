@@ -17,6 +17,7 @@ import { subscribeDiagnostics, type ResolvedDiagnostic } from '@/lib/diagnostics
 import { subscribeChannels, type OutputChannel, type ChannelTone } from '@/lib/output-channels';
 import ProblemsPane from './ProblemsPane';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
+import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
 
 const Terminal = dynamic(() => import('@/components/Terminal'), { ssr: false });
 
@@ -103,12 +104,10 @@ export default function BottomDock(props: BottomDockProps) {
   // forzar el switch (ej: ejecutar ST dos veces seguidas debe volver a
   // mostrar 'st-output' aunque el usuario haya clickeado Terminal en medio).
   useEffect(() => {
-    const handler = (event: Event) => {
-      const tab = (event as CustomEvent<{ tab?: string }>).detail?.tab;
+    return subscribeAgoraEvent(AGORA_EVENTS.openBottomDock, (detail) => {
+      const tab = detail?.tab;
       if (tab) setActive(tab);
-    };
-    window.addEventListener('agora:open-bottom-dock', handler);
-    return () => window.removeEventListener('agora:open-bottom-dock', handler);
+    });
   }, []);
 
   // Si el tab activo desaparece del registro, cae al primero disponible.
