@@ -2960,7 +2960,7 @@ function DashboardContent() {
                       </PanelGroup>
                       {rightPanelOpen && isCompact && (
                         <div
-                          className="fixed inset-0 z-50 flex bg-surface-900"
+                          className="fixed inset-x-0 bottom-0 top-11 z-40 flex bg-surface-900"
                           role="dialog"
                           aria-modal="true"
                           aria-label="Panel Agora AI"

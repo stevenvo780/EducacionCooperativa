@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
-import { getFirestore, Firestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, Firestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getDatabase, Database } from 'firebase/database';
 
 // Lectura literal: Next sólo inlinea process.env.NEXT_PUBLIC_* si el acceso
@@ -55,10 +55,13 @@ function getFirebaseDb(): Firestore {
     return {} as Firestore;
   }
   if (!db) {
-    db = getFirestore(getFirebaseApp());
-    enableMultiTabIndexedDbPersistence(db).catch((err) => {
-      console.warn('Firebase persistence failed:', err);
-    });
+    try {
+      db = initializeFirestore(getFirebaseApp(), {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      });
+    } catch {
+      db = getFirestore(getFirebaseApp());
+    }
   }
   return db;
 }

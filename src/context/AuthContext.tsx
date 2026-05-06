@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomToken } from '@/lib/firebase';
-import { apiUrl } from '@/services/apiClient';
+import { apiUrl, parseApiResponse } from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -193,11 +193,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || 'Credenciales inválidas');
+            const errorData = await parseApiResponse<{ error?: string }>(res).catch(() => ({} as { error?: string }));
+            throw new Error(errorData.error || `Credenciales inválidas (HTTP ${res.status})`);
         }
 
-        const userData = await res.json();
+        const userData = await parseApiResponse<Record<string, unknown> & {
+            customToken?: string;
+            localDevToken?: string;
+            uid: string;
+            email?: string;
+            displayName?: string;
+            photoURL?: string | null;
+        }>(res);
 
         if (userData.customToken) {
             try {
@@ -271,11 +278,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || 'Error al registrar usuario');
+            const errorData = await parseApiResponse<{ error?: string }>(res).catch(() => ({} as { error?: string }));
+            throw new Error(errorData.error || `Error al registrar usuario (HTTP ${res.status})`);
         }
 
-        const userData = await res.json();
+        const userData = await parseApiResponse<Record<string, unknown> & {
+            customToken?: string;
+            localDevToken?: string;
+            uid: string;
+            email?: string;
+        }>(res);
 
         if (userData.customToken) {
             try {
@@ -359,11 +371,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || 'Error al cambiar la contraseña');
+            const errorData = await parseApiResponse<{ error?: string }>(res).catch(() => ({} as { error?: string }));
+            throw new Error(errorData.error || `Error al cambiar la contraseña (HTTP ${res.status})`);
         }
 
-        return res.json();
+        await parseApiResponse(res).catch(() => undefined);
     }, [user]);
 
     const resetPassword = useCallback(async (email: string) => {
@@ -376,10 +388,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
 
             if (!prepareRes.ok) {
-                const errorData = await prepareRes.json().catch(() => ({}));
-                throw new Error(typeof errorData?.error === 'string'
+                const errorData = await parseApiResponse<{ error?: string }>(prepareRes).catch(() => ({} as { error?: string }));
+                throw new Error(typeof errorData.error === 'string'
                     ? errorData.error
-                    : 'Error al preparar el correo de recuperacion');
+                    : `Error al preparar el correo de recuperación (HTTP ${prepareRes.status})`);
             }
 
             const firebaseAuth = getAuth();

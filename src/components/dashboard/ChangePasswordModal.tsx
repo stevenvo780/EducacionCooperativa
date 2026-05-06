@@ -3,6 +3,7 @@
 import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { Check, Key, Loader2, X } from 'lucide-react';
 import { getErrorMessage } from '@/lib/error-utils';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface PasswordForm {
     current: string;
@@ -41,6 +42,7 @@ export default function ChangePasswordModal({
     modalFade,
     modalPop
 }: ChangePasswordModalProps) {
+    useEscapeClose(isOpen, onClose);
     return (
         <AnimatePresence>
             {isOpen && (
@@ -52,6 +54,9 @@ export default function ChangePasswordModal({
                     className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
                     style={{ willChange: 'opacity' }}
                     onClick={onClose}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Cambiar contraseña"
                 >
                     <m.div
                         initial={{ scale: 0.9, opacity: 0 }}

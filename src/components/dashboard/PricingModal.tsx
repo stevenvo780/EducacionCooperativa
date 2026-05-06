@@ -6,6 +6,7 @@ import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive, AlertTriangl
 import { PLAN_ORDER, PLANS, Plan, type PlanId, type PlanConfig, formatStorageSize } from '@/types/subscription';
 import { authFetch } from '@/services/apiClient';
 import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface PricingModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
     }
   }, [isOpen]);
 
+  useEscapeClose(isOpen, onClose);
   if (!isOpen) return null;
 
   const handleSelectPlan = async (planId: PlanId) => {
@@ -73,8 +75,8 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#1e1e2e] rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-gray-700/50 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-[#1e1e2e] rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-gray-700/50 shadow-2xl" role="dialog" aria-modal="true" aria-label="Planes y Precios" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
           <div>

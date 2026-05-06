@@ -6,6 +6,7 @@ import { ArrowRightLeft, Briefcase, Check, Copy, Loader2, MoreVertical, Pencil, 
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { Workspace } from '@/components/dashboard/types';
 import { WorkspaceType } from '@/types/workspace';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface WorkspaceManagerModalProps {
   isOpen: boolean;
@@ -65,6 +66,7 @@ export default function WorkspaceManagerModal({
   const [actionMenuPos, setActionMenuPos] = useState<{ top: number; left: number } | null>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const actionButtonRef = useRef<HTMLButtonElement>(null);
+  useEscapeClose(isOpen && !actionMenuId, onClose);
 
   useEffect(() => {
     if (!isOpen) {

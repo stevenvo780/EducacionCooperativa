@@ -4,6 +4,7 @@ import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { Shield, Trash2, Users, X } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { Workspace } from './types';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface MembersModalProps {
     isOpen: boolean;
@@ -30,6 +31,7 @@ export default function MembersModal({
     removeMember,
     modalFade
 }: MembersModalProps) {
+    useEscapeClose(isOpen, onClose);
     return (
         <AnimatePresence>
             {isOpen && (
@@ -38,8 +40,12 @@ export default function MembersModal({
                     transition={modalFade}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
                     style={{ willChange: 'opacity' }}
+                    onClick={onClose}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Miembros del Espacio"
                 >
-                    <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-md border border-surface-600/50">
+                    <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-md border border-surface-600/50" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-lg font-bold flex items-center gap-2 text-white">
                                 <Users className="w-5 h-5 text-mandy-400" />

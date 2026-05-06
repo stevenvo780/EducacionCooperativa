@@ -1,6 +1,7 @@
 'use client';
 
 import { AnimatePresence, m, type Transition } from 'framer-motion';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface NewWorkspaceModalProps {
     isOpen: boolean;
@@ -19,6 +20,7 @@ export default function NewWorkspaceModal({
     onCreate,
     modalFade
 }: NewWorkspaceModalProps) {
+    useEscapeClose(isOpen, onClose);
     return (
         <AnimatePresence>
             {isOpen && (
@@ -27,8 +29,12 @@ export default function NewWorkspaceModal({
                     transition={modalFade}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
                     style={{ willChange: 'opacity' }}
+                    onClick={onClose}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Nuevo Espacio de Trabajo"
                 >
-                    <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-sm border border-surface-600/50">
+                    <div className="bg-surface-800 rounded-2xl shadow-xl shadow-black/40 p-6 w-full max-w-sm border border-surface-600/50" onClick={(e) => e.stopPropagation()}>
                         <h2 className="text-lg font-bold mb-4 text-white">Nuevo Espacio de Trabajo</h2>
                         <input
                             type="text"

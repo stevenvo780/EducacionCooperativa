@@ -3,6 +3,7 @@
 import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { X } from 'lucide-react';
 import type { DialogConfig } from '@/components/dashboard/types';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface DialogModalProps {
   dialogConfig: DialogConfig | null;
@@ -23,6 +24,9 @@ const DialogModal = ({
   modalFade,
   modalPop
 }: DialogModalProps) => {
+  const isOpen = !!dialogConfig;
+  const isDismissable = !!dialogConfig && (dialogConfig.type === 'confirm' || dialogConfig.type === 'input');
+  useEscapeClose(isOpen && isDismissable, onCancel);
   return (
     <AnimatePresence>
       {dialogConfig && (
@@ -34,10 +38,13 @@ const DialogModal = ({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           style={{ willChange: 'opacity' }}
           onClick={() => {
-            if (dialogConfig.type === 'confirm' || dialogConfig.type === 'input') onCancel();
+            if (isDismissable) onCancel();
           }}
         >
           <m.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={dialogConfig.title}
             initial={{ scale: 0.96, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.96, opacity: 0 }}

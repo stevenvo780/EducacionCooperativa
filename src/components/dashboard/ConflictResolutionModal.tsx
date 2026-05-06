@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { AlertTriangle, FileText, Server, User } from 'lucide-react';
 import type { SyncQueueItem } from '@/lib/offlineStorage';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface ConflictResolutionModalProps {
   open: boolean;
@@ -24,11 +25,12 @@ export default function ConflictResolutionModal({
   onAcceptServer,
   resolveDocName
 }: ConflictResolutionModalProps) {
+  useEscapeClose(open && conflicts.length > 0, onClose);
   if (!open || conflicts.length === 0) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-amber-500/30 bg-slate-950 shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-amber-500/30 bg-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-label="Conflicto de versión">
         <header className="flex shrink-0 items-center gap-3 border-b border-slate-800 px-5 py-3.5">
           <AlertTriangle className="h-5 w-5 text-amber-400" />
           <div className="flex-1">

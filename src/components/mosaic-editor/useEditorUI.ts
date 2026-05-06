@@ -67,6 +67,25 @@ export function useEditorUI({ editorShellRef, embedded, roomId }: UseEditorUIOpt
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [embedded, roomId]);
 
+  // ESC fallback: el browser maneja ESC en native fullscreen, pero si el modo
+  // se entró sin fullscreen API (e.g. iframe, contexto sin permission, headless),
+  // el user quedaría atrapado. Garantizamos siempre una salida.
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-prevent-modal-escape="true"], .cm-content, [role="textbox"][contenteditable="true"]')) return;
+      e.preventDefault();
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined);
+      }
+      setIsFullscreen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isFullscreen]);
+
   const applyToolbarVisibility = useCallback((nextVisibility: ToolbarVisibility) => {
     dispatch(setEditorToolbarVisibility(nextVisibility));
   }, [dispatch]);
