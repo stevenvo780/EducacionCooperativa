@@ -69,9 +69,50 @@ export function usePresence(args: UsePresenceArgs): UsePresenceResult {
     const newSessionId = generateSessionId();
     setSessionId(newSessionId);
 
-    let cancelled = false;
-    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-    let localHandle: PresenceHandle | null = null;
+    const ctrl = {
+      cancelled: false,
+      heartbeatTimer: null as ReturnType<typeof setInterval> | null,
+      localHandle: null as PresenceHandle | null
+    };
+
+    const startHeartbeat = (handle: PresenceHandle) => {
+      if (ctrl.heartbeatTimer) return;
+      ctrl.heartbeatTimer = setInterval(() => {
+        if (ctrl.cancelled) {
+          if (ctrl.heartbeatTimer) {
+            clearInterval(ctrl.heartbeatTimer);
+            ctrl.heartbeatTimer = null;
+          }
+          return;
+        }
+        handle.heartbeat().catch(() => { /* RTDB hipa, no rompemos UI */ });
+      }, PRESENCE_HEARTBEAT_MS);
+    };
+
+    const stopHeartbeat = () => {
+      if (ctrl.heartbeatTimer) {
+        clearInterval(ctrl.heartbeatTimer);
+        ctrl.heartbeatTimer = null;
+      }
+    };
+
+    // Pausamos el heartbeat cuando la pestaña está oculta. El TTL de
+    // PRESENCE_TTL_MS (90s) cubre tabs en background sin que aparezcan
+    // como online indefinidamente: si el user pasa >90s con la tab
+    // hidden, los demás dejan de verlo. Al volver, un heartbeat inmediato
+    // lo reconcilia. Esto reduce escrituras RTDB de ~2400/h por usuario
+    // (con N tabs abiertas) a solo las pestañas visibles.
+    const handleVisibilityChange = () => {
+      const handle = ctrl.localHandle;
+      if (!handle) return;
+      if (document.hidden) {
+        stopHeartbeat();
+      } else {
+        // Heartbeat inmediato + reanudar interval.
+        handle.heartbeat().catch(() => { /* ignore */ });
+        startHeartbeat(handle);
+      }
+    };
 
     (async () => {
       try {
@@ -83,25 +124,31 @@ export function usePresence(args: UsePresenceArgs): UsePresenceResult {
           photoURL: args.photoURL ?? undefined,
           currentDocId: args.currentDocId ?? undefined
         });
-        if (cancelled) {
+        if (ctrl.cancelled) {
           await handle.leave();
           return;
         }
-        localHandle = handle;
+        ctrl.localHandle = handle;
         handleRef.current = handle;
-        heartbeatTimer = setInterval(() => {
-          handle.heartbeat().catch(() => { /* RTDB hipa, no rompemos UI */ });
-        }, PRESENCE_HEARTBEAT_MS);
+        if (typeof document === 'undefined' || !document.hidden) {
+          startHeartbeat(handle);
+        }
+        if (typeof document !== 'undefined') {
+          document.addEventListener('visibilitychange', handleVisibilityChange);
+        }
       } catch (err) {
         console.warn('[usePresence] join failed:', err);
       }
     })();
 
     return () => {
-      cancelled = true;
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      ctrl.cancelled = true;
+      stopHeartbeat();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
       handleRef.current = null;
-      localHandle?.leave().catch(() => { /* ignore */ });
+      ctrl.localHandle?.leave().catch(() => { /* ignore */ });
       setSessionId(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentDocId se sincroniza aparte

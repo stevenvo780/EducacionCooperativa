@@ -73,11 +73,18 @@ export function isSuppressed(ruleId: string | undefined, text: string | undefine
 /**
  * Add a suppression entry.
  */
+// Cap defensivo: el array crecía sin freno mientras el user suprimía errores,
+// hinchando localStorage indefinidamente. Mantenemos las más recientes.
+const MAX_SUPPRESSIONS = 1000;
+
 export function addSuppression(ruleId: string, text: string): void {
   load();
   const key = suppressionKey(ruleId, text);
   if (buildIndex().has(key)) return; // already suppressed
   _suppressions.push({ ruleId, text: text.toLowerCase().trim() });
+  if (_suppressions.length > MAX_SUPPRESSIONS) {
+    _suppressions = _suppressions.slice(_suppressions.length - MAX_SUPPRESSIONS);
+  }
   save();
   notify();
 }

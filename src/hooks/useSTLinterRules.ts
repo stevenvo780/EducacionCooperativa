@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { STDefinitionsRegistry, type STDefinition } from '@/lib/st-definitions-registry';
 import { LinterRegistry } from '@/lib/linters/registry';
 import type { LinterRule, LinterDiagnostic } from '@/hooks/useMarkdownLinter';
@@ -30,12 +30,36 @@ export function useSTLinterRules() {
     STDefinitionsRegistry.getAllDefinitions()
   );
 
+  // Shallow-compare antes de setDefinitions: el registry puede notificar con
+  // arrays "nuevos" pero contenido equivalente (mismas defs, mismo orden) en
+  // cada keystroke. Sin este guard, cada notify dispara re-render del hook
+  // y rebuild de los memos (definedNamesSet, theoremsAndAxioms) aguas abajo.
+  const prevDefsRef = useRef<STDefinition[]>([]);
   useEffect(() => {
-    setDefinitions(STDefinitionsRegistry.getAllDefinitions());
-    const offDefs = STDefinitionsRegistry.subscribe(setDefinitions);
+    const initial = STDefinitionsRegistry.getAllDefinitions();
+    prevDefsRef.current = initial;
+    setDefinitions(initial);
+
+    const compareAndSet = (defs: STDefinition[]) => {
+      const prev = prevDefsRef.current;
+      if (prev.length === defs.length && prev.every((d, i) => {
+        const next = defs[i];
+        return next !== undefined
+          && d.name === next.name
+          && d.file === next.file
+          && d.kind === next.kind
+          && d.detail === next.detail;
+      })) {
+        return;
+      }
+      prevDefsRef.current = defs;
+      setDefinitions(defs);
+    };
+
+    const offDefs = STDefinitionsRegistry.subscribe(compareAndSet);
     // Re-render cuando cambia el flag global del linter ST.
     const offReg = LinterRegistry.subscribe(() => {
-      setDefinitions(STDefinitionsRegistry.getAllDefinitions());
+      compareAndSet(STDefinitionsRegistry.getAllDefinitions());
     });
     return () => { offDefs(); offReg(); };
   }, []);

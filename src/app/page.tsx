@@ -663,7 +663,7 @@ function LandingPage() {
                       className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5"
                     >
                       <card.icon className={`w-5 h-5 ${card.color} mb-3`} />
-                      <h4 className="font-semibold text-white text-sm mb-1.5">{card.title}</h4>
+                      <h3 className="font-semibold text-white text-sm mb-1.5">{card.title}</h3>
                       <p className="text-surface-400 text-xs leading-relaxed">{card.desc}</p>
                     </m.div>
                   ))}
@@ -1195,7 +1195,7 @@ function LandingPage() {
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-surface-300 text-sm mb-3 uppercase tracking-wider">Plataforma</h4>
+              <h3 className="font-semibold text-surface-300 text-sm mb-3 uppercase tracking-wider">Plataforma</h3>
               <nav className="flex flex-col gap-2 text-sm">
                 <a href="#pillars" className="hover:text-mandy-400 transition">Características</a>
                 <a href="#st" className="hover:text-mandy-400 transition">Lenguaje ST</a>
@@ -1204,7 +1204,7 @@ function LandingPage() {
               </nav>
             </div>
             <div>
-              <h4 className="font-semibold text-surface-300 text-sm mb-3 uppercase tracking-wider">Recursos</h4>
+              <h3 className="font-semibold text-surface-300 text-sm mb-3 uppercase tracking-wider">Recursos</h3>
               <nav className="flex flex-col gap-2 text-sm">
                 <Link href="/docs/st" className="hover:text-mandy-400 transition">Docs ST</Link>
                 <a href="https://www.npmjs.com/package/@stevenvo780/st-lang" target="_blank" rel="noopener noreferrer" className="hover:text-mandy-400 transition">
@@ -1216,7 +1216,7 @@ function LandingPage() {
               </nav>
             </div>
             <div>
-              <h4 className="font-semibold text-surface-300 text-sm mb-3 uppercase tracking-wider">Elenxos</h4>
+              <h3 className="font-semibold text-surface-300 text-sm mb-3 uppercase tracking-wider">Elenxos</h3>
               <nav className="flex flex-col gap-2 text-sm">
                 <a href={ELENXOS_BRAND.homeUrl} target="_blank" rel="noopener noreferrer" className="hover:text-mandy-400 transition">
                   Sitio principal

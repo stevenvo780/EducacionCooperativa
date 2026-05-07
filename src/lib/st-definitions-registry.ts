@@ -165,14 +165,65 @@ const extractFromAst = (program: Program, fileId: string): STDefinition[] => {
 class STDefinitionsRegistryClass {
   private _fileDefinitions = new Map<string, STDefinition[]>();
   private _listeners = new Set<Listener>();
+  // Índice global de nombre → primera definición encontrada. Antes lookup era
+  // O(F·D) (linter podía dispararlo en cada keystroke). Ahora O(1).
+  private _nameIndex = new Map<string, STDefinition>();
+  private _nameIndexDirty = true;
+  // Version counter incrementado en cada mutación. Permite a callers cachear
+  // resultados derivados (conflicts, lookup batchs) y bail-out en O(1) sin
+  // recomputar.
+  private _version = 0;
+  private _lastConflictsByVersion: {
+    version: number;
+    conflicts: Array<{ name: string; definitions: STDefinition[] }>;
+  } | null = null;
+
+  private _rebuildNameIndex(): void {
+    this._nameIndex.clear();
+    for (const defs of this._fileDefinitions.values()) {
+      for (const def of defs) {
+        if (!this._nameIndex.has(def.name)) this._nameIndex.set(def.name, def);
+      }
+    }
+    this._nameIndexDirty = false;
+  }
+
+  get version(): number {
+    return this._version;
+  }
+
+  private _filePerFileEqual(fileId: string, next: STDefinition[]): boolean {
+    const prev = this._fileDefinitions.get(fileId);
+    if (!prev || prev.length !== next.length) return false;
+    for (let i = 0; i < prev.length; i++) {
+      const a = prev[i];
+      const b = next[i];
+      if (!a || !b) return false;
+      if (a.name !== b.name || a.kind !== b.kind || a.detail !== b.detail || a.line !== b.line) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   setFileDefinitions(fileId: string, definitions: STDefinition[]): void {
+    // Shallow-compare contra el snapshot anterior del archivo. El parser ST
+    // produce arrays nuevos por identidad pero idénticos por contenido en
+    // cada debounce; sin guardia, cada uno dispara notify → re-render en
+    // cascada en linters Markdown que escuchan el registry.
+    if (this._filePerFileEqual(fileId, definitions)) {
+      return;
+    }
     this._fileDefinitions.set(fileId, definitions);
+    this._nameIndexDirty = true;
+    this._version += 1;
     this._notify();
   }
 
   removeFile(fileId: string): void {
     if (this._fileDefinitions.delete(fileId)) {
+      this._nameIndexDirty = true;
+      this._version += 1;
       this._notify();
     }
   }
@@ -206,32 +257,46 @@ class STDefinitionsRegistryClass {
   /**
    * Devuelve nombres definidos en múltiples archivos con kind o detail diferente.
    * Útil para detectar inconsistencias semánticas entre archivos .st del workspace.
+   *
+   * Algoritmo O(N) por agrupación con Set de signatures (kind|detail). Antes
+   * era O(N²) con `defs.slice(i+1).some(...)` por cada nombre con duplicados.
+   * Cache invalidado por `_version` counter, así llamadas consecutivas sin
+   * mutaciones cuestan O(1).
    */
   getCrossDocumentConflicts(): Array<{ name: string; definitions: STDefinition[] }> {
+    if (this._lastConflictsByVersion && this._lastConflictsByVersion.version === this._version) {
+      return this._lastConflictsByVersion.conflicts;
+    }
     const nameMap = new Map<string, STDefinition[]>();
     for (const defs of this._fileDefinitions.values()) {
       for (const def of defs) {
-        if (!nameMap.has(def.name)) nameMap.set(def.name, []);
-        nameMap.get(def.name)!.push(def);
+        const list = nameMap.get(def.name);
+        if (list) list.push(def);
+        else nameMap.set(def.name, [def]);
       }
     }
     const conflicts: Array<{ name: string; definitions: STDefinition[] }> = [];
     for (const [name, defs] of nameMap) {
       if (defs.length < 2) continue;
-      const hasConflict = defs.some((d, i) =>
-        defs.slice(i + 1).some((other) => d.kind !== other.kind || d.detail !== other.detail)
-      );
+      const signatures = new Set<string>();
+      let hasConflict = false;
+      for (const def of defs) {
+        const signature = `${def.kind}|${def.detail ?? ''}`;
+        signatures.add(signature);
+        if (signatures.size > 1) {
+          hasConflict = true;
+          break;
+        }
+      }
       if (hasConflict) conflicts.push({ name, definitions: defs });
     }
+    this._lastConflictsByVersion = { version: this._version, conflicts };
     return conflicts;
   }
 
   lookup(name: string): STDefinition | undefined {
-    for (const defs of this._fileDefinitions.values()) {
-      const found = defs.find((definition) => definition.name === name);
-      if (found) return found;
-    }
-    return undefined;
+    if (this._nameIndexDirty) this._rebuildNameIndex();
+    return this._nameIndex.get(name);
   }
 
   subscribe(listener: Listener): () => void {

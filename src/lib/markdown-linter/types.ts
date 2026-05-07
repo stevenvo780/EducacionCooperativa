@@ -78,9 +78,34 @@ export interface LinterRuleMeta {
   supportsIncremental?: boolean;
 }
 
+/**
+ * Contexto pre-computado compartido entre reglas durante un mismo lint pass.
+ * Pre-computar trabajo redundante (codeBlockLines, lines split, etc.) evita
+ * que cada regla rehaga el mismo escaneo sobre el mismo texto.
+ *
+ * Si el contexto no llega (ej. reglas custom de plugins externos), las reglas
+ * lo derivan internamente como antes. Por eso es opcional.
+ */
+export interface LinterRuleContext {
+  /** `text.split('\n')` cacheado */
+  lines: string[];
+  /** Resultado de `getCodeBlockLines(lines)` cacheado */
+  codeBlockLines: Set<number>;
+}
+
 export interface LinterRule extends LinterRuleMeta {
-  /** Función pura: recibe texto markdown, devuelve diagnósticos */
-  check: (text: string) => LinterDiagnostic[];
+  /** Función pura: recibe texto markdown (y contexto opcional pre-computado), devuelve diagnósticos */
+  check: (text: string, ctx?: LinterRuleContext) => LinterDiagnostic[];
+}
+
+/**
+ * Construye un contexto para un texto. Pasar el contexto resultante a cada
+ * regla en un mismo pass evita que cada regla rehaga `text.split` y
+ * `getCodeBlockLines` por separado.
+ */
+export function buildLinterRuleContext(text: string): LinterRuleContext {
+  const lines = text.split('\n');
+  return { lines, codeBlockLines: getCodeBlockLines(lines) };
 }
 
 export function lineAt(lines: readonly string[], index: number): string {

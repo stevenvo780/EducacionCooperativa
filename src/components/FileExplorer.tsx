@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import {
@@ -78,6 +78,11 @@ interface FileExplorerProps {
   embedded?: boolean;
   activeFolder?: string;
   onActiveFolderChange?: (folderPath: string) => void;
+  // Tree model precomputado. Si llega como prop evitamos rebuild local del
+  // workspace tree (single source of truth desde page.tsx).
+  docsByFolder?: Record<string, DocItem[]>;
+  folderChildrenMap?: Record<string, FolderItem[]>;
+  effectiveFolders?: FolderItem[];
 }
 
 const FileExplorer: React.FC<FileExplorerProps> = ({
@@ -105,7 +110,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   currentWorkspaceId,
   embedded = false,
   activeFolder: activeFolderProp,
-  onActiveFolderChange
+  onActiveFolderChange,
+  docsByFolder: docsByFolderProp,
+  folderChildrenMap: folderChildrenMapProp,
+  effectiveFolders: effectiveFoldersProp
 }) => {
   const isTouchDevice = useIsTouchDeviceProfile();
   const favoriteDocIdSet = useMemo(() => new Set(favoriteDocIds), [favoriteDocIds]);
@@ -144,21 +152,29 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return docs.map(doc => ({ ...doc, folder: normalizeFolderPath(doc.folder) }));
   }, [docs]);
 
-  // Track container width for responsive layout
+  // Track container width for responsive layout. clearTimeout idempotente
+  // (un solo trailing call por ráfaga). Gate de 5px evita re-render por
+  // sub-pixel jitter en zoom/scrollbar.
+  const lastWidthRef = useRef<number>(800);
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let pendingWidth = 800;
+    const flush = () => {
+      timer = null;
+      if (Math.abs(pendingWidth - lastWidthRef.current) < 5) return;
+      lastWidthRef.current = pendingWidth;
+      setContainerWidth(pendingWidth);
+    };
     const ro = new ResizeObserver(entries => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const w = entries[0]?.contentRect.width ?? 800;
-        setContainerWidth(w);
-      }, 150);
+      pendingWidth = entries[0]?.contentRect.width ?? 800;
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(flush, 150);
     });
     ro.observe(node);
     return () => {
-      clearTimeout(timer);
+      if (timer !== null) clearTimeout(timer);
       ro.disconnect();
     };
   }, []);
@@ -188,10 +204,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [toolbarMenuOpen]);
 
-  const { effectiveFolders, folderChildrenMap, docsByFolder } = useMemo(
-    () => buildWorkspaceTreeModel(folders, normalizedDocs),
-    [folders, normalizedDocs]
+  // Si llega tree model como prop, lo usamos sin recomputar. Fallback al
+  // build local mantiene compatibilidad con consumers (ej. tests) que monten
+  // <FileExplorer/> sin pre-computar.
+  const localTreeModel = useMemo(
+    () => (docsByFolderProp && folderChildrenMapProp && effectiveFoldersProp)
+      ? null
+      : buildWorkspaceTreeModel(folders, normalizedDocs),
+    [folders, normalizedDocs, docsByFolderProp, folderChildrenMapProp, effectiveFoldersProp]
   );
+  const effectiveFolders = effectiveFoldersProp ?? localTreeModel!.effectiveFolders;
+  const folderChildrenMap = folderChildrenMapProp ?? localTreeModel!.folderChildrenMap;
+  const docsByFolder = docsByFolderProp ?? localTreeModel!.docsByFolder;
 
   const activeChildFolders = useMemo(() => {
     return folderChildrenMap[activeFolder] ?? [];
@@ -201,19 +225,22 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return docsByFolder[activeFolder] ?? [];
   }, [docsByFolder, activeFolder]);
 
+  // useDeferredValue evita que el filter O(N) sobre todas las carpetas/docs
+  // bloquee cada keystroke. React rendea con la query previa hasta que el
+  // recompute esté listo.
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const filteredChildFolders = useMemo(() => {
-    if (!searchQuery.trim()) return activeChildFolders;
-    const query = searchQuery.toLowerCase();
-    // Cuando hay búsqueda, buscar en TODAS las carpetas
+    if (!deferredSearchQuery.trim()) return activeChildFolders;
+    const query = deferredSearchQuery.toLowerCase();
     return effectiveFolders.filter(folder => folder.name.toLowerCase().includes(query));
-  }, [activeChildFolders, effectiveFolders, searchQuery]);
+  }, [activeChildFolders, effectiveFolders, deferredSearchQuery]);
 
   const filteredFolderDocs = useMemo(() => {
-    if (!searchQuery.trim()) return activeFolderDocs;
-    const query = searchQuery.toLowerCase();
-    // Cuando hay búsqueda, buscar en TODOS los documentos
+    if (!deferredSearchQuery.trim()) return activeFolderDocs;
+    const query = deferredSearchQuery.toLowerCase();
     return normalizedDocs.filter(doc => doc.name.toLowerCase().includes(query));
-  }, [activeFolderDocs, normalizedDocs, searchQuery]);
+  }, [activeFolderDocs, normalizedDocs, deferredSearchQuery]);
 
   const contentItems = useMemo<ContentItem[]>(() => {
     const items: ContentItem[] = [];
@@ -955,78 +982,113 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     );
   };
 
-  const renderFolderTree = useCallback((parentPath: string, depth = 0): React.ReactNode[] => {
-    const children = folderChildrenMap[parentPath] ?? [];
-    return children.map(folder => {
-      const isExpanded = expandedFolders.has(folder.path);
-      const hasChildren = (folderChildrenMap[folder.path] ?? []).length > 0;
-      const count = docsByFolder[folder.path]?.length ?? 0;
-      const isActive = activeFolder === folder.path;
-      const paddingLeft = 10 + depth * 12;
+  // Flat tree para virtualización del aside de carpetas. flatFolderTreeAll
+  // depende solo del modelo (visible TODA la jerarquía); visibleFolderTree
+  // filtra por collapsed con un set lookup O(F).
+  type FolderTreeFlatItem = { folder: FolderItem; depth: number; ancestors: string[]; hasChildren: boolean };
 
-      return (
-        <div key={folder.path}>
-          <div
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveFolder(folder.path);
-              onActiveFolderChange?.(folder.path);
-              if (hasChildren) {
+  const flatFolderTreeAll = useMemo<FolderTreeFlatItem[]>(() => {
+    const out: FolderTreeFlatItem[] = [];
+    const walk = (parentPath: string, depth: number, ancestors: string[]) => {
+      const children = folderChildrenMap[parentPath] ?? [];
+      for (const folder of children) {
+        const subfolders = folderChildrenMap[folder.path] ?? [];
+        const hasChildren = subfolders.length > 0;
+        out.push({ folder, depth, ancestors, hasChildren });
+        if (hasChildren) {
+          walk(folder.path, depth + 1, [...ancestors, folder.path]);
+        }
+      }
+    };
+    walk('', 0, []);
+    return out;
+  }, [folderChildrenMap]);
+
+  const visibleFolderTree = useMemo<FolderTreeFlatItem[]>(() => {
+    if (expandedFolders.size === 0) {
+      return flatFolderTreeAll.filter(item => item.depth === 0);
+    }
+    return flatFolderTreeAll.filter(item =>
+      item.ancestors.every(ancestor => expandedFolders.has(ancestor))
+    );
+  }, [flatFolderTreeAll, expandedFolders]);
+
+  const FOLDER_TREE_ROW_HEIGHT = 32;
+  const [folderTreeListRef, folderTreeListSize] = useElementSize<HTMLDivElement>();
+
+  const renderFolderTreeRow = useCallback(({ index, style }: RowComponentProps) => {
+    const item = visibleFolderTree[index];
+    if (!item) return null;
+    const { folder, depth, hasChildren } = item;
+    const isExpanded = expandedFolders.has(folder.path);
+    const count = docsByFolder[folder.path]?.length ?? 0;
+    const isActive = activeFolder === folder.path;
+    const paddingLeft = 10 + depth * 12;
+    return (
+      <div
+        style={style}
+        role="treeitem"
+        aria-expanded={hasChildren ? isExpanded : undefined}
+        aria-selected={isActive}
+        aria-level={depth + 1}
+      >
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveFolder(folder.path);
+            onActiveFolderChange?.(folder.path);
+            if (hasChildren) {
+              toggleFolder(folder.path);
+            }
+          }}
+          {...getContextTriggerProps({ type: 'folder', path: folder.path, folder })}
+          className={`group flex items-center gap-2 py-1.5 px-2 mx-1 rounded transition border cursor-pointer relative ${
+            isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'
+          }`}
+          style={{ paddingLeft }}
+        >
+          {hasChildren ? (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
                 toggleFolder(folder.path);
-              }
-            }}
-            {...getContextTriggerProps({ type: 'folder', path: folder.path, folder })}
-            className={`group w-full flex items-center gap-2 py-1.5 px-2 rounded transition border cursor-pointer relative ${
-              isActive ? 'border-mandy-500/40 bg-mandy-500/10 text-mandy-300' : 'border-transparent text-surface-300 hover:bg-surface-700/40'
-            }`}
-            style={{ paddingLeft }}
-          >
-            {hasChildren ? (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFolder(folder.path);
-                }}
-                className="flex items-center justify-center w-4 h-4 shrink-0"
-              >
-                {isExpanded ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                )}
-              </span>
-            ) : (
-              <span className="w-4 shrink-0" />
-            )}
-            {isExpanded ? (
-              <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
-            ) : (
-              <Folder className="w-4 h-4 text-amber-400 shrink-0" />
-            )}
-            <span className="text-sm truncate flex-1 md:pr-6">{folder.name}</span>
-            <span className="text-[10px] text-surface-500 shrink-0">{count}</span>
+              }}
+              className="flex items-center justify-center w-4 h-4 shrink-0"
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              )}
+            </span>
+          ) : (
+            <span className="w-4 shrink-0" />
+          )}
+          {isExpanded ? (
+            <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
+          ) : (
+            <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+          )}
+          <span className="text-sm truncate flex-1 md:pr-6">{folder.name}</span>
+          <span className="text-[10px] text-surface-500 shrink-0">{count}</span>
 
-            {onRenameDoc && folder.docId && (
-                <div
-                   onClick={(e) => {
-                       e.stopPropagation();
-                       const doc = docMap.get(folder.docId!);
-                       if (doc) onRenameDoc(doc);
-                   }}
-                   className="absolute right-2 p-1 rounded bg-surface-800 text-surface-400 hover:text-white hover:bg-surface-700 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
-                   title="Renombrar carpeta"
-                >
-                   <Pencil className="w-3 h-3" />
-                </div>
-            )}
-          </div>
-          {isExpanded && hasChildren && (
-            <div>{renderFolderTree(folder.path, depth + 1)}</div>
+          {onRenameDoc && folder.docId && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                const doc = docMap.get(folder.docId!);
+                if (doc) onRenameDoc(doc);
+              }}
+              className="absolute right-2 p-1 rounded bg-surface-800 text-surface-400 hover:text-white hover:bg-surface-700 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
+              title="Renombrar carpeta"
+            >
+              <Pencil className="w-3 h-3" />
+            </div>
           )}
         </div>
-      );
-    });
-  }, [folderChildrenMap, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange, docMap, onRenameDoc, getContextTriggerProps]);
+      </div>
+    );
+  }, [visibleFolderTree, expandedFolders, docsByFolder, activeFolder, onActiveFolderChange, docMap, onRenameDoc, getContextTriggerProps]);
 
   return (
     <div ref={containerRef} className={`h-full flex flex-col bg-surface-900 text-slate-200 overflow-hidden ${embedded ? '' : ''}`}>
@@ -1284,8 +1346,29 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         {!sidebarCollapsed && !isUltraCompact && (
         <aside className={`${isCompact ? 'w-36' : 'w-56'} border-r border-surface-700/60 bg-surface-800/40 flex flex-col shrink-0 transition-all duration-150`}>
           <div className="px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Carpetas</div>
-          <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-4 space-y-1">
-            {renderFolderTree('')}
+          <div
+            ref={folderTreeListRef}
+            role="tree"
+            aria-label="Árbol de carpetas"
+            className="flex-1 min-h-0"
+          >
+            {visibleFolderTree.length > 0 && (
+              <VirtualizedList
+                rowCount={visibleFolderTree.length}
+                rowHeight={FOLDER_TREE_ROW_HEIGHT}
+                overscanCount={8}
+                className="scrollbar-hide"
+                style={{
+                  // Mismo patrón que el sidebar: default 400 hasta que el
+                  // ResizeObserver reporte el alto real, así no rendea todos
+                  // los folders en un solo frame.
+                  height: Math.max(folderTreeListSize.height, 400),
+                  width: Math.max(folderTreeListSize.width, 1)
+                }}
+                rowComponent={renderFolderTreeRow}
+                rowProps={{}}
+              />
+            )}
           </div>
         </aside>
         )}
@@ -1312,7 +1395,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 overscanCount={6}
                 className="scrollbar-hide"
                 style={{
-                  height: Math.max(contentListSize.height, 1),
+                  height: Math.max(contentListSize.height, 400),
                   width: Math.max(contentListSize.width, 1)
                 }}
                 rowComponent={renderContentRow}

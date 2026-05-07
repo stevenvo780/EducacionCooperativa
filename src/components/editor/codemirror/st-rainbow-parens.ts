@@ -28,22 +28,34 @@ const CLOSE = new Set([')', '}']);
 function buildRainbowDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
-  const text = doc.toString();
   let depth = 0;
 
-  // Walk through visible ranges for performance
+  // Walk visible ranges via iterRange (chunked) en lugar de hacer
+  // doc.toString() del documento completo: en archivos de 50KB+ esa copia
+  // dispara GC y atrasca scroll en cada keystroke.
   for (const { from, to } of view.visibleRanges) {
-    for (let pos = from; pos < to; pos++) {
-      const ch = text.charAt(pos);
-      if (OPEN.has(ch)) {
-        const d = depth % 4;
-        builder.add(pos, pos + 1, parenDecos[d]!);
-        depth++;
-      } else if (CLOSE.has(ch)) {
-        depth = Math.max(0, depth - 1);
-        const d = depth % 4;
-        builder.add(pos, pos + 1, parenDecos[d]!);
+    const iter = doc.iterRange(from, to);
+    let pos = from;
+    while (!iter.next().done) {
+      const chunk = iter.value;
+      // Saltar saltos de línea (iter emite "" para line breaks)
+      if (chunk.length === 0) {
+        pos += 1; // un newline por chunk vacío
+        continue;
       }
+      for (let i = 0; i < chunk.length; i++) {
+        const ch = chunk.charAt(i);
+        if (OPEN.has(ch)) {
+          const d = depth % 4;
+          builder.add(pos + i, pos + i + 1, parenDecos[d]!);
+          depth++;
+        } else if (CLOSE.has(ch)) {
+          depth = Math.max(0, depth - 1);
+          const d = depth % 4;
+          builder.add(pos + i, pos + i + 1, parenDecos[d]!);
+        }
+      }
+      pos += chunk.length;
     }
   }
 

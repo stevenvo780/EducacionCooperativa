@@ -206,7 +206,7 @@ export function LogicCoursePage({ course }: { course: LogicCoursePageData }) {
             </div>
             <div className="grid gap-4">
               {course.operators.map((operator, index) => (
-                <div key={index} className="bg-surface-900/40 rounded-xl p-5 border border-surface-700/30">
+                <div key={index} className="bg-surface-900/40 rounded-xl p-5 border border-surface-700/30 min-w-0 overflow-hidden">
                   <div className="flex flex-wrap items-center gap-3 mb-3">
                     <code className="text-xs bg-surface-950 border border-surface-700/40 rounded-md px-2.5 py-1 text-emerald-300">{operator.symbol}</code>
                     <h4 className="text-sm font-bold text-white">{operator.name}</h4>

@@ -273,7 +273,7 @@ export default function STRunner({
   dockToWorkspace = false,
   collab
 }: STRunnerProps) {
-  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles: _profiles, isRunning, getSymbols, validate, lastDiagnostics } =
+  const { run, execLine, quick, reset, history, clearHistory, theorySummary, profiles: _profiles, isRunning, getSymbols, validate, validateAsync, lastDiagnostics } =
     useSTInterpreter();
 
   const [mode, setMode] = useState<STRunnerMode>(initialMode);
@@ -349,8 +349,15 @@ export default function STRunner({
   }, [dockToWorkspace]);
 
   const getEnrichedSymbols = useCallback((source: string) => {
+    // Antes hacía 2 parses: getSymbols + STDefinitionsRegistry.extractFromSource.
+    // El registry guarda las definitions ya extraídas; las leemos del fileId
+    // en lugar de re-parsear. Si todavía no hay registro (race), hacemos UN
+    // solo parse vía extractFromSource.
     const symbols = getSymbols(source);
-    const definitions = STDefinitionsRegistry.extractFromSource(source, currentFileId);
+    let definitions = STDefinitionsRegistry.getFileDefinitions(currentFileId);
+    if (definitions.length === 0) {
+      definitions = STDefinitionsRegistry.extractFromSource(source, currentFileId);
+    }
     const definitionMap = new Map(definitions.map((definition) => [definition.name, definition]));
 
     return symbols.map((symbol) => {
@@ -369,6 +376,8 @@ export default function STRunner({
   }, [currentFileId, getSymbols]);
 
   const runAnalysis = useCallback(() => {
+    // Síncrono — usado solo por el botón Analizar en touch (lo dispara el user
+    // explícitamente). El auto-análisis usa runAnalysisAsync.
     const diagnostics = validate(code);
     const symbols = getEnrichedSymbols(code);
     setCurrentSymbols(symbols);
@@ -380,28 +389,61 @@ export default function STRunner({
     return diagnostics;
   }, [code, getEnrichedSymbols, validate]);
 
+  const runAnalysisAsync = useCallback(async () => {
+    const diagnostics = await validateAsync(code);
+    const symbols = getEnrichedSymbols(code);
+    setCurrentSymbols(symbols);
+    setActiveTab((prev) => {
+      if (diagnostics.length > 0) return 'problems';
+      if (prev === 'problems') return 'output';
+      return prev;
+    });
+    return diagnostics;
+  }, [code, getEnrichedSymbols, validateAsync]);
+
   useEffect(() => {
     if (mode !== 'script' || isTouchTablet) return;
 
+    let cancelled = false;
     let cancelIdleTask = () => {};
     const timer = window.setTimeout(() => {
       cancelIdleTask = runWhenBrowserIdle(() => {
-        runAnalysis();
+        if (cancelled) return;
+        void runAnalysisAsync();
       }, 1200);
     }, 900);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
       cancelIdleTask();
     };
-  }, [code, isTouchTablet, mode, runAnalysis]);
+  }, [code, isTouchTablet, mode, runAnalysisAsync]);
 
   useEffect(() => {
     const fileId = fileMode?.docName || 'st-runner-scratch';
-    const defs = STDefinitionsRegistry.extractFromSource(code, fileId);
-    STDefinitionsRegistry.setFileDefinitions(fileId, defs);
-    return () => { STDefinitionsRegistry.removeFile(fileId); };
-  }, [code, fileMode?.docName]);
+    // En tablet/touch, archivos grandes saturan el parser ST y crashean la
+    // pestaña en el primer mount. Diferimos + capamos: <30KB siempre se
+    // parsea; >=30KB sólo desktop, debounceado a 800ms.
+    const TABLET_PARSE_LIMIT = 30_000;
+    const skipParse = isTouchTablet && code.length > TABLET_PARSE_LIMIT;
+    if (skipParse) {
+      return () => { STDefinitionsRegistry.removeFile(fileId); };
+    }
+    const debounceMs = code.length > 5_000 ? 800 : 200;
+    const timer = window.setTimeout(() => {
+      try {
+        const defs = STDefinitionsRegistry.extractFromSource(code, fileId);
+        STDefinitionsRegistry.setFileDefinitions(fileId, defs);
+      } catch {
+        // El parser puede fallar en input parcial durante edición. Silencioso.
+      }
+    }, debounceMs);
+    return () => {
+      window.clearTimeout(timer);
+      STDefinitionsRegistry.removeFile(fileId);
+    };
+  }, [code, fileMode?.docName, isTouchTablet]);
 
   const startResizingOutput = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -483,7 +525,10 @@ export default function STRunner({
 
     const result = execLine(line);
     onExecute?.(line, result);
-    setReplHistory(prev => [...prev, line]);
+    setReplHistory(prev => {
+      const next = [...prev, line];
+      return next.length > 200 ? next.slice(next.length - 200) : next;
+    });
     setReplHistoryIdx(-1);
     setReplInput('');
   }, [replInput, execLine, onExecute]);
@@ -493,7 +538,10 @@ export default function STRunner({
     if (!expr) return;
     const result = quick(expr);
     onExecute?.(expr, result);
-    setReplHistory(prev => [...prev, expr]);
+    setReplHistory(prev => {
+      const next = [...prev, expr];
+      return next.length > 200 ? next.slice(next.length - 200) : next;
+    });
     setReplHistoryIdx(-1);
     setReplInput('');
   }, [replInput, quick, onExecute]);

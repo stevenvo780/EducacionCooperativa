@@ -5,6 +5,10 @@
  * del usuario y al del workspace activo, y reemite cada evento via
  * dispatchAgoraEvent(rtdbEvent | docsChanged) para que cualquier página
  * lo consuma.
+ *
+ * El dispatch de docsChanged incluye `workspaceId` para que los listeners
+ * puedan filtrar y no reaccionar a eventos de un workspace que no es el
+ * activo (causaba refetch innecesarios al cambiar de workspace).
  */
 import { useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -20,17 +24,24 @@ export default function SyncEventsBridge() {
     const wsId = currentWorkspace?.id ?? null;
     const isPersonal = !wsId || wsId === PERSONAL_WORKSPACE_ID;
 
-    const reemit = useCallback((event: SyncEvent) => {
+    const reemitPersonal = useCallback((event: SyncEvent) => {
         dispatchAgoraEvent(AGORA_EVENTS.rtdbEvent, event);
-        dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
-    }, []);
+        dispatchAgoraEvent(AGORA_EVENTS.docsChanged, {
+            workspaceId: user?.uid ? `${PERSONAL_WORKSPACE_ID}:${user.uid}` : PERSONAL_WORKSPACE_ID
+        });
+    }, [user?.uid]);
+
+    const reemitShared = useCallback((event: SyncEvent) => {
+        dispatchAgoraEvent(AGORA_EVENTS.rtdbEvent, event);
+        dispatchAgoraEvent(AGORA_EVENTS.docsChanged, { workspaceId: wsId });
+    }, [wsId]);
 
     useSyncEvents({
         workspaceId: null,
         userId: user?.uid ?? null,
         workspaceType: WorkspaceType.Personal,
         enabled: !!user,
-        onEvent: reemit
+        onEvent: reemitPersonal
     });
 
     useSyncEvents({
@@ -38,7 +49,7 @@ export default function SyncEventsBridge() {
         userId: null,
         workspaceType: WorkspaceType.Shared,
         enabled: !!user && !isPersonal,
-        onEvent: reemit
+        onEvent: reemitShared
     });
 
     return null;

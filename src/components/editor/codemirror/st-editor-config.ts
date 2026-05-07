@@ -16,6 +16,7 @@ import { stLintExtensions } from './st-lint';
 import { stHoverTooltip } from './st-hover';
 import { stRainbowParens } from './st-rainbow-parens';
 import { stTheme, stLightTheme } from './st-theme';
+import { stGotoDef } from './st-goto-def';
 import { isTouchDeviceProfile } from '@/lib/device-input';
 
 export { isTouchDeviceProfile };
@@ -32,7 +33,8 @@ export type EditorFeature =
   | 'autocomplete'
   | 'lint'
   | 'hover'
-  | 'lightTheme';
+  | 'lightTheme'
+  | 'gotoDef';
 
 export interface EditorConfig {
   minimap: boolean;
@@ -47,6 +49,12 @@ export interface EditorConfig {
   lint: boolean;
   hover: boolean;
   lightTheme: boolean;
+  /**
+   * Ctrl+Click / F12 go-to-definition + ctrl-hover underline plugin.
+   * En tablet/touch dispara findDefinitions() en cada keystroke por el
+   * ViewPlugin update — apagado por default en touch.
+   */
+  gotoDef: boolean;
 }
 
 const STORAGE_KEY = 'st-editor-config';
@@ -63,7 +71,8 @@ export const DEFAULT_CONFIG: EditorConfig = {
   autocomplete: true,
   lint: true,
   hover: true,
-  lightTheme: false
+  lightTheme: false,
+  gotoDef: true
 };
 
 export const TOUCH_DEVICE_CONFIG: EditorConfig = {
@@ -75,7 +84,8 @@ export const TOUCH_DEVICE_CONFIG: EditorConfig = {
   rainbowParens: false,
   autocomplete: false,
   lint: false,
-  hover: false
+  hover: false,
+  gotoDef: false
 };
 
 export const ST_NATIVE_INPUT_ATTRIBUTES: Readonly<Record<string, string>> = {
@@ -98,7 +108,21 @@ export function loadConfig(): EditorConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return baseConfig;
-    return { ...baseConfig, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw) as Partial<EditorConfig>;
+    // En touch devices: NUNCA permitir que localStorage (heredado de desktop)
+    // active features pesadas que crashean tablets. lint/hover/autocomplete +
+    // foldGutter/rainbowParens son forzados al valor base TOUCH_DEVICE_CONFIG.
+    // Crash repro histórico: abrir un .st grande en iPad colgaba el browser
+    // por lint corriendo el parser ST en cada keystroke.
+    if (isTouchDeviceProfile()) {
+      const safeKeys: ReadonlyArray<keyof EditorConfig> = ['lint', 'hover', 'autocomplete', 'foldGutter', 'rainbowParens', 'bracketMatching', 'minimap', 'gotoDef'];
+      const merged = { ...baseConfig, ...parsed };
+      for (const k of safeKeys) {
+        merged[k] = baseConfig[k];
+      }
+      return merged;
+    }
+    return { ...baseConfig, ...parsed };
   } catch {
     return baseConfig;
   }
@@ -124,6 +148,7 @@ export interface EditorCompartments {
   lint: Compartment;
   hover: Compartment;
   lightTheme: Compartment;
+  gotoDef: Compartment;
 }
 
 export function createCompartments(): EditorCompartments {
@@ -139,7 +164,8 @@ export function createCompartments(): EditorCompartments {
     autocomplete: new Compartment(),
     lint: new Compartment(),
     hover: new Compartment(),
-    lightTheme: new Compartment()
+    lightTheme: new Compartment(),
+    gotoDef: new Compartment()
   };
 }
 
@@ -200,6 +226,10 @@ function lightThemeExtension(enabled: boolean): Extension {
   return enabled ? stLightTheme() : stTheme();
 }
 
+function gotoDefExtension(enabled: boolean): Extension {
+  return enabled ? stGotoDef() : [];
+}
+
 export function buildCompartmentExtensions(
   compartments: EditorCompartments,
   config: EditorConfig
@@ -216,7 +246,8 @@ export function buildCompartmentExtensions(
     compartments.autocomplete.of(autocompleteExtension(config.autocomplete)),
     compartments.lint.of(lintExtension(config.lint)),
     compartments.hover.of(hoverExtension(config.hover)),
-    compartments.lightTheme.of(lightThemeExtension(config.lightTheme))
+    compartments.lightTheme.of(lightThemeExtension(config.lightTheme)),
+    compartments.gotoDef.of(gotoDefExtension(config.gotoDef))
   ];
 }
 
@@ -232,7 +263,8 @@ const FACTORY_MAP: Record<EditorFeature, (enabled: boolean) => Extension> = {
   autocomplete: autocompleteExtension,
   lint: lintExtension,
   hover: hoverExtension,
-  lightTheme: lightThemeExtension
+  lightTheme: lightThemeExtension,
+  gotoDef: gotoDefExtension
 };
 
 /**
@@ -263,7 +295,8 @@ export const FEATURE_LABELS: Record<EditorFeature, string> = {
   autocomplete: 'Autocompletado',
   lint: 'Diagnósticos',
   hover: 'Tooltips al hover',
-  lightTheme: 'Tema claro'
+  lightTheme: 'Tema claro',
+  gotoDef: 'Ir a definición (Ctrl+click)'
 };
 
 export const ALL_FEATURES: EditorFeature[] = [
@@ -278,5 +311,6 @@ export const ALL_FEATURES: EditorFeature[] = [
   'rainbowParens',
   'autocomplete',
   'lint',
-  'hover'
+  'hover',
+  'gotoDef'
 ];

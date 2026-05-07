@@ -12,6 +12,7 @@
 import {
   type LinterRule,
   type LinterDiagnostic,
+  type LinterRuleContext,
   getCodeBlockLines,
   lineAt
 } from './types';
@@ -43,10 +44,10 @@ export const headingSpaceRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -77,10 +78,10 @@ export const headingHierarchyRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     let lastLevel = 0;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -115,10 +116,10 @@ export const multipleH1Rule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     let h1Count = 0;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -149,10 +150,10 @@ export const emptyHeadingRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -181,10 +182,10 @@ export const linkSpacesRule: LinterRule = {
   category: 'links',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const linkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -219,10 +220,10 @@ export const emptyLinkRule: LinterRule = {
   category: 'links',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const linkRegex = /\[([^\]]*)\]\(([^)]*)\)/g;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -269,10 +270,10 @@ export const bareUrlRule: LinterRule = {
   category: 'links',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     // Match URLs not preceded by ( or < or " or ]( which would be part of link syntax
     const urlRegex = /(?<![(<"[\]])https?:\/\/[^\s)>\]"]+/g;
 
@@ -309,10 +310,10 @@ export const longParagraphRule: LinterRule = {
   category: 'readability',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     let paragraphStart = -1;
     let paragraphWords = 0;
     let paragraphText = '';
@@ -365,10 +366,10 @@ export const longSentenceRule: LinterRule = {
   category: 'readability',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -409,10 +410,10 @@ export const imageAltTextRule: LinterRule = {
   category: 'accessibility',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const imgRegex = /!\[([^\]]*)\]\([^)]+\)/g;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -447,10 +448,10 @@ export const mixedListMarkersRule: LinterRule = {
   category: 'consistency',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const markersUsed = new Map<string, number[]>();
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -501,10 +502,10 @@ export const trailingWhitespaceRule: LinterRule = {
   category: 'whitespace',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -540,9 +541,9 @@ export const consecutiveBlankLinesRule: LinterRule = {
   category: 'whitespace',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
+    const lines = ctx?.lines ?? text.split('\n');
     let blankCount = 0;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -577,10 +578,10 @@ export const unclosedBracketsRule: LinterRule = {
   category: 'academic',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const pairs: [string, string][] = [['(', ')'], ['[', ']'], ['{', '}']];
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -627,10 +628,10 @@ export const todoMarkersRule: LinterRule = {
   category: 'academic',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const markerRegex = /\b(TODO|FIXME|HACK|XXX|PENDIENTE|FALTA|COMPLETAR)\b/gi;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -662,10 +663,10 @@ export const malformedTableRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     let headerColCount = 0;
     let inTable = false;
 
@@ -714,9 +715,9 @@ export const codeBlockLangRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
+    const lines = ctx?.lines ?? text.split('\n');
     let inFence = false;
     let fenceChar = '';
 
@@ -760,8 +761,8 @@ export const unclosedFenceRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
-    const lines = text.split('\n');
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
+    const lines = ctx?.lines ?? text.split('\n');
     let inFence = false;
     let fenceOpenLine = -1;
     let fenceChar = '';
@@ -806,10 +807,10 @@ export const orphanFootnoteRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const defined = new Map<string, number>();
     const used = new Set<string>();
 
@@ -873,9 +874,9 @@ export const frontmatterRule: LinterRule = {
   category: 'structure',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
+    const lines = ctx?.lines ?? text.split('\n');
     if (!lines[0]?.trim().startsWith('---')) return results;
 
     let endLine = -1;
@@ -918,10 +919,10 @@ export const fleschKincaidEsRule: LinterRule = {
   category: 'readability',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const countSyllables = (word: string) =>
       Math.max(1, (word.match(/[aeiouáéíóúü]+/gi) ?? []).length);
 
@@ -970,10 +971,10 @@ export const quoteStyleRule: LinterRule = {
   category: 'consistency',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     let hasStraight = false, hasTypographic = false;
 
     for (let i = 0; i < lines.length; i++) {
@@ -1009,10 +1010,10 @@ export const dashStyleRule: LinterRule = {
   category: 'consistency',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const regex = / - /g;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -1042,10 +1043,10 @@ export const numberStyleRule: LinterRule = {
   category: 'consistency',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const written = /\b(uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|cien|ciento|mil)\b/gi;
     const arabic = /\b\d+\b/g;
 
@@ -1078,10 +1079,10 @@ export const duplicateHeadingsRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const seen = new Map<string, number>(); // normalized text → first line
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -1120,10 +1121,10 @@ export const emptyListItemRule: LinterRule = {
   category: 'structure',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -1155,10 +1156,10 @@ export const linkTextQualityRule: LinterRule = {
   category: 'accessibility',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const BAD_TEXTS = new Set([
       'clic aquí', 'haz clic aquí', 'click aquí', 'click here',
       'aquí', 'enlace', 'link', 'este enlace', 'this link',
@@ -1200,10 +1201,10 @@ export const htmlInMarkdownRule: LinterRule = {
   category: 'accessibility',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     // Common HTML tags that have Markdown equivalents
     const HTML_TAGS = /(<\/?(?:b|i|em|strong|h[1-6]|a|img|br|hr|p|ul|ol|li|blockquote|code|pre)\b[^>]*>)/gi;
 
@@ -1238,10 +1239,10 @@ export const excessiveExclamationRule: LinterRule = {
   category: 'readability',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -1276,10 +1277,10 @@ export const sentenceStartConjunctionRule: LinterRule = {
   category: 'readability',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     // After period+space or start of paragraph, conjunction + space
     const conjunctionRegex = /(?:^|[.!?]\s+)(Y|Pero|O|Ni|E)\s+[a-záéíóúüñ]/g;
 
@@ -1327,10 +1328,10 @@ export const inconsistentTerminologyRule: LinterRule = {
   category: 'consistency',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const plainText = lines.filter((_, i) => !codeLines.has(i)).join('\n');
 
     for (const [abbrRe, fullRe, abbrLabel, fullLabel] of TERMINOLOGY_PAIRS) {
@@ -1374,10 +1375,10 @@ export const brokenInternalLinkRule: LinterRule = {
   category: 'links',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     // Collect all heading anchors (GitHub-style slugification)
     const anchors = new Set<string>();

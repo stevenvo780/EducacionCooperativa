@@ -163,26 +163,77 @@ function jumpToDefinition(view: EditorView, pos: number = view.state.selection.m
   return true;
 }
 
+/**
+ * Debounce ms para re-escanear definiciones tras edits. El parser ST entero
+ * corría en cada keystroke + scroll → bloqueo de UI en archivos medianos.
+ */
+const DEFINITIONS_REBUILD_DEBOUNCE_MS = 300;
+
 export const ctrlHoverPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     isCtrlHeld = false;
     definitions: SymbolDef[] = [];
+    /**
+     * `dirty` indica que el doc cambió pero todavía no re-escaneamos. El
+     * primer Ctrl+hover dispara findDefinitions sincrónico si dirty (para
+     * que la primera intención del user no espere), o lo encola.
+     */
+    private dirty = true;
+    private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+    private latestView: EditorView;
 
     constructor(view: EditorView) {
       this.decorations = Decoration.none;
+      this.latestView = view;
       this.definitions = findDefinitions(view.state.doc.toString());
+      this.dirty = false;
+    }
+
+    private scheduleRebuild(): void {
+      if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
+      this.rebuildTimer = setTimeout(() => {
+        this.rebuildTimer = null;
+        if (!this.dirty) return;
+        this.definitions = findDefinitions(this.latestView.state.doc.toString());
+        this.dirty = false;
+      }, DEFINITIONS_REBUILD_DEBOUNCE_MS);
+    }
+
+    private rebuildNow(): void {
+      if (this.rebuildTimer) {
+        clearTimeout(this.rebuildTimer);
+        this.rebuildTimer = null;
+      }
+      this.definitions = findDefinitions(this.latestView.state.doc.toString());
+      this.dirty = false;
     }
 
     update(update: ViewUpdate) {
+      this.latestView = update.view;
       if (update.docChanged) {
-        this.definitions = findDefinitions(update.state.doc.toString());
-        this.decorations = Decoration.none;
+        // No re-parseamos sincrónico — solo marcamos sucio y desencolamos
+        // las decoraciones obsoletas. El rebuild real va al timer (o al
+        // próximo Ctrl-hover).
+        this.dirty = true;
+        if (this.decorations !== Decoration.none) {
+          this.decorations = Decoration.none;
+        }
+        this.scheduleRebuild();
       }
     }
 
     destroy() {
-      // cleanup if needed
+      if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
+      this.rebuildTimer = null;
+    }
+
+    /**
+     * Llamado desde el handler de mousemove (this dentro del eventHandler
+     * apunta a la instancia, igual que el patrón original de CM6).
+     */
+    ensureDefinitionsFresh(): void {
+      if (this.dirty) this.rebuildNow();
     }
   },
   {
@@ -206,6 +257,11 @@ export const ctrlHoverPlugin = ViewPlugin.fromClass(
           }
           return;
         }
+
+        // Si el doc cambió y el rebuild de definiciones está pendiente en el
+        // timer, lo forzamos ahora (lazy): el user va a ver underline correcto
+        // en el primer hover post-edit sin esperar 300ms.
+        this.ensureDefinitionsFresh();
 
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
         if (pos === null) return;

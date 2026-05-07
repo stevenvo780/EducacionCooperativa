@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -489,10 +490,30 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const sendingRef = useRef(false);
   const lastSendAtRef = useRef(0);
   const userScrolledUpRef = useRef(false);
-  const scrollRafRef = useRef<number | null>(null);
+  // Auto-confirm tracker para profile=god-mode. Reset en cada cambio de sesión
+  // (startNewChat, activateSession, deleteActiveChat) para evitar leak en
+  // sesiones largas — el Set crecía sin tope.
+  const autoConfirmedRef = useRef<Set<string>>(new Set());
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
 
   const meta = PROVIDER_META[config.provider];
   const resolvedWorkspaceId = workspaceId || PERSONAL_WORKSPACE_ID;
+
+  // Token-counter pill memoizado. Antes era un IIFE inline que recomputaba
+  // O(N·L) string concat por cada render del padre — con 200 mensajes y
+  // streaming SSE eso eran cientos de joins/segundo. Ahora sólo se recomputa
+  // si cambia el contenido real de los mensajes, el input o el modelo activo.
+  const tokenCounterInfo = useMemo(() => {
+    const lastUsage = [...messages].reverse().find(message => message.agentRun?.usage?.totalTokens);
+    const usedTokens = lastUsage?.agentRun?.usage?.totalTokens
+      ?? approxTokens(messages.map(message => message.content).join('\n') + input);
+    const window = contextWindowForModel(config.provider, config.model || meta.defaultModel, modelCatalog);
+    const ratio = Math.min(1, usedTokens / window);
+    const tone = ratio > 0.85 ? 'text-amber-300 border-amber-500/40 bg-amber-500/10'
+      : ratio > 0.5 ? 'text-sky-200 border-sky-500/30 bg-sky-500/5'
+      : 'text-surface-300 border-surface-700 bg-surface-900';
+    return { usedTokens, window, ratio, tone };
+  }, [messages, input, modelCatalog, config.provider, config.model, meta.defaultModel]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -508,33 +529,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
-      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
     };
   }, []);
 
-  // Detecta si el usuario hizo scroll-up manual; si lo hizo, no autoscrolleamos
-  // (no peleamos con su lectura). Vuelve al modo seguir-fondo cuando llega abajo.
-  useEffect(() => {
-    const node = bottomRef.current?.parentElement;
-    if (!node) return;
-    const onScroll = () => {
-      const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-      userScrolledUpRef.current = distanceFromBottom > 80;
-    };
-    node.addEventListener('scroll', onScroll, { passive: true });
-    return () => node.removeEventListener('scroll', onScroll);
-  }, []);
-
-  // Scroll al fondo coalescido por rAF + behavior 'auto' para no pelear con la
-  // lectura durante streaming SSE (antes 'smooth' por cada token).
-  useEffect(() => {
-    if (userScrolledUpRef.current) return;
-    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRafRef.current = null;
-      bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
-    });
-  }, [messages, loading]);
+  // Auto-scroll: Virtuoso lo maneja via followOutput + atBottomStateChange.
+  // userScrolledUpRef sigue siendo respetado por el callback followOutput
+  // (devuelve false cuando el usuario está leyendo arriba).
 
   useEffect(() => {
     const loaded = loadChatSessions(resolvedWorkspaceId);
@@ -561,24 +561,45 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     historyHydratedRef.current = true;
   }, [resolvedWorkspaceId]);
 
+  // Persistencia debounced 500ms. Skipear si hay streaming en curso (loading=true)
+  // — antes esto se ejecutaba en CADA chunk SSE, JSON.stringify ~20MB de sesiones
+  // bloqueaba el main thread por step y mataba la UX. Ahora sólo persistimos al
+  // terminar el turno (loading false) o tras 500ms de quietud.
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!historyHydratedRef.current || !activeSessionId) return;
-    setSessions(prev => {
-      const current = prev.find((session) => session.id === activeSessionId);
-      const nextSession: AgentChatSession = {
-        id: activeSessionId,
-        title: deriveChatSessionTitle(messages),
-        workspaceId: resolvedWorkspaceId,
-        provider: current?.provider || config.provider,
-        mode,
-        messages,
-        rollbackQueue,
-        createdAt: current?.createdAt || Date.now(),
-        updatedAt: Date.now()
-      };
-      return saveChatSessions(resolvedWorkspaceId, upsertChatSession(prev, nextSession));
-    });
-  }, [activeSessionId, config.provider, messages, mode, resolvedWorkspaceId, rollbackQueue]);
+    if (loading) return;
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      setSessions(prev => {
+        const current = prev.find((session) => session.id === activeSessionId);
+        const nextSession: AgentChatSession = {
+          id: activeSessionId,
+          title: deriveChatSessionTitle(messages),
+          workspaceId: resolvedWorkspaceId,
+          provider: current?.provider || config.provider,
+          mode,
+          messages,
+          rollbackQueue,
+          createdAt: current?.createdAt || Date.now(),
+          updatedAt: Date.now()
+        };
+        return saveChatSessions(resolvedWorkspaceId, upsertChatSession(prev, nextSession));
+      });
+    }, 500);
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, [activeSessionId, config.provider, messages, mode, resolvedWorkspaceId, rollbackQueue, loading]);
+
+  // Flush forzado al desmontar para no perder el último delta tras cerrar el panel.
+  useEffect(() => () => {
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+  }, []);
 
   const updateMode = useCallback((_nextMode: AgentMode) => {
     // Modo chat eliminado: el agente siempre opera en modo 'agent'.
@@ -713,7 +734,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       dispatchAgoraEvent(AGORA_EVENTS.documentsMutated, mutatedEvent);
     }
     if (shouldRefreshDocuments) {
-      dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
+      dispatchAgoraEvent(AGORA_EVENTS.docsChanged, { workspaceId: resolvedWorkspaceId ?? null });
     }
     if (openDocumentsEvent) {
       dispatchAgoraEvent(AGORA_EVENTS.openDocuments, openDocumentsEvent);
@@ -780,19 +801,51 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     let finalPayload: AgentResponseBody | null = null;
     const liveSteps: AgentTraceStep[] = [];
 
-    const syncPartialRun = (reply: string) => {
+    // Throttle de syncPartialRun: el SSE puede emitir step events cada pocos
+    // ms y antes hacíamos un setMessages por cada uno → re-render de TODOS los
+    // mensajes con KaTeX/ReactMarkdown por step. Ahora coalescemos a max 1
+    // flush cada 250ms y un flush final al cerrar el stream.
+    const FLUSH_MS = 250;
+    let lastFlushAt = 0;
+    let pendingReply: string | null = null;
+    let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flushPartialRun = () => {
+      if (pendingTimer) {
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+      if (pendingReply === null) return;
+      const reply = pendingReply;
+      pendingReply = null;
+      lastFlushAt = Date.now();
+      // Snapshot estable del array de steps. El cap a 1 setMessages/250ms
+      // evita la cascada de re-renders mientras se mantiene la "vivacidad"
+      // visual del progreso.
+      const snapshot = liveSteps.slice();
       updateMessageById(assistantMessageId, (current) => ({
         ...current,
         content: reply,
         agentRun: {
           mode,
           provider: config.provider,
-          iterations: liveSteps.length,
-          steps: [...liveSteps],
+          iterations: snapshot.length,
+          steps: snapshot,
           finalReply: reply,
           rollback: current.agentRun?.rollback || []
         }
       }));
+    };
+
+    const syncPartialRun = (reply: string) => {
+      pendingReply = reply;
+      const since = Date.now() - lastFlushAt;
+      if (since >= FLUSH_MS) {
+        flushPartialRun();
+        return;
+      }
+      if (pendingTimer) return;
+      pendingTimer = setTimeout(flushPartialRun, FLUSH_MS - since);
     };
 
     while (true) {
@@ -851,6 +904,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             reply: event.reply,
             agentRun: event.agentRun
           };
+          // Cancelar cualquier flush pendiente para evitar pisar el complete final.
+          if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+          pendingReply = null;
           updateMessageById(assistantMessageId, current => ({
             ...current,
             content: event.reply,
@@ -861,6 +917,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         }
 
         if (event.type === 'error') {
+          if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+          pendingReply = null;
           publishAgentProblem({
             severity: 'error',
             message: 'Error en stream de Agora AI',
@@ -871,6 +929,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         }
       }
     }
+
+    // Stream cerrado naturalmente: flushear cualquier estado parcial pendiente.
+    flushPartialRun();
 
     if (!finalPayload) {
       publishAgentProblem({
@@ -884,6 +945,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
     return finalPayload;
   }, [accessPolicy, config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
+
+  // Memoizar el array de tools por accessPolicy: toOllamaTools recorre la
+  // tabla de ~140 definitions y arma un payload pesado.
+  const ollamaToolsForPolicy = useMemo(() => toOllamaTools(accessPolicy), [accessPolicy]);
 
   const callOllamaDirect = useCallback(async (
     msgs: Array<Record<string, unknown>>,
@@ -899,9 +964,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       stream: false
     };
     if (useTools) {
-      const availableTools = toOllamaTools(accessPolicy);
-      if (availableTools.length > 0) {
-        payload.tools = availableTools;
+      if (ollamaToolsForPolicy.length > 0) {
+        payload.tools = ollamaToolsForPolicy;
         // Disable extended thinking when tools are available — qwen3 often
         // wastes the thinking budget concluding "I don't have access" instead
         // of invoking the tools.  Disabling think forces tool-first behaviour.
@@ -916,7 +980,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     });
     if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
     return await res.json() as OllamaChatResponse;
-  }, [accessPolicy, config.endpoint, config.model, meta.defaultModel]);
+  }, [ollamaToolsForPolicy, config.endpoint, config.model, meta.defaultModel]);
 
   const runOllamaLoop = useCallback(async (
     history: UIChatMessage[],
@@ -1124,6 +1188,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const activateSession = useCallback((sessionId: string) => {
     const target = sessions.find((session) => session.id === sessionId);
     if (!target) return;
+    autoConfirmedRef.current.clear();
     setActiveSessionId(target.id);
     setMessages(target.messages);
     setRollbackQueue(target.rollbackQueue || []);
@@ -1139,6 +1204,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       provider: config.provider,
       mode
     });
+    autoConfirmedRef.current.clear();
     const next = saveChatSessions(resolvedWorkspaceId, upsertChatSession(sessions, fresh));
     setSessions(next);
     setActiveSessionId(fresh.id);
@@ -1150,6 +1216,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   const deleteActiveChat = useCallback(() => {
     if (!activeSessionId) return;
+    autoConfirmedRef.current.clear();
     const remaining = sessions.filter((session) => session.id !== activeSessionId);
     if (remaining.length === 0) {
       const fresh = createEmptyChatSession({
@@ -1522,7 +1589,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   // Auto-confirm en god mode: si llega un pendingConfirmation y el perfil
   // activo lo permite, se aprueba sin pedir input al usuario.
-  const autoConfirmedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!profileAutoConfirms(accessPolicy.profile)) return;
     const target = messages.find(message => message.pendingConfirmation && !autoConfirmedRef.current.has(message.id));
@@ -1654,8 +1720,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         </div>
       </div>
 
-      <div className="scrollbar-agora flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 space-y-1.5 min-h-0">
-        {messages.length === 0 && (
+      <div className="scrollbar-agora flex-1 overflow-hidden min-h-0 relative">
+        {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-surface-500 gap-4 select-none px-4">
             <Bot className="w-10 h-10 text-surface-700" />
             <div>
@@ -1693,30 +1759,46 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               ))}
             </div>
           </div>
-        )}
-
-        {messages.map(msg => (
-          <ChatMessage
-            key={msg.id}
-            msg={msg}
-            traceExpanded={traceExpanded}
-            confirmingId={confirmingId}
-            copiedId={copiedId}
-            onConfirm={handleConfirmStable}
-            onCopy={handleCopyStable}
+        ) : (
+          <Virtuoso
+            ref={virtuosoRef}
+            data={messages}
+            className="scrollbar-agora h-full"
+            followOutput={(isAtBottom) => (isAtBottom ? 'auto' : false)}
+            atBottomStateChange={(atBottom) => {
+              userScrolledUpRef.current = !atBottom;
+            }}
+            increaseViewportBy={{ top: 600, bottom: 600 }}
+            computeItemKey={(_, msg) => msg.id}
+            itemContent={(_index, msg) => (
+              <div className="px-3 py-1">
+                <ChatMessage
+                  msg={msg}
+                  traceExpanded={traceExpanded}
+                  confirmingId={confirmingId}
+                  copiedId={copiedId}
+                  onConfirm={handleConfirmStable}
+                  onCopy={handleCopyStable}
+                />
+              </div>
+            )}
+            components={{
+              Footer: () => (
+                <div className="px-3 pt-1 pb-2">
+                  {loading && (
+                    <div className="flex justify-start">
+                      <div className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 flex items-center gap-2 text-surface-400 text-sm">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>{streamStatus || 'Ejecutando agente…'}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={bottomRef} />
+                </div>
+              )
+            }}
           />
-        ))}
-
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 flex items-center gap-2 text-surface-400 text-sm">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>{streamStatus || 'Ejecutando agente…'}</span>
-            </div>
-          </div>
         )}
-
-        <div ref={bottomRef} />
       </div>
 
       <div className="flex-shrink-0 border-t border-surface-700 p-2 bg-surface-900 min-w-0">
@@ -1898,25 +1980,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                 )}
               </select>
             </label>
-            {(() => {
-              const lastUsage = [...messages].reverse().find(message => message.agentRun?.usage?.totalTokens);
-              const usedTokens = lastUsage?.agentRun?.usage?.totalTokens
-                ?? approxTokens(messages.map(message => message.content).join('\n') + input);
-              const window = contextWindowForModel(config.provider, config.model || meta.defaultModel, modelCatalog);
-              const ratio = Math.min(1, usedTokens / window);
-              const tone = ratio > 0.85 ? 'text-amber-300 border-amber-500/40 bg-amber-500/10'
-                : ratio > 0.5 ? 'text-sky-200 border-sky-500/30 bg-sky-500/5'
-                : 'text-surface-300 border-surface-700 bg-surface-900';
-              return (
-                <span
-                  title={`${usedTokens.toLocaleString()} / ${window.toLocaleString()} tokens (≈ ${(ratio * 100).toFixed(0)}%) — ventana del modelo. ${accessPolicy.capabilities.workspaceContext ? 'Contexto del workspace activo.' : 'Contexto del workspace desactivado.'}`}
-                  className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${tone}`}
-                >
-                  <ListTree className="w-3 h-3" />
-                  <span className="font-mono">{formatNumber(usedTokens)}/{formatNumber(window)}</span>
-                </span>
-              );
-            })()}
+            <span
+              title={`${tokenCounterInfo.usedTokens.toLocaleString()} / ${tokenCounterInfo.window.toLocaleString()} tokens (≈ ${(tokenCounterInfo.ratio * 100).toFixed(0)}%) — ventana del modelo. ${accessPolicy.capabilities.workspaceContext ? 'Contexto del workspace activo.' : 'Contexto del workspace desactivado.'}`}
+              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition ${tokenCounterInfo.tone}`}
+            >
+              <ListTree className="w-3 h-3" />
+              <span className="font-mono">{formatNumber(tokenCounterInfo.usedTokens)}/{formatNumber(tokenCounterInfo.window)}</span>
+            </span>
           </div>
           <div className="text-surface-400 hidden sm:flex items-center gap-1 shrink-0">
             <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px] text-surface-300">Enter</kbd>

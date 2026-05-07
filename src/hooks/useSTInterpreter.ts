@@ -15,6 +15,7 @@ import {
   type Diagnostic
 } from '@/lib/st-api';
 import { collectSTDiagnostics } from '@/lib/st-execution';
+import { checkInWorker, evaluateInWorker } from '@/lib/st-runtime-worker-client';
 
 export interface STHistoryEntry {
   id: number;
@@ -46,8 +47,10 @@ export interface UseSTInterpreterReturn {
   isRunning: boolean;
   /** Obtiene los símbolos del código actual */
   getSymbols: (code: string) => SymbolInfo[];
-  /** Valida el código sin afectar el historial */
+  /** Valida el código sin afectar el historial (síncrono — fallback) */
   validate: (code: string) => Diagnostic[];
+  /** Valida en Web Worker — no bloquea hilo principal */
+  validateAsync: (code: string) => Promise<Diagnostic[]>;
   /** Diagnósticos acumulados de la última ejecución o validación */
   lastDiagnostics: Diagnostic[];
 }
@@ -84,7 +87,14 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
       result,
       timestamp: Date.now()
     };
-    setHistory(prev => [...prev, entry]);
+    // Cap defensivo: cada entry retiene el resultado completo de evaluate()
+    // (tablas de verdad, pruebas, output trace). Sin cap el array crece
+    // ilimitado y atrapa MBs en heap durante sesiones largas.
+    const HISTORY_CAP = 50;
+    setHistory(prev => {
+      const next = [...prev, entry];
+      return next.length > HISTORY_CAP ? next.slice(next.length - HISTORY_CAP) : next;
+    });
     setLastResult(result);
     setLastDiagnostics(collectSTDiagnostics(result));
     return result;
@@ -109,6 +119,29 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
 
     try {
       const result = evaluate(code);
+      const diagnostics = collectSTDiagnostics(result);
+      setLastDiagnostics(diagnostics);
+      return diagnostics;
+    } catch {
+      setLastDiagnostics(parserDiagnostics);
+      return parserDiagnostics;
+    }
+  }, []);
+
+  const validateAsync = useCallback(async (code: string): Promise<Diagnostic[]> => {
+    // Doble pasada: primero check (rápido) en worker; si pasa, evaluate en
+    // worker. Si check tiene errores de parseo, no perdemos tiempo evaluando.
+    const checkResult = await checkInWorker(code);
+    const parserDiagnostics: Diagnostic[] = checkResult.diagnostics || [];
+    const hasParseErrors = parserDiagnostics.some((d: Diagnostic) => d.severity === 'error');
+
+    if (hasParseErrors) {
+      setLastDiagnostics(parserDiagnostics);
+      return parserDiagnostics;
+    }
+
+    try {
+      const result = await evaluateInWorker(code);
       const diagnostics = collectSTDiagnostics(result);
       setLastDiagnostics(diagnostics);
       return diagnostics;
@@ -184,6 +217,7 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     isRunning,
     getSymbols,
     validate,
+    validateAsync,
     lastDiagnostics
   };
 }

@@ -89,7 +89,8 @@ import {
   filterSemanticWorkspaceStateByDocument,
   hasSemanticWorkspaceStateChanged,
   mergeSemanticWorkspaceStates,
-  normalizeSemanticWorkspaceState
+  normalizeSemanticWorkspaceState,
+  type SemanticFragmentRecord
 } from '@/lib/semantic/workspace-state';
 import {
   loadSemanticWorkspaceState,
@@ -225,7 +226,19 @@ export default function MosaicEditor({
 
   const noteDiagnostics = useMemo<LinterDiagnostic[]>(() => {
     const diags: LinterDiagnostic[] = [];
-    const notes = semanticState.fragments.filter(f => f.kind === 'note' && f.note && f.text);
+    const activeDocId = roomId ?? null;
+    const activeDocName = docName || currentDocMetaRef.current.name || null;
+    const NOTE_DIAG_LIMIT = 200;
+    const notes: SemanticFragmentRecord[] = [];
+    for (const f of semanticState.fragments) {
+      if (f.kind !== 'note' || !f.note || !f.text) continue;
+      const matchesDoc = activeDocId
+        ? (f.docId === activeDocId || (!f.docId && f.docName === activeDocName))
+        : (!f.docId);
+      if (!matchesDoc) continue;
+      notes.push(f);
+      if (notes.length >= NOTE_DIAG_LIMIT) break;
+    }
 
     for (const n of notes) {
       if (!n.note || !n.text) continue;
@@ -236,7 +249,6 @@ export default function MosaicEditor({
          const line = lines.length;
          const column = (lines[lines.length - 1] ?? '').length + 1;
 
-         // Multi-line aware end column for single line fallbacks
          const textLines = n.text.split('\n');
          const endColumn = textLines.length === 1 ? column + n.text.length : undefined;
 
@@ -252,7 +264,7 @@ export default function MosaicEditor({
       }
     }
     return diags;
-  }, [semanticState.fragments, statsContent]);
+  }, [semanticState.fragments, statsContent, roomId, docName]);
 
   const allDiagnostics = useMemo(() => {
     return [...markdownDiagnostics, ...noteDiagnostics];
@@ -287,29 +299,73 @@ export default function MosaicEditor({
   // can still project them into hoverable ST interpretations without requiring a manual formula.
   // Debounced to avoid rebuilds on every small semantic change.
   const prevConceptsHashRef = useRef('');
+  const prevConceptsSummaryRef = useRef<{
+    count: number;
+    fragCount: number;
+    totalConcepts: number;
+    sumUpdatedAt: number;
+    sumConfidence: number;
+    sumTitleLength: number;
+  }>({ count: 0, fragCount: 0, totalConcepts: 0, sumUpdatedAt: 0, sumConfidence: 0, sumTitleLength: 0 });
   useEffect(() => {
     const currentName = docName || currentDocMetaRef.current.name || 'Documento';
-    const scopedSemanticState = filterSemanticWorkspaceStateByDocument(semanticState, {
-      docId: roomId ?? null,
-      docName: currentName
-    });
-    const sourceFragmentById = new Map(
-      scopedSemanticState.fragments.map((fragment) => [fragment.id, fragment.text])
+    // Summary numérico: O(N) sin allocation pesada. Si las sumas matchean,
+    // los proyected concepts no cambiaron — saltamos el JSON.stringify caro
+    // (que es el 99% de los casos cuando solo cambian timestamps no-relevantes).
+    let sumUpdatedAt = 0;
+    let sumConfidence = 0;
+    let sumTitleLength = 0;
+    for (const concept of semanticState.concepts) {
+      sumUpdatedAt += concept.updatedAt || 0;
+      sumConfidence += concept.confidence ?? 0;
+      sumTitleLength += concept.title?.length ?? 0;
+    }
+    const summary = {
+      count: semanticState.concepts.length,
+      fragCount: semanticState.fragments.length,
+      totalConcepts: semanticState.concepts.length + semanticState.relations.length,
+      sumUpdatedAt,
+      sumConfidence,
+      sumTitleLength
+    };
+    const prevSummary = prevConceptsSummaryRef.current;
+    const summaryUnchanged = (
+      summary.count === prevSummary.count &&
+      summary.fragCount === prevSummary.fragCount &&
+      summary.totalConcepts === prevSummary.totalConcepts &&
+      summary.sumUpdatedAt === prevSummary.sumUpdatedAt &&
+      summary.sumConfidence === prevSummary.sumConfidence &&
+      summary.sumTitleLength === prevSummary.sumTitleLength
     );
-    const projectedConcepts = scopedSemanticState.concepts;
-    const hash = JSON.stringify(projectedConcepts.map((concept) => ({
-      id: concept.id,
-      title: concept.title,
-      definition: concept.definition || '',
-      formula: concept.formula || '',
-      logicProfile: concept.logicProfile || '',
-      excerpt: concept.excerpt || '',
-      sourceText: concept.sourceFragmentId ? sourceFragmentById.get(concept.sourceFragmentId) || '' : ''
-    })));
-    if (hash === prevConceptsHashRef.current) return;
+    if (summaryUnchanged) return;
 
+    // Defer ALL heavy work al setTimeout. Antes el filter+map+stringify
+    // corrían en el body del effect → cada poll de 15s sincronizaba state
+    // y bloqueaba el frame en tablets, aunque el debounce evitaba reparses.
     const timer = setTimeout(() => {
+      const scopedSemanticState = filterSemanticWorkspaceStateByDocument(semanticState, {
+        docId: roomId ?? null,
+        docName: currentName
+      });
+      const projectedConcepts = scopedSemanticState.concepts;
+      const sourceFragmentById = new Map(
+        scopedSemanticState.fragments.map((fragment) => [fragment.id, fragment.text])
+      );
+      const hash = JSON.stringify(projectedConcepts.map((concept) => ({
+        id: concept.id,
+        title: concept.title,
+        definition: concept.definition || '',
+        formula: concept.formula || '',
+        logicProfile: concept.logicProfile || '',
+        excerpt: concept.excerpt || '',
+        sourceText: concept.sourceFragmentId ? sourceFragmentById.get(concept.sourceFragmentId) || '' : ''
+      })));
+      if (hash === prevConceptsHashRef.current) {
+        prevConceptsSummaryRef.current = summary;
+        return;
+      }
       prevConceptsHashRef.current = hash;
+      prevConceptsSummaryRef.current = summary;
       const stFileName = companionSTName(currentName);
       if (projectedConcepts.length > 0) {
         const stContent = buildSTFromSemantic(scopedSemanticState, currentName);

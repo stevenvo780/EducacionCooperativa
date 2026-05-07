@@ -6,7 +6,7 @@ import { BUILTIN_RULE_IDS } from '@/lib/markdown-linter/rules';
 import { getPersonalDictionary, initSpellEngine, isSpellEngineReady } from '@/lib/markdown-linter/spell-engine';
 import { isSuppressed } from '@/lib/markdown-linter/suppressions';
 import { LinterRegistry } from '@/lib/linters/registry';
-import type { LinterDiagnostic, LinterRule } from '@/lib/markdown-linter/types';
+import { buildLinterRuleContext, type LinterDiagnostic, type LinterRule } from '@/lib/markdown-linter/types';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 // Re-export types for backward compatibility
@@ -153,20 +153,56 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       if (!message || message.requestId !== latestRequestIdRef.current) return;
 
       if (message.type === 'lint-result') {
-        // Linting completo: poblar cache por párrafo para futuros incrementales
+        // Linting completo: poblar cache por párrafo para futuros incrementales.
+        // Partition O(D+P): construimos un Map<startLine, paragraph> + binary
+        // search sobre los startLines en lugar de N pasadas .filter() (O(D·P)).
         const paragraphs = prevParagraphsRef.current;
         if (paragraphs.length > 0) {
           paragraphCacheRef.current.clear();
-          for (const para of paragraphs) {
-            const paraLineCount = para.text.split('\n').length;
-            const paraDiags = message.diagnostics
-              .filter((d) => d.line >= para.startLine && d.line < para.startLine + paraLineCount)
-              .map((d) => ({
-                ...d,
-                line: d.line - para.startLine + 1,
-                endLine: d.endLine !== undefined ? d.endLine - para.startLine + 1 : undefined
-              }));
-            paragraphCacheRef.current.set(para.hash, { diagnostics: paraDiags });
+
+          // Para cada párrafo, su rango es [startLine, startLine + lineCount)
+          const paraBuckets: Array<{
+            para: Paragraph;
+            startLine: number;
+            endLine: number;
+            diags: LinterDiagnostic[];
+          }> = paragraphs.map((para) => ({
+            para,
+            startLine: para.startLine,
+            endLine: para.startLine + para.text.split('\n').length,
+            diags: []
+          }));
+
+          // Asegurar orden por startLine (debería estar ordenado pero garantizamos)
+          paraBuckets.sort((a, b) => a.startLine - b.startLine);
+
+          // Binary search para localizar el bucket que contiene una línea dada
+          const findBucket = (line: number): typeof paraBuckets[number] | undefined => {
+            let lo = 0;
+            let hi = paraBuckets.length - 1;
+            while (lo <= hi) {
+              const mid = (lo + hi) >>> 1;
+              const b = paraBuckets[mid];
+              if (!b) return undefined;
+              if (line < b.startLine) hi = mid - 1;
+              else if (line >= b.endLine) lo = mid + 1;
+              else return b;
+            }
+            return undefined;
+          };
+
+          for (const d of message.diagnostics) {
+            const bucket = findBucket(d.line);
+            if (bucket) bucket.diags.push(d);
+          }
+
+          for (const b of paraBuckets) {
+            const adjusted = b.diags.map((d) => ({
+              ...d,
+              line: d.line - b.startLine + 1,
+              endLine: d.endLine !== undefined ? d.endLine - b.startLine + 1 : undefined
+            }));
+            paragraphCacheRef.current.set(b.para.hash, { diagnostics: adjusted });
           }
         }
         combineAndSet(message.diagnostics);
@@ -236,8 +272,11 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       ...enabledRulesRef.current.filter((r) => !BUILTIN_RULE_IDS.has(r.id)),
       ...customRulesRef.current
     ];
+    if (rules.length === 0) return [];
+    // Build shared ctx once for all custom rules in this pass
+    const ctx = buildLinterRuleContext(text);
     return sortDiagnostics(rules.flatMap((r) =>
-      r.check(text).map(d => ({ ...d, ruleId: d.ruleId ?? r.id }))
+      r.check(text, ctx).map(d => ({ ...d, ruleId: d.ruleId ?? r.id }))
     ));
   }, []);
 
@@ -278,7 +317,8 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
 
     // Fallback sin worker
     if (!workerAvailableRef.current || !workerRef.current) {
-      const fallback = sortDiagnostics(builtinEnabled.flatMap((r) => r.check(text)));
+      const ctx = buildLinterRuleContext(text);
+      const fallback = sortDiagnostics(builtinEnabled.flatMap((r) => r.check(text, ctx)));
       const combined = sortDiagnostics([...mainDiags, ...fallback]);
       setDiagnostics((prev) => diagnosticsEqual(prev, combined) ? prev : combined);
       setLinterStatus('ready');

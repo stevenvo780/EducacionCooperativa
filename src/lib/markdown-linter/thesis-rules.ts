@@ -10,7 +10,7 @@
  * con los requisitos estructurales y estilísticos institucionales.
  */
 
-import { type LinterRule, type LinterDiagnostic, getCodeBlockLines, lineAt } from './types';
+import { type LinterRule, type LinterDiagnostic, type LinterRuleContext, getCodeBlockLines, lineAt } from './types';
 
 /** Extrae todos los encabezados del documento con su nivel y línea. */
 function extractHeadings(lines: string[], codeLines: Set<number>): Array<{ level: number; text: string; lineIdx: number }> {
@@ -91,10 +91,10 @@ export const thesisMissingSectionRule: LinterRule = {
   category: 'thesis',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const headings = extractHeadings(lines, codeLines);
 
     for (const section of REQUIRED_SECTIONS) {
@@ -125,10 +125,10 @@ export const thesisFirstPersonRule: LinterRule = {
   category: 'thesis',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     // Pronombres y verbos en primera persona singular
     const firstPersonRegex = /\b(yo\s+(?:creo|pienso|considero|opino|estimo|argumento|propongo|planteo|afirmo)|me\s+parece\s+que|en\s+mi\s+opinión|a\s+mi\s+juicio|según\s+mi\s+(?:criterio|perspectiva|punto\s+de\s+vista)|desde\s+mi\s+(?:perspectiva|punto\s+de\s+vista)|personalmente\s+(?:creo|considero|pienso))\b/gi;
@@ -172,6 +172,14 @@ const WEAK_ASSERTIONS: Array<[string, string]> = [
   ['lógicamente', '"Lógicamente" como comodín retórico debilita el argumento.']
 ];
 
+// Pre-compiled regexes — evita reconstruirlos en cada línea de cada lint pass.
+const WEAK_ASSERTION_REGEXES: Array<{ regex: RegExp; suggestion: string }> = WEAK_ASSERTIONS.map(
+  ([phrase, suggestion]) => {
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return { regex: new RegExp(`\\b${escaped}\\b`, 'gi'), suggestion };
+  }
+);
+
 export const thesisWeakAssertionRule: LinterRule = {
   id: 'thesis_weak_assertion',
   name: 'Afirmaciones sin respaldo',
@@ -179,19 +187,18 @@ export const thesisWeakAssertionRule: LinterRule = {
   category: 'thesis',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
       const line = lineAt(lines, lineIdx);
       if (/^[#>]/.test(line.trim())) continue;
 
-      for (const [phrase, suggestion] of WEAK_ASSERTIONS) {
-        const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
+      for (const { regex, suggestion } of WEAK_ASSERTION_REGEXES) {
+        regex.lastIndex = 0;
         let match;
         while ((match = regex.exec(line)) !== null) {
           results.push({
@@ -220,9 +227,9 @@ export const thesisHypothesisRule: LinterRule = {
   category: 'thesis',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const headings = extractHeadings(lines, codeLines);
 
     const introHeading = headings.find((h) =>
@@ -276,9 +283,9 @@ export const thesisAbstractLengthRule: LinterRule = {
   category: 'thesis',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const headings = extractHeadings(lines, codeLines);
 
     const abstractHeading = headings.find((h) =>
@@ -337,9 +344,9 @@ export const thesisKeywordsRule: LinterRule = {
   category: 'thesis',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const headings = extractHeadings(lines, codeLines);
 
     const abstractHeading = headings.find((h) =>
@@ -380,10 +387,10 @@ export const thesisSectionOrderRule: LinterRule = {
   category: 'thesis',
   defaultEnabled: false,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const headings = extractHeadings(lines, codeLines);
 
     // Orden esperado (índices en la secuencia)

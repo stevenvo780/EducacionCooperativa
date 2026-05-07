@@ -66,6 +66,7 @@
     "react-mosaic-component": "^6.1.1",
     "react-redux": "^9.2.0",
     "react-resizable-panels": "^4.5.3",
+    "react-virtuoso": "^4.18.6",
     "react-window": "^2.2.6",
     "react-zoom-pan-pinch": "^4.0.3",
     "rehype-katex": "^7.0.1",

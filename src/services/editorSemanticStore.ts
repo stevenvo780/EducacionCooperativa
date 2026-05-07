@@ -69,6 +69,37 @@ const getStorageKey = ({ workspaceId, userId }: SemanticStoreContext) => (
 
 const isBrowser = () => typeof window !== 'undefined';
 
+// Cache en memoria del state por storage key. Evita JSON.parse + normalize
+// del payload completo en cada mutator. localStorage es hot pero el parse
+// + sort + validación campo-a-campo cuesta milisegundos en workspaces
+// grandes. La cache se invalida al hacer save (siempre encadenamos save→load
+// en el mismo tick).
+const memoryStateCache = new Map<string, SemanticWorkspaceState>();
+// Versión por storage key. Cualquier mutación que produce cambios reales
+// la incrementa. Otros consumidores (ej. derived selectors) pueden cachear
+// por versión y bail-out en O(1) cuando no hay cambios.
+const storeVersionByKey = new Map<string, number>();
+// Save debouncing: encolamos un único timeout por storage key. Las mutaciones
+// que llegan dentro del intervalo reusan la promesa pendiente y solo el last
+// state se persiste. Evita escribir N veces al localStorage en bursts.
+const SAVE_DEBOUNCE_MS = 500;
+const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
+const flushPendingSave = (key: string) => {
+  const handle = pendingSaves.get(key);
+  if (handle) {
+    clearTimeout(handle);
+    pendingSaves.delete(key);
+  }
+};
+
+const bumpStoreVersion = (key: string) => {
+  storeVersionByKey.set(key, (storeVersionByKey.get(key) ?? 0) + 1);
+};
+
+export const getSemanticStoreVersion = (context: SemanticStoreContext): number => (
+  storeVersionByKey.get(getStorageKey(context)) ?? 0
+);
+
 const slugify = (value: string) => (
   value
     .normalize('NFD')
@@ -109,23 +140,64 @@ const buildSourceRefs = (payload: SemanticSelectionPayload) => [{
 
 export const loadSemanticWorkspaceState = (context: SemanticStoreContext): SemanticWorkspaceState => {
   if (!isBrowser()) return EMPTY_SEMANTIC_WORKSPACE_STATE;
+  const key = getStorageKey(context);
+  const cached = memoryStateCache.get(key);
+  if (cached) return cached;
   try {
-    const raw = window.localStorage.getItem(getStorageKey(context));
-    if (!raw) return EMPTY_SEMANTIC_WORKSPACE_STATE;
-    return normalizeSemanticWorkspaceState(JSON.parse(raw));
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      memoryStateCache.set(key, EMPTY_SEMANTIC_WORKSPACE_STATE);
+      return EMPTY_SEMANTIC_WORKSPACE_STATE;
+    }
+    const normalized = normalizeSemanticWorkspaceState(JSON.parse(raw));
+    memoryStateCache.set(key, normalized);
+    return normalized;
   } catch {
+    memoryStateCache.set(key, EMPTY_SEMANTIC_WORKSPACE_STATE);
     return EMPTY_SEMANTIC_WORKSPACE_STATE;
+  }
+};
+
+const writeStateToStorage = (key: string, state: SemanticWorkspaceState) => {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(state));
+  } catch {
+    // Quota / privacy mode: ignoramos. El cache en memoria sigue válido.
   }
 };
 
 export const saveSemanticWorkspaceState = (context: SemanticStoreContext, state: SemanticWorkspaceState) => {
   if (!isBrowser()) return state;
+  const key = getStorageKey(context);
   const nextState: SemanticWorkspaceState = {
     ...normalizeSemanticWorkspaceState(state),
     updatedAt: Date.now()
   };
-  window.localStorage.setItem(getStorageKey(context), JSON.stringify(nextState));
+  memoryStateCache.set(key, nextState);
+  bumpStoreVersion(key);
+  // Debounce de escritura a localStorage. Mutaciones consecutivas reusan el
+  // timeout: solo la última escribe.
+  flushPendingSave(key);
+  const handle = setTimeout(() => {
+    pendingSaves.delete(key);
+    const finalState = memoryStateCache.get(key);
+    if (finalState) writeStateToStorage(key, finalState);
+  }, SAVE_DEBOUNCE_MS);
+  pendingSaves.set(key, handle);
   return nextState;
+};
+
+/**
+ * Persiste sincrónicamente el state pendiente. Útil antes de page unload o
+ * antes de operaciones que dependen de localStorage (ej. otra tab leyendo).
+ */
+export const flushSemanticWorkspaceState = (context: SemanticStoreContext) => {
+  if (!isBrowser()) return;
+  const key = getStorageKey(context);
+  flushPendingSave(key);
+  const state = memoryStateCache.get(key);
+  if (state) writeStateToStorage(key, state);
 };
 
 const updateState = (
@@ -133,7 +205,47 @@ const updateState = (
   updater: (state: SemanticWorkspaceState) => SemanticWorkspaceState
 ) => {
   const current = loadSemanticWorkspaceState(context);
-  return saveSemanticWorkspaceState(context, updater(current));
+  const next = updater(current);
+  // Skip notify si shallow-equal. updater puede haber retornado la misma
+  // referencia tras un branch no-op (ej. concept inexistente). En ese caso
+  // no hay nada que persistir y no incrementamos versión.
+  if (next === current) return current;
+  return saveSemanticWorkspaceState(context, next);
+};
+
+// Index derivado de fragments por (selectionHash, kind, docId, conceptId)
+// y por stableKey. WeakMap por state para que se libere cuando el state
+// se reemplaza por el siguiente save. Antes el find era O(F) por cada
+// keystroke que dispara un mutator (relate, capture, etc). Para un
+// workspace con cientos de fragments y user tipeando rápido era visible.
+const fragmentLookupCache = new WeakMap<
+  SemanticFragmentRecord[],
+  { byStableKey: Map<string, SemanticFragmentRecord>; bySemanticKey: Map<string, SemanticFragmentRecord> }
+>();
+
+const fragmentSemanticKey = (
+  kind: SemanticFragmentKind,
+  selectionHash: string,
+  docId: string | null,
+  conceptId: string | undefined
+) => `${kind}|${selectionHash}|${docId ?? ''}|${conceptId ?? ''}`;
+
+const getFragmentLookup = (fragments: SemanticFragmentRecord[]) => {
+  let cache = fragmentLookupCache.get(fragments);
+  if (!cache) {
+    const byStableKey = new Map<string, SemanticFragmentRecord>();
+    const bySemanticKey = new Map<string, SemanticFragmentRecord>();
+    for (const fragment of fragments) {
+      if (fragment.stableKey) byStableKey.set(fragment.stableKey, fragment);
+      bySemanticKey.set(
+        fragmentSemanticKey(fragment.kind, fragment.selectionHash, fragment.docId, fragment.conceptId),
+        fragment
+      );
+    }
+    cache = { byStableKey, bySemanticKey };
+    fragmentLookupCache.set(fragments, cache);
+  }
+  return cache;
 };
 
 const ensureFragment = (
@@ -154,15 +266,9 @@ const ensureFragment = (
     extra?.docBlockId
   );
 
-  const existing = state.fragments.find((fragment) => (
-    fragment.stableKey === stableKey
-    || (
-      fragment.kind === kind
-      && fragment.selectionHash === selectionHash
-      && fragment.docId === payload.docId
-      && fragment.conceptId === extra?.conceptId
-    )
-  ));
+  const lookup = getFragmentLookup(state.fragments);
+  const existing = lookup.byStableKey.get(stableKey)
+    || lookup.bySemanticKey.get(fragmentSemanticKey(kind, selectionHash, payload.docId, extra?.conceptId));
 
   const entityKind = extra?.entityKind || (
     kind === 'evidence'
@@ -179,6 +285,8 @@ const ensureFragment = (
   const status = extra?.status || defaultStatusForEntity(entityKind);
 
   if (existing) {
+    const prevSemKey = fragmentSemanticKey(existing.kind, existing.selectionHash, existing.docId, existing.conceptId);
+    const prevStableKey = existing.stableKey;
     existing.updatedAt = Date.now();
     existing.entityKind = entityKind;
     existing.origin = origin;
@@ -189,6 +297,16 @@ const ensureFragment = (
     if (confidence !== undefined) existing.confidence = confidence;
     if (extra) {
       Object.assign(existing, extra);
+    }
+    // Re-sincronizar lookup si las keys cambiaron tras el merge.
+    const nextSemKey = fragmentSemanticKey(existing.kind, existing.selectionHash, existing.docId, existing.conceptId);
+    if (prevSemKey !== nextSemKey) {
+      lookup.bySemanticKey.delete(prevSemKey);
+      lookup.bySemanticKey.set(nextSemKey, existing);
+    }
+    if (prevStableKey !== existing.stableKey) {
+      if (prevStableKey) lookup.byStableKey.delete(prevStableKey);
+      if (existing.stableKey) lookup.byStableKey.set(existing.stableKey, existing);
     }
     return existing;
   }
@@ -214,6 +332,11 @@ const ensureFragment = (
     ...extra
   };
   state.fragments.unshift(fragment);
+  if (fragment.stableKey) lookup.byStableKey.set(fragment.stableKey, fragment);
+  lookup.bySemanticKey.set(
+    fragmentSemanticKey(fragment.kind, fragment.selectionHash, fragment.docId, fragment.conceptId),
+    fragment
+  );
   return fragment;
 };
 
@@ -443,13 +566,16 @@ export const setSemanticWorkspacePreferences = (
 
 export const deleteConcept = (context: SemanticStoreContext, conceptId: string) => updateState(context, (state) => {
   state.concepts = state.concepts.filter(c => c.id !== conceptId);
-  const relatedRelationFragmentIds = state.relations
-    .filter(r => r.conceptId === conceptId)
-    .map(r => r.fragmentId);
+  // Antes: relatedRelationFragmentIds se computaba como array y se usaba con
+  // `Array.includes()` dentro de `.filter()` → O(F·R). Con Set es O(F+R).
+  const relatedRelationFragmentIds = new Set<string>();
+  for (const r of state.relations) {
+    if (r.conceptId === conceptId) relatedRelationFragmentIds.add(r.fragmentId);
+  }
   state.relations = state.relations.filter(r => r.conceptId !== conceptId);
   state.fragments = state.fragments.filter(f => {
     if (f.conceptId === conceptId) return false;
-    if (relatedRelationFragmentIds.includes(f.id) && f.kind === 'relation') return false;
+    if (relatedRelationFragmentIds.has(f.id) && f.kind === 'relation') return false;
     return true;
   });
   return state;

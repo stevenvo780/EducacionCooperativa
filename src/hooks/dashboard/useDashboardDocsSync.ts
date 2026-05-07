@@ -252,16 +252,21 @@ export const useDashboardDocsSync = ({
 
   useEffect(() => {
     if (!currentWorkspace || !user || !isPageVisible) return;
+    // En tablets el polling de 60s + applyDocsSnapshot O(N·log N) sobre 100+
+    // docs cuelga el frame. Subimos a 5min en touch (RTDB sigue siendo el
+    // path principal de sync; este es solo fallback).
+    const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
+    const pollMs = isTouch ? 300_000 : 60_000;
     const intervalId = setInterval(() => {
       if (document.hidden) return;
       const now = Date.now();
-      if (now - lastSyncEventRef.current >= 60000) {
+      if (now - lastSyncEventRef.current >= pollMs) {
         if (process.env.NODE_ENV !== 'production') {
-          console.warn('[Sync] fallback polling triggered (no RTDB event in 60s)');
+          console.warn('[Sync] fallback polling triggered (no RTDB event in', pollMs, 'ms)');
         }
         void requestDocsRefreshRef.current?.({ force: true, delayMs: 0 });
       }
-    }, 60000);
+    }, pollMs);
 
     return () => {
       clearInterval(intervalId);
@@ -301,7 +306,13 @@ export const useDashboardDocsSync = ({
       scheduleSyncFetch();
     };
 
-    const unsubDocsChanged = subscribeAgoraEvent(AGORA_EVENTS.docsChanged, () => {
+    const unsubDocsChanged = subscribeAgoraEvent(AGORA_EVENTS.docsChanged, (detail) => {
+      // SyncEventsBridge incluye `workspaceId` para que solo el dashboard del
+      // workspace activo reaccione. Otros emisores históricos disparan sin
+      // detail (objeto vacío) → mantenemos el comportamiento actual de
+      // refrescar siempre cuando no hay workspaceId explícito.
+      const eventWsId = detail?.workspaceId;
+      if (eventWsId && !matchesActiveWorkspace(eventWsId)) return;
       triggerRefresh('agora:docs-changed');
     });
     const unsubDocsMutated = subscribeAgoraEvent(AGORA_EVENTS.documentsMutated, (detail) => {

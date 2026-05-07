@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import {
   AlertCircle,
   AlertTriangle,
@@ -49,6 +50,96 @@ export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fi
 // la pestaña. Cap defensivo + banner sugiriendo búsqueda. Si necesitas ver
 // más, filtra por término. Sube si la app se vuelve lenta pero no crashea.
 const RENDER_SAFETY_LIMIT = 500;
+
+const VIRTUALIZE_THRESHOLD = 80;
+const CONCEPT_ROW_HEIGHT = 232;
+const FRAGMENT_ROW_HEIGHT = 188;
+const RELATION_ROW_HEIGHT = 144;
+
+type SemanticVirtualRowData<T> = {
+  items: T[];
+  render: (item: T, index: number) => React.ReactNode;
+  rowHeight: number;
+};
+
+function SemanticVirtualRow<T>(props: RowComponentProps<SemanticVirtualRowData<T>>) {
+  const { index, style, items, render, rowHeight } = props;
+  const item = items[index];
+  if (!item) return null;
+  return (
+    <div style={style} className="px-1">
+      <div style={{ height: rowHeight - 12, overflow: 'hidden' }} className="rounded-xl">
+        {render(item, index)}
+      </div>
+    </div>
+  );
+}
+
+interface SemanticListProps<T> {
+  items: T[];
+  rowHeight: number;
+  renderItem: (item: T, index: number) => React.ReactNode;
+  itemKey: (item: T, index: number) => string;
+  emptyState: React.ReactNode;
+  label: string;
+}
+
+function SemanticList<T>({ items, rowHeight, renderItem, itemKey, emptyState, label }: SemanticListProps<T>) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (!ref.current || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setSize({ width, height });
+    });
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+
+  if (items.length === 0) {
+    return <div className="h-full overflow-y-auto p-4"><div className="max-w-4xl mx-auto">{emptyState}</div></div>;
+  }
+
+  const shouldVirtualize = items.length > VIRTUALIZE_THRESHOLD;
+
+  if (!shouldVirtualize) {
+    const visible = items.slice(0, RENDER_SAFETY_LIMIT);
+    return (
+      <div className="h-full overflow-y-auto p-4">
+        <div className="max-w-4xl mx-auto space-y-3">
+          <TruncatedBanner shown={visible.length} total={items.length} label={label} />
+          {visible.map((item, index) => (
+            <React.Fragment key={itemKey(item, index)}>
+              {renderItem(item, index)}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="h-full p-4">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+          Lista virtualizada · {items.length} {label}
+        </div>
+      </div>
+      <VirtualizedList<SemanticVirtualRowData<T>>
+        rowCount={items.length}
+        rowHeight={rowHeight}
+        overscanCount={4}
+        rowComponent={SemanticVirtualRow}
+        rowProps={{ items, render: renderItem, rowHeight }}
+        style={{ height: Math.max(size.height - 36, 1), width: '100%' }}
+      />
+    </div>
+  );
+}
 
 function TruncatedBanner({ shown, total, label }: { shown: number; total: number; label: string }) {
   if (total <= shown) return null;
@@ -623,10 +714,10 @@ function STFilesPanel({ filterFileName }: { filterFileName?: string }) {
 
 function EmptyState({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
-    <div className="text-center py-12">
-      <div className="mx-auto mb-3 text-slate-600">{icon}</div>
-      <p className="text-sm text-slate-400">{title}</p>
-      <p className="mt-1 text-[11px] text-slate-600 max-w-md mx-auto">{description}</p>
+    <div className="flex flex-col items-center text-center py-14 gap-3">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300 ring-1 ring-inset ring-blue-500/20">{icon}</div>
+      <p className="text-base font-medium text-slate-200">{title}</p>
+      <p className="text-xs text-slate-400 max-w-md leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -692,9 +783,19 @@ export function SemanticBrowser({
   const [activeTab, setActiveTab] = useState<SemanticTab>(initialTab ?? 'resumen');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const notes = useMemo(() => state.fragments.filter(f => f.kind === 'note'), [state.fragments]);
-  const evidence = useMemo(() => state.fragments.filter(f => f.kind === 'evidence'), [state.fragments]);
-  const pinned = useMemo(() => state.fragments.filter(f => f.kind === 'pinned'), [state.fragments]);
+  // Fragments cap: en WS gigantes (Lógica/Neurociencias) limitamos los 5
+  // arrays derivados a una ventana de los últimos 1500 fragments para evitar
+  // que useMemo en cadena bloquee el thread y crashee la pestaña.
+  const FRAGMENT_PROCESS_CAP = 1500;
+  const processFragments = useMemo(() => {
+    if (state.fragments.length <= FRAGMENT_PROCESS_CAP) return state.fragments;
+    // Quedarnos con los más recientes
+    return [...state.fragments].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, FRAGMENT_PROCESS_CAP);
+  }, [state.fragments]);
+
+  const notes = useMemo(() => processFragments.filter(f => f.kind === 'note'), [processFragments]);
+  const evidence = useMemo(() => processFragments.filter(f => f.kind === 'evidence'), [processFragments]);
+  const pinned = useMemo(() => processFragments.filter(f => f.kind === 'pinned'), [processFragments]);
 
   const relationCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -704,12 +805,12 @@ export function SemanticBrowser({
 
   const linkedDocs = useMemo(() => {
     const linked = new Map<string, { name: string; fragment: string }>();
-    state.fragments.forEach(item => {
+    processFragments.forEach(item => {
       if (!item.linkedDocId || !item.linkedDocName || linked.has(item.linkedDocId)) return;
       linked.set(item.linkedDocId, { name: item.linkedDocName, fragment: item.excerpt });
     });
     return Array.from(linked.entries()).map(([id, v]) => ({ id, ...v }));
-  }, [state.fragments]);
+  }, [processFragments]);
 
   // Index fragments por conceptId una sola vez. Antes cada ConceptCard
   // hacía fragments.filter(f => f.conceptId === concept.id) en cada
@@ -717,19 +818,19 @@ export function SemanticBrowser({
   // de estado y mataba la pestaña con muchos elementos en la mesa semántica.
   const fragmentsByConceptId = useMemo(() => {
     const map = new Map<string, SemanticFragmentRecord[]>();
-    for (const f of state.fragments) {
+    for (const f of processFragments) {
       if (!f.conceptId) continue;
       const list = map.get(f.conceptId);
       if (list) list.push(f);
       else map.set(f.conceptId, [f]);
     }
     return map;
-  }, [state.fragments]);
+  }, [processFragments]);
   const fragmentsById = useMemo(() => {
     const map = new Map<string, SemanticFragmentRecord>();
-    for (const f of state.fragments) map.set(f.id, f);
+    for (const f of processFragments) map.set(f.id, f);
     return map;
-  }, [state.fragments]);
+  }, [processFragments]);
   const EMPTY_FRAGMENTS: SemanticFragmentRecord[] = useMemo(() => [], []);
 
   const lowerQuery = searchQuery.toLowerCase().trim();
@@ -874,8 +975,9 @@ export function SemanticBrowser({
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto min-h-0 p-4">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {activeTab === 'resumen' && (
+          <div className="h-full overflow-y-auto p-4">
           <div className="space-y-6 max-w-5xl mx-auto">
             {/* Metrics */}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
@@ -1040,11 +1142,25 @@ export function SemanticBrowser({
               <STPreviewBlock content={stPreviewContent} />
             )}
           </div>
+          </div>
         )}
 
         {activeTab === 'conceptos' && (
-          <div className="max-w-4xl mx-auto space-y-3">
-            {filteredConcepts.length === 0 ? (
+          <SemanticList
+            items={filteredConcepts}
+            rowHeight={CONCEPT_ROW_HEIGHT}
+            label="conceptos"
+            itemKey={(concept) => concept.id}
+            renderItem={(concept) => (
+              <ConceptCard
+                concept={concept}
+                relationsCount={relationCounts.get(concept.id) ?? 0}
+                relatedFragments={fragmentsByConceptId.get(concept.id) ?? EMPTY_FRAGMENTS}
+                onDelete={onDeleteConcept}
+                onEdit={onEditConcept}
+              />
+            )}
+            emptyState={(
               <EmptyState
                 icon={<Network className="h-8 w-8" />}
                 title={lowerQuery ? 'Sin resultados' : 'No hay conceptos registrados'}
@@ -1052,27 +1168,20 @@ export function SemanticBrowser({
                   ? 'Intenta con otro término de búsqueda.'
                   : 'Selecciona texto en el editor y usa "Definir concepto" para crear tu primer concepto.'}
               />
-            ) : (
-              <>
-                <TruncatedBanner shown={Math.min(filteredConcepts.length, RENDER_SAFETY_LIMIT)} total={filteredConcepts.length} label="conceptos" />
-                {filteredConcepts.slice(0, RENDER_SAFETY_LIMIT).map(concept => (
-                  <ConceptCard
-                    key={concept.id}
-                    concept={concept}
-                    relationsCount={relationCounts.get(concept.id) ?? 0}
-                    relatedFragments={fragmentsByConceptId.get(concept.id) ?? EMPTY_FRAGMENTS}
-                    onDelete={onDeleteConcept}
-                    onEdit={onEditConcept}
-                  />
-                ))}
-              </>
             )}
-          </div>
+          />
         )}
 
         {activeTab === 'notas' && (
-          <div className="max-w-4xl mx-auto space-y-3">
-            {filteredNotes.length === 0 ? (
+          <SemanticList
+            items={filteredNotes}
+            rowHeight={FRAGMENT_ROW_HEIGHT}
+            label="notas"
+            itemKey={(fragment) => fragment.id}
+            renderItem={(fragment) => (
+              <FragmentCard fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
+            )}
+            emptyState={(
               <EmptyState
                 icon={<MessageSquareText className="h-8 w-8" />}
                 title={lowerQuery ? 'Sin resultados' : 'No hay notas guardadas'}
@@ -1080,20 +1189,20 @@ export function SemanticBrowser({
                   ? 'Intenta con otro término de búsqueda.'
                   : 'Selecciona texto en el editor y usa “Guardar nota” para dejar comentarios persistentes.'}
               />
-            ) : (
-              <>
-                <TruncatedBanner shown={Math.min(filteredNotes.length, RENDER_SAFETY_LIMIT)} total={filteredNotes.length} label="notas" />
-                {filteredNotes.slice(0, RENDER_SAFETY_LIMIT).map(fragment => (
-                  <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
-                ))}
-              </>
             )}
-          </div>
+          />
         )}
 
         {activeTab === 'evidencias' && (
-          <div className="max-w-4xl mx-auto space-y-3">
-            {filteredEvidence.length === 0 ? (
+          <SemanticList
+            items={filteredEvidence}
+            rowHeight={FRAGMENT_ROW_HEIGHT}
+            label="evidencias"
+            itemKey={(fragment) => fragment.id}
+            renderItem={(fragment) => (
+              <FragmentCard fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
+            )}
+            emptyState={(
               <EmptyState
                 icon={<Quote className="h-8 w-8" />}
                 title={lowerQuery ? 'Sin resultados' : 'No hay evidencias marcadas'}
@@ -1101,20 +1210,20 @@ export function SemanticBrowser({
                   ? 'Intenta con otro término de búsqueda.'
                   : 'Selecciona texto en el editor y usa "Marcar como evidencia" para comenzar.'}
               />
-            ) : (
-              <>
-                <TruncatedBanner shown={Math.min(filteredEvidence.length, RENDER_SAFETY_LIMIT)} total={filteredEvidence.length} label="evidencias" />
-                {filteredEvidence.slice(0, RENDER_SAFETY_LIMIT).map(fragment => (
-                  <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
-                ))}
-              </>
             )}
-          </div>
+          />
         )}
 
         {activeTab === 'fijados' && (
-          <div className="max-w-4xl mx-auto space-y-3">
-            {filteredPinned.length === 0 ? (
+          <SemanticList
+            items={filteredPinned}
+            rowHeight={FRAGMENT_ROW_HEIGHT}
+            label="fijados"
+            itemKey={(fragment) => fragment.id}
+            renderItem={(fragment) => (
+              <FragmentCard fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
+            )}
+            emptyState={(
               <EmptyState
                 icon={<Pin className="h-8 w-8" />}
                 title={lowerQuery ? 'Sin resultados' : 'No hay fragmentos fijados'}
@@ -1122,20 +1231,24 @@ export function SemanticBrowser({
                   ? 'Intenta con otro término de búsqueda.'
                   : 'Selecciona texto en el editor y usa "Fijar fragmento" para acceso rápido.'}
               />
-            ) : (
-              <>
-                <TruncatedBanner shown={Math.min(filteredPinned.length, RENDER_SAFETY_LIMIT)} total={filteredPinned.length} label="fijados" />
-                {filteredPinned.slice(0, RENDER_SAFETY_LIMIT).map(fragment => (
-                  <FragmentCard key={fragment.id} fragment={fragment} onDelete={onDeleteFragment} onEdit={onEditFragment} />
-                ))}
-              </>
             )}
-          </div>
+          />
         )}
 
         {activeTab === 'relaciones' && (
-          <div className="max-w-4xl mx-auto space-y-3">
-            {filteredRelations.length === 0 ? (
+          <SemanticList
+            items={filteredRelations}
+            rowHeight={RELATION_ROW_HEIGHT}
+            label="relaciones"
+            itemKey={(relation) => relation.id}
+            renderItem={(relation) => (
+              <RelationCard
+                relation={relation}
+                fragment={fragmentsById.get(relation.fragmentId)}
+                onDelete={onDeleteRelation}
+              />
+            )}
+            emptyState={(
               <EmptyState
                 icon={<Link2 className="h-8 w-8" />}
                 title={lowerQuery ? 'Sin resultados' : 'No hay relaciones'}
@@ -1143,25 +1256,15 @@ export function SemanticBrowser({
                   ? 'Intenta con otro término de búsqueda.'
                   : 'Selecciona texto y relacíonalo con un concepto existente.'}
               />
-            ) : (
-              <>
-                <TruncatedBanner shown={Math.min(filteredRelations.length, RENDER_SAFETY_LIMIT)} total={filteredRelations.length} label="relaciones" />
-                {filteredRelations.slice(0, RENDER_SAFETY_LIMIT).map(relation => (
-                  <RelationCard
-                    key={relation.id}
-                    relation={relation}
-                    fragment={fragmentsById.get(relation.fragmentId)}
-                    onDelete={onDeleteRelation}
-                  />
-                ))}
-              </>
             )}
-          </div>
+          />
         )}
 
         {activeTab === 'archivos' && (
-          <div className="max-w-4xl mx-auto">
-            <STFilesPanel filterFileName={filterSTFile} />
+          <div className="h-full overflow-y-auto p-4">
+            <div className="max-w-4xl mx-auto">
+              <STFilesPanel filterFileName={filterSTFile} />
+            </div>
           </div>
         )}
       </div>

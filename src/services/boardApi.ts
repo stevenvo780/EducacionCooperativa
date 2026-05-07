@@ -2,23 +2,30 @@ import { db, auth } from '@/lib/firebase';
 import { fetchZod } from '@/lib/fetch-zod';
 import { boardDataSchema, boardColumnSchema, boardCardSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  orderBy, 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
+  limit as fsLimit,
+  startAfter,
+  onSnapshot,
   writeBatch,
   serverTimestamp,
-  setDoc,
-  Timestamp
+  type QueryDocumentSnapshot,
+  type DocumentData
 } from 'firebase/firestore';
 import type { BoardCard, BoardColumn, BoardData } from '@/components/dashboard/types';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+
+const BOARD_PAGE_SIZE = 100;
+
+const generateOrder = () => Date.now() * 1000 + Math.floor(Math.random() * 1000);
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const useHttpBoardApi = process.env.NEXT_PUBLIC_ALLOW_INSECURE_AUTH === 'true';
@@ -81,28 +88,104 @@ export const fetchBoardApi = async (params: { workspaceId: string }): Promise<Bo
   await ensureBoardExists(boardId, params.workspaceId);
 
   const boardRef = doc(db(), 'boards', boardId);
-  
-  // Fetch columns
-  const columnsQuery = query(collection(boardRef, 'columns'), orderBy('order'));
-  const columnsSnap = await getDocs(columnsQuery);
-  const columns = columnsSnap.docs.map(d => ({
-    id: d.id,
-    ...d.data()
-  })) as BoardColumn[];
 
-  // Fetch cards
-  const cardsQuery = query(collection(boardRef, 'cards'), orderBy('order'));
-  const cardsSnap = await getDocs(cardsQuery);
-  const cards = cardsSnap.docs.map(d => ({
-    id: d.id,
-    ...d.data()
-  })) as BoardCard[];
+  const columns: BoardColumn[] = [];
+  let columnCursor: QueryDocumentSnapshot<DocumentData> | undefined;
+  while (true) {
+    const baseQuery = columnCursor
+      ? query(collection(boardRef, 'columns'), orderBy('order'), startAfter(columnCursor), fsLimit(BOARD_PAGE_SIZE))
+      : query(collection(boardRef, 'columns'), orderBy('order'), fsLimit(BOARD_PAGE_SIZE));
+    const snap = await getDocs(baseQuery);
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      columns.push({ id: d.id, ...d.data() } as BoardColumn);
+    }
+    if (snap.docs.length < BOARD_PAGE_SIZE) break;
+    columnCursor = snap.docs[snap.docs.length - 1];
+  }
+
+  const cards: BoardCard[] = [];
+  let cardCursor: QueryDocumentSnapshot<DocumentData> | undefined;
+  while (true) {
+    const baseQuery = cardCursor
+      ? query(collection(boardRef, 'cards'), orderBy('order'), startAfter(cardCursor), fsLimit(BOARD_PAGE_SIZE))
+      : query(collection(boardRef, 'cards'), orderBy('order'), fsLimit(BOARD_PAGE_SIZE));
+    const snap = await getDocs(baseQuery);
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      cards.push({ id: d.id, ...d.data() } as BoardCard);
+    }
+    if (snap.docs.length < BOARD_PAGE_SIZE) break;
+    cardCursor = snap.docs[snap.docs.length - 1];
+  }
 
   return {
     boardId,
     workspaceId: params.workspaceId,
     columns,
     cards
+  };
+};
+
+export interface BoardSnapshotPayload {
+  columns: BoardColumn[];
+  cards: BoardCard[];
+}
+
+export const subscribeBoardApi = (
+  workspaceId: string,
+  onChange: (payload: BoardSnapshotPayload) => void,
+  onError?: (err: Error) => void
+): (() => void) => {
+  if (useHttpBoardApi) {
+    return () => {};
+  }
+
+  let boardId: string;
+  try {
+    boardId = resolveBoardId(workspaceId);
+  } catch (err) {
+    onError?.(err as Error);
+    return () => {};
+  }
+
+  const boardRef = doc(db(), 'boards', boardId);
+  const columnsQuery = query(collection(boardRef, 'columns'), orderBy('order'));
+  const cardsQuery = query(collection(boardRef, 'cards'), orderBy('order'));
+
+  let latestColumns: BoardColumn[] = [];
+  let latestCards: BoardCard[] = [];
+  let hasColumns = false;
+  let hasCards = false;
+
+  const emit = () => {
+    if (!hasColumns || !hasCards) return;
+    onChange({ columns: latestColumns, cards: latestCards });
+  };
+
+  const unsubColumns = onSnapshot(
+    columnsQuery,
+    (snap) => {
+      latestColumns = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BoardColumn);
+      hasColumns = true;
+      emit();
+    },
+    (err) => onError?.(err)
+  );
+
+  const unsubCards = onSnapshot(
+    cardsQuery,
+    (snap) => {
+      latestCards = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BoardCard);
+      hasCards = true;
+      emit();
+    },
+    (err) => onError?.(err)
+  );
+
+  return () => {
+    unsubColumns();
+    unsubCards();
   };
 };
 
@@ -128,7 +211,7 @@ export const createBoardColumnApi = async (params: { workspaceId: string; name: 
   // To keep it robust without query:
   const newColData = {
     name: params.name,
-    order: Date.now(), // Fallback if regular ordering fails, really should be passed or queried
+    order: generateOrder(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
@@ -228,7 +311,7 @@ export const createBoardCardApi = async (params: {
     title: params.title,
     description: params.description || '',
     ownerId: params.ownerId || auth().currentUser?.uid,
-    order: Date.now(), // Simple ordering
+    order: generateOrder(),
     sourceDocId: params.sourceDocId || null,
     sourceDocName: params.sourceDocName || null,
     sourceFragment: params.sourceFragment || null,

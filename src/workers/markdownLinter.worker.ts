@@ -1,5 +1,5 @@
 import { BUILTIN_RULES_BY_ID } from '@/lib/markdown-linter/rules';
-import type { LinterDiagnostic } from '@/lib/markdown-linter/types';
+import { buildLinterRuleContext, type LinterDiagnostic } from '@/lib/markdown-linter/types';
 import { initSpellEngine, syncPersonalDictionary } from '@/lib/markdown-linter/spell-engine';
 
 // Preload spell engine immediately — dictionaries (~850KB) start downloading
@@ -59,10 +59,13 @@ async function ensureSpellEngine(ruleIds: string[], personalDictionary: string[]
 
 function runRulesOnText(text: string, ruleIds: string[]): LinterDiagnostic[] {
   const diagnostics: LinterDiagnostic[] = [];
+  // Pre-compute shared context (lines split + codeBlockLines) once per text
+  // instead of letting each rule rebuild them. Most builtin rules consume both.
+  const ctx = buildLinterRuleContext(text);
   for (const ruleId of ruleIds) {
     const rule = BUILTIN_RULES_BY_ID.get(ruleId);
     if (rule) {
-      for (const d of rule.check(text)) {
+      for (const d of rule.check(text, ctx)) {
         diagnostics.push({ ...d, ruleId });
       }
     }

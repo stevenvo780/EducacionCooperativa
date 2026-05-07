@@ -52,6 +52,7 @@ import {
     fetchUserProfilesApi
 } from '@/services/dashboardApi';
 import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue } from '@/services/dashboardUtils';
+import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
 import { loadFavoriteDocIds, MAX_FAVORITE_DOCS, saveFavoriteDocIds } from '@/services/dashboardPersistence';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
@@ -679,8 +680,28 @@ function DashboardContent() {
         }
     };
 
+    const lastFetchedSignatureRef = useRef<{ wsId: string; len: number; sumUpdated: number } | null>(null);
+
     const applyDocsSnapshot = useCallback((fetched: DocItem[]) => {
         if (!currentWorkspace) return;
+
+        // Short-circuit por equivalencia rápida: si el snapshot crudo tiene
+        // mismo length + suma de updatedAt + mismo workspace que el último
+        // aplicado, salimos antes de las 6 pasadas O(N).
+        let sumUpdated = 0;
+        for (let i = 0; i < fetched.length; i += 1) {
+            sumUpdated += getUpdatedAtValue(fetched[i]?.updatedAt);
+        }
+        const lastSig = lastFetchedSignatureRef.current;
+        if (
+            lastSig &&
+            lastSig.wsId === currentWorkspace.id &&
+            lastSig.len === fetched.length &&
+            lastSig.sumUpdated === sumUpdated
+        ) {
+            return;
+        }
+        lastFetchedSignatureRef.current = { wsId: currentWorkspace.id, len: fetched.length, sumUpdated };
 
         const sanitized = fetched.map(docItem => {
             const { content: _content, ...rest } = docItem;
@@ -1816,51 +1837,14 @@ function DashboardContent() {
         });
     }, []);
 
-    const docsByFolder = useMemo(() => {
-        const grouped: Record<string, DocItem[]> = {};
-        docs.forEach(docItem => {
-            const folderName = normalizeFolderPath(docItem.folder);
-            if (!grouped[folderName]) grouped[folderName] = [];
-            grouped[folderName].push(docItem);
-        });
-        Object.values(grouped).forEach(list => {
-            list.sort((a, b) => {
-                const orderA = typeof a.order === 'number' ? a.order : null;
-                const orderB = typeof b.order === 'number' ? b.order : null;
-                if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-                if (orderA !== null && orderB === null) return -1;
-                if (orderA === null && orderB !== null) return 1;
-                const dateA = getUpdatedAtValue(a.updatedAt);
-                const dateB = getUpdatedAtValue(b.updatedAt);
-                if (dateA !== dateB) return dateB - dateA;
-                return (a.name || '').localeCompare(b.name || '');
-            });
-        });
-        return grouped;
-    }, [docs]);
-
-    const folderChildrenMap = useMemo(() => {
-        const map: Record<string, FolderItem[]> = {};
-        folders.forEach(folder => {
-            const parent = folder.parentPath || '';
-            if (!map[parent]) map[parent] = [];
-            map[parent].push(folder);
-        });
-        Object.values(map).forEach(list => {
-            list.sort((a, b) => {
-                const orderA = typeof a.order === 'number' ? a.order : null;
-                const orderB = typeof b.order === 'number' ? b.order : null;
-                if (orderA !== null && orderB !== null && orderA !== orderB) return orderA - orderB;
-                if (orderA !== null && orderB === null) return -1;
-                if (orderA === null && orderB !== null) return 1;
-                const kindWeight: Record<FolderItem['kind'], number> = { system: 0, record: 1, virtual: 2 };
-                const weightDiff = kindWeight[a.kind] - kindWeight[b.kind];
-                if (weightDiff !== 0) return weightDiff;
-                return a.name.localeCompare(b.name);
-            });
-        });
-        return map;
-    }, [folders]);
+    // Single source of truth del tree model: una sola pasada por
+    // (folders, docs) que comparten Sidebar, FileExplorer y todo el código que
+    // antes recalculaba `docsByFolder` y `folderChildrenMap` localmente.
+    const treeModel = useMemo(
+        () => buildWorkspaceTreeModel(folders, docs),
+        [folders, docs]
+    );
+    const { docsByFolder, folderChildrenMap } = treeModel;
 
     const formatPropertyDate = useCallback((value: unknown) => {
         const timestamp = getUpdatedAtValue(value);
@@ -2479,8 +2463,30 @@ function DashboardContent() {
 
     if (loading || !user) {
         return (
-            <div className="flex h-[100dvh] items-center justify-center bg-surface-900">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mandy-500" />
+            <div className="flex h-[100dvh] flex-col bg-surface-900 text-white overflow-hidden">
+                <div className="h-12 border-b border-surface-700/40 bg-surface-800/40 flex items-center px-4 gap-3">
+                    <div className="h-6 w-6 rounded bg-surface-700/60 animate-pulse" />
+                    <div className="h-4 w-32 rounded bg-surface-700/60 animate-pulse" />
+                    <div className="ml-auto h-4 w-20 rounded bg-surface-700/60 animate-pulse" />
+                </div>
+                <div className="flex-1 flex">
+                    <div className="w-12 border-r border-surface-700/40 bg-surface-800/30 flex flex-col items-center gap-3 py-3">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="h-6 w-6 rounded bg-surface-700/60 animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
+                        ))}
+                    </div>
+                    <div className="w-64 border-r border-surface-700/40 bg-surface-900 px-3 py-3 space-y-2">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <div key={i} className="h-7 rounded bg-surface-700/40 animate-pulse" style={{ animationDelay: `${i * 60}ms` }} />
+                        ))}
+                    </div>
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="text-xs text-surface-500 flex items-center gap-3">
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-surface-700 border-t-mandy-500" />
+                            <span>Cargando workspace…</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }
@@ -2711,6 +2717,8 @@ function DashboardContent() {
                         sidebarSearchQuery={sidebarSearchQuery}
                         setSidebarSearchQuery={setSidebarSearchQuery}
                         sidebarFilteredDocs={sidebarFilteredDocs}
+                        docsByFolder={docsByFolder}
+                        folderChildrenMap={folderChildrenMap}
                         selectedDocId={selectedDocId}
                         favoriteDocs={favoriteDocs}
                         favoriteDocIds={favoriteDocIds}

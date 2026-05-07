@@ -21,8 +21,27 @@ export const getUpdatedAtValue = (value: DocItem['updatedAt']) => {
   return 0;
 };
 
+const docsHashSignature = (list: DocItem[]) => {
+  let sumUpdated = 0;
+  let sumIdLen = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const d = list[i]!;
+    sumUpdated += getUpdatedAtValue(d.updatedAt);
+    sumIdLen += d.id ? d.id.length : 0;
+  }
+  return { len: list.length, sumUpdated, sumIdLen };
+};
+
 export const areDocsEquivalent = (prev: DocItem[], next: DocItem[]) => {
+  if (prev === next) return true;
   if (prev.length !== next.length) return false;
+  // Fast hash short-circuit: si difieren en suma de updatedAt o longitudes de
+  // id, son distintos sin pasar O(N) por cada campo. Falso positivo ~0 con
+  // updatedAt en ms; vale la pena el bail-out temprano.
+  const hashA = docsHashSignature(prev);
+  const hashB = docsHashSignature(next);
+  if (hashA.sumUpdated !== hashB.sumUpdated) return false;
+  if (hashA.sumIdLen !== hashB.sumIdLen) return false;
   for (let i = 0; i < prev.length; i += 1) {
     const a = prev[i]!;
     const b = next[i]!;

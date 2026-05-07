@@ -127,6 +127,14 @@ export interface SemanticWorkspaceState {
   relations: SemanticRelationRecord[];
   updatedAt: number;
   preferences: SemanticWorkspacePreferences;
+  /**
+   * Flag interno: marca que el state ya fue normalizado y ordenado por
+   * `normalizeSemanticWorkspaceState`. Permite a callers downstream
+   * (`mergeSemanticWorkspaceStates`, `buildTheoryGraphFromSemanticState`)
+   * saltar el doble pase. NO persistido al borde (el JSON.parse del
+   * localStorage produce un raw object sin esta flag).
+   */
+  _normalized?: boolean;
 }
 
 export interface SemanticDocumentRef {
@@ -145,7 +153,8 @@ export const EMPTY_SEMANTIC_WORKSPACE_STATE: SemanticWorkspaceState = {
   fragments: [],
   relations: [],
   updatedAt: 0,
-  preferences: DEFAULT_PREFERENCES
+  preferences: DEFAULT_PREFERENCES,
+  _normalized: true
 };
 
 const FRAGMENT_KIND_SET = new Set<SemanticFragmentKind>([
@@ -400,6 +409,14 @@ const normalizeRelation = (value: unknown): SemanticRelationRecord | null => {
 export const normalizeSemanticWorkspaceState = (value: unknown): SemanticWorkspaceState => {
   if (!value || typeof value !== 'object') return EMPTY_SEMANTIC_WORKSPACE_STATE;
   const raw = value as Partial<SemanticWorkspaceState>;
+  // Fast-path: si el state ya está marcado como normalizado, devolvemos
+  // tal cual. Esto evita que callers downstream (theory-graph, merge)
+  // re-paguen O(N log N) sort + validación por cada item. La flag no se
+  // persiste al borde, así que cualquier raw del localStorage o de la
+  // red entra al pipeline completo.
+  if (raw._normalized === true && Array.isArray(raw.concepts) && Array.isArray(raw.fragments) && Array.isArray(raw.relations)) {
+    return value as SemanticWorkspaceState;
+  }
   const concepts = Array.isArray(raw.concepts)
     ? raw.concepts.map(normalizeConcept).filter((item): item is SemanticConceptRecord => item !== null)
     : [];
@@ -422,7 +439,8 @@ export const normalizeSemanticWorkspaceState = (value: unknown): SemanticWorkspa
         return 0;
       }),
     updatedAt: toNumber(raw.updatedAt),
-    preferences: normalizePreferences(raw.preferences)
+    preferences: normalizePreferences(raw.preferences),
+    _normalized: true
   };
 };
 
@@ -527,7 +545,8 @@ export const mergeSemanticWorkspaceStates = (...states: SemanticWorkspaceState[]
       return rightUpdated - leftUpdated;
     }),
     updatedAt,
-    preferences: pickPreferences(...preferences)
+    preferences: pickPreferences(...preferences),
+    _normalized: true
   };
 };
 
@@ -535,22 +554,24 @@ export const filterSemanticWorkspaceStateByDocument = (
   state: SemanticWorkspaceState,
   target: SemanticDocumentRef
 ): SemanticWorkspaceState => {
-  const normalized = normalizeSemanticWorkspaceState(state);
-
+  // Antes: normalizaba el state COMPLETO (sorts + validación campo a campo)
+  // antes de filtrar, aunque el caller solo necesita un subconjunto. En cada
+  // poll se re-normalizaba todo. Asumimos que el state que llega ya está
+  // normalizado por el store; si no, el caller debe normalizar antes.
   if (!target.docId && !target.docName) {
-    return normalized;
+    return state;
   }
 
-  const concepts = normalized.concepts.filter((concept) => matchesSemanticDocument(target, concept));
+  const concepts = state.concepts.filter((concept) => matchesSemanticDocument(target, concept));
   const conceptIds = new Set(concepts.map((concept) => concept.id));
 
-  const fragments = normalized.fragments.filter((fragment) => (
+  const fragments = state.fragments.filter((fragment) => (
     matchesSemanticDocument(target, fragment)
     || (fragment.conceptId ? conceptIds.has(fragment.conceptId) : false)
   ));
   const fragmentIds = new Set(fragments.map((fragment) => fragment.id));
 
-  const relations = normalized.relations.filter((relation) => (
+  const relations = state.relations.filter((relation) => (
     conceptIds.has(relation.conceptId)
     || fragmentIds.has(relation.fragmentId)
     || (target.docId ? relation.docId === target.docId : false)
@@ -560,8 +581,9 @@ export const filterSemanticWorkspaceStateByDocument = (
     concepts,
     fragments,
     relations,
-    updatedAt: normalized.updatedAt,
-    preferences: normalized.preferences
+    updatedAt: state.updatedAt,
+    preferences: state.preferences,
+    _normalized: state._normalized
   };
 };
 
@@ -575,11 +597,34 @@ export const removeSemanticWorkspaceSlice = (
     fragments: normalized.fragments.filter((fragment) => !matcher(fragment)),
     relations: normalized.relations.filter((relation) => !matcher(relation)),
     updatedAt: normalized.updatedAt,
-    preferences: normalized.preferences
+    preferences: normalized.preferences,
+    _normalized: true
   };
 };
 
 export const hasSemanticWorkspaceStateChanged = (left: SemanticWorkspaceState, right: SemanticWorkspaceState) => {
+  // Antes: 2× JSON.stringify del state completo (~130KB cada uno) por cada
+  // comparación. Ahora chequeo estructural barato: si conteos, updatedAt
+  // global y updatedAt agregado por id matchean, son equivalentes. Para casos
+  // edge donde solo cambia un campo no-tracked, hace fallback al stringify.
+  if (left === right) return false;
+  if (
+    left.concepts.length !== right.concepts.length ||
+    left.fragments.length !== right.fragments.length ||
+    left.relations.length !== right.relations.length ||
+    left.updatedAt !== right.updatedAt
+  ) return true;
+  // Comparación rápida por id+updatedAt sumarizado
+  const sumUpdatedAt = (arr: ReadonlyArray<{ id: string; updatedAt?: number | null }>) => {
+    let total = 0;
+    for (const item of arr) total += item.updatedAt ?? 0;
+    return total;
+  };
+  if (
+    sumUpdatedAt(left.concepts) !== sumUpdatedAt(right.concepts) ||
+    sumUpdatedAt(left.fragments) !== sumUpdatedAt(right.fragments)
+  ) return true;
+  // Fallback al método caro solo cuando todo lo barato matchea (raro tras polls)
   return JSON.stringify(normalizeSemanticWorkspaceState(left)) !== JSON.stringify(normalizeSemanticWorkspaceState(right));
 };
 

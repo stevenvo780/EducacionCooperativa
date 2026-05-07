@@ -14,8 +14,8 @@ import { useIsTouchDeviceProfile } from '@/lib/device-input';
 const ROW_HEIGHT = 28;
 
 type SidebarListItem =
-  | { kind: 'folder'; folder: FolderItem; depth: number; hasChildren: boolean }
-  | { kind: 'doc'; doc: DocItem; depth: number }
+  | { kind: 'folder'; folder: FolderItem; depth: number; hasChildren: boolean; ancestors: string[] }
+  | { kind: 'doc'; doc: DocItem; depth: number; ancestors: string[] }
   | { kind: 'search'; doc: DocItem };
 
 interface SidebarProps {
@@ -32,6 +32,11 @@ interface SidebarProps {
   sidebarSearchQuery: string;
   setSidebarSearchQuery: (value: string) => void;
   sidebarFilteredDocs: DocItem[];
+  // Tree model precomputado en page.tsx (single source of truth). Si no
+  // viene, caemos a build local — pero el caso esperado en producción es
+  // que llegue como prop para evitar duplicar el build O(N).
+  docsByFolder?: Record<string, DocItem[]>;
+  folderChildrenMap?: Record<string, FolderItem[]>;
   selectedDocId: string | null;
   favoriteDocs: DocItem[];
   favoriteDocIds: string[];
@@ -78,6 +83,9 @@ const Sidebar = ({
   docs,
   sidebarSearchQuery,
   setSidebarSearchQuery,
+  sidebarFilteredDocs,
+  docsByFolder: docsByFolderProp,
+  folderChildrenMap: folderChildrenMapProp,
   selectedDocId,
   favoriteDocs,
   favoriteDocIds,
@@ -165,10 +173,17 @@ const Sidebar = ({
     setCollapsedByUser(new Set(allPaths));
   };
 
-  const { folderChildrenMap, docsByFolder } = useMemo(
-    () => buildWorkspaceTreeModel(folders, docs),
-    [folders, docs]
+  // Si page.tsx pasa el tree model como prop, lo usamos sin recomputar.
+  // Fallback al build local: necesario para tests/storybook que monten
+  // <Sidebar/> sin haber pre-computado el tree.
+  const localTreeModel = useMemo(
+    () => (docsByFolderProp && folderChildrenMapProp)
+      ? null
+      : buildWorkspaceTreeModel(folders, docs),
+    [folders, docs, docsByFolderProp, folderChildrenMapProp]
   );
+  const folderChildrenMap = folderChildrenMapProp ?? localTreeModel!.folderChildrenMap;
+  const docsByFolder = docsByFolderProp ?? localTreeModel!.docsByFolder;
 
   const toggleFolder = (path: string) => {
     // Todos los folders están expandidos por defecto; el toggle invierte
@@ -188,56 +203,51 @@ const Sidebar = ({
     expandFolderPath(activeFolder);
   }, [activeFolder, isSearchMode]);
 
-  // Filtrar docs localmente para evitar desfase con useDeferredValue
-  const actualFilteredDocs = useMemo(() => {
-    const query = sidebarSearchQuery.trim().toLowerCase();
-    if (!query) return [];
-    return docs.filter(d => d.name.toLowerCase().includes(query));
-  }, [docs, sidebarSearchQuery]);
-
-  const treeItems = useMemo<SidebarListItem[]>(() => {
+  // flatTree: lista plana de TODOS los items del árbol con sus ancestros,
+  // independiente del estado collapsed. Solo cambia cuando el modelo cambia.
+  const flatTree = useMemo<SidebarListItem[]>(() => {
     const items: SidebarListItem[] = [];
 
-    const walk = (parentPath: string, depth: number) => {
+    const walk = (parentPath: string, depth: number, ancestors: string[]) => {
       const children = folderChildrenMap[parentPath] ?? [];
       for (const folder of children) {
         const subfolders = folderChildrenMap[folder.path] ?? [];
         const folderFiles = docsByFolder[folder.path] ?? [];
         const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
-        items.push({ kind: 'folder', folder, depth, hasChildren });
+        items.push({ kind: 'folder', folder, depth, hasChildren, ancestors });
 
-        // Todos los folders están expandidos por defecto a menos que
-        // el user los haya colapsado manualmente (collapsedByUser).
-        // Antes el alias mágico 'No estructurado' jugaba ese rol; ahora
-        // sin alias, mantenemos el comportamiento "ver todo de entrada"
-        // que era el esperado por los users.
-        const isUserCollapsed = collapsedByUser.has(folder.path);
-        const shouldExpand = !isUserCollapsed;
-
-        if (shouldExpand) {
-          walk(folder.path, depth + 1);
-          for (const doc of folderFiles) {
-            items.push({ kind: 'doc', doc, depth: depth + 1 });
-          }
+        const childAncestors = [...ancestors, folder.path];
+        walk(folder.path, depth + 1, childAncestors);
+        for (const doc of folderFiles) {
+          items.push({ kind: 'doc', doc, depth: depth + 1, ancestors: childAncestors });
         }
       }
     };
 
-    walk('', 0);
-    // Docs en raíz (folder=''): se listan al final del nivel superior.
+    walk('', 0, []);
     const rootDocs = docsByFolder[''] ?? [];
     for (const doc of rootDocs) {
-      items.push({ kind: 'doc', doc, depth: 0 });
+      items.push({ kind: 'doc', doc, depth: 0, ancestors: [] });
     }
     return items;
-  }, [docsByFolder, folderChildrenMap, collapsedByUser]);
+  }, [docsByFolder, folderChildrenMap]);
+
+  // visibleItems: filtrado O(F) por collapsed. Toggle ya no rebuildea el árbol
+  // entero — solo filtra el flatTree precomputado con un set lookup.
+  const visibleItems = useMemo<SidebarListItem[]>(() => {
+    if (collapsedByUser.size === 0) return flatTree;
+    return flatTree.filter(item => {
+      if (item.kind === 'search') return true;
+      return !item.ancestors.some(ancestor => collapsedByUser.has(ancestor));
+    });
+  }, [flatTree, collapsedByUser]);
 
   const listItems = useMemo<SidebarListItem[]>(() => {
     if (isSearchMode) {
-      return actualFilteredDocs.map(doc => ({ kind: 'search', doc }));
+      return sidebarFilteredDocs.map(doc => ({ kind: 'search', doc }));
     }
-    return treeItems;
-  }, [isSearchMode, actualFilteredDocs, treeItems]);
+    return visibleItems;
+  }, [isSearchMode, sidebarFilteredDocs, visibleItems]);
 
   const handleDocClick = (e: React.MouseEvent, index: number, doc: DocItem) => {
     if (e.shiftKey && lastSelectedIndex !== null) {
@@ -352,7 +362,14 @@ const Sidebar = ({
       const paddingLeft = 8 + item.depth * 12;
 
       return (
-        <div style={style} {...ariaAttributes}>
+        <div
+          style={style}
+          {...ariaAttributes}
+          role="treeitem"
+          aria-expanded={item.hasChildren ? isExpanded : undefined}
+          aria-selected={isActive}
+          aria-level={item.depth + 1}
+        >
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -390,7 +407,13 @@ const Sidebar = ({
     const paddingLeft = 8 + item.depth * 12 + 16;
   const isFavorite = favoriteDocIdSet.has(item.doc.id);
     return (
-      <div style={style} {...ariaAttributes}>
+      <div
+        style={style}
+        {...ariaAttributes}
+        role="treeitem"
+        aria-selected={selectedDocId === item.doc.id || selectedDocsIds.has(item.doc.id)}
+        aria-level={item.depth + 1}
+      >
         <div
           onClick={(e) => handleDocClick(e, index, item.doc)}
           draggable={!isTouchDevice}
@@ -597,21 +620,25 @@ const Sidebar = ({
                 </div>
               )}
 
-              {isSearchMode && actualFilteredDocs.length === 0 && (
+              {isSearchMode && sidebarFilteredDocs.length === 0 && (
                 <div className="px-3 py-2 text-center text-xs text-surface-500">
                   Sin resultados
                 </div>
               )}
 
               {listItems.length > 0 && (
-                <div ref={listRef} className="h-full min-h-[200px]">
+                <div ref={listRef} className="h-full min-h-[200px]" role="tree" aria-label="Árbol de archivos">
                   <VirtualizedList
                     rowCount={listItems.length}
                     rowHeight={ROW_HEIGHT}
                     overscanCount={6}
                     className="scrollbar-hide"
                     style={{
-                      height: listSize.height > 0 ? listSize.height : listItems.length * ROW_HEIGHT,
+                      // height=0 en el primer paint provoca que react-window
+                      // pinte 0 rows o, peor, todas (1619 en filosofia) en un
+                      // frame. Default 400 hasta que el ResizeObserver reporte
+                      // el alto real del contenedor.
+                      height: Math.max(listSize.height, 400),
                       width: Math.max(listSize.width, 1)
                     }}
                     rowComponent={renderSidebarRow}
@@ -624,7 +651,7 @@ const Sidebar = ({
         </div>
 
         <div className="p-3 border-t border-surface-600/50 bg-surface-800 text-xs text-surface-500 flex justify-between items-center">
-          <span>{sidebarSearchQuery ? `${actualFilteredDocs.length} de ${docs.length}` : `${docs.length} archivos`}</span>
+          <span>{sidebarSearchQuery ? `${sidebarFilteredDocs.length} de ${docs.length}` : `${docs.length} archivos`}</span>
           <div className="flex gap-2">
             <button
               type="button"

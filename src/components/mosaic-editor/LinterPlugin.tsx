@@ -61,11 +61,25 @@ function buildDocumentTextIndex(root: HTMLElement): DocumentTextIndex {
 function resolveTextPosition(segments: TextNodeSegment[], absoluteOffset: number) {
   if (segments.length === 0) return null;
   const clampedOffset = Math.max(0, absoluteOffset);
-  for (const segment of segments) {
-    if (clampedOffset < segment.endOffset) {
-      return { node: segment.node, offset: clampedOffset - segment.startOffset };
+
+  // Binary search — segments están ordenados por offset por construcción.
+  // Reemplaza el linear scan O(N) por O(log N) por lookup; multiplica por D
+  // diagnósticos × 2 endpoints por diagnóstico, esto vale.
+  let lo = 0;
+  let hi = segments.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const seg = segments[mid];
+    if (!seg) break;
+    if (clampedOffset < seg.startOffset) {
+      hi = mid - 1;
+    } else if (clampedOffset >= seg.endOffset) {
+      lo = mid + 1;
+    } else {
+      return { node: seg.node, offset: clampedOffset - seg.startOffset };
     }
   }
+
   const lastSegment = segments[segments.length - 1];
   if (!lastSegment) return null;
   return { node: lastSegment.node, offset: lastSegment.text.length };
@@ -200,6 +214,17 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
   const hideCooldownRef = useRef(false);
   // True while mouse hovers any marker — prevents decorate() from destroying hit areas
   const hoverActiveRef = useRef(false);
+
+  // Counter incremented on each editable mutation. The decorate path caches a
+  // DocumentTextIndex keyed by this revision; scrolls/resizes/re-decorates that
+  // happen without DOM changes reuse the previous index instead of rebuilding.
+  const mutationRevisionRef = useRef(0);
+  const cachedTextIndexRef = useRef<{ revision: number; index: DocumentTextIndex } | null>(null);
+
+  // Tracked timers/raf handles so cleanup flushes them all atomically. Avoids
+  // leaks when individual ref slots get overwritten between schedules.
+  const pendingTimersRef = useRef<Set<number>>(new Set());
+  const pendingRafsRef = useRef<Set<number>>(new Set());
 
   const hideTooltipFull = () => {
     const tooltip = sharedTooltipRef.current;
@@ -571,7 +596,19 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
         .filter((g): g is [LinterDiagnostic, ...LinterDiagnostic[]] => g.length > 0)
         .sort((left, right) => compareDiagnosticsForSharedRange(left[0], right[0]));
       const usedPositions = new Set<string>();
-      const textIndex = buildDocumentTextIndex(editable);
+
+      // Reuse cached DocumentTextIndex if no DOM mutation happened since last
+      // build. Scrolls/resizes/diagnostic re-render alone don't change text,
+      // so this avoids the O(N) tree walk + string concatenation per decorate.
+      const currentRevision = mutationRevisionRef.current;
+      let textIndex: DocumentTextIndex;
+      const cached = cachedTextIndexRef.current;
+      if (cached && cached.revision === currentRevision && cached.index.segments.length > 0) {
+        textIndex = cached.index;
+      } else {
+        textIndex = buildDocumentTextIndex(editable);
+        cachedTextIndexRef.current = { revision: currentRevision, index: textIndex };
+      }
 
       groupedDiags.forEach((diagGroup) => {
         const [d] = diagGroup;
@@ -673,17 +710,41 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
     decorateRef.current = decorate;
 
     const scheduleDecorate = () => {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = requestAnimationFrame(decorate);
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        pendingRafsRef.current.delete(rafIdRef.current);
+      }
+      const id = requestAnimationFrame(() => {
+        pendingRafsRef.current.delete(id);
+        decorate();
+      });
+      pendingRafsRef.current.add(id);
+      rafIdRef.current = id;
+    };
+
+    const trackTimeout = (fn: () => void, ms: number): number => {
+      const id = window.setTimeout(() => {
+        pendingTimersRef.current.delete(id);
+        fn();
+      }, ms);
+      pendingTimersRef.current.add(id);
+      return id;
     };
 
     // Initial decoration with short delay
-    const timer = setTimeout(scheduleDecorate, 150);
+    const timer = trackTimeout(scheduleDecorate, 150);
 
     let mutationTimer = 0;
     const observer = new MutationObserver(() => {
-      clearTimeout(mutationTimer);
-      mutationTimer = window.setTimeout(scheduleDecorate, 200);
+      // Bump revision so the cached DocumentTextIndex is invalidated. Scroll
+      // / resize / re-render from new diagnostics don't bump this counter, so
+      // those code paths reuse the index.
+      mutationRevisionRef.current += 1;
+      if (mutationTimer) {
+        window.clearTimeout(mutationTimer);
+        pendingTimersRef.current.delete(mutationTimer);
+      }
+      mutationTimer = trackTimeout(scheduleDecorate, 200);
     });
     observer.observe(editable, { childList: true, subtree: true, characterData: true });
 
@@ -696,24 +757,42 @@ export function LinterPlugin({ diagnostics, editorShellRef, viewMode, content, o
 
     let resizeTimer = 0;
     const resizeObserver = new ResizeObserver(() => {
-      clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(scheduleDecorate, 60);
+      if (resizeTimer) {
+        window.clearTimeout(resizeTimer);
+        pendingTimersRef.current.delete(resizeTimer);
+      }
+      resizeTimer = trackTimeout(scheduleDecorate, 60);
     });
     resizeObserver.observe(editable);
     resizeObserver.observe(scrollParent);
     resizeObserver.observe(shell);
 
     const handleWindowResize = () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(scheduleDecorate, 100);
+      if (resizeTimer) {
+        window.clearTimeout(resizeTimer);
+        pendingTimersRef.current.delete(resizeTimer);
+      }
+      resizeTimer = trackTimeout(scheduleDecorate, 100);
     };
     window.addEventListener('resize', handleWindowResize, { passive: true });
 
+    // Snapshot refs in effect scope so cleanup uses the same Set instance
+    // that the effect populated, even if React re-mounts the component.
+    const trackedTimers = pendingTimersRef.current;
+    const trackedRafs = pendingRafsRef.current;
     return () => {
-      clearTimeout(timer);
-      clearTimeout(mutationTimer);
-      clearTimeout(resizeTimer);
-      cancelAnimationFrame(rafIdRef.current);
+      // Flush every tracked timer/raf in one pass — avoids the leak window
+      // that exists when individual ref slots get overwritten between schedules.
+      for (const id of trackedTimers) window.clearTimeout(id);
+      trackedTimers.clear();
+      for (const id of trackedRafs) cancelAnimationFrame(id);
+      trackedRafs.clear();
+      // Defensive: legacy refs we still touch above
+      if (timer) window.clearTimeout(timer);
+      if (mutationTimer) window.clearTimeout(mutationTimer);
+      if (resizeTimer) window.clearTimeout(resizeTimer);
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+      cachedTextIndexRef.current = null;
       observer.disconnect();
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleWindowResize);

@@ -3,7 +3,19 @@
 import { useAuth } from '@/context/AuthContext';
 import { useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Editor from '@/components/Editor';
+import dynamic from 'next/dynamic';
+
+const Editor = dynamic(() => import('@/components/Editor'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[100dvh] items-center justify-center bg-slate-950 text-slate-400">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-600 border-t-blue-400" />
+        <span className="text-xs text-slate-500">Cargando editor…</span>
+      </div>
+    </div>
+  )
+});
 
 export default function EditorPage() {
   const { user, loading } = useAuth();

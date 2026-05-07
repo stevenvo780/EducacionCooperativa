@@ -9,14 +9,29 @@ import {
   type SymbolInfo
 } from '@/lib/st-api';
 
-let cachedSymbolSource: string | null = null;
+/**
+ * djb2 hash compacto. Usado para cachear getSemanticSymbols por contenido,
+ * no por identidad de string: dos llamadas con strings idénticos pero
+ * objetos diferentes (común con setState/dispatch CM6) ahora hit cache.
+ */
+function djb2(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i);
+    h = h & h;
+  }
+  return h.toString(36);
+}
+
+let cachedSymbolHash: string | null = null;
 let cachedSymbols: SymbolInfo[] = [];
 let cachedStaticCompletions: STCompletionItem[] | null = null;
 
 export function getSemanticSymbols(source: string): SymbolInfo[] {
-  if (source === cachedSymbolSource) return cachedSymbols;
+  const hash = djb2(source);
+  if (hash === cachedSymbolHash) return cachedSymbols;
 
-  cachedSymbolSource = source;
+  cachedSymbolHash = hash;
   try {
     cachedSymbols = stSymbols(source);
   } catch {

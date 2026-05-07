@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -35,6 +35,7 @@ import {
   deleteBoardCardApi,
   deleteBoardColumnApi,
   fetchBoardApi,
+  subscribeBoardApi,
   updateBoardCardApi,
   updateBoardColumnApi
 } from '@/services/boardApi';
@@ -171,15 +172,17 @@ const moveCardInState = (
   return Array.from(updated.values());
 };
 
-const SortableCard = ({
-  card,
-  onDeleteCard,
-  onUpdateCardTitle
-}: {
+interface SortableCardProps {
   card: BoardCard;
   onDeleteCard: (cardId: string) => void;
   onUpdateCardTitle: (cardId: string, title: string) => void;
-}) => {
+}
+
+const SortableCardInner = ({
+  card,
+  onDeleteCard,
+  onUpdateCardTitle
+}: SortableCardProps) => {
   const {
     attributes,
     listeners,
@@ -320,35 +323,47 @@ const SortableCard = ({
   );
 };
 
-const SortableColumn = ({
+const SortableCard = memo(SortableCardInner, (prev, next) => (
+  prev.card.id === next.card.id &&
+  prev.card.order === next.card.order &&
+  prev.card.columnId === next.card.columnId &&
+  prev.card.title === next.card.title &&
+  prev.card.sourceDocId === next.card.sourceDocId &&
+  prev.card.sourceDocName === next.card.sourceDocName &&
+  prev.onDeleteCard === next.onDeleteCard &&
+  prev.onUpdateCardTitle === next.onUpdateCardTitle
+));
+SortableCard.displayName = 'SortableCard';
+
+interface SortableColumnProps {
+  column: BoardColumn;
+  cards: BoardCard[];
+  draftValue: string;
+  newCardTitle: string;
+  onDraftChange: (columnId: string, value: string) => void;
+  onRenameColumn: (columnId: string, value: string) => void;
+  onDeleteColumn: (columnId: string) => void;
+  onAddCard: (columnId: string, event: FormEvent) => void;
+  onNewCardTitleChange: (columnId: string, value: string) => void;
+  onMoveCard: (cardId: string, columnId: string) => void;
+  onDeleteCard: (cardId: string) => void;
+  onUpdateCardTitle: (cardId: string, title: string) => void;
+}
+
+const SortableColumnInner = ({
   column,
   cards,
-  columns: _columns,
   draftValue,
+  newCardTitle,
   onDraftChange,
   onRenameColumn,
   onDeleteColumn,
   onAddCard,
-  newCardTitle,
   onNewCardTitleChange,
   onMoveCard: _onMoveCard,
   onDeleteCard,
   onUpdateCardTitle
-}: {
-  column: BoardColumn;
-  cards: BoardCard[];
-  columns: BoardColumn[];
-  draftValue: string;
-  onDraftChange: (value: string) => void;
-  onRenameColumn: (value: string) => void;
-  onDeleteColumn: () => void;
-  onAddCard: (event: FormEvent) => void;
-  newCardTitle: string;
-  onNewCardTitleChange: (value: string) => void;
-  onMoveCard: (cardId: string, columnId: string) => void;
-  onDeleteCard: (cardId: string) => void;
-  onUpdateCardTitle: (cardId: string, title: string) => void;
-}) => {
+}: SortableColumnProps) => {
   const {
     attributes,
     listeners,
@@ -393,13 +408,13 @@ const SortableColumn = ({
           </button>
           <input
             value={draftValue}
-            onChange={(e) => onDraftChange(e.target.value)}
+            onChange={(e) => onDraftChange(column.id, e.target.value)}
             onBlur={(e) => {
               const value = e.target.value.trim();
               if (value && value !== column.name) {
-                onRenameColumn(value);
+                onRenameColumn(column.id, value);
               } else {
-                onDraftChange(column.name);
+                onDraftChange(column.id, column.name);
               }
             }}
             aria-label={`Renombrar columna ${column.name}`}
@@ -407,7 +422,7 @@ const SortableColumn = ({
           />
         </div>
         <button
-          onClick={onDeleteColumn}
+          onClick={() => onDeleteColumn(column.id)}
           className="p-1 text-surface-500 hover:text-mandy-400 hover:bg-mandy-500/10 rounded"
           title="Eliminar columna"
         >
@@ -439,12 +454,12 @@ const SortableColumn = ({
         </SortableContext>
       </div>
 
-      <form onSubmit={onAddCard} className="mt-3 flex gap-2">
+      <form onSubmit={(event) => onAddCard(column.id, event)} className="mt-3 flex gap-2">
         <input
           type="text"
           aria-label="Nueva tarjeta"
           value={newCardTitle}
-          onChange={(e) => onNewCardTitleChange(e.target.value)}
+          onChange={(e) => onNewCardTitleChange(column.id, e.target.value)}
           placeholder="Nueva tarjeta"
           className="flex-1 bg-surface-700 border border-surface-600 rounded-lg px-2 py-1 text-xs text-white placeholder:text-surface-500 focus:outline-none focus:ring-1 focus:ring-mandy-500/40"
         />
@@ -460,6 +475,38 @@ const SortableColumn = ({
   );
 };
 
+const cardListShallowEqual = (a: BoardCard[], b: BoardCard[]) => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const ac = a[i];
+    const bc = b[i];
+    if (!ac || !bc) return false;
+    if (ac.id !== bc.id || ac.order !== bc.order || ac.columnId !== bc.columnId || ac.title !== bc.title) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const SortableColumn = memo(SortableColumnInner, (prev, next) => (
+  prev.column.id === next.column.id &&
+  prev.column.name === next.column.name &&
+  prev.column.order === next.column.order &&
+  prev.draftValue === next.draftValue &&
+  prev.newCardTitle === next.newCardTitle &&
+  prev.onDraftChange === next.onDraftChange &&
+  prev.onRenameColumn === next.onRenameColumn &&
+  prev.onDeleteColumn === next.onDeleteColumn &&
+  prev.onAddCard === next.onAddCard &&
+  prev.onNewCardTitleChange === next.onNewCardTitleChange &&
+  prev.onMoveCard === next.onMoveCard &&
+  prev.onDeleteCard === next.onDeleteCard &&
+  prev.onUpdateCardTitle === next.onUpdateCardTitle &&
+  cardListShallowEqual(prev.cards, next.cards)
+));
+SortableColumn.displayName = 'SortableColumn';
+
 const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) => {
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [cards, setCards] = useState<BoardCard[]>([]);
@@ -470,6 +517,8 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
   const [columnDrafts, setColumnDrafts] = useState<Record<string, string>>({});
   const [activeDrag, setActiveDrag] = useState<{ type: 'card' | 'column'; id: string } | null>(null);
   const dragSnapshotRef = useRef<{ type: 'card' | 'column'; cards: BoardCard[]; columns: BoardColumn[] } | null>(null);
+  const dragStateRef = useRef<{ cards: BoardCard[] } | null>(null);
+  const dragOverRafRef = useRef<number | null>(null);
 
   const columnsOrdered = useMemo(() => {
     return [...columns].sort((a, b) => a.order - b.order);
@@ -508,10 +557,26 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       setCards([]);
       return;
     }
-    loadBoard();
+    void loadBoard();
+
+    const unsubscribe = subscribeBoardApi(
+      workspaceId,
+      ({ columns: nextColumns, cards: nextCards }) => {
+        if (dragSnapshotRef.current) return;
+        setColumns(nextColumns);
+        setCards(nextCards);
+      },
+      (err) => {
+        console.warn('[KanbanBoard] subscribe error', err);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [workspaceId, loadBoard]);
 
-  const handleAddColumn = async (e: FormEvent) => {
+  const handleAddColumn = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     if (!workspaceId) return;
     const name = newColumnName.trim();
@@ -524,9 +589,9 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       console.error('Error creating column', err);
       setError('No se pudo crear la columna.');
     }
-  };
+  }, [workspaceId, newColumnName]);
 
-  const handleRenameColumn = async (columnId: string, name: string) => {
+  const handleRenameColumn = useCallback(async (columnId: string, name: string) => {
     if (!workspaceId) return;
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -537,9 +602,9 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       console.error('Error renaming column', err);
       setError('No se pudo renombrar la columna.');
     }
-  };
+  }, [workspaceId]);
 
-  const handleDeleteColumn = async (columnId: string) => {
+  const handleDeleteColumn = useCallback(async (columnId: string) => {
     if (!workspaceId) return;
     const ok = window.confirm('¿Eliminar la columna y sus tarjetas?');
     if (!ok) return;
@@ -551,12 +616,15 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       console.error('Error deleting column', err);
       setError('No se pudo eliminar la columna.');
     }
-  };
+  }, [workspaceId]);
 
-  const handleAddCard = async (columnId: string, e: FormEvent) => {
+  const newCardTitlesRef = useRef(newCardTitles);
+  useEffect(() => { newCardTitlesRef.current = newCardTitles; }, [newCardTitles]);
+
+  const handleAddCard = useCallback(async (columnId: string, e: FormEvent) => {
     e.preventDefault();
     if (!workspaceId) return;
-    const title = (newCardTitles[columnId] || '').trim();
+    const title = (newCardTitlesRef.current[columnId] || '').trim();
     if (!title) return;
     try {
       const created = await createBoardCardApi({ workspaceId, columnId, title, ownerId });
@@ -566,21 +634,21 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       console.error('Error creating card', err);
       setError('No se pudo crear la tarjeta.');
     }
-  };
+  }, [workspaceId, ownerId]);
 
-  const handleMoveCard = async (cardId: string, newColumnId: string) => {
+  const handleMoveCard = useCallback(async (cardId: string, newColumnId: string) => {
     if (!workspaceId) return;
     try {
-      const nextOrder = Date.now();
+      const nextOrder = Date.now() * 1000 + Math.floor(Math.random() * 1000);
       await updateBoardCardApi({ workspaceId, cardId, columnId: newColumnId, order: nextOrder });
       setCards(prev => prev.map(card => (card.id === cardId ? { ...card, columnId: newColumnId, order: nextOrder } : card)));
     } catch (err) {
       console.error('Error moving card', err);
       setError('No se pudo mover la tarjeta.');
     }
-  };
+  }, [workspaceId]);
 
-  const handleDeleteCard = async (cardId: string) => {
+  const handleDeleteCard = useCallback(async (cardId: string) => {
     if (!workspaceId) return;
     try {
       await deleteBoardCardApi({ workspaceId, cardId });
@@ -589,9 +657,9 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       console.error('Error deleting card', err);
       setError('No se pudo eliminar la tarjeta.');
     }
-  };
+  }, [workspaceId]);
 
-  const handleUpdateCardTitle = async (cardId: string, title: string) => {
+  const handleUpdateCardTitle = useCallback(async (cardId: string, title: string) => {
     if (!workspaceId || !title) return;
     try {
       await updateBoardCardApi({ workspaceId, cardId, title });
@@ -600,17 +668,37 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       console.error('Error updating card title', err);
       setError('No se pudo renombrar la tarjeta.');
     }
-  };
+  }, [workspaceId]);
+
+  const handleColumnDraftChange = useCallback((columnId: string, value: string) => {
+    setColumnDrafts(prev => ({ ...prev, [columnId]: value }));
+  }, []);
+
+  const handleNewCardTitleChange = useCallback((columnId: string, value: string) => {
+    setNewCardTitles(prev => ({ ...prev, [columnId]: value }));
+  }, []);
+
+  const cancelPendingDragOver = useCallback(() => {
+    if (dragOverRafRef.current !== null) {
+      cancelAnimationFrame(dragOverRafRef.current);
+      dragOverRafRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => cancelPendingDragOver(), [cancelPendingDragOver]);
 
   const handleDragStart = ({ active }: DragStartEvent) => {
     const data = active.data.current as DragData | undefined;
     if (!data) return;
     if (data.type === 'card') {
-      dragSnapshotRef.current = { type: 'card', cards: cards.map(card => ({ ...card })), columns: [] };
+      const cardsSnapshot = cards.map(card => ({ ...card }));
+      dragSnapshotRef.current = { type: 'card', cards: cardsSnapshot, columns: [] };
+      dragStateRef.current = { cards: cardsSnapshot };
       setActiveDrag({ type: 'card', id: data.cardId });
     }
     if (data.type === 'column') {
       dragSnapshotRef.current = { type: 'column', columns: columns.map(col => ({ ...col })), cards: [] };
+      dragStateRef.current = null;
       setActiveDrag({ type: 'column', id: data.columnId });
     }
   };
@@ -620,15 +708,32 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
     if (!activeData || activeData.type !== 'card') return;
     if (!over) return;
 
-    const overData = resolveOverData(over, cards);
-    setCards(prev => moveCardInState(prev, columnsOrdered, activeData.cardId, overData));
+    const sourceCards = dragStateRef.current?.cards ?? cards;
+    const overData = resolveOverData(over, sourceCards);
+    if (!overData) return;
+
+    const next = moveCardInState(sourceCards, columnsOrdered, activeData.cardId, overData);
+    if (next === sourceCards) return;
+
+    dragStateRef.current = { cards: next };
+
+    if (dragOverRafRef.current !== null) return;
+    dragOverRafRef.current = requestAnimationFrame(() => {
+      dragOverRafRef.current = null;
+      const pending = dragStateRef.current;
+      if (!pending) return;
+      setCards(pending.cards);
+    });
   };
 
   const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    cancelPendingDragOver();
     const activeData = active.data.current as DragData | undefined;
     const snapshot = dragSnapshotRef.current;
+    const pendingDragCards = dragStateRef.current?.cards ?? null;
     setActiveDrag(null);
     dragSnapshotRef.current = null;
+    dragStateRef.current = null;
 
     if (!activeData || !over) {
       if (snapshot?.type === 'card') setCards(snapshot.cards);
@@ -636,7 +741,8 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       return;
     }
 
-    const overData = resolveOverData(over, cards);
+    const baseCardsForResolve = pendingDragCards ?? cards;
+    const overData = resolveOverData(over, baseCardsForResolve);
 
     if (activeData.type === 'column' && (overData?.type === 'column' || overData?.type === 'column-drop')) {
       const targetColumnId = overData.columnId;
@@ -657,7 +763,8 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
     }
 
     if (activeData.type === 'card') {
-      const normalized = normalizeCards(cards, columnsOrdered);
+      const baseCards = pendingDragCards ?? moveCardInState(cards, columnsOrdered, activeData.cardId, overData);
+      const normalized = normalizeCards(baseCards, columnsOrdered);
       setCards(normalized);
       if (workspaceId && snapshot?.type === 'card') {
         const changes = diffCardChanges(snapshot.cards, normalized);
@@ -672,10 +779,12 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
   };
 
   const handleDragCancel = ({ active }: DragCancelEvent) => {
+    cancelPendingDragOver();
     const snapshot = dragSnapshotRef.current;
     if (snapshot?.type === 'card') setCards(snapshot.cards);
     if (snapshot?.type === 'column') setColumns(snapshot.columns);
     dragSnapshotRef.current = null;
+    dragStateRef.current = null;
     if (active?.data?.current) setActiveDrag(null);
   };
 
@@ -742,14 +851,13 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
                     key={column.id}
                     column={column}
                     cards={cardsByColumn[column.id] || []}
-                    columns={columnsOrdered}
                     draftValue={columnDrafts[column.id] ?? column.name}
-                    onDraftChange={(value) => setColumnDrafts(prev => ({ ...prev, [column.id]: value }))}
-                    onRenameColumn={(value) => handleRenameColumn(column.id, value)}
-                    onDeleteColumn={() => handleDeleteColumn(column.id)}
-                    onAddCard={(event) => handleAddCard(column.id, event)}
                     newCardTitle={newCardTitles[column.id] || ''}
-                    onNewCardTitleChange={(value) => setNewCardTitles(prev => ({ ...prev, [column.id]: value }))}
+                    onDraftChange={handleColumnDraftChange}
+                    onRenameColumn={handleRenameColumn}
+                    onDeleteColumn={handleDeleteColumn}
+                    onAddCard={handleAddCard}
+                    onNewCardTitleChange={handleNewCardTitleChange}
                     onMoveCard={handleMoveCard}
                     onDeleteCard={handleDeleteCard}
                     onUpdateCardTitle={handleUpdateCardTitle}

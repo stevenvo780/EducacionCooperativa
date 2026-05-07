@@ -16,15 +16,46 @@ export interface Snippet {
 
 export type SnippetInput = Omit<Snippet, 'id' | 'ownerId'>;
 
+const SNIPPET_PAGE_SIZE = 100;
+const SNIPPET_PAGE_HARD_LIMIT = 50;
+
+const pagedSnippetSchema = z.object({
+  items: z.array(snippetSchema),
+  cursor: z.string().nullable().optional()
+});
+
 export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => {
-  try {
-    const data = await fetchZod(`/api/snippets?workspaceId=${encodeURIComponent(workspaceId)}`, z.array(snippetSchema), {
-      cache: 'no-store'
+  const accumulated: Snippet[] = [];
+  let cursor: string | null = null;
+
+  for (let page = 0; page < SNIPPET_PAGE_HARD_LIMIT; page++) {
+    const params = new URLSearchParams({
+      workspaceId,
+      limit: String(SNIPPET_PAGE_SIZE)
     });
-    return data as Snippet[];
-  } catch {
-    return [];
+    if (cursor) params.set('cursor', cursor);
+
+    try {
+      const raw = await fetchZod(`/api/snippets?${params.toString()}`, z.union([z.array(snippetSchema), pagedSnippetSchema]), {
+        cache: 'no-store'
+      });
+
+      if (Array.isArray(raw)) {
+        return raw as Snippet[];
+      }
+
+      accumulated.push(...(raw.items as Snippet[]));
+      const nextCursor = raw.cursor ?? null;
+      if (!nextCursor || raw.items.length < SNIPPET_PAGE_SIZE) {
+        return accumulated;
+      }
+      cursor = nextCursor;
+    } catch {
+      return page === 0 ? [] : accumulated;
+    }
   }
+
+  return accumulated;
 };
 
 export const createSnippet = async (data: SnippetInput): Promise<Snippet | null> => {
