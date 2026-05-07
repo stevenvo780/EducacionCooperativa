@@ -899,10 +899,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               code: 'agora-ai-retry'
             });
           }
-          updateMessageById(assistantMessageId, current => ({
-            ...current,
-            content: current.content || event.status
-          }));
+          updateMessageById(assistantMessageId, current => {
+            const nextContent = event.status;
+            if (current.content === nextContent) return current;
+            return { ...current, content: nextContent };
+          });
           continue;
         }
 
