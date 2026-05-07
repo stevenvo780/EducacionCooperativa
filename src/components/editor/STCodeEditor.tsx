@@ -22,7 +22,6 @@ import { closeBracketsKeymap } from '@codemirror/autocomplete';
 import {
   stLanguageSupport,
   stKeymap,
-  stGotoDef,
   stInputGuardsExtension,
   dispatchDiagnostics,
   type EditorConfig,
@@ -110,7 +109,6 @@ export default function STCodeEditor({
     EditorState.tabSize.of(2),
 
     stLanguageSupport(),
-    ...stGotoDef(),
 
     ...stKeymap(
       () => onRunRef.current?.(),

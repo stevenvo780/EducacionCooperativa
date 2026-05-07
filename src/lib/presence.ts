@@ -13,7 +13,18 @@
  * y los lectores filtran entradas con `lastSeen < now - PRESENCE_TTL_MS`.
  */
 
-import { onDisconnect, onValue, ref, remove, serverTimestamp, set, update } from 'firebase/database';
+import {
+  off,
+  onChildAdded,
+  onChildChanged,
+  onChildRemoved,
+  onDisconnect,
+  ref,
+  remove,
+  serverTimestamp,
+  set,
+  update
+} from 'firebase/database';
 import { rtdb } from '@/lib/firebase';
 
 export const PRESENCE_HEARTBEAT_MS = 25_000;
@@ -116,8 +127,14 @@ export async function joinPresence(args: JoinPresenceArgs): Promise<{
 }
 
 /**
- * Suscribe al canal de presencia y emite el snapshot completo (filtrado
- * por TTL) cada vez que cambia. Devuelve función de unsubscribe.
+ * Suscribe al canal de presencia y emite el snapshot completo cada vez
+ * que cambia. Devuelve función de unsubscribe.
+ *
+ * Implementación per-child (onChildAdded/Changed/Removed) en lugar de
+ * onValue: cada cambio paga O(1) en serialización y costo de red, en
+ * lugar de O(N) por evento. En aulas grandes (>20 conectados) onValue
+ * generaba O(N²) tráfico — cada heartbeat retransmitía el snapshot
+ * completo a todos los clientes.
  */
 export function subscribePresence(
   workspaceId: string,
@@ -125,20 +142,51 @@ export function subscribePresence(
 ): () => void {
   const database = rtdb();
   const channelRef = ref(database, presencePath(workspaceId));
-  const unsubscribe = onValue(channelRef, (snapshot) => {
-    const raw = (snapshot.val() ?? {}) as Record<string, unknown>;
+
+  // Estado local: mantenemos un Map<sessionId, PresenceEntry> que se actualiza
+  // incrementalmente con los eventos por hijo. Cada cambio re-emite el snapshot
+  // filtrado/ordenado al callback.
+  const entriesBySession = new Map<string, PresenceEntry>();
+
+  const emitSnapshot = () => {
     const now = Date.now();
     const entries: PresenceEntry[] = [];
-    for (const [sessionId, value] of Object.entries(raw)) {
-      const parsed = parsePresenceEntry(sessionId, value);
-      if (!parsed) continue;
-      if (now - parsed.lastSeen > PRESENCE_TTL_MS) continue;
-      entries.push(parsed);
+    for (const entry of entriesBySession.values()) {
+      if (now - entry.lastSeen > PRESENCE_TTL_MS) continue;
+      entries.push(entry);
     }
     entries.sort((a, b) => a.joinedAt - b.joinedAt);
     callback(entries);
-  });
-  return unsubscribe;
+  };
+
+  const upsert = (snapshot: { key: string | null; val: () => unknown }) => {
+    const key = snapshot.key;
+    if (!key) return;
+    const parsed = parsePresenceEntry(key, snapshot.val());
+    if (!parsed) {
+      entriesBySession.delete(key);
+    } else {
+      entriesBySession.set(key, parsed);
+    }
+    emitSnapshot();
+  };
+
+  const removeKey = (snapshot: { key: string | null }) => {
+    const key = snapshot.key;
+    if (!key) return;
+    if (entriesBySession.delete(key)) emitSnapshot();
+  };
+
+  const addedHandler = onChildAdded(channelRef, upsert);
+  const changedHandler = onChildChanged(channelRef, upsert);
+  const removedHandler = onChildRemoved(channelRef, removeKey);
+
+  return () => {
+    try { addedHandler(); } catch { off(channelRef, 'child_added'); }
+    try { changedHandler(); } catch { off(channelRef, 'child_changed'); }
+    try { removedHandler(); } catch { off(channelRef, 'child_removed'); }
+    entriesBySession.clear();
+  };
 }
 
 function parsePresenceEntry(sessionId: string, value: unknown): PresenceEntry | null {

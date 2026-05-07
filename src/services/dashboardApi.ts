@@ -242,13 +242,33 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
 
   const promise = (async () => {
     try {
-      const res = await authFetch(`/api/documents?${key}`, { cache: 'no-store' });
-      assertOk(res, 'Failed to fetch docs via API');
-      const docs = (await res.json()) as DocItem[];
+      // Paginar con cursor hasta agotar. Antes el cliente recibía solo los
+      // primeros 200 docs (default backend) y archivos con id alfabético tras
+      // el ultimo recibido quedaban invisibles en el sidebar. Bug 2026-05-06
+      // (FilosofiaDeLaNeurologia, >1000 docs).
+      const allDocs: DocItem[] = [];
+      let cursor: string | null = null;
+      let safety = 0;
+      const MAX_PAGES = 20; // 20 × 1000 = 20000 docs hard cap defensivo
+      do {
+        const url = cursor
+          ? `/api/documents?${key}&cursor=${encodeURIComponent(cursor)}`
+          : `/api/documents?${key}`;
+        const res = await authFetch(url, { cache: 'no-store' });
+        assertOk(res, 'Failed to fetch docs via API');
+        const page = (await res.json()) as DocItem[];
+        allDocs.push(...page);
+        cursor = res.headers.get('X-Next-Cursor') || null;
+        safety += 1;
+        if (safety >= MAX_PAGES) {
+          console.warn('[fetchDocsApi] Pagination cap reached at', safety, 'pages,', allDocs.length, 'docs');
+          break;
+        }
+      } while (cursor);
 
       // Cache docs in IDB for offline use
       try {
-        const cached: CachedDoc[] = docs.map(d => ({
+        const cached: CachedDoc[] = allDocs.map(d => ({
           id: d.id,
           name: d.name,
           type: d.type,
@@ -265,7 +285,7 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
         await cacheDocuments(cached);
       } catch { /* IDB not available */ }
 
-      return docs;
+      return allDocs;
     } catch (err) {
       // Offline fallback: return cached docs from IDB
       if (!navigator.onLine) {
@@ -282,7 +302,7 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
   })();
 
   fetchDocsInFlight.set(key, promise);
-  promise.finally(() => fetchDocsInFlight.delete(key));
+  void promise.finally(() => fetchDocsInFlight.delete(key));
   return promise;
 };
 

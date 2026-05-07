@@ -8,7 +8,6 @@
  */
 import { formalize, type LogicProfile } from '@stevenvo780/autologic';
 import type { SemanticWorkspaceState } from '@/services/editorSemanticStore';
-import { buildTheoryGraphFromSemanticState } from '@/lib/semantic/theory-graph';
 import { ST_RUNTIME_PROFILE_IDS } from '@/lib/st-runtime-manifest';
 import { createStableSemanticId } from '@/lib/semantic/ids';
 import { canonicalizeSTFormula, toClaimExpression } from '@/lib/st-formula';
@@ -110,11 +109,11 @@ interface SupportSourceProjection {
 
 const buildConceptProjection = (
   concept: SemanticWorkspaceState['concepts'][number],
-  fragments: SemanticWorkspaceState['fragments'],
+  fragmentsById: Map<string, SemanticWorkspaceState['fragments'][number]>,
   conceptIndex: number
 ): ConceptProjection => {
   const sourceFragment = concept.sourceFragmentId
-    ? fragments.find((fragment) => fragment.id === concept.sourceFragmentId)
+    ? fragmentsById.get(concept.sourceFragmentId)
     : undefined;
   const fullText = normalizeSemanticText(sourceFragment?.text || concept.excerpt || concept.title);
   const profile: LogicProfile = isValidProfile(concept.logicProfile)
@@ -170,13 +169,18 @@ const buildConceptProjection = (
 };
 
 const buildHeader = (docName: string, state: SemanticWorkspaceState) => {
-  const graph = buildTheoryGraphFromSemanticState(state, { sourceDocument: { docName } });
+  // Antes: este header llamaba buildTheoryGraphFromSemanticState SOLO para
+  // imprimir 3 contadores. En workspaces grandes esto duplicaba el costo
+  // O(n²)·ST_eval del verifyTheoryGraph. Ahora usamos counters baratos.
+  const conceptCount = state.concepts.length;
+  const fragmentCount = state.fragments.length;
+  const relationCount = state.relations.length;
   return [
     '// ============================================================',
     '// Agora ST companion',
     `// Documento origen: ${docName}`,
     `// Generado: ${new Date().toISOString()}`,
-    `// Nodos: ${graph.nodes.length} | Aristas: ${graph.edges.length} | Diagnosticos: ${graph.diagnostics.length}`,
+    `// Conceptos: ${conceptCount} | Fragments: ${fragmentCount} | Relaciones: ${relationCount}`,
     '// ============================================================',
     ''
   ].join('\n');
@@ -330,9 +334,11 @@ const buildRelationsSection = (
   }
 
   const lines = ['// [relations]'];
+  // Indexar fragments por id para evitar O(R·F) en el render de relations.
+  const fragmentsById = new Map(fragments.map((f) => [f.id, f]));
   relations.forEach((relation) => {
     const projection = projectionsByConceptId.get(relation.conceptId);
-    const fragment = fragments.find((item) => item.id === relation.fragmentId);
+    const fragment = fragmentsById.get(relation.fragmentId);
     if (!projection || !fragment) return;
     const stableId = createStableSemanticId('companion-relation', relation.id, relation.relationType, projection.stableId);
     lines.push(makeManagedComment('relation', stableId));
@@ -389,7 +395,9 @@ export function buildSTFromSemantic(
   docName: string,
   options?: { existingContent?: string | null }
 ): string {
-  const projections = state.concepts.map((concept, index) => buildConceptProjection(concept, state.fragments, index));
+  // Indexar fragments por id antes del map: antes era O(C·F) (find por concepto)
+  const fragmentsById = new Map(state.fragments.map((f) => [f.id, f]));
+  const projections = state.concepts.map((concept, index) => buildConceptProjection(concept, fragmentsById, index));
   const projectionsByConceptId = new Map(projections.map((projection) => [projection.sourceConceptId, projection]));
   const profileIds = Array.from(new Set([
     ...projections.map((projection) => projection.profile),
@@ -397,24 +405,86 @@ export function buildSTFromSemantic(
     chooseDominantProfile(state)
   ]));
 
+  // Pre-bucket O(C+R+F+P) en lugar de O(P·(C+R+F)). En workspaces con muchos
+  // perfiles + relations el flatMap por profile re-iteraba todas las relations
+  // y fragments una vez por profile (P pasadas). Con la indexación previa cada
+  // profile-iteration es O(1) lookup + O(scoped) por sección.
+  const projectionsByProfile = new Map<string, ConceptProjection[]>();
+  for (const projection of projections) {
+    const list = projectionsByProfile.get(projection.profile);
+    if (list) list.push(projection);
+    else projectionsByProfile.set(projection.profile, [projection]);
+  }
+
+  const conceptProfileById = new Map<string, string>();
+  for (const projection of projections) {
+    conceptProfileById.set(projection.sourceConceptId, projection.profile);
+  }
+
+  const firstProfile = profileIds[0];
+  const relationsByProfile = new Map<string, SemanticWorkspaceState['relations']>();
+  for (const relation of state.relations) {
+    const profile = relation.conceptId
+      ? conceptProfileById.get(relation.conceptId)
+      : firstProfile;
+    if (!profile) continue;
+    const list = relationsByProfile.get(profile);
+    if (list) list.push(relation);
+    else relationsByProfile.set(profile, [relation]);
+  }
+
+  // Una sola pasada por fragments: cada fragment cae en al menos un bucket
+  // de profile (puede ser múltiples si una relación lo arrastra). Pre-computamos
+  // qué fragmentIds quedan arrastrados por cada profile via relations.
+  const draggedFragmentIdsByProfile = new Map<string, Set<string>>();
+  for (const [profile, rels] of relationsByProfile) {
+    const ids = new Set<string>();
+    for (const rel of rels) ids.add(rel.fragmentId);
+    draggedFragmentIdsByProfile.set(profile, ids);
+  }
+
+  const fragmentsByProfile = new Map<string, SemanticWorkspaceState['fragments']>();
+  const ensureFragmentBucket = (profile: string) => {
+    let list = fragmentsByProfile.get(profile);
+    if (!list) {
+      list = [];
+      fragmentsByProfile.set(profile, list);
+    }
+    return list;
+  };
+  for (const fragment of state.fragments) {
+    if (fragment.conceptId) {
+      const profile = conceptProfileById.get(fragment.conceptId);
+      if (profile) {
+        ensureFragmentBucket(profile).push(fragment);
+        continue;
+      }
+    }
+    let placed = false;
+    for (const [profile, ids] of draggedFragmentIdsByProfile) {
+      if (ids.has(fragment.id)) {
+        ensureFragmentBucket(profile).push(fragment);
+        placed = true;
+      }
+    }
+    if (placed) continue;
+    if (!fragment.conceptId && !fragment.logicProfile && firstProfile) {
+      ensureFragmentBucket(firstProfile).push(fragment);
+      continue;
+    }
+    if (fragment.logicProfile && !fragment.conceptId) {
+      ensureFragmentBucket(fragment.logicProfile).push(fragment);
+    }
+  }
+
   const managedSections = [
     buildHeader(docName, state),
     COMPANION_MANAGED_START,
     buildImportsSection(),
-    ...profileIds.flatMap((profile, index) => {
-      const scopedProjections = projections.filter((projection) => projection.profile === profile);
-      const scopedConceptIds = new Set(scopedProjections.map((projection) => projection.sourceConceptId));
-      const scopedRelations = state.relations.filter((relation) => (
-        scopedConceptIds.has(relation.conceptId)
-        || (!relation.conceptId && index === 0)
-      ));
-      const scopedFragmentIds = new Set(scopedRelations.map((relation) => relation.fragmentId));
-      const scopedFragments = state.fragments.filter((fragment) => {
-        if (fragment.conceptId && scopedConceptIds.has(fragment.conceptId)) return true;
-        if (scopedFragmentIds.has(fragment.id)) return true;
-        if (index === 0 && !fragment.conceptId && !fragment.logicProfile) return true;
-        return fragment.logicProfile === profile && !fragment.conceptId;
-      });
+    ...profileIds.flatMap((profile) => {
+      const scopedProjections = projectionsByProfile.get(profile) ?? [];
+      const scopedRelations = relationsByProfile.get(profile) ?? [];
+      const scopedFragments = fragmentsByProfile.get(profile) ?? [];
 
       return [
         buildProfileSection(profile),

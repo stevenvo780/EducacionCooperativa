@@ -20,10 +20,17 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://agora.elenxos.com'),
   title: PRODUCT_BRAND.title,
   description: PRODUCT_BRAND.metadataDescription,
+  alternates: {
+    canonical: '/'
+  },
   manifest: '/manifest.json',
   icons: {
-    icon: '/favicon.svg',
-    apple: '/favicon.svg'
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' }
+    ],
+    apple: '/apple-touch-icon.png'
   },
   appleWebApp: {
     capable: true,
@@ -39,12 +46,21 @@ export const metadata: Metadata = {
     title: PRODUCT_BRAND.title,
     description: PRODUCT_BRAND.metadataDescription,
     url: 'https://agora.elenxos.com',
-    locale: 'es_ES'
+    locale: 'es_ES',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: PRODUCT_BRAND.title
+      }
+    ]
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: PRODUCT_BRAND.title,
-    description: PRODUCT_BRAND.metadataDescription
+    description: PRODUCT_BRAND.metadataDescription,
+    images: ['/og-image.png']
   },
   robots: {
     index: true,

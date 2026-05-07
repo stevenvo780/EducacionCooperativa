@@ -227,20 +227,35 @@ const stFoldService = foldService.of((state, lineStart, _lineEnd) => {
 
   const openBraceIndex = text.indexOf('{');
   if (openBraceIndex >= 0) {
+    // Antes: `doc.sliceString(p, p+1)` por cada char hasta encontrar la
+    // llave de cierre. En archivos grandes con bloques de cientos de líneas
+    // eso era O(N) llamadas a sliceString por cada query del fold service.
+    // Ahora iteramos por línea (text de la línea ya está en memoria).
+    const startPos = line.from + openBraceIndex;
     let depth = 0;
-    for (let position = line.from + openBraceIndex; position < doc.length; position += 1) {
-      const ch = doc.sliceString(position, position + 1);
-      if (ch === '{') depth += 1;
-      if (ch === '}') {
-        depth -= 1;
-        if (depth === 0) {
-          return {
-            from: line.from + openBraceIndex + 1,
-            to: position
-          };
+    let absPos = startPos;
+    let lineNum = line.number;
+    while (lineNum <= doc.lines) {
+      const currentLine = doc.line(lineNum);
+      const lineText = currentLine.text;
+      const startInLine = lineNum === line.number ? openBraceIndex : 0;
+      for (let i = startInLine; i < lineText.length; i++) {
+        const ch = lineText.charAt(i);
+        if (ch === '{') depth += 1;
+        else if (ch === '}') {
+          depth -= 1;
+          if (depth === 0) {
+            return {
+              from: startPos + 1,
+              to: currentLine.from + i
+            };
+          }
         }
       }
+      lineNum += 1;
+      absPos = currentLine.to + 1;
     }
+    void absPos;
   }
 
   return null;

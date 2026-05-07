@@ -3,6 +3,7 @@ import { getAuthToken } from '@/services/apiClient';
 import { getErrorMessage, isAbortError } from '@/lib/error-utils';
 
 const SSE_DATA_PREFIX = 'data: ';
+const MAX_EVENT_BYTES = 5 * 1024 * 1024;
 
 interface UseEditorSSEStreamOptions {
   roomId: string | undefined;
@@ -45,8 +46,16 @@ export function useEditorSSEStream({
             .split('\n')
             .find(line => line.startsWith(SSE_DATA_PREFIX));
           if (!dataLine) return;
+          const payload = dataLine.substring(SSE_DATA_PREFIX.length);
+          // Cap defensivo: un payload de >5MB casi seguro es ruido o un loop
+          // de retry en el server. JSON.parse de cadenas gigantes bloquea el
+          // main thread por 100s de ms y hace que el editor se sienta muerto.
+          if (payload.length > MAX_EVENT_BYTES) {
+            console.warn('[useEditorSSEStream] dropping oversized SSE event:', payload.length, 'bytes');
+            return;
+          }
           try {
-            const data = JSON.parse(dataLine.substring(SSE_DATA_PREFIX.length));
+            const data = JSON.parse(payload);
             if (data?.type === 'snapshot') {
               onSnapshot(data.data);
             } else if (data?.type === 'deleted') {
@@ -65,6 +74,11 @@ export function useEditorSSEStream({
           for (const rawEvent of events) {
             if (rawEvent.length === 0) continue;
             processEvent(rawEvent);
+            // Backpressure: ceder al event loop entre eventos para no
+            // monopolizar el hilo principal cuando llega un burst (ej:
+            // reconnect que retransmite 100 eventos seguidos). Sin esto,
+            // input lag visible al tipear durante el flush.
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
           }
         }
 

@@ -1,6 +1,7 @@
 import {
   type LinterRule,
   type LinterDiagnostic,
+  type LinterRuleContext,
   getCodeBlockLines,
   lineAt
 } from './types';
@@ -93,10 +94,10 @@ export const spellingRule: LinterRule = {
   category: 'spelling',
   defaultEnabled: false,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const mathRangesByLine = getMathRangesByLine(lines);
     const spellReady = isSpellEngineReady();
 
@@ -144,10 +145,10 @@ export const doubledWordsRule: LinterRule = {
   category: 'spelling',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const mathRangesByLine = getMathRangesByLine(lines);
     const regex = /\b(\w{2,})\s+\1\b/gi;
 
@@ -307,10 +308,10 @@ export const accentPatternRule: LinterRule = {
   description: 'Detecta palabras que necesitan tilde usando patrones morfológicos del español (-ción, -sión, esdrújulas, etc.)',
   category: 'spelling',
   defaultEnabled: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const mathRangesByLine = getMathRangesByLine(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -373,10 +374,10 @@ export const suspiciousPatternsRule: LinterRule = {
   description: 'Detecta combinaciones de letras imposibles o muy raras en español (consonantes dobles inválidas, triples letras, inicios imposibles).',
   category: 'spelling',
   defaultEnabled: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const mathRangesByLine = getMathRangesByLine(lines);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {

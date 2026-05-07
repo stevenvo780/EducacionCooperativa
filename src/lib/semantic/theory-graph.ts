@@ -10,7 +10,6 @@ import { formulaToString } from '@stevenvo780/st-lang';
 import { canonicalizeSTFormula } from '@/lib/st-formula';
 import {
   mergeSemanticWorkspaceStates,
-  normalizeSemanticWorkspaceState,
   type SemanticConceptRecord,
   type SemanticDocumentRef,
   type SemanticEntityKind,
@@ -143,13 +142,26 @@ const safeFormulaToString = (formula?: Formula) => {
   }
 };
 
+// Cache de Set de keys por array de refs. Antes esto era O(R²) por nodo:
+// `refs.some(JSON.stringify(item) === key)` serializaba todo el array por cada
+// addSourceRef. Para grafos con muchos refs el costo escalaba cuadráticamente.
+const sourceRefKeyCache = new WeakMap<SemanticSourceRef[], Set<string>>();
+const sourceRefKey = (ref: SemanticSourceRef): string => (
+  `${ref.docId ?? ''}|${ref.docName ?? ''}|${ref.fileName ?? ''}|${ref.line ?? ''}|${ref.column ?? ''}|${ref.nodeId ?? ''}|${ref.excerpt ?? ''}`
+);
 const addSourceRef = (
   refs: SemanticSourceRef[],
   sourceRef: SemanticSourceRef
 ) => {
-  const key = JSON.stringify(sourceRef);
-  const hasRef = refs.some((item) => JSON.stringify(item) === key);
-  if (!hasRef) refs.push(sourceRef);
+  let keys = sourceRefKeyCache.get(refs);
+  if (!keys) {
+    keys = new Set(refs.map(sourceRefKey));
+    sourceRefKeyCache.set(refs, keys);
+  }
+  const key = sourceRefKey(sourceRef);
+  if (keys.has(key)) return;
+  keys.add(key);
+  refs.push(sourceRef);
 };
 
 const createEmptyGraph = (options?: { sourceDocument?: SemanticDocumentRef; sourceFileName?: string }): TheoryGraph => ({
@@ -244,11 +256,21 @@ const buildSourceRefsForFragment = (fragment: SemanticFragmentRecord): SemanticS
   return refs;
 };
 
+/**
+ * Construye el theory-graph a partir del state semántico.
+ *
+ * Invariante asumido: `state` ya viene normalizado (sorts + validación
+ * campo a campo). Los callers `editorSemanticStore` (load/save) y
+ * `mergeSemanticWorkspaceStates` ya garantizan ese contrato. NO llamamos
+ * `normalizeSemanticWorkspaceState` aquí: en workspaces grandes ese
+ * doble pase agrega O(N) parse + O(N log N) sort por cada (re)build del
+ * grafo y se dispara en cada poll de sync.
+ */
 export const buildTheoryGraphFromSemanticState = (
   state: SemanticWorkspaceState,
   options?: { sourceDocument?: SemanticDocumentRef }
 ): TheoryGraph => {
-  const normalized = normalizeSemanticWorkspaceState(state);
+  const normalized = state;
   const nodes = new Map<string, TheoryGraphNode>();
   const edges = new Map<string, TheoryGraphEdge>();
   const profiles = new Set<string>();
@@ -1009,9 +1031,11 @@ export const verifyTheoryGraph = (graph: TheoryGraph): TheoryGraphDiagnostic[] =
       }
     });
 
+  // Indexar nodes por id para evitar O(E·N) en el chequeo de perfiles incompatibles.
+  const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
   graph.edges.forEach((edge) => {
-    const fromNode = graph.nodes.find((node) => node.id === edge.from);
-    const toNode = graph.nodes.find((node) => node.id === edge.to);
+    const fromNode = nodesById.get(edge.from);
+    const toNode = nodesById.get(edge.to);
     if (!fromNode?.logicProfile || !toNode?.logicProfile || fromNode.logicProfile === toNode.logicProfile) {
       return;
     }
@@ -1027,41 +1051,49 @@ export const verifyTheoryGraph = (graph: TheoryGraph): TheoryGraphDiagnostic[] =
     });
   });
 
+  // Cap defensivo: con N claims con fórmula esto era O(N²) × ST evaluate síncrono.
+  // Con N=18 = 153 ejecuciones del runtime ST en main thread. Para N>30 era inviable
+  // en tablets. Saltamos las verificaciones par-a-par de satisfacibilidad cuando
+  // el costo total estimado supera el umbral. Las contradicciones quedan
+  // detectables on-demand desde otro flujo.
   const formulaClaims = claimNodes.filter((node) => node.formula && node.logicProfile);
-  for (let index = 0; index < formulaClaims.length; index += 1) {
-    const left = formulaClaims[index];
-    if (!left) continue;
-    for (let next = index + 1; next < formulaClaims.length; next += 1) {
-      const right = formulaClaims[next];
-      if (!right) continue;
-      if (!left.logicProfile || left.logicProfile !== right.logicProfile || !left.formula || !right.formula) continue;
-      try {
-        const leftFormula = canonicalizeSTFormula(left.formula, left.logicProfile);
-        const rightFormula = canonicalizeSTFormula(right.formula, right.logicProfile);
-        const result = evaluate(
-          `logic ${left.logicProfile}\ncheck satisfiable ((${leftFormula}) & (${rightFormula}))`
-        );
-        if (result.results[0]?.status === 'unsatisfiable') {
-          diagnostics.push({
-            id: createDiagnosticId('contradiction', [left.id, right.id, left.logicProfile]),
-            type: 'contradiction',
-            severity: 'warning',
-            message: `Los claims "${left.label}" y "${right.label}" no son satisfacibles juntos en ${left.logicProfile}.`,
-            nodeIds: [left.id, right.id],
-            edgeIds: [],
-            quickFixes: [{
-              id: createStableSemanticId('quick-fix', 'mark-dialectical-tension', left.id, right.id),
-              kind: 'mark-dialectical-tension',
-              label: 'Marcar tensión dialéctica',
-              description: 'Conserva ambos claims y explicita la tensión como parte del argumento.',
-              sourceNodeId: left.id,
-              targetNodeId: right.id
-            }],
-            sourceRefs: [...left.sourceRefs, ...right.sourceRefs]
-          });
+  const PAIRWISE_VERIFY_LIMIT = 25;
+  if (formulaClaims.length <= PAIRWISE_VERIFY_LIMIT) {
+    for (let index = 0; index < formulaClaims.length; index += 1) {
+      const left = formulaClaims[index];
+      if (!left) continue;
+      for (let next = index + 1; next < formulaClaims.length; next += 1) {
+        const right = formulaClaims[next];
+        if (!right) continue;
+        if (!left.logicProfile || left.logicProfile !== right.logicProfile || !left.formula || !right.formula) continue;
+        try {
+          const leftFormula = canonicalizeSTFormula(left.formula, left.logicProfile);
+          const rightFormula = canonicalizeSTFormula(right.formula, right.logicProfile);
+          const result = evaluate(
+            `logic ${left.logicProfile}\ncheck satisfiable ((${leftFormula}) & (${rightFormula}))`
+          );
+          if (result.results[0]?.status === 'unsatisfiable') {
+            diagnostics.push({
+              id: createDiagnosticId('contradiction', [left.id, right.id, left.logicProfile]),
+              type: 'contradiction',
+              severity: 'warning',
+              message: `Los claims "${left.label}" y "${right.label}" no son satisfacibles juntos en ${left.logicProfile}.`,
+              nodeIds: [left.id, right.id],
+              edgeIds: [],
+              quickFixes: [{
+                id: createStableSemanticId('quick-fix', 'mark-dialectical-tension', left.id, right.id),
+                kind: 'mark-dialectical-tension',
+                label: 'Marcar tensión dialéctica',
+                description: 'Conserva ambos claims y explicita la tensión como parte del argumento.',
+                sourceNodeId: left.id,
+                targetNodeId: right.id
+              }],
+              sourceRefs: [...left.sourceRefs, ...right.sourceRefs]
+            });
+          }
+        } catch {
+          // Ignore verification failures for profiles/formulas the runtime cannot compare safely here.
         }
-      } catch {
-        // Ignore verification failures for profiles/formulas the runtime cannot compare safely here.
       }
     }
   }

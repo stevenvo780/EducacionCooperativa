@@ -23,6 +23,8 @@ export type {
   Statement,
   STInterpreter,
   STEvalResult,
+  STCheckResult,
+  STParseResult,
   SymbolInfo,
   TheorySummary
 } from '@stevenvo780/st-lang/api';

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, ExternalLink, FileText, Folder as FolderIcon, Loader2, X } from 'lucide-react';
 import { authFetch } from '@/services/apiClient';
+import { useEscapeClose } from '@/hooks/useModalA11y';
 import type { DocItem } from '@/components/FileExplorer';
 
 interface ManifestResponse {
@@ -85,6 +86,8 @@ export default function FilePropertiesModal({ doc, onClose }: FilePropertiesModa
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState<string | null>(null);
     const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEscapeClose(true, onClose);
 
     useEffect(() => () => {
         if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);

@@ -78,6 +78,21 @@ export function useSTDefinitionsLinter() {
     return map;
   }, [definitions]);
 
+  /**
+   * Regex unificado de TODOS los nombres definidos. Antes el lint corría
+   * `new RegExp(\b<name>\b)` por cada nombre por cada línea por cada
+   * keystroke (regex storm: O(N·D·L)). Ahora compilamos UN solo regex
+   * union por cambio del registry.
+   */
+  const definedNamesRegex = useMemo(() => {
+    if (definedNamesMap.size === 0) return null;
+    const names = [...definedNamesMap.keys()].map(escapeRegex);
+    // Ordenamos por longitud descendente para que regex alternation prefiera
+    // el match más largo (evita que "Theory.Foo" matchee solo como "Foo").
+    names.sort((a, b) => b.length - a.length);
+    return new RegExp(`\\b(?:${names.join('|')})\\b`, 'g');
+  }, [definedNamesMap]);
+
   /** Frases en lenguaje natural extraídas de interpret (para buscar en markdown) */
   const naturalPhrases = useMemo(() => {
     const phrases: Array<{
@@ -124,12 +139,17 @@ export function useSTDefinitionsLinter() {
         // Saltar líneas de código (fenced code blocks, inline code)
         if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) continue;
 
-        for (const [name, def] of definedNamesMap) {
-          // Buscar palabra completa (word boundary)
-          const regex = new RegExp(`\\b${escapeRegex(name)}\\b`, 'g');
-          let match;
-
-          while ((match = regex.exec(line)) !== null) {
+        // Single-pass regex: una pasada por línea para TODOS los nombres
+        // definidos. La regex está pre-compilada por cambio del registry,
+        // no por keystroke. lastIndex se resetea al asignar — es fresh
+        // por línea pero compartida entre líneas.
+        if (definedNamesRegex && definedNamesMap.size > 0) {
+          definedNamesRegex.lastIndex = 0;
+          let match: RegExpExecArray | null;
+          while ((match = definedNamesRegex.exec(line)) !== null) {
+            const name = match[0];
+            const def = definedNamesMap.get(name);
+            if (!def) continue;
             const key = `${lineIdx}:${match.index}:${name}`;
             if (seen.has(key)) continue;
             seen.add(key);
@@ -181,7 +201,7 @@ export function useSTDefinitionsLinter() {
 
       return results;
     }
-  }), [definedNamesMap, naturalPhrases]);
+  }), [definedNamesMap, definedNamesRegex, naturalPhrases]);
 
   /** Función para registrar/actualizar definiciones de un archivo .st */
   const registerSTFile = useCallback((fileId: string, code: string) => {

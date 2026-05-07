@@ -8,7 +8,7 @@
  * entradas bibliográficas formalizadas y se cruzan con citas en texto.
  */
 
-import { type LinterRule, type LinterDiagnostic, getCodeBlockLines, lineAt } from './types';
+import { type LinterRule, type LinterDiagnostic, type LinterRuleContext, getCodeBlockLines, lineAt } from './types';
 
 /**
  * Detecta la línea donde empieza una sección de bibliografía/referencias.
@@ -80,10 +80,10 @@ export const apaMalformedRule: LinterRule = {
   category: 'citation',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     // Citas sin coma: (Smith 2020) o (Smith2020)
     const missingComma = /\(([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+[A-Za-záéíóúüñ]+)?)\s+(\d{4}[a-z]?)\)/g;
@@ -151,10 +151,10 @@ export const missingBibliographyRule: LinterRule = {
   category: 'citation',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const bibStart = findBibliographySection(lines);
     if (bibStart === -1) return results; // No hay sección de referencias — otra regla lo detecta
 
@@ -207,10 +207,10 @@ export const orphanBibliographyRule: LinterRule = {
   category: 'citation',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const bibStart = findBibliographySection(lines);
     if (bibStart === -1) return results;
 
@@ -266,10 +266,10 @@ export const doiFormatRule: LinterRule = {
   category: 'citation',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     // DOI sin protocolo https: doi.org/... o 10.xxxx/...
     const badDoi = /(?<![/\w])(?:doi:\s*|DOI:\s*)(10\.\d{4,}\/\S+)/g;
@@ -324,9 +324,9 @@ export const missingReferenceSectionRule: LinterRule = {
   category: 'citation',
   defaultEnabled: true,
   supportsIncremental: false,
-  check: (text: string): LinterDiagnostic[] => {
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
     // ¿Hay citas en el texto?
     const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+,\s*\d{4}\)/;
@@ -363,10 +363,10 @@ export const ibidOpCitRule: LinterRule = {
   category: 'citation',
   defaultEnabled: true,
   supportsIncremental: true,
-  check: (text: string): LinterDiagnostic[] => {
+  check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const results: LinterDiagnostic[] = [];
-    const lines = text.split('\n');
-    const codeLines = getCodeBlockLines(lines);
+    const lines = ctx?.lines ?? text.split('\n');
+    const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
     const ibidRegex = /\b(ibid\.?|ibídem\.?|op\.\s*cit\.?|loc\.\s*cit\.?)\b/gi;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {

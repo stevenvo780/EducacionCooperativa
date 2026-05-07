@@ -1633,7 +1633,7 @@ export default function STDocsPage() {
             <div className="grid gap-4">
               {SYNTAX.map((s, i) => (
                 <div key={i} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">{s.title}</h4>
+                  <h3 className="text-sm font-bold text-white mb-2">{s.title}</h3>
                   <CopyBlock code={s.code} />
                   {s.note && <p className="text-xs text-surface-500 mt-2 italic">{s.note}</p>}
                 </div>
@@ -1667,7 +1667,7 @@ export default function STDocsPage() {
               <div className="grid gap-4">
                 {PEDAGOGICAL_FEATURES.map((feature, index) => (
                   <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                    <h4 className="text-sm font-bold text-white mb-2">{feature.title}</h4>
+                    <h3 className="text-sm font-bold text-white mb-2">{feature.title}</h3>
                     <p className="text-xs text-surface-400 mb-3 leading-relaxed">{feature.description}</p>
                     <CopyBlock code={feature.code} />
                     <p className="text-xs text-surface-500 mt-2 italic">{feature.note}</p>
@@ -1688,7 +1688,7 @@ export default function STDocsPage() {
               <div className="grid gap-4">
                 {RUNTIME_FACETS.map((facet, index) => (
                   <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                    <h4 className="text-sm font-bold text-white mb-2">{facet.title}</h4>
+                    <h3 className="text-sm font-bold text-white mb-2">{facet.title}</h3>
                     <p className="text-xs text-surface-400 leading-relaxed mb-3">{facet.description}</p>
                     <div className="mb-3">
                       <BulletList items={facet.bullets} />
@@ -1713,32 +1713,32 @@ export default function STDocsPage() {
               </p>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Aliases y estado</h4>
+                  <h3 className="text-sm font-bold text-white mb-2">Aliases y estado</h3>
                   <p className="text-xs text-surface-400 mb-3">Usa <code className="text-mandy-400">let</code> para nombrar fórmulas o descripciones y <code className="text-mandy-400">set</code> para mutar una variable durante el script. Un <code className="text-mandy-400">let</code> con fórmula también queda disponible para <code className="text-mandy-400">derive</code> y <code className="text-mandy-400">prove</code>.</p>
                   <CopyBlock code={'logic classical.propositional\nlet regla = "Si estudio, apruebo" : (E -> A)\nlet hecho = E\nderive A from {regla, hecho}\nset hecho = A\nprint hecho\nrender theory'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Condicionales y loops</h4>
+                  <h3 className="text-sm font-bold text-white mb-2">Condicionales y loops</h3>
                   <p className="text-xs text-surface-400 mb-3">Las condiciones se evalúan con estatus lógicos reales: <code className="text-mandy-400">valid</code>, <code className="text-mandy-400">invalid</code>, <code className="text-mandy-400">satisfiable</code> o <code className="text-mandy-400">unsatisfiable</code>.</p>
                   <CopyBlock code={'logic classical.propositional\nset estado = P\n\nif valid (P | !P) {\n  print "tautología"\n} else if satisfiable P {\n  print "contingencia"\n} else {\n  print "contradicción"\n}\n\nfor Caso in { P, Q, (R -> R) } {\n  print Caso\n}\n\nwhile satisfiable estado {\n  print "iteración"\n  set estado = P & !P\n}'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Funciones</h4>
+                  <h3 className="text-sm font-bold text-white mb-2">Funciones</h3>
                   <p className="text-xs text-surface-400 mb-3">Las funciones encapsulan pasos repetibles, <code className="text-mandy-400">return</code> corta la ejecución del cuerpo y la llamada puede volver a usarse dentro de otros comandos si devuelve una fórmula.</p>
                   <CopyBlock code={'logic classical.propositional\nfn revisar(X) {\n  explain X\n  return X\n}\n\ncheck valid revisar((P -> P))\nprint get_atoms(revisar((P -> Q) & R))'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Export e import selectivo</h4>
+                  <h3 className="text-sm font-bold text-white mb-2">Export e import selectivo</h3>
                   <p className="text-xs text-surface-400 mb-3">Los archivos importados solo exponen lo que marques con <code className="text-mandy-400">export</code>. Eso permite modularizar sin contaminar el scope.</p>
                   <CopyBlock code={'// utilidades.st\nexport let Ley = P -> P\nexport fn revisar(X) {\n  return X\n}\n\n// curso.st\nimport "utilidades.st"\ncheck valid Ley\nprint typeof(revisar((P -> Q)))'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Singletons, clases e herencia</h4>
+                  <h3 className="text-sm font-bold text-white mb-2">Singletons, clases e herencia</h3>
                   <p className="text-xs text-surface-400 mb-3">Una <code className="text-mandy-400">theory</code> sin parámetros actúa como singleton; con parámetros actúa como clase instanciable. <code className="text-mandy-400">extends</code> reutiliza miembros públicos de una teoría padre ya instanciada.</p>
                   <CopyBlock code={'logic classical.propositional\n\ntheory Base {\n  let ley = P -> Q\n}\n\ntheory Hija extends Base {\n  fn ver() {\n    print ley\n  }\n}\n\ntheory Caja(valor) {\n  let dato = valor\n}\n\nprint Hija.ley\nlet caja = Caja("demo")\nprint caja.dato\nHija.ver()'} />
                 </div>
                 <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                  <h4 className="text-sm font-bold text-white mb-2">Funciones nativas del runtime</h4>
+                  <h3 className="text-sm font-bold text-white mb-2">Funciones nativas del runtime</h3>
                   <p className="text-xs text-surface-400 mb-3">El intérprete incluye helpers ya listos para inspección, validación rápida, extracción de átomos y entrada interactiva.</p>
                   <CopyBlock code={'logic arithmetic\nprint typeof(2)\nprint typeof("hola")\nprint typeof((P -> Q))\nprint is_valid(2 + 3 < 10)\nprint is_satisfiable(5 > 3)\nprint get_atoms((P -> Q) & R)\nlet nombre = input("Nombre:")'} />
                 </div>
@@ -1764,7 +1764,7 @@ export default function STDocsPage() {
               <div className="grid gap-4">
                 {META_LOGIC_PATTERNS.map((pattern, index) => (
                   <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                    <h4 className="text-sm font-bold text-white mb-2">{pattern.title}</h4>
+                    <h3 className="text-sm font-bold text-white mb-2">{pattern.title}</h3>
                     <p className="text-xs text-surface-400 mb-3 leading-relaxed">{pattern.description}</p>
                     <CopyBlock code={pattern.code} />
                     <p className="text-xs text-surface-500 mt-2 italic">{pattern.note}</p>
@@ -1785,7 +1785,7 @@ export default function STDocsPage() {
               <div className="grid gap-4">
                 {PACKAGE_HELPERS.map((helper, index) => (
                   <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                    <h4 className="text-sm font-bold text-white mb-2">{helper.title}</h4>
+                    <h3 className="text-sm font-bold text-white mb-2">{helper.title}</h3>
                     <p className="text-xs text-surface-400 mb-3 leading-relaxed">{helper.description}</p>
                     <CopyBlock code={helper.code} runnable={false} />
                     <p className="text-xs text-surface-500 mt-2 italic">{helper.note}</p>
@@ -1804,7 +1804,7 @@ export default function STDocsPage() {
                 y compare la salida sin salir del manual.
               </p>
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                <h4 className="text-sm font-bold text-white mb-2">Prueba libre sobre el runtime documentado</h4>
+                <h3 className="text-sm font-bold text-white mb-2">Prueba libre sobre el runtime documentado</h3>
                 <p className="text-xs text-surface-400 mb-3">
                   Usa el botón <code className="text-mandy-300">Ejecutar</code> o <code className="text-mandy-300">Ctrl/Cmd + Enter</code> cuando el editor esté abierto.
                 </p>
@@ -1833,7 +1833,7 @@ export default function STDocsPage() {
                 {PHILOSOPHY_FORMALIZATIONS.map((item, index) => (
                   <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <h4 className="text-sm font-bold text-white">{item.title}</h4>
+                      <h3 className="text-sm font-bold text-white">{item.title}</h3>
                       <span className="text-[10px] font-bold bg-surface-700/70 text-surface-300 px-2 py-1 rounded-md border border-surface-600/40">{item.source}</span>
                     </div>
                     <p className="text-xs text-surface-400 mb-3">{item.why}</p>
@@ -1856,7 +1856,7 @@ export default function STDocsPage() {
               <div className="grid gap-4">
                 {RESERVED_WORD_GROUPS.map((group, index) => (
                   <div key={index} className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                    <h4 className="text-sm font-bold text-white mb-3">{group.title}</h4>
+                    <h3 className="text-sm font-bold text-white mb-3">{group.title}</h3>
                     <div className="grid gap-2 md:grid-cols-2">
                       {group.items.map((item, itemIndex) => (
                         <div key={itemIndex} className="bg-surface-900/40 rounded-lg border border-surface-700/30 px-3 py-2">
@@ -1898,17 +1898,17 @@ export default function STDocsPage() {
                       <div className="px-5 pb-6 space-y-5 border-t border-surface-700/30 pt-5 animate-in fade-in">
                         {/* Semántica */}
                         <div>
-                          <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Semántica</h5>
+                          <h4 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Semántica</h4>
                           <p className="text-sm text-surface-300">{p.semantics}</p>
                         </div>
                         {/* Motor */}
                         <div>
-                          <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Motor</h5>
+                          <h4 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Motor</h4>
                           <p className="text-sm text-surface-300">{p.engine}</p>
                         </div>
                         {/* Operadores */}
                         <div>
-                          <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Operadores</h5>
+                          <h4 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Operadores</h4>
                           <div className="flex flex-wrap gap-2">
                             {p.operators.map((op, i) => (
                               <code key={i} className="text-xs bg-surface-900/60 px-2.5 py-1 rounded-md border border-surface-700/40 text-emerald-300">{op}</code>
@@ -1918,13 +1918,13 @@ export default function STDocsPage() {
                         {/* Axiomas */}
                         {p.axioms && (
                           <div>
-                            <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Axiomas del Sistema</h5>
+                            <h4 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Axiomas del Sistema</h4>
                             <BulletList items={p.axioms} />
                           </div>
                         )}
                         {p.highlights && (
                           <div>
-                            <h5 className="text-xs font-bold text-violet-300 uppercase tracking-widest mb-2">Capacidades nuevas</h5>
+                            <h4 className="text-xs font-bold text-violet-300 uppercase tracking-widest mb-2">Capacidades nuevas</h4>
                             <BulletList items={p.highlights} />
                           </div>
                         )}
@@ -1973,28 +1973,28 @@ export default function STDocsPage() {
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
-                  <h5 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">1. Passage</h5>
+                  <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">1. Passage</h3>
                   <CopyBlock code={'let p1 = passage([[doc.md#clause-1]])'} />
                   <p className="text-xs text-surface-400">Referencia a un ancla de documento externo.</p>
                 </div>
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
-                  <h5 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">2. Formalize</h5>
+                  <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">2. Formalize</h3>
                   <CopyBlock code={'let f1 = formalize p1 as (P & Q)'} />
                   <p className="text-xs text-surface-400">Mapea el pasaje a una fórmula lógica.</p>
                 </div>
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
-                  <h5 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">3. Claim</h5>
+                  <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">3. Claim</h3>
                   <CopyBlock code={'claim c1 = f1'} />
                   <p className="text-xs text-surface-400">Declara un claim verificable a partir de la formalización.</p>
                 </div>
                 <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
-                  <h5 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">4. Verificar</h5>
+                  <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">4. Verificar</h3>
                   <CopyBlock code={'render claims\nrender theory\nrender all'} />
                   <p className="text-xs text-surface-400">Usa render para inspeccionar claims, confianza, soporte, contexto y teoría compilada.</p>
                 </div>
               </div>
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Metadatos opcionales</h5>
+                <h3 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Metadatos opcionales</h3>
                 <CopyBlock code={'support c1 <- p1\nconfidence c1 = 0.85\ncontext c1 = "Cláusula de privacidad del contrato"\nrender claims'} />
               </div>
             </div>
@@ -2011,19 +2011,19 @@ export default function STDocsPage() {
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
-                    <h5 className="text-xs font-bold text-amber-400 mb-2">Clásica Proposicional</h5>
+                    <h3 className="text-xs font-bold text-amber-400 mb-2">Clásica Proposicional</h3>
                     <BulletList items={['truth_table: máx. 20 variables', 'Derivación BFS: máx. 100 iteraciones + guardia de 500 fórmulas conocidas']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
-                    <h5 className="text-xs font-bold text-amber-400 mb-2">Primer Orden (FOL)</h5>
+                    <h3 className="text-xs font-bold text-amber-400 mb-2">Primer Orden (FOL)</h3>
                     <BulletList items={['Tableau limitado a 50 pasos de profundidad', 'Semi-decidible: retorna unknown, no invalid']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
-                    <h5 className="text-xs font-bold text-amber-400 mb-2">Modal / Deóntica / Epistémica / Temporal</h5>
+                    <h3 className="text-xs font-bold text-amber-400 mb-2">Modal / Deóntica / Epistémica / Temporal</h3>
                     <BulletList items={['Tableau: máx. 200 nodos', 'LTL: operador U (until) con soporte limitado', 'S5: espacio crece rápido con frame universal']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
-                    <h5 className="text-xs font-bold text-amber-400 mb-2">Belnap (4 valores)</h5>
+                    <h3 className="text-xs font-bold text-amber-400 mb-2">Belnap (4 valores)</h3>
                     <BulletList items={[
                       'P -> P NO es válida (N -> N = N)',
                       'P | !P NO es válida (N | N = N)',
@@ -2031,15 +2031,15 @@ export default function STDocsPage() {
                     ]} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
-                    <h5 className="text-xs font-bold text-amber-400 mb-2">Aristotélica</h5>
+                    <h3 className="text-xs font-bold text-amber-400 mb-2">Aristotélica</h3>
                     <BulletList items={['Hoy codifica 19 modos silogísticos válidos y varios entimemas frecuentes', 'Requiere premisas categóricas bien formadas', 'Las falacias verbales fuera de la forma lógica siguen requiriendo lectura humana']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
-                    <h5 className="text-xs font-bold text-amber-400 mb-2">Probabilística</h5>
+                    <h3 className="text-xs font-bold text-amber-400 mb-2">Probabilística</h3>
                     <BulletList items={['Muestreo discreto (5 o 3 puntos)', 'Asume independencia entre átomos', 'truth_table mezcla columnas booleanas y probabilísticas']} />
                   </div>
                   <div className="bg-surface-900/50 rounded-lg p-4 border border-surface-700/30">
-                    <h5 className="text-xs font-bold text-amber-400 mb-2">Runtime de scripting</h5>
+                    <h3 className="text-xs font-bold text-amber-400 mb-2">Runtime de scripting</h3>
                     <BulletList items={['while: límite de seguridad de 1000 iteraciones', 'extends requiere una teoría padre ya instanciada, normalmente singleton', 'input está pensado para CLI/Node', 'typeof / is_valid / get_atoms devuelven strings legibles, no booleans o arrays nativos']} />
                   </div>
                 </div>
@@ -2062,7 +2062,7 @@ export default function STDocsPage() {
                 code="npm run validate:st-docs\n# Ejecuta los 13 scripts .st canónicos contra @stevenvo780/st-lang\n# Salida esperada: ejecución completa sin errores"
               />
               <div className="bg-surface-800/40 border border-surface-700/40 rounded-xl p-5">
-                <h5 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Scripts de validación disponibles</h5>
+                <h3 className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-3">Scripts de validación disponibles</h3>
                 <div className="grid gap-2 sm:grid-cols-2 text-xs text-surface-400 font-mono">
                   <span>01 – Clásica proposicional</span>
                   <span>02 – Primer orden (FOL)</span>

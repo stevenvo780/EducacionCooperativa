@@ -205,32 +205,85 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     });
   }, [isPageVisible, docId, loading, fetchContent]);
 
-  const scheduleAutoSave = useCallback((value: string) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        setSaving(true);
-        await updateDocumentApi(docId, { content: value });
-        lastSyncedRef.current = value;
-        setDirty(false);
-        dispatchAgoraEvent(AGORA_EVENTS.stSourceSaved, { docId, docName, content: value });
-      } catch (err) {
-        console.error('[STFileEditor] Auto-save failed', err);
-      } finally {
-        setSaving(false);
-      }
-    }, 2000);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Helper que ejecuta el save real. Devuelve true si guardó OK.
+  // Sin debounce — para uso en flush de cleanup y emergencias.
+  const performSaveNow = useCallback(async (value: string): Promise<boolean> => {
+    // Defense in depth: NO sobreescribir blob con string vacío si previamente
+    // teníamos contenido. Cubre el bug del seedLock leak donde Y.Doc quedaba
+    // vacío y el autosave persistía "" pisando el contenido real en MinIO.
+    if (value === '' && (lastSyncedRef.current ?? '').length > 0) {
+      console.warn('[STFileEditor] Refusing to autosave empty over non-empty lastSynced — likely Y.Doc seed lock leak');
+      return false;
+    }
+    try {
+      setSaving(true);
+      setSaveError(null);
+      await updateDocumentApi(docId, { content: value });
+      lastSyncedRef.current = value;
+      setDirty(false);
+      dispatchAgoraEvent(AGORA_EVENTS.stSourceSaved, { docId, docName, content: value });
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error guardando';
+      console.error('[STFileEditor] Auto-save failed', err);
+      setSaveError(msg);
+      return false;
+    } finally {
+      setSaving(false);
+    }
   }, [docId, docName]);
 
-  // Ref del autosave para que los effects que escuchan el Y.Text puedan
-  // referenciarlo sin meterse en el dependency loop.
+  const scheduleAutoSave = useCallback((value: string) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void performSaveNow(value);
+    }, 2000);
+  }, [performSaveNow]);
+
   const scheduleAutoSaveRef = useRef(scheduleAutoSave);
   scheduleAutoSaveRef.current = scheduleAutoSave;
 
-  // Cleanup timer on unmount
+  // Refs para flush en cleanup
+  const performSaveNowRef = useRef(performSaveNow);
+  performSaveNowRef.current = performSaveNow;
+  const dirtyForCleanupRef = useRef(false);
+  useEffect(() => { dirtyForCleanupRef.current = dirty; }, [dirty]);
+  const contentForCleanupRef = useRef(content);
+  useEffect(() => { contentForCleanupRef.current = content; }, [content]);
+
+  // Cleanup en unmount: si hay un save pendiente en debounce, FLUSHEAR.
+  // Antes el clearTimeout cancelaba el último save → pérdida de datos al
+  // cambiar de tab antes de los 2s del debounce.
   useEffect(() => {
     return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      if (dirtyForCleanupRef.current) {
+        void performSaveNowRef.current(contentForCleanupRef.current);
+      }
+    };
+  }, []);
+
+  // beforeunload: flushear sin debounce con sendBeacon-like fallback.
+  useEffect(() => {
+    const handler = () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      if (dirtyForCleanupRef.current) {
+        void performSaveNowRef.current(contentForCleanupRef.current);
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    window.addEventListener('pagehide', handler);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+      window.removeEventListener('pagehide', handler);
     };
   }, []);
 
@@ -241,13 +294,30 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
   }, [scheduleAutoSave]);
 
   useEffect(() => {
-    if (content) {
-      const fileId = docName || docId;
-      const defs = STDefinitionsRegistry.extractFromSource(content, fileId);
-      STDefinitionsRegistry.setFileDefinitions(fileId, defs);
+    const fileId = docName || docId;
+    if (!content) {
+      return () => { STDefinitionsRegistry.removeFile(fileId); };
     }
+    // Bug histórico: el parser ST corría en cada setContent (incluyendo cada
+    // keystroke local y cada Y.Text update remoto), duplicando el debounceado
+    // de STRunner. En tablet con archivos medianos (>10KB) eso colgaba la
+    // pestaña. Debounce + cap por tamaño en touch.
+    const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
+    const TOUCH_PARSE_LIMIT = 30_000;
+    if (isTouch && content.length > TOUCH_PARSE_LIMIT) {
+      return () => { STDefinitionsRegistry.removeFile(fileId); };
+    }
+    const debounceMs = content.length > 5_000 ? 1200 : 350;
+    const timer = window.setTimeout(() => {
+      try {
+        const defs = STDefinitionsRegistry.extractFromSource(content, fileId);
+        STDefinitionsRegistry.setFileDefinitions(fileId, defs);
+      } catch {
+        // El parser puede fallar en input parcial. Silencioso.
+      }
+    }, debounceMs);
     return () => {
-      const fileId = docName || docId;
+      window.clearTimeout(timer);
       STDefinitionsRegistry.removeFile(fileId);
     };
   }, [content, docId, docName]);
@@ -280,19 +350,19 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     });
     registerStatusSegment({
       id: 'editor-save',
-      label: saving ? 'Guardando…' : dirty ? 'Guardar' : 'Guardado',
+      label: saveError ? `Error: ${saveError.slice(0, 30)}` : saving ? 'Guardando…' : dirty ? 'Guardar' : 'Guardado',
       icon: saving ? Cloud : Check,
       slot: 'right',
       priority: 20,
-      tone: saving ? 'info' : dirty ? 'warning' : 'success',
-      title: dirty ? 'Guardar (Ctrl+S)' : 'Sin cambios pendientes',
-      onClick: dirty && !saving ? handleSave : undefined
+      tone: saveError ? 'error' : saving ? 'info' : dirty ? 'warning' : 'success',
+      title: saveError ? `Falló el guardado: ${saveError}. Click para reintentar` : dirty ? 'Guardar (Ctrl+S)' : 'Sin cambios pendientes',
+      onClick: (dirty || saveError) && !saving ? handleSave : undefined
     });
     return () => {
       forceUnregisterStatusSegment('editor-stats');
       forceUnregisterStatusSegment('editor-save');
     };
-  }, [content, saving, dirty, handleSave]);
+  }, [content, saving, dirty, saveError, handleSave]);
 
   // Indicador de estado colaborativo en la status bar (solo si está activo).
   useEffect(() => {

@@ -4,6 +4,36 @@ import type { ViewMode } from './types';
 
 const OVERLAY_CONTAINER_CLASS = 'katex-overlay-container';
 const EDITING_ATTR = 'data-katex-editing';
+const LATEX_LAZY_ATTR = 'data-katex-lazy';
+
+// LRU cache for KaTeX renderToString. Same LaTeX in display vs inline mode
+// produces different HTML, so we key on `${latex}::${displayMode}`. Evicts
+// least-recently-used entries past the cap to bound memory in long sessions.
+const KATEX_CACHE_MAX = 500;
+const _katexCache = new Map<string, string>();
+
+function getCachedKatex(latex: string, displayMode: boolean): string {
+  const key = `${displayMode ? '1' : '0'}::${latex}`;
+  const hit = _katexCache.get(key);
+  if (hit !== undefined) {
+    // Re-insert to mark as most-recently-used
+    _katexCache.delete(key);
+    _katexCache.set(key, hit);
+    return hit;
+  }
+  let html: string;
+  try {
+    html = katex.renderToString(latex, { displayMode, throwOnError: false, trust: true });
+  } catch {
+    html = '';
+  }
+  _katexCache.set(key, html);
+  if (_katexCache.size > KATEX_CACHE_MAX) {
+    const oldestKey = _katexCache.keys().next().value;
+    if (oldestKey !== undefined) _katexCache.delete(oldestKey);
+  }
+  return html;
+}
 
 type MathBlock = {
   elements: HTMLElement[];
@@ -363,22 +393,22 @@ const collectInlineMath = (
   return inlines;
 };
 
-const createBlockOverlay = (block: MathBlock) => {
-  const html = katex.renderToString(block.latex, {
-    displayMode: true,
-    throwOnError: false,
-    trust: true
-  });
-
+const createBlockOverlay = (block: MathBlock, deferRender: boolean) => {
   const overlay = document.createElement('div');
   overlay.className = 'katex-block-overlay';
-  overlay.innerHTML = html;
   overlay.style.position = 'absolute';
   overlay.style.top = `${block.top}px`;
   overlay.style.left = `${block.left}px`;
   overlay.style.width = `${block.width}px`;
   overlay.style.minHeight = `${block.height}px`;
   overlay.style.zIndex = '5';
+  overlay.dataset.latex = block.latex;
+  overlay.dataset.displayMode = '1';
+  if (deferRender) {
+    overlay.setAttribute(LATEX_LAZY_ATTR, '1');
+  } else {
+    overlay.innerHTML = getCachedKatex(block.latex, true);
+  }
 
   overlay.addEventListener('click', (event) => {
     event.preventDefault();
@@ -395,16 +425,9 @@ const createBlockOverlay = (block: MathBlock) => {
   return overlay;
 };
 
-const createInlineOverlay = (container: HTMLElement, inlineMath: InlineMath) => {
-  const html = katex.renderToString(inlineMath.latex, {
-    displayMode: false,
-    throwOnError: false,
-    trust: true
-  });
-
+const createInlineOverlay = (container: HTMLElement, inlineMath: InlineMath, deferRender: boolean) => {
   const overlay = document.createElement('span');
   overlay.className = 'katex-inline-overlay';
-  overlay.innerHTML = html;
   overlay.style.position = 'absolute';
   overlay.style.top = `${inlineMath.top}px`;
   overlay.style.left = `${inlineMath.left}px`;
@@ -412,6 +435,13 @@ const createInlineOverlay = (container: HTMLElement, inlineMath: InlineMath) => 
   overlay.style.height = `${inlineMath.height}px`;
   overlay.style.zIndex = '5';
   overlay.dataset.paraId = String(inlineMath.el.dataset.lexicalKey || inlineMath.el.id || '');
+  overlay.dataset.latex = inlineMath.latex;
+  overlay.dataset.displayMode = '0';
+  if (deferRender) {
+    overlay.setAttribute(LATEX_LAZY_ATTR, '1');
+  } else {
+    overlay.innerHTML = getCachedKatex(inlineMath.latex, false);
+  }
 
   overlay.addEventListener('click', (event) => {
     event.preventDefault();
@@ -428,6 +458,20 @@ const createInlineOverlay = (container: HTMLElement, inlineMath: InlineMath) => 
   });
 
   return overlay;
+};
+
+/**
+ * Renderiza un overlay perezoso (placeholder) llenando su HTML cuando entra
+ * al viewport. Usado por IntersectionObserver para no pagar `renderToString`
+ * sobre fórmulas off-screen.
+ */
+const fillLazyOverlay = (overlay: HTMLElement) => {
+  if (!overlay.hasAttribute(LATEX_LAZY_ATTR)) return;
+  const latex = overlay.dataset.latex || '';
+  const displayMode = overlay.dataset.displayMode === '1';
+  if (!latex) return;
+  overlay.innerHTML = getCachedKatex(latex, displayMode);
+  overlay.removeAttribute(LATEX_LAZY_ATTR);
 };
 
 export const useKatexOverlayDecorations = ({
@@ -447,6 +491,28 @@ export const useKatexOverlayDecorations = ({
     let shellObserver: MutationObserver | null = null;
     let scrollTarget: HTMLElement | null = null;
     let decorateFrame: number | null = null;
+    let viewportObserver: IntersectionObserver | null = null;
+
+    // Lazy fill via IntersectionObserver (200px margin for prefetch). Overlays
+    // tagged with LATEX_LAZY_ATTR get their innerHTML filled when scrolling
+    // brings them into view. Off-screen formulas remain placeholders, so we
+    // pay zero `katex.renderToString` cost for them.
+    const ensureViewportObserver = () => {
+      if (viewportObserver) return viewportObserver;
+      viewportObserver = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              const target = entry.target as HTMLElement;
+              fillLazyOverlay(target);
+              viewportObserver?.unobserve(target);
+            }
+          }
+        },
+        { rootMargin: '200px 0px', threshold: 0.01 }
+      );
+      return viewportObserver;
+    };
 
     const decorateAll = () => {
       const editable = shell.querySelector('[contenteditable="true"]') as HTMLElement | null;
@@ -460,23 +526,62 @@ export const useKatexOverlayDecorations = ({
 
       if (container.dataset.renderKey === renderKey) return;
 
+      // Cap el límite para no construir miles de overlays en docs gigantes.
+      // Block math caps en 200; inline math en 400. El usuario puede ver las
+      // fórmulas faltantes desplazándose (la lista se reconstruye cada lint).
+      const cappedBlocks = blocks.length > 200 ? blocks.slice(0, 200) : blocks;
+      const cappedInlines = inlines.length > 400 ? inlines.slice(0, 400) : inlines;
+
+      // Determinar qué overlays están dentro del viewport del scroll parent
+      // (aproximación geométrica antes de insertarlos al DOM). Los que estén
+      // fuera entran como placeholders LAZY y se rellenan al scrollear.
+      const sp = editable.parentElement;
+      const viewTop = sp ? sp.scrollTop : 0;
+      const viewBottom = sp ? viewTop + sp.clientHeight : Number.POSITIVE_INFINITY;
+      const viewMargin = 200;
+
+      const isOffscreen = (top: number, height: number) => {
+        if (!sp) return false;
+        return top + height < viewTop - viewMargin || top > viewBottom + viewMargin;
+      };
+
+      // Limpiar tracking de IntersectionObserver del decorate previo
+      if (viewportObserver) {
+        viewportObserver.disconnect();
+        viewportObserver = null;
+      }
+      const observer = ensureViewportObserver();
+
       const fragment = document.createDocumentFragment();
-      blocks.forEach((block) => {
+      const lazyOverlays: HTMLElement[] = [];
+
+      for (const block of cappedBlocks) {
         try {
-          fragment.appendChild(createBlockOverlay(block));
+          const offscreen = isOffscreen(block.top, block.height);
+          const overlay = createBlockOverlay(block, offscreen);
+          if (offscreen) lazyOverlays.push(overlay);
+          fragment.appendChild(overlay);
         } catch {
           // ignore katex errors for malformed blocks
         }
-      });
-      inlines.forEach((inlineMath) => {
+      }
+      for (const inlineMath of cappedInlines) {
         try {
-          fragment.appendChild(createInlineOverlay(container, inlineMath));
+          const offscreen = isOffscreen(inlineMath.top, inlineMath.height);
+          const overlay = createInlineOverlay(container, inlineMath, offscreen);
+          if (offscreen) lazyOverlays.push(overlay);
+          fragment.appendChild(overlay);
         } catch {
           // ignore katex errors for malformed inline expressions
         }
-      });
+      }
       container.dataset.renderKey = renderKey;
       container.replaceChildren(fragment);
+
+      // Observar todos los overlays perezosos para rellenar al scrollear
+      for (const overlay of lazyOverlays) {
+        observer.observe(overlay);
+      }
     };
 
     let decorateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -567,6 +672,8 @@ export const useKatexOverlayDecorations = ({
       clearTimeout(initialTimer);
       if (decorateTimer) clearTimeout(decorateTimer);
       if (decorateFrame !== null) cancelAnimationFrame(decorateFrame);
+      viewportObserver?.disconnect();
+      viewportObserver = null;
       shellObserver?.disconnect();
       detachEditableBindings();
       document.removeEventListener('click', handleClickOutside);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Wrench, CheckCircle2, AlertTriangle, FileDiff } from 'lucide-react';
 import type { AgentTraceStep } from '@/lib/agora-ai/types';
 
@@ -17,7 +17,7 @@ function prettyJson(value: unknown) {
   }
 }
 
-export function ToolCallBlock({ step, defaultOpen = false }: ToolCallBlockProps) {
+function ToolCallBlockImpl({ step, defaultOpen = false }: ToolCallBlockProps) {
   const [open, setOpen] = useState(defaultOpen);
   const icon = step.type === 'error' ? AlertTriangle : step.type === 'tool_result' ? CheckCircle2 : Wrench;
   const Icon = icon;
@@ -69,3 +69,18 @@ export function ToolCallBlock({ step, defaultOpen = false }: ToolCallBlockProps)
     </div>
   );
 }
+
+export const ToolCallBlock = memo(ToolCallBlockImpl, (prev, next) => {
+  if (prev.defaultOpen !== next.defaultOpen) return false;
+  const a = prev.step;
+  const b = next.step;
+  if (a.id !== b.id) return false;
+  if (a.type !== b.type) return false;
+  if ((a.content?.length ?? 0) !== (b.content?.length ?? 0)) return false;
+  // status no existe en AgentTraceStep, usamos finishedAt + result presence como proxy
+  if (a.finishedAt !== b.finishedAt) return false;
+  if (Boolean(a.result) !== Boolean(b.result)) return false;
+  if (Boolean(a.call) !== Boolean(b.call)) return false;
+  if (a.title !== b.title) return false;
+  return true;
+});

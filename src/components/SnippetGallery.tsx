@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import {
   X, Plus, Pencil, Trash2, Check,
-  Search, Copy, Sigma, Code2, LayoutGrid, FileText, BookOpen, TerminalSquare
+  Search, Copy, Sigma, Code2, LayoutGrid, FileText, BookOpen, TerminalSquare,
+  Sparkles
 } from 'lucide-react';
 import clsx from 'clsx';
 import {
@@ -18,6 +20,9 @@ import {
   seedDefaultSnippets,
   type Snippet
 } from '@/services/snippetApi';
+
+const SNIPPET_ROW_HEIGHT = 144;
+const SNIPPET_VIRTUALIZE_THRESHOLD = 24;
 
 /**
  * Metadatos de categorías para el filtrado de snippets.
@@ -35,8 +40,38 @@ const CATEGORIES = [
 
 /**
  * Vista previa minimalista de Markdown que renderiza KaTeX y GFM.
+ * El render del Markdown/KaTeX es perezoso: hasta que el card entra en viewport
+ * (o se acerca a 200px) mostramos un skeleton para evitar parsear ~43 cards al
+ * primer mount con KaTeX simultáneo.
  */
 const MiniPreview = React.memo(({ content, category }: { content: string; category: string }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [shouldRender, setShouldRender] = useState(() => typeof IntersectionObserver === 'undefined');
+
+  useEffect(() => {
+    if (shouldRender) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setShouldRender(true);
+      return;
+    }
+    const node = containerRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setShouldRender(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '200px 0px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldRender]);
+
   if (category === 'st' || category === 'formalization') {
     return (
       <pre className="overflow-hidden whitespace-pre-wrap rounded bg-slate-950/60 p-2 font-mono text-[11px] leading-relaxed text-slate-300 max-h-24">
@@ -45,8 +80,21 @@ const MiniPreview = React.memo(({ content, category }: { content: string; catego
     );
   }
 
+  if (!shouldRender) {
+    return (
+      <div
+        ref={containerRef}
+        className="snippet-mini-preview overflow-hidden text-xs leading-relaxed text-slate-500 max-h-24"
+        aria-hidden="true"
+      >
+        <div className="h-2 w-3/4 rounded bg-slate-800/70" />
+        <div className="mt-1.5 h-2 w-1/2 rounded bg-slate-800/50" />
+      </div>
+    );
+  }
+
   return (
-    <div className="snippet-mini-preview overflow-hidden text-xs leading-relaxed text-slate-300 max-h-24">
+    <div ref={containerRef} className="snippet-mini-preview overflow-hidden text-xs leading-relaxed text-slate-300 max-h-24">
       <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
         {content}
       </ReactMarkdown>
@@ -242,6 +290,68 @@ export function SnippetEditorModal({
   );
 }
 
+interface VirtualizedSnippetRowData {
+  items: Snippet[];
+  onInsert: (markdown: string, snippet?: Snippet) => void;
+  onEdit: (snippet: Snippet) => void;
+  onDelete: (id: string) => void;
+}
+
+function VirtualizedSnippetRow(props: RowComponentProps<VirtualizedSnippetRowData>) {
+  const { index, style, items, onInsert, onEdit, onDelete } = props;
+  const snippet = items[index];
+  if (!snippet) return null;
+  return (
+    <div style={style} className="px-0.5">
+      <div style={{ height: SNIPPET_ROW_HEIGHT - 8 }}>
+        <SnippetCard
+          snippet={snippet}
+          onInsert={onInsert}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
+    </div>
+  );
+}
+
+function VirtualizedSnippetList({
+  items,
+  onInsert,
+  onEdit,
+  onDelete
+}: VirtualizedSnippetRowData) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (!containerRef.current || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setSize({ width, height });
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="h-full">
+      {size.height > 0 && (
+        <VirtualizedList<VirtualizedSnippetRowData>
+          rowCount={items.length}
+          rowHeight={SNIPPET_ROW_HEIGHT}
+          overscanCount={4}
+          rowComponent={VirtualizedSnippetRow}
+          rowProps={{ items, onInsert, onEdit, onDelete }}
+          style={{ height: size.height, width: '100%' }}
+        />
+      )}
+    </div>
+  );
+}
+
 /**
  * SnippetGallery — Barra lateral de gestión e inserción de snippets.
  * Proporciona búsqueda, filtrado por categorías y operaciones CRUD.
@@ -349,12 +459,79 @@ export default function SnippetGallery({
     setShowEditor(true);
   }, []);
 
+  const duplicateGroups = useMemo(() => {
+    const seen = new Map<string, Snippet[]>();
+    for (const s of snippets) {
+      const key = `${(s.title || '').trim().toLowerCase()}::${(s.markdown || '').trim()}`;
+      const arr = seen.get(key) ?? [];
+      arr.push(s);
+      seen.set(key, arr);
+    }
+    return Array.from(seen.values()).filter((arr) => arr.length > 1);
+  }, [snippets]);
+
+  const duplicateCount = useMemo(
+    () => duplicateGroups.reduce((sum, arr) => sum + (arr.length - 1), 0),
+    [duplicateGroups]
+  );
+
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
+
+  const handleCleanDuplicates = useCallback(async () => {
+    if (duplicateCount === 0 || cleaningDuplicates) return;
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm(
+        `Se eliminarán ${duplicateCount} snippet${duplicateCount === 1 ? '' : 's'} duplicado${duplicateCount === 1 ? '' : 's'}, conservando uno de cada grupo. ¿Continuar?`
+      );
+      if (!ok) return;
+    }
+    setCleaningDuplicates(true);
+    try {
+      const idsToDelete: string[] = [];
+      for (const group of duplicateGroups) {
+        const sorted = [...group].sort((a, b) => {
+          const ao = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+          const bo = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+          if (ao !== bo) return ao - bo;
+          return String(a.id).localeCompare(String(b.id));
+        });
+        for (let i = 1; i < sorted.length; i++) {
+          const item = sorted[i];
+          if (item?.id) idsToDelete.push(item.id);
+        }
+      }
+      const results = await Promise.allSettled(idsToDelete.map((id) => deleteSnippet(id)));
+      const okIds = new Set<string>();
+      results.forEach((r, idx) => {
+        const id = idsToDelete[idx];
+        if (r.status === 'fulfilled' && r.value && id) okIds.add(id);
+      });
+      if (okIds.size > 0) {
+        setSnippets((prev) => prev.filter((s) => !okIds.has(s.id)));
+      }
+    } finally {
+      setCleaningDuplicates(false);
+    }
+  }, [duplicateGroups, duplicateCount, cleaningDuplicates]);
+
   return (
     <>
       <div className="flex h-full flex-col bg-slate-950 text-slate-200">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-3 py-2">
           <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</h2>
           <div className="flex items-center gap-1">
+            {duplicateCount > 0 && (
+              <button
+                type="button"
+                onClick={handleCleanDuplicates}
+                disabled={cleaningDuplicates}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-amber-300 transition hover:bg-amber-500/10 disabled:opacity-50"
+                title={`Eliminar ${duplicateCount} duplicado${duplicateCount === 1 ? '' : 's'}`}
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>{cleaningDuplicates ? '…' : `${duplicateCount} dup`}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handleNew}
@@ -417,9 +594,38 @@ export default function SnippetGallery({
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-blue-400" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500">
-              {searchQuery ? 'Sin resultados' : (emptyLabel ?? 'No hay snippets. ¡Crea el primero!')}
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/10 text-blue-300">
+                <FileText className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-200">
+                  {searchQuery ? 'Sin resultados' : 'Aún no hay snippets'}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {searchQuery
+                    ? 'Prueba con otro término o crea uno nuevo.'
+                    : (emptyLabel ?? 'Guarda fragmentos reutilizables y reusa con un click.')}
+                </p>
+              </div>
+              {!searchQuery && (
+                <button
+                  type="button"
+                  onClick={handleNew}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-200 transition hover:border-blue-400 hover:bg-blue-500/20"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Crear primer snippet
+                </button>
+              )}
             </div>
+          ) : filtered.length > SNIPPET_VIRTUALIZE_THRESHOLD ? (
+            <VirtualizedSnippetList
+              items={filtered}
+              onInsert={onInsert}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
           ) : (
             <div className="grid gap-2">
               {filtered.map((s) => (

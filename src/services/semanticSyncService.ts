@@ -80,7 +80,7 @@ const syncRegistryFromContent = (fileName: string, content: string) => {
 const emitCompanionEvents = (companionName: string, companionDocIds: string[]) => {
   if (typeof window === 'undefined' || companionDocIds.length === 0) return;
 
-  dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
+  dispatchAgoraEvent(AGORA_EVENTS.docsChanged, {});
   companionDocIds.forEach((docId) => {
     dispatchAgoraEvent(AGORA_EVENTS.docContentUpdated, { docId, docName: companionName });
   });

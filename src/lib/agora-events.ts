@@ -72,7 +72,12 @@ type AgoraWindowEventMap = {
   [AGORA_EVENTS.agentUiCommand]: AgentUiCommandEventDetail;
   [AGORA_EVENTS.agentDiagnostic]: AgentDiagnosticEventDetail;
   [AGORA_EVENTS.documentsMutated]: AgentDocumentsMutatedEventDetail;
-  [AGORA_EVENTS.docsChanged]: void;
+  /**
+   * Detail opcional. Cuando se dispara desde SyncEventsBridge incluye
+   * `workspaceId` para que los listeners puedan filtrar y solo refresquen
+   * si el evento corresponde al workspace activo.
+   */
+  [AGORA_EVENTS.docsChanged]: { workspaceId?: string | null };
   [AGORA_EVENTS.openDocuments]: AgentOpenDocumentsEventDetail;
   [AGORA_EVENTS.rtdbEvent]: SyncEvent;
   [AGORA_EVENTS.problem]: AgoraProblemEventDetail;

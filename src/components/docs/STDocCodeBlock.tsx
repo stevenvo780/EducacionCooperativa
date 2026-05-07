@@ -102,7 +102,7 @@ export default function STDocCodeBlock({
   }, [handleReset, handleRun]);
 
   return (
-    <div className="group relative my-3">
+    <div className="group relative my-3 min-w-0">
       {label && <div className="text-[10px] uppercase tracking-wider text-surface-500 mb-1 font-semibold">{label}</div>}
       <div className="bg-surface-950 border border-surface-700/50 rounded-lg overflow-hidden">
         <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-surface-800/50 border-b border-surface-700/30">

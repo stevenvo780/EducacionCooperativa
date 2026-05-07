@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Brain, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AgentThinkingBlockProps {
@@ -8,7 +8,7 @@ interface AgentThinkingBlockProps {
   defaultOpen?: boolean;
 }
 
-export function AgentThinkingBlock({ content, defaultOpen = false }: AgentThinkingBlockProps) {
+function AgentThinkingBlockImpl({ content, defaultOpen = false }: AgentThinkingBlockProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -32,3 +32,9 @@ export function AgentThinkingBlock({ content, defaultOpen = false }: AgentThinki
     </div>
   );
 }
+
+export const AgentThinkingBlock = memo(AgentThinkingBlockImpl, (prev, next) => (
+  prev.defaultOpen === next.defaultOpen
+  && prev.content.length === next.content.length
+  && prev.content === next.content
+));

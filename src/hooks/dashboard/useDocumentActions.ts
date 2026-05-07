@@ -608,11 +608,52 @@ export function useDocumentActions({
         await moveDocumentToFolder(docItem.id, target);
     };
 
+    // Ensures the doc name is unique within the same folder of the workspace.
+    // Auto-suffix con (2), (3)... cuando hay colisión. Antes dos docs con el
+    // mismo nombre confundían listas/búsquedas y a veces hacían que uno
+    // desapareciera de la jerarquía aparentemente.
+    const ensureUniqueDocName = (proposed: string, folder: string): string => {
+        const norm = (n: string) => n.toLowerCase().trim();
+        const folderNorm = normalizeFolderPath(folder);
+        const existingNames = new Set(
+            (docsRef.current ?? docs)
+                .filter(d => normalizeFolderPath(d.folder) === folderNorm && d.type !== 'folder')
+                .map(d => norm(d.name))
+        );
+        if (!existingNames.has(norm(proposed))) return proposed;
+        const dotIdx = proposed.lastIndexOf('.');
+        const stem = dotIdx > 0 ? proposed.slice(0, dotIdx) : proposed;
+        const ext = dotIdx > 0 ? proposed.slice(dotIdx) : '';
+        for (let i = 2; i < 1000; i++) {
+            const candidate = `${stem} (${i})${ext}`;
+            if (!existingNames.has(norm(candidate))) return candidate;
+        }
+        return `${stem}-${Date.now()}${ext}`;
+    };
+
     const createDoc = async (e?: React.FormEvent, folderName?: string) => {
         if (e) e.preventDefault();
-        const name = newDocName.trim() || 'Sin título';
         if (!user) return;
         const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
+        // Pedir nombre obligatorio si está vacío. Antes ponía "Sin título"
+        // por defecto y dos docs con el mismo nombre se confundían en la UI.
+        let proposed = newDocName.trim();
+        if (!proposed) {
+            const result = await showDialog({
+                type: DialogKind.Input,
+                title: 'Nombre del documento',
+                message: 'Escribe un nombre para identificarlo en la jerarquía.',
+                placeholder: 'mi-documento.md',
+                defaultValue: '',
+                confirmLabel: 'Crear',
+                cancelLabel: 'Cancelar',
+                required: true
+            });
+            if (!result.confirmed) return;
+            proposed = (result.value ?? '').trim();
+            if (!proposed) return;
+        }
+        const name = ensureUniqueDocName(proposed, targetFolder);
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
         const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;
         setIsCreating(true);
@@ -628,17 +669,33 @@ export function useDocumentActions({
             const docRef = { id: String(data.id) };
 
             setNewDocName('');
-            await requestDocsRefresh();
-            openDocument({
+            // Optimistic insert: agregar el doc al state local INMEDIATAMENTE
+            // para que aparezca en el sidebar sin esperar el refresh. Antes:
+            // si requestDocsRefresh() fallaba o el filtro de workspaceId no
+            // matcheaba, el doc quedaba "guardado pero invisible".
+            const newDoc: DocItem = {
                 id: docRef.id,
                 name,
                 type: 'text',
                 ownerId: user.uid,
-                updatedAt: { seconds: Date.now() / 1000 },
-                folder: targetFolder
+                workspaceId: docWorkspaceId,
+                folder: targetFolder,
+                updatedAt: { seconds: Date.now() / 1000 } as unknown as DocItem['updatedAt']
+            };
+            setDocs(prev => {
+                if (prev.some(d => d.id === docRef.id)) return prev;
+                return [newDoc, ...prev];
             });
+            void requestDocsRefresh({ force: true }).catch(() => { /* ignore */ });
+            openDocument(newDoc);
         } catch (e) {
             console.error('Error creating doc', e);
+            await showDialog({
+                type: DialogKind.Error,
+                title: 'No se pudo crear el documento',
+                message: e instanceof Error ? e.message : 'Error desconocido al crear el archivo.',
+                confirmLabel: 'OK'
+            });
         } finally {
             setIsCreating(false);
         }

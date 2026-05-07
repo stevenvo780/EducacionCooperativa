@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from 'react';
+import { Sparkles } from 'lucide-react';
 import { SemanticBrowser, type SemanticTab } from '@/components/editor/SemanticBrowser';
 import {
   loadSemanticWorkspaceState,
@@ -26,7 +27,7 @@ import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
 import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
 import { syncSTSourceToSemanticWorkspace } from '@/services/semanticSyncService';
 import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
-import { buildTheoryGraphFromSemanticState, type TheoryGraphQuickFix } from '@/lib/semantic/theory-graph';
+import { buildTheoryGraphFromSemanticState, type TheoryGraph, type TheoryGraphQuickFix } from '@/lib/semantic/theory-graph';
 import { buildSTFromSemantic } from '@/lib/buildSTFromSemantic';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -49,25 +50,31 @@ export default function GlobalSemanticBrowser({
 
   const mutatingRef = useRef(false);
   const lastReloadAtRef = useRef(0);
+  // Guard de workspaceId: si el user cambia de WS mid-fetch, NO aplicar el
+  // resultado del fetch viejo al state del WS nuevo. Antes era una race
+  // condition que aplicaba state a workspace incorrecto.
+  const currentWorkspaceIdRef = useRef(workspaceId);
+  useEffect(() => { currentWorkspaceIdRef.current = workspaceId; }, [workspaceId]);
 
   const reload = useCallback(() => {
     if (!workspaceId) return;
-    /* While a mutation (delete/edit) is persisting, skip remote merge to avoid
-       the additive union resurrecting items that were just deleted locally. */
     if (mutatingRef.current) return;
 
+    const requestedWsId = workspaceId;
     const localState = loadSemanticWorkspaceState({ workspaceId, userId });
     setState(localState);
     void fetchSemanticWorkspaceStateApi(workspaceId)
       .then((remoteState) => {
-        /* Guard again — a mutation may have started while the fetch was in-flight */
         if (mutatingRef.current) return;
+        if (currentWorkspaceIdRef.current !== requestedWsId) return;
         const mergedState = mergeSemanticWorkspaceStates(remoteState ?? EMPTY_SEMANTIC_WORKSPACE_STATE, localState);
         saveSemanticWorkspaceState({ workspaceId, userId }, mergedState);
         setState(mergedState);
       })
       .catch(() => {
-        if (!mutatingRef.current) setState(localState);
+        if (mutatingRef.current) return;
+        if (currentWorkspaceIdRef.current !== requestedWsId) return;
+        setState(localState);
       });
   }, [workspaceId, userId]);
 
@@ -82,7 +89,11 @@ export default function GlobalSemanticBrowser({
 
   useEffect(() => {
     if (!workspaceId || !isPageVisible || !isOnline) return;
-    const interval = setInterval(() => scheduleReload(), 30000);
+    // Tablets de 4GB con WS Lógica/Neuro: el polling de 30s + cascada de
+    // memos+filtros+normalize cuelga la pestaña. Subimos a 3min en touch.
+    const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
+    const intervalMs = isTouch ? 180_000 : 30_000;
+    const interval = setInterval(() => scheduleReload(), intervalMs);
     return () => clearInterval(interval);
   }, [workspaceId, isOnline, isPageVisible, scheduleReload]);
 
@@ -262,11 +273,30 @@ export default function GlobalSemanticBrowser({
   // la UI primero con el estado anterior y compute las derivadas en idle.
   const deferredState = useDeferredValue(state);
 
-  const theoryGraph = useMemo(() => buildTheoryGraphFromSemanticState(deferredState, {
-    sourceDocument: { docName: filterDocName || 'Espacio de trabajo' }
-  }), [filterDocName, deferredState]);
+  // Cap defensivo para WS muy grandes (Lógica/Neurociencias). Por encima
+  // de este umbral, computar el grafo y la preview ST congela la tablet.
+  const HEAVY_DERIVATION_LIMIT = 600;
+  const stateIsLarge = (
+    deferredState.concepts.length > HEAVY_DERIVATION_LIMIT ||
+    deferredState.fragments.length > HEAVY_DERIVATION_LIMIT * 2 ||
+    deferredState.relations.length > HEAVY_DERIVATION_LIMIT
+  );
 
-  const stPreviewContent = useMemo(() => buildSTFromSemantic(deferredState, filterDocName || 'Espacio de trabajo'), [filterDocName, deferredState]);
+  const theoryGraph = useMemo<TheoryGraph>(() => {
+    if (stateIsLarge) {
+      return { nodes: [], edges: [], diagnostics: [], outline: [], profileIds: [] };
+    }
+    return buildTheoryGraphFromSemanticState(deferredState, {
+      sourceDocument: { docName: filterDocName || 'Espacio de trabajo' }
+    });
+  }, [filterDocName, deferredState, stateIsLarge]);
+
+  const stPreviewContent = useMemo(() => {
+    if (stateIsLarge) {
+      return `// Espacio con >${HEAVY_DERIVATION_LIMIT} conceptos. Vista previa ST omitida\n// para mantener fluido el editor. Usa la pestaña "Conceptos" para explorar.\n`;
+    }
+    return buildSTFromSemantic(deferredState, filterDocName || 'Espacio de trabajo');
+  }, [filterDocName, deferredState, stateIsLarge]);
 
   const handleExperienceModeChange = useCallback((mode: 'assisted' | 'hybrid' | 'expert') => {
     if (!ctx) return;
@@ -335,6 +365,54 @@ export default function GlobalSemanticBrowser({
         .catch((err) => console.error('[GlobalSemanticBrowser] handleApplyQuickFix(evidence) failed', err));
     }
   }, [ctx, persistAndSync, state, theoryGraph.nodes, conceptsById, fragmentsById]);
+
+  // Circuit breaker para tablets/mobile: en workspaces XXL la propia mesa
+  // semántica satura el thread principal aún con virtualización. Le damos
+  // al user un opt-in explícito para "abrir igualmente" si es desktop.
+  // Threshold bajo (300/500) porque incluso ~600 fragments con conceptos
+  // genera memoization en cadena que cuelga tablets viejas.
+  const isTouchDevice = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad/.test(navigator.userAgent));
+  const SAFETY_CONCEPT_CAP = isTouchDevice ? 250 : 600;
+  const SAFETY_FRAG_CAP = isTouchDevice ? 500 : 1500;
+  const SAFETY_REL_CAP = isTouchDevice ? 250 : 600;
+  const stateOverwhelming = (
+    deferredState.concepts.length > SAFETY_CONCEPT_CAP ||
+    deferredState.fragments.length > SAFETY_FRAG_CAP ||
+    deferredState.relations.length > SAFETY_REL_CAP
+  );
+  const [forceOpenHeavy, setForceOpenHeavy] = useState(false);
+
+  if (stateOverwhelming && !forceOpenHeavy) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center bg-slate-950 text-slate-200 px-6 py-12">
+        <div className="max-w-md text-center space-y-4">
+          <div className="mx-auto h-14 w-14 rounded-full bg-amber-500/15 flex items-center justify-center">
+            <Sparkles className="h-7 w-7 text-amber-300" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold text-white">Mesa Semántica deshabilitada por tamaño</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Este workspace tiene <strong>{deferredState.concepts.length}</strong> conceptos y
+              <strong> {deferredState.fragments.length}</strong> fragmentos.
+              {isTouchDevice
+                ? ' Abrir la mesa puede colgar la tablet.'
+                : ' Abrir la mesa puede ralentizar el navegador unos segundos.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForceOpenHeavy(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-200 hover:bg-amber-500/20 transition"
+          >
+            Abrir igualmente
+          </button>
+          <p className="text-[10px] text-slate-500">
+            Usa la búsqueda en el sidebar para filtrar conceptos sin abrir la mesa completa.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SemanticBrowser

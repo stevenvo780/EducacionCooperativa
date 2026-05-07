@@ -5,7 +5,70 @@ const MAX_CHAT_MESSAGES = 200;
 
 const isBrowser = () => typeof window !== 'undefined';
 
-const clampMessages = (messages: AgentStoredChatMessage[]) => messages.slice(-MAX_CHAT_MESSAGES);
+// Truncar tool outputs largos de cada agentRun antes de persistir. Tool outputs
+// (file content, terminal stdout) pueden ser MBs cada uno y hinchaban el chat
+// history en localStorage a 20MB+. Mantenemos shape original.
+const TOOL_RESULT_PREVIEW_CHARS = 800;
+const STEP_CONTENT_PREVIEW_CHARS = 800;
+const STEP_RESULT_DATA_PREVIEW_CHARS = 4000;
+const truncateString = (val: unknown, max = TOOL_RESULT_PREVIEW_CHARS): unknown => {
+  if (typeof val !== 'string') return val;
+  if (val.length <= max) return val;
+  return `${val.slice(0, max)}\n…[truncado ${val.length - max} chars]`;
+};
+const truncateStepData = (data: unknown): unknown => {
+  if (data === null || data === undefined) return data;
+  if (typeof data === 'string') return truncateString(data, STEP_RESULT_DATA_PREVIEW_CHARS);
+  try {
+    const serialized = JSON.stringify(data);
+    if (serialized.length <= STEP_RESULT_DATA_PREVIEW_CHARS) return data;
+    return `${serialized.slice(0, STEP_RESULT_DATA_PREVIEW_CHARS)}\n…[truncado ${serialized.length - STEP_RESULT_DATA_PREVIEW_CHARS} chars]`;
+  } catch {
+    return data;
+  }
+};
+const truncateAgentRun = (msg: AgentStoredChatMessage): AgentStoredChatMessage => {
+  const m = msg as unknown as {
+    agentRun?: {
+      toolResults?: Array<Record<string, unknown>>;
+      steps?: Array<Record<string, unknown>>;
+    };
+  };
+  if (!m.agentRun) return msg;
+  const compactResults = m.agentRun.toolResults?.map((r) => {
+    const next = { ...r };
+    if ('output' in next) next['output'] = truncateString(next['output']);
+    if ('result' in next) next['result'] = truncateString(next['result']);
+    return next;
+  });
+  const compactSteps = m.agentRun.steps?.map((step) => {
+    const next: Record<string, unknown> = { ...step };
+    if (typeof next['content'] === 'string') {
+      next['content'] = truncateString(next['content'], STEP_CONTENT_PREVIEW_CHARS);
+    }
+    const result = next['result'];
+    if (result && typeof result === 'object') {
+      const r = result as Record<string, unknown>;
+      const compactResult: Record<string, unknown> = { ...r };
+      if ('data' in compactResult) compactResult['data'] = truncateStepData(compactResult['data']);
+      if (typeof compactResult['summary'] === 'string') {
+        compactResult['summary'] = truncateString(compactResult['summary'], STEP_CONTENT_PREVIEW_CHARS);
+      }
+      if (typeof compactResult['error'] === 'string') {
+        compactResult['error'] = truncateString(compactResult['error'], STEP_CONTENT_PREVIEW_CHARS);
+      }
+      next['result'] = compactResult;
+    }
+    return next;
+  });
+  const nextRun: Record<string, unknown> = { ...m.agentRun };
+  if (compactResults) nextRun['toolResults'] = compactResults;
+  if (compactSteps) nextRun['steps'] = compactSteps;
+  return { ...msg, agentRun: nextRun } as unknown as AgentStoredChatMessage;
+};
+const clampMessages = (messages: AgentStoredChatMessage[]) => (
+  messages.slice(-MAX_CHAT_MESSAGES).map(truncateAgentRun)
+);
 
 export const getChatHistoryStorageKey = (workspaceId: string) => `agora-ai-chats:${workspaceId}`;
 
