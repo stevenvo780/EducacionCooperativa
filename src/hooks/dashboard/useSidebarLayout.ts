@@ -5,6 +5,20 @@ import { useCallback, useEffect, useState } from 'react';
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 600;
 const SIDEBAR_DEFAULT_WIDTH = 260;
+const LAST_WIDTH_STORAGE_KEY = 'agora:sidebar-last-width';
+
+export function readPersistedSidebarWidth(): number {
+  if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH;
+  try {
+    const raw = window.localStorage.getItem(LAST_WIDTH_STORAGE_KEY);
+    if (!raw) return SIDEBAR_DEFAULT_WIDTH;
+    const parsed = Number.parseFloat(raw);
+    if (!Number.isFinite(parsed)) return SIDEBAR_DEFAULT_WIDTH;
+    return Math.min(Math.max(parsed, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
+  } catch {
+    return SIDEBAR_DEFAULT_WIDTH;
+  }
+}
 
 export interface UseSidebarLayoutResult {
   sidebarWidth: number;
@@ -27,14 +41,18 @@ export interface UseSidebarLayoutResult {
  *   const sidebar = useSidebarLayout();
  *   <div onMouseDown={sidebar.startResizingSidebar} ... />
  */
-export function useSidebarLayout(initialWidth = SIDEBAR_DEFAULT_WIDTH): UseSidebarLayoutResult {
-  const [sidebarWidth, setSidebarWidthState] = useState(initialWidth);
+export function useSidebarLayout(initialWidth?: number): UseSidebarLayoutResult {
+  const [sidebarWidth, setSidebarWidthState] = useState(() => initialWidth ?? readPersistedSidebarWidth());
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const setSidebarWidth = useCallback((width: number) => {
     if (!Number.isFinite(width)) return;
-    setSidebarWidthState(Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH));
+    const clamped = Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
+    setSidebarWidthState(clamped);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem(LAST_WIDTH_STORAGE_KEY, String(clamped)); } catch { /* noop */ }
+    }
   }, []);
 
   const startResizingSidebar = useCallback((event: React.MouseEvent) => {
@@ -44,7 +62,10 @@ export function useSidebarLayout(initialWidth = SIDEBAR_DEFAULT_WIDTH): UseSideb
 
   const stopResizingSidebar = useCallback(() => {
     setIsResizingSidebar(false);
-  }, []);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem(LAST_WIDTH_STORAGE_KEY, String(sidebarWidth)); } catch { /* noop */ }
+    }
+  }, [sidebarWidth]);
 
   useEffect(() => {
     if (!isResizingSidebar) return;

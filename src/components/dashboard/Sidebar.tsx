@@ -741,23 +741,25 @@ const Sidebar = ({
               </div>
             </div>
 
-            <div className="mt-2 px-1 flex-1 min-h-0">
+            <div className="mt-2 px-1 flex-1 min-h-0 relative">
               {loadingDocs && docs.length === 0 && (
-                <div className="px-3 py-2 text-center text-xs text-surface-500 flex items-center justify-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Cargando archivos...
+                <div className="h-full min-h-[200px] flex items-start justify-center pt-6">
+                  <div className="flex items-center gap-2 text-xs text-surface-500">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Cargando archivos...
+                  </div>
                 </div>
               )}
 
               {!loadingDocs && docs.length === 0 && !isSearchMode && (
-                <div className="px-3 py-2 text-center text-xs text-surface-500">
-                  Espacio vacío
+                <div className="h-full min-h-[200px] flex items-start justify-center pt-6">
+                  <div className="text-xs text-surface-500">Espacio vacío</div>
                 </div>
               )}
 
               {isSearchMode && sidebarFilteredDocs.length === 0 && (
-                <div className="px-3 py-2 text-center text-xs text-surface-500">
-                  Sin resultados
+                <div className="h-full min-h-[200px] flex items-start justify-center pt-6">
+                  <div className="text-xs text-surface-500">Sin resultados</div>
                 </div>
               )}
 
