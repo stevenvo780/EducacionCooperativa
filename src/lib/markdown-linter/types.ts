@@ -78,10 +78,28 @@ export interface LinterRuleMeta {
   supportsIncremental?: boolean;
 }
 
+export interface MathRange {
+  from: number;
+  to: number;
+}
+
+export interface HeadingInfo {
+  line: number;
+  level: number;
+  text: string;
+}
+
+export interface BibliographyEntry {
+  key: string;
+  lineIdx: number;
+  raw: string;
+}
+
 /**
  * Contexto pre-computado compartido entre reglas durante un mismo lint pass.
- * Pre-computar trabajo redundante (codeBlockLines, lines split, etc.) evita
- * que cada regla rehaga el mismo escaneo sobre el mismo texto.
+ * Pre-computar trabajo redundante (codeBlockLines, lines split, math ranges,
+ * headings, bibliografía, etc.) evita que cada regla rehaga el mismo escaneo
+ * sobre el mismo texto.
  *
  * Si el contexto no llega (ej. reglas custom de plugins externos), las reglas
  * lo derivan internamente como antes. Por eso es opcional.
@@ -91,6 +109,14 @@ export interface LinterRuleContext {
   lines: string[];
   /** Resultado de `getCodeBlockLines(lines)` cacheado */
   codeBlockLines: Set<number>;
+  /** Rangos de fórmulas LaTeX por línea (`$...$`, `$$...$$`). Compartido por reglas spelling. */
+  mathRangesByLine: Map<number, MathRange[]>;
+  /** Encabezados markdown del documento. Compartido por reglas thesis. */
+  headings: HeadingInfo[];
+  /** Índice (0-based) de la línea donde empieza la sección Referencias/Bibliografía, o `null`. */
+  bibliographySectionLineIdx: number | null;
+  /** Entradas bibliográficas pre-extraídas. Compartidas por las reglas citation. */
+  bibliographyEntries: BibliographyEntry[];
 }
 
 export interface LinterRule extends LinterRuleMeta {
@@ -98,14 +124,121 @@ export interface LinterRule extends LinterRuleMeta {
   check: (text: string, ctx?: LinterRuleContext) => LinterDiagnostic[];
 }
 
+const HEADING_REGEX = /^(#{1,6})\s+(.+)/;
+const BIBLIOGRAPHY_HEADING_REGEX = /^#{1,3}\s+(referencias?|bibliografía|bibliography|fuentes?|works\s+cited|literatura\s+citada)\s*$/i;
+const BIBLIOGRAPHY_ENTRY_REGEX = /^([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:[A-Za-záéíóúüñ\s,\.]+)?)\s*\((\d{4}[a-z]?)\)/;
+
+function isEscapedDollarChar(line: string, index: number): boolean {
+  let backslashes = 0;
+  for (let pos = index - 1; pos >= 0 && line[pos] === '\\'; pos--) {
+    backslashes++;
+  }
+  return backslashes % 2 === 1;
+}
+
+function computeMathRangesByLine(lines: readonly string[]): Map<number, MathRange[]> {
+  const rangesByLine = new Map<number, MathRange[]>();
+  let current:
+    | { delimiter: '$' | '$$'; startLine: number; startCol: number }
+    | null = null;
+
+  const push = (startLine: number, startCol: number, endLine: number, endCol: number): void => {
+    for (let line = startLine; line <= endLine; line++) {
+      const lineStart = line === startLine ? startCol : 0;
+      const lineEnd = line === endLine ? endCol : Number.POSITIVE_INFINITY;
+      const list = rangesByLine.get(line);
+      const range: MathRange = { from: lineStart, to: lineEnd };
+      if (list) list.push(range);
+      else rangesByLine.set(line, [range]);
+    }
+  };
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex] ?? '';
+
+    for (let column = 0; column < line.length; column++) {
+      if (line[column] !== '$') continue;
+      if (isEscapedDollarChar(line, column)) continue;
+
+      const delimiter: '$' | '$$' = line[column + 1] === '$' && !isEscapedDollarChar(line, column + 1)
+        ? '$$'
+        : '$';
+      const delimiterLength = delimiter.length;
+
+      if (!current) {
+        current = { delimiter, startLine: lineIndex, startCol: column };
+        column += delimiterLength - 1;
+        continue;
+      }
+
+      if (current.delimiter !== delimiter) continue;
+
+      push(current.startLine, current.startCol, lineIndex, column + delimiterLength);
+      current = null;
+      column += delimiterLength - 1;
+    }
+  }
+
+  return rangesByLine;
+}
+
+function computeHeadings(lines: readonly string[], codeBlockLines: Set<number>): HeadingInfo[] {
+  const headings: HeadingInfo[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (codeBlockLines.has(i)) continue;
+    const match = (lines[i] ?? '').match(HEADING_REGEX);
+    const hashes = match?.[1];
+    const headingText = match?.[2];
+    if (hashes && headingText) {
+      headings.push({ line: i, level: hashes.length, text: headingText.trim() });
+    }
+  }
+  return headings;
+}
+
+function computeBibliographySectionLineIdx(lines: readonly string[]): number | null {
+  for (let i = 0; i < lines.length; i++) {
+    if (BIBLIOGRAPHY_HEADING_REGEX.test((lines[i] ?? '').trim())) return i;
+  }
+  return null;
+}
+
+function computeBibliographyEntries(lines: readonly string[], bibStart: number | null): BibliographyEntry[] {
+  if (bibStart === null) return [];
+  const entries: BibliographyEntry[] = [];
+  for (let i = bibStart + 1; i < lines.length; i++) {
+    const raw = (lines[i] ?? '').trim();
+    const match = raw.match(BIBLIOGRAPHY_ENTRY_REGEX);
+    if (!match) continue;
+    const firstAuthor = (match[1] ?? '').split(',')[0]?.trim().split(/\s+/).pop();
+    const year = match[2];
+    if (!firstAuthor || !year) continue;
+    entries.push({ key: `${firstAuthor.toLowerCase()}_${year}`, lineIdx: i, raw });
+  }
+  return entries;
+}
+
 /**
  * Construye un contexto para un texto. Pasar el contexto resultante a cada
- * regla en un mismo pass evita que cada regla rehaga `text.split` y
- * `getCodeBlockLines` por separado.
+ * regla en un mismo pass evita que cada regla rehaga `text.split`,
+ * `getCodeBlockLines`, math-ranges, headings y entradas bibliográficas por
+ * separado.
  */
 export function buildLinterRuleContext(text: string): LinterRuleContext {
   const lines = text.split('\n');
-  return { lines, codeBlockLines: getCodeBlockLines(lines) };
+  const codeBlockLines = getCodeBlockLines(lines);
+  const mathRangesByLine = computeMathRangesByLine(lines);
+  const headings = computeHeadings(lines, codeBlockLines);
+  const bibliographySectionLineIdx = computeBibliographySectionLineIdx(lines);
+  const bibliographyEntries = computeBibliographyEntries(lines, bibliographySectionLineIdx);
+  return {
+    lines,
+    codeBlockLines,
+    mathRangesByLine,
+    headings,
+    bibliographySectionLineIdx,
+    bibliographyEntries
+  };
 }
 
 export function lineAt(lines: readonly string[], index: number): string {

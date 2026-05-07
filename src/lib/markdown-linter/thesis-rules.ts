@@ -1,28 +1,26 @@
-/**
- * Reglas de formato y estilo de tesis académica.
- *
- * Orientadas a la redacción de tesis de grado/posgrado según
- * los estándares de academias hispanohablantes.
- *
- * Estas reglas están diseñadas para el ecosistema ST: la tesis puede
- * usar ST para formalizar hipótesis, definiciones y teoremas,
- * mientras estas reglas garantizan que el texto en prosa cumple
- * con los requisitos estructurales y estilísticos institucionales.
- */
+import {
+  type LinterRule,
+  type LinterDiagnostic,
+  type LinterRuleContext,
+  type HeadingInfo,
+  getCodeBlockLines,
+  lineAt
+} from './types';
 
-import { type LinterRule, type LinterDiagnostic, type LinterRuleContext, getCodeBlockLines, lineAt } from './types';
-
-/** Extrae todos los encabezados del documento con su nivel y línea. */
-function extractHeadings(lines: string[], codeLines: Set<number>): Array<{ level: number; text: string; lineIdx: number }> {
-  const headings: Array<{ level: number; text: string; lineIdx: number }> = [];
+function extractHeadingsFallback(lines: readonly string[], codeLines: Set<number>): HeadingInfo[] {
+  const headings: HeadingInfo[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (codeLines.has(i)) continue;
-    const match = lineAt(lines, i).match(/^(#{1,6})\s+(.+)/);
+    const match = (lines[i] ?? '').match(/^(#{1,6})\s+(.+)/);
     const hashes = match?.[1];
     const headingText = match?.[2];
-    if (hashes && headingText) headings.push({ level: hashes.length, text: headingText.trim(), lineIdx: i });
+    if (hashes && headingText) headings.push({ level: hashes.length, text: headingText.trim(), line: i });
   }
   return headings;
+}
+
+function getHeadings(lines: readonly string[], codeLines: Set<number>, ctx?: LinterRuleContext): HeadingInfo[] {
+  return ctx?.headings ?? extractHeadingsFallback(lines, codeLines);
 }
 
 function headingMatchesPattern(text: string, patterns: string[]): boolean {
@@ -31,8 +29,6 @@ function headingMatchesPattern(text: string, patterns: string[]): boolean {
   );
   return patterns.some((p) => lower.includes(p));
 }
-
-// 1. SECCIONES REQUERIDAS EN TESIS
 
 const REQUIRED_SECTIONS: Array<{
   key: string;
@@ -95,7 +91,7 @@ export const thesisMissingSectionRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const headings = extractHeadings(lines, codeLines);
+    const headings = getHeadings(lines, codeLines, ctx);
 
     for (const section of REQUIRED_SECTIONS) {
       const found = headings.some((h) => headingMatchesPattern(h.text, section.patterns));
@@ -116,8 +112,6 @@ export const thesisMissingSectionRule: LinterRule = {
   }
 };
 
-// 2. PRIMERA PERSONA SINGULAR EN TESIS
-
 export const thesisFirstPersonRule: LinterRule = {
   id: 'thesis_first_person_singular',
   name: 'Primera persona singular en tesis',
@@ -130,7 +124,6 @@ export const thesisFirstPersonRule: LinterRule = {
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
-    // Pronombres y verbos en primera persona singular
     const firstPersonRegex = /\b(yo\s+(?:creo|pienso|considero|opino|estimo|argumento|propongo|planteo|afirmo)|me\s+parece\s+que|en\s+mi\s+opinión|a\s+mi\s+juicio|según\s+mi\s+(?:criterio|perspectiva|punto\s+de\s+vista)|desde\s+mi\s+(?:perspectiva|punto\s+de\s+vista)|personalmente\s+(?:creo|considero|pienso))\b/gi;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -156,8 +149,6 @@ export const thesisFirstPersonRule: LinterRule = {
   }
 };
 
-// 3. AFIRMACIONES SIN RESPALDO (argumentos débiles)
-
 const WEAK_ASSERTIONS: Array<[string, string]> = [
   ['es obvio que', 'Sustituye "es obvio que" por evidencia o cita bibliográfica.'],
   ['claramente', 'Evita "claramente" — lo que es claro para el autor puede no serlo para el lector.'],
@@ -172,7 +163,6 @@ const WEAK_ASSERTIONS: Array<[string, string]> = [
   ['lógicamente', '"Lógicamente" como comodín retórico debilita el argumento.']
 ];
 
-// Pre-compiled regexes — evita reconstruirlos en cada línea de cada lint pass.
 const WEAK_ASSERTION_REGEXES: Array<{ regex: RegExp; suggestion: string }> = WEAK_ASSERTIONS.map(
   ([phrase, suggestion]) => {
     const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -218,8 +208,6 @@ export const thesisWeakAssertionRule: LinterRule = {
   }
 };
 
-// 4. HIPÓTESIS EN LA INTRODUCCIÓN
-
 export const thesisHypothesisRule: LinterRule = {
   id: 'thesis_hypothesis_statement',
   name: 'Hipótesis no identificada',
@@ -230,22 +218,20 @@ export const thesisHypothesisRule: LinterRule = {
   check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const headings = extractHeadings(lines, codeLines);
+    const headings = getHeadings(lines, codeLines, ctx);
 
     const introHeading = headings.find((h) =>
       headingMatchesPattern(h.text, ['introduccion', 'introducción'])
     );
     if (!introHeading) return [];
 
-    // Buscar la siguiente sección (o fin de documento)
     const introIdx = headings.indexOf(introHeading);
     const nextIntroHeading = headings[introIdx + 1];
-    const nextHeadingLine = nextIntroHeading ? nextIntroHeading.lineIdx : lines.length;
+    const nextHeadingLine = nextIntroHeading ? nextIntroHeading.line : lines.length;
 
-    // Extraer texto de la introducción
     const introText = lines
-      .slice(introHeading.lineIdx + 1, nextHeadingLine)
-      .filter((_, i) => !codeLines.has(introHeading.lineIdx + 1 + i))
+      .slice(introHeading.line + 1, nextHeadingLine)
+      .filter((_, i) => !codeLines.has(introHeading.line + 1 + i))
       .join(' ')
       .toLowerCase();
 
@@ -263,18 +249,16 @@ export const thesisHypothesisRule: LinterRule = {
         message: 'La Introducción no contiene una hipótesis, pregunta de investigación ni objetivo explícito.',
         suggestion: 'Incluye una declaración clara: "La hipótesis de este trabajo es...", "Se propone que..." o "El objetivo principal es..."',
         severity: 'info',
-        line: introHeading.lineIdx + 1,
+        line: introHeading.line + 1,
         column: 1,
-        endLine: introHeading.lineIdx + 1,
-        endColumn: lineAt(lines, introHeading.lineIdx).length + 1,
+        endLine: introHeading.line + 1,
+        endColumn: lineAt(lines, introHeading.line).length + 1,
         source: 'Thesis'
       }];
     }
     return [];
   }
 };
-
-// 5. LONGITUD DEL RESUMEN
 
 export const thesisAbstractLengthRule: LinterRule = {
   id: 'thesis_abstract_length',
@@ -286,7 +270,7 @@ export const thesisAbstractLengthRule: LinterRule = {
   check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const headings = extractHeadings(lines, codeLines);
+    const headings = getHeadings(lines, codeLines, ctx);
 
     const abstractHeading = headings.find((h) =>
       headingMatchesPattern(h.text, ['resumen', 'abstract', 'sintesis'])
@@ -295,11 +279,11 @@ export const thesisAbstractLengthRule: LinterRule = {
 
     const headingIdx = headings.indexOf(abstractHeading);
     const nextHeading = headings[headingIdx + 1];
-    const nextLine = nextHeading ? nextHeading.lineIdx : lines.length;
+    const nextLine = nextHeading ? nextHeading.line : lines.length;
 
     const abstractText = lines
-      .slice(abstractHeading.lineIdx + 1, nextLine)
-      .filter((_, i) => !codeLines.has(abstractHeading.lineIdx + 1 + i))
+      .slice(abstractHeading.line + 1, nextLine)
+      .filter((_, i) => !codeLines.has(abstractHeading.line + 1 + i))
       .join(' ')
       .trim();
 
@@ -310,10 +294,10 @@ export const thesisAbstractLengthRule: LinterRule = {
         message: `Resumen demasiado corto: ${wordCount} palabras (mínimo recomendado: 150).`,
         suggestion: 'El resumen APA debe incluir: objetivo, metodología, resultados principales y conclusiones.',
         severity: 'warning',
-        line: abstractHeading.lineIdx + 1,
+        line: abstractHeading.line + 1,
         column: 1,
-        endLine: abstractHeading.lineIdx + 1,
-        endColumn: lineAt(lines, abstractHeading.lineIdx).length + 1,
+        endLine: abstractHeading.line + 1,
+        endColumn: lineAt(lines, abstractHeading.line).length + 1,
         source: 'Thesis'
       }];
     }
@@ -323,10 +307,10 @@ export const thesisAbstractLengthRule: LinterRule = {
         message: `Resumen demasiado largo: ${wordCount} palabras (máximo recomendado: 300).`,
         suggestion: 'APA 7ª ed. limita el resumen a 250-300 palabras para artículos y tesis.',
         severity: 'info',
-        line: abstractHeading.lineIdx + 1,
+        line: abstractHeading.line + 1,
         column: 1,
-        endLine: abstractHeading.lineIdx + 1,
-        endColumn: lineAt(lines, abstractHeading.lineIdx).length + 1,
+        endLine: abstractHeading.line + 1,
+        endColumn: lineAt(lines, abstractHeading.line).length + 1,
         source: 'Thesis'
       }];
     }
@@ -334,8 +318,6 @@ export const thesisAbstractLengthRule: LinterRule = {
     return [];
   }
 };
-
-// 6. PALABRAS CLAVE (keywords)
 
 export const thesisKeywordsRule: LinterRule = {
   id: 'thesis_keywords',
@@ -347,7 +329,7 @@ export const thesisKeywordsRule: LinterRule = {
   check: (text: string, ctx?: LinterRuleContext): LinterDiagnostic[] => {
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const headings = extractHeadings(lines, codeLines);
+    const headings = getHeadings(lines, codeLines, ctx);
 
     const abstractHeading = headings.find((h) =>
       headingMatchesPattern(h.text, ['resumen', 'abstract'])
@@ -356,9 +338,9 @@ export const thesisKeywordsRule: LinterRule = {
 
     const headingIdx = headings.indexOf(abstractHeading);
     const nextHeading = headings[headingIdx + 1];
-    const nextLine = nextHeading ? nextHeading.lineIdx : lines.length;
+    const nextLine = nextHeading ? nextHeading.line : lines.length;
 
-    const abstractLines = lines.slice(abstractHeading.lineIdx + 1, nextLine);
+    const abstractLines = lines.slice(abstractHeading.line + 1, nextLine);
     const keywordPattern = /^\s*\*{0,2}(?:palabras?\s+clave|keywords?)\s*[:*]/i;
     const hasKeywords = abstractLines.some((l) => keywordPattern.test(l));
 
@@ -367,18 +349,16 @@ export const thesisKeywordsRule: LinterRule = {
         message: 'No se encontraron palabras clave después del resumen.',
         suggestion: 'APA requiere 3–5 palabras clave. Ejemplo:\n**Palabras clave:** aprendizaje, cooperativo, formalización.',
         severity: 'info',
-        line: abstractHeading.lineIdx + 1,
+        line: abstractHeading.line + 1,
         column: 1,
-        endLine: abstractHeading.lineIdx + 1,
-        endColumn: lineAt(lines, abstractHeading.lineIdx).length + 1,
+        endLine: abstractHeading.line + 1,
+        endColumn: lineAt(lines, abstractHeading.line).length + 1,
         source: 'Thesis'
       }];
     }
     return [];
   }
 };
-
-// 7. ORDEN DE SECCIONES
 
 export const thesisSectionOrderRule: LinterRule = {
   id: 'thesis_section_order',
@@ -391,9 +371,8 @@ export const thesisSectionOrderRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const headings = extractHeadings(lines, codeLines);
+    const headings = getHeadings(lines, codeLines, ctx);
 
-    // Orden esperado (índices en la secuencia)
     const ORDER = [
       { patterns: ['resumen', 'abstract'], label: 'Resumen' },
       { patterns: ['introduccion'], label: 'Introducción' },
@@ -404,19 +383,17 @@ export const thesisSectionOrderRule: LinterRule = {
       { patterns: ['referencias', 'bibliografia'], label: 'Referencias' }
     ];
 
-    // Encontrar el índice de orden para cada encabezado
     const foundOrder: Array<{ orderIdx: number; label: string; lineIdx: number }> = [];
     for (const heading of headings) {
       for (let oi = 0; oi < ORDER.length; oi++) {
         const orderedSection = ORDER[oi];
         if (orderedSection && headingMatchesPattern(heading.text, orderedSection.patterns)) {
-          foundOrder.push({ orderIdx: oi, label: orderedSection.label, lineIdx: heading.lineIdx });
+          foundOrder.push({ orderIdx: oi, label: orderedSection.label, lineIdx: heading.line });
           break;
         }
       }
     }
 
-    // Detectar secciones fuera de orden
     for (let i = 1; i < foundOrder.length; i++) {
       const current = foundOrder[i];
       const previous = foundOrder[i - 1];

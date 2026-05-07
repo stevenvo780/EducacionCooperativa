@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
 import { fetchZod } from '@/lib/fetch-zod';
-import { agentResponseBodySchema, agentContextResponseSchema } from '@agora/contracts';
+import { agentContextResponseSchema } from '@agora/contracts';
 import {
   createEmptyChatSession,
   deriveChatSessionTitle,
@@ -286,6 +286,27 @@ const markdownComponents = {
   img: (props: any) => <img {...props} className="max-w-full h-auto rounded-md my-2" loading="lazy" alt={props.alt || ''} />
 } as const;
 
+const REMARK_PLUGINS = [remarkGfm, remarkMath];
+const REHYPE_PLUGINS = [rehypeKatex];
+
+const STREAM_BUFFER_CAP_BYTES = 4 * 1024 * 1024;
+
+interface MarkdownContentProps {
+  content: string;
+}
+
+const MarkdownContent = memo(function MarkdownContent({ content }: MarkdownContentProps) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={REHYPE_PLUGINS}
+      components={markdownComponents}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+});
+
 interface ChatMessageProps {
   msg: UIChatMessage;
   traceExpanded: boolean;
@@ -313,13 +334,7 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
           </div>
         )}
         <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
-            components={markdownComponents}
-          >
-            {msg.content}
-          </ReactMarkdown>
+          <MarkdownContent content={msg.content} />
         </div>
 
         {msg.agentRun?.mode === 'agent' && msg.role === 'assistant' && (
@@ -333,13 +348,7 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
                   <div key={step.id} className="mt-1.5 rounded-md border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5 text-xs text-sky-100">
                     <div className="font-medium text-sky-300 mb-1">{step.title}</div>
                     <div className="break-words leading-snug">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={markdownComponents}
-                      >
-                        {step.content || ''}
-                      </ReactMarkdown>
+                      <MarkdownContent content={step.content || ''} />
                     </div>
                   </div>
                 );
@@ -405,12 +414,9 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
 const ChatMessage = memo(ChatMessageImpl, (prev, next) => {
   if (prev.msg.id !== next.msg.id) return false;
   if (prev.msg.content !== next.msg.content) return false;
-  if ((prev.msg.agentRun?.steps?.length ?? 0) !== (next.msg.agentRun?.steps?.length ?? 0)) return false;
+  if (prev.msg.agentRun !== next.msg.agentRun) return false;
   if (prev.msg.error !== next.msg.error) return false;
   if (prev.msg.pendingConfirmation !== next.msg.pendingConfirmation) return false;
-  if (prev.msg.agentRun?.truncated !== next.msg.agentRun?.truncated) return false;
-  if (prev.msg.agentRun?.usage !== next.msg.agentRun?.usage) return false;
-  if (prev.msg.agentRun?.rollback?.length !== next.msg.agentRun?.rollback?.length) return false;
   if (prev.traceExpanded !== next.traceExpanded) return false;
   const prevConfirming = prev.confirmingId === prev.msg.id;
   const nextConfirming = next.confirmingId === next.msg.id;
@@ -482,14 +488,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   });
   const [nextTurnHints, setNextTurnHints] = useState<Set<'plan' | 'think'>>(new Set());
   const [showSlashHelp, setShowSlashHelp] = useState<SlashCommandHelp[] | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const historyHydratedRef = useRef(false);
   const sessionDefaultsRef = useRef({ provider: config.provider, mode });
   const sendingRef = useRef(false);
   const lastSendAtRef = useRef(0);
-  const userScrolledUpRef = useRef(false);
   // Auto-confirm tracker para profile=god-mode. Reset en cada cambio de sesión
   // (startNewChat, activateSession, deleteActiveChat) para evitar leak en
   // sesiones largas — el Set crecía sin tope.
@@ -532,10 +536,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     };
   }, []);
 
-  // Auto-scroll: Virtuoso lo maneja via followOutput + atBottomStateChange.
-  // userScrolledUpRef sigue siendo respetado por el callback followOutput
-  // (devuelve false cuando el usuario está leyendo arriba).
-
   useEffect(() => {
     const loaded = loadChatSessions(resolvedWorkspaceId);
     const firstSession = loaded[0];
@@ -544,7 +544,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setActiveSessionId(firstSession.id);
       setMessages(firstSession.messages);
       setRollbackQueue(firstSession.rollbackQueue || []);
-      // Modo chat eliminado: el agente siempre opera en modo 'agent'.
     } else {
       const fresh = createEmptyChatSession({
         workspaceId: resolvedWorkspaceId,
@@ -561,10 +560,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     historyHydratedRef.current = true;
   }, [resolvedWorkspaceId]);
 
-  // Persistencia debounced 500ms. Skipear si hay streaming en curso (loading=true)
-  // — antes esto se ejecutaba en CADA chunk SSE, JSON.stringify ~20MB de sesiones
-  // bloqueaba el main thread por step y mataba la UX. Ahora sólo persistimos al
-  // terminar el turno (loading false) o tras 500ms de quietud.
+  const sessionsRef = useRef<AgentChatSession[]>(sessions);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!historyHydratedRef.current || !activeSessionId) return;
@@ -572,21 +572,21 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
-      setSessions(prev => {
-        const current = prev.find((session) => session.id === activeSessionId);
-        const nextSession: AgentChatSession = {
-          id: activeSessionId,
-          title: deriveChatSessionTitle(messages),
-          workspaceId: resolvedWorkspaceId,
-          provider: current?.provider || config.provider,
-          mode,
-          messages,
-          rollbackQueue,
-          createdAt: current?.createdAt || Date.now(),
-          updatedAt: Date.now()
-        };
-        return saveChatSessions(resolvedWorkspaceId, upsertChatSession(prev, nextSession));
-      });
+      const prev = sessionsRef.current;
+      const current = prev.find((session) => session.id === activeSessionId);
+      const nextSession: AgentChatSession = {
+        id: activeSessionId,
+        title: deriveChatSessionTitle(messages),
+        workspaceId: resolvedWorkspaceId,
+        provider: current?.provider || config.provider,
+        mode,
+        messages,
+        rollbackQueue,
+        createdAt: current?.createdAt || Date.now(),
+        updatedAt: Date.now()
+      };
+      const saved = saveChatSessions(resolvedWorkspaceId, upsertChatSession(prev, nextSession));
+      setSessions(saved);
     }, 500);
     return () => {
       if (persistTimerRef.current) {
@@ -601,9 +601,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
   }, []);
 
-  const updateMode = useCallback((_nextMode: AgentMode) => {
-    // Modo chat eliminado: el agente siempre opera en modo 'agent'.
-  }, []);
+  const updateMode = useCallback((_nextMode: AgentMode) => {}, []);
 
   const updateAccessProfile = useCallback((profile: Exclude<AgentAccessProfileId, 'custom'>) => {
     saveAgentAccessProfile(profile);
@@ -848,10 +846,30 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       pendingTimer = setTimeout(flushPartialRun, FLUSH_MS - since);
     };
 
+    let bufferOverflowed = false;
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
+
+      if (buffer.length > STREAM_BUFFER_CAP_BYTES) {
+        if (!bufferOverflowed) {
+          bufferOverflowed = true;
+          publishAgentProblem({
+            severity: 'warning',
+            message: 'Stream de Agora AI excedió el cap de buffer (4MB)',
+            detail: 'Considera iniciar un nuevo chat para liberar memoria. La respuesta parcial recibida hasta ahora se mantiene.',
+            code: 'agora-ai-stream-overflow'
+          });
+        }
+        const lastSeparator = buffer.lastIndexOf('\n\n');
+        if (lastSeparator >= 0) {
+          buffer = buffer.slice(lastSeparator + 2);
+        } else {
+          buffer = '';
+        }
+        continue;
+      }
 
       let separatorIndex = buffer.indexOf('\n\n');
       while (separatorIndex !== -1) {
@@ -1006,7 +1024,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     let pendingConfirmation: AgentPendingConfirmation | undefined;
 
     for (let iteration = 1; iteration <= 10; iteration += 1) {
-      const response = await callOllamaDirect(loopMessages, signal, mode === 'agent');
+      const response = await callOllamaDirect(loopMessages, signal, true);
       const rawContent = response.message?.content ?? '';
       // Ollama models (e.g. qwen3) may return thinking in a separate field
       const nativeThinking = response.message?.thinking?.trim() || null;
@@ -1050,7 +1068,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         })
         .filter((call): call is AgentToolCall => Boolean(call));
 
-      if (!toolCalls.length || mode !== 'agent') {
+      if (!toolCalls.length) {
         finalReply = visible || finalReply || 'Listo.';
         steps.push(createStep({
           id: `final-${iteration}`,
@@ -1384,7 +1402,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         agentRun = await runOllamaLoop(history, controller.signal);
         reply = agentRun.finalReply;
         emitAgentWorkspaceEvents(agentRun);
-      } else if (shouldStreamServerAgent && assistantMessageId) {
+      } else {
+        if (!assistantMessageId) {
+          throw new Error('Stream de Agora AI sin assistantMessageId');
+        }
         // Reintento con backoff exponencial ante errores de red transitorios
         // (NetBird drop, lock screen del iPad). Sólo reintenta si el server
         // no recibió la request o devolvió 5xx — nunca si el user abortó.
@@ -1436,46 +1457,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         reply = streamed.reply;
         agentRun = streamed.agentRun;
         emitAgentWorkspaceEvents(agentRun);
-      } else {
-        const chatMsgs = history.map(serializeMessageForHistory);
-        const data = await fetchZod('/api/agora-ai', agentResponseBodySchema, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            messages: chatMsgs,
-            workspaceId: resolvedWorkspaceId,
-            provider: config.provider,
-            apiKey: config.apiKey,
-            model: config.model || meta.defaultModel,
-            mode,
-            accessPolicy,
-            userInstructions: effectiveUserInstructions,
-            dryRun
-          })
-        });
-
-        if (data.status !== 'success' || data.error) {
-          publishAgentProblem({
-            severity: 'error',
-            message: 'Agora AI falló',
-            detail: (data.error as string) ?? 'Error desconocido',
-            code: 'agora-ai-request'
-          });
-          setMessages(prev => [...prev, toAssistantMessage((data.error as string) ?? 'Error desconocido', undefined, true)]);
-          return;
-        }
-        reply = data.reply as string;
-        agentRun = data.agentRun as AgentRun | undefined;
-        if (agentRun) {
-          emitAgentWorkspaceEvents(agentRun);
-        }
       }
 
       if (agentRun?.rollback?.length) {
         setRollbackQueue(agentRun.rollback);
       }
-      if (!shouldStreamServerAgent) {
+      if (config.provider === 'ollama') {
         setMessages(prev => [...prev, toAssistantMessage(reply, agentRun)]);
       }
     } catch (err) {
@@ -1507,7 +1494,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setStreamStatus('');
       textareaRef.current?.focus();
     }
-  }, [accessPolicy, input, loading, canSend, messages, mode, runRollback, config.provider, config.apiKey, config.model, meta.defaultModel, resolvedWorkspaceId, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints]);
+  }, [input, loading, canSend, messages, mode, runRollback, config.provider, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1765,9 +1752,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             data={messages}
             className="scrollbar-agora h-full"
             followOutput={(isAtBottom) => (isAtBottom ? 'auto' : false)}
-            atBottomStateChange={(atBottom) => {
-              userScrolledUpRef.current = !atBottom;
-            }}
             increaseViewportBy={{ top: 600, bottom: 600 }}
             computeItemKey={(_, msg) => msg.id}
             itemContent={(_index, msg) => (
@@ -1793,7 +1777,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                       </div>
                     </div>
                   )}
-                  <div ref={bottomRef} />
                 </div>
               )
             }}

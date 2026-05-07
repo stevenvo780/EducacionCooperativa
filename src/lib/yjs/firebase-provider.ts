@@ -5,11 +5,16 @@
  *
  * Modelo de datos:
  *   /collab/<wsId>/<docId>/updates/<pushKey> = { data: <base64>, clientId, ts }
- *   /collab/<wsId>/<docId>/awareness/<clientId> = { state: <base64>, ts }
+ *   /collab/<wsId>/<docId>/awarenessV2/<clientId> = { update: <base64>, ts }
  *   /collab/<wsId>/<docId>/seedLock = { clientID, ts }
  *   /collab/<wsId>/<docId>/compactionLock = { clientID, ts }
  *
  * Yjs (CRDT) garantiza convergencia eventual. Firebase es solo el broker.
+ *
+ * El payload de awareness es el binario oficial producido por
+ * `encodeAwarenessUpdate` de y-protocols. Lleva clock + lastUpdated
+ * embebidos por cliente, así `applyAwarenessUpdate` resuelve correctamente
+ * orden de eventos y borrados (state=null incrementa clock).
  */
 
 import {
@@ -22,14 +27,18 @@ import {
   onValue,
   push,
   ref as rtdbRef,
-  remove,
   runTransaction,
-  serverTimestamp,
   set,
   type DatabaseReference
 } from 'firebase/database';
 import * as Y from 'yjs';
-import { Awareness } from 'y-protocols/awareness';
+import {
+  Awareness,
+  applyAwarenessUpdate,
+  encodeAwarenessUpdate,
+  removeAwarenessStates
+} from 'y-protocols/awareness';
+import * as encoding from 'lib0/encoding';
 import { rtdb } from '@/lib/firebase';
 
 const ORIGIN_REMOTE = Symbol('yjs-firebase-remote');
@@ -40,8 +49,8 @@ interface UpdateRecord {
   ts: number;
 }
 
-interface AwarenessRecord {
-  state: string;
+interface AwarenessRecordV2 {
+  update: string;
   ts: number;
 }
 
@@ -139,8 +148,8 @@ export class FirebaseYjsProvider {
     const database = rtdb();
     const base = basePath(opts.workspaceId, opts.docId);
     this.updatesRef = rtdbRef(database, `${base}/updates`);
-    this.awarenessRef = rtdbRef(database, `${base}/awareness`);
-    this.myAwarenessRef = rtdbRef(database, `${base}/awareness/${this.ydoc.clientID}`);
+    this.awarenessRef = rtdbRef(database, `${base}/awarenessV2`);
+    this.myAwarenessRef = rtdbRef(database, `${base}/awarenessV2/${this.ydoc.clientID}`);
     this.seedLockRef = rtdbRef(database, `${base}/seedLock`);
     this.compactionLockRef = rtdbRef(database, `${base}/compactionLock`);
     this.connectedRef = rtdbRef(database, '.info/connected');
@@ -237,24 +246,45 @@ export class FirebaseYjsProvider {
     const handler = onValue(this.connectedRef, (snap) => {
       const connected = snap.val() === true;
       if (connected && !this.wasConnected) {
-        // Reconnect: re-arm onDisconnect + reemit local awareness state.
-        onDisconnect(this.myAwarenessRef).remove().catch(() => { /* ignore */ });
-        try {
-          const aw = this.awareness;
-          if (aw) {
-            const update = encodeAwarenessForClient(aw, this.ydoc.clientID);
-            if (update) {
-              const record: AwarenessRecord = { state: bytesToBase64(update), ts: Date.now() };
-              set(this.myAwarenessRef, record).catch(() => { /* ignore */ });
-            }
-          }
-        } catch { /* ignore */ }
+        this.armDisconnectTombstone();
+        this.publishLocalAwareness();
       }
       this.wasConnected = connected;
     });
     this.unsubscribeFns.push(() => {
       try { handler(); } catch { off(this.connectedRef, 'value'); }
     });
+  }
+
+  /**
+   * Arma onDisconnect server-side para que cuando la conexión se pierda
+   * (cierre de tab, kill, red caída) se publique un tombstone con el clock
+   * incrementado. Sin esto, los peers ven al cliente como "fantasma" hasta
+   * que el outdatedTimeout (30s) los limpie.
+   *
+   * El tombstone NO usa remove() porque eso destruye también el clock
+   * histórico — un peer que aplique luego una update vieja podría revivirlo.
+   */
+  private armDisconnectTombstone(): void {
+    if (!this.awareness) return;
+    try {
+      const meta = (this.awareness as unknown as { meta: Map<number, { clock: number }> }).meta;
+      const currClock = meta.get(this.ydoc.clientID)?.clock ?? 0;
+      const tombstone = encodeTombstoneAwarenessUpdate(this.ydoc.clientID, currClock + 1);
+      const record: AwarenessRecordV2 = { update: bytesToBase64(tombstone), ts: Date.now() };
+      onDisconnect(this.myAwarenessRef).set(record).catch(() => { /* ignore */ });
+    } catch { /* ignore */ }
+  }
+
+  private publishLocalAwareness(): void {
+    if (!this.awareness) return;
+    try {
+      const update = encodeAwarenessUpdate(this.awareness, [this.ydoc.clientID]);
+      const record: AwarenessRecordV2 = { update: bytesToBase64(update), ts: Date.now() };
+      set(this.myAwarenessRef, record).catch(() => { /* ignore */ });
+    } catch (e) {
+      console.warn('[yjs-firebase] awareness publish failed', e);
+    }
   }
 
   // Trackeamos pushes en vuelo para que destroy() pueda esperar a que terminen.
@@ -293,33 +323,36 @@ export class FirebaseYjsProvider {
     if (!this.awareness) return;
     const awareness = this.awareness;
 
-    const localHandler = () => {
-      try {
-        const update = encodeAwarenessForClient(awareness, this.ydoc.clientID);
-        if (!update) return;
-        const record: AwarenessRecord = { state: bytesToBase64(update), ts: Date.now() };
-        set(this.myAwarenessRef, record).catch(() => { /* ignore */ });
-      } catch (e) {
-        console.warn('[yjs-firebase] awareness publish failed', e);
-      }
+    // El payload `update` que Yjs emite trae los IDs afectados (added,
+    // updated, removed). Solo nos interesa propagar cambios de NUESTRO
+    // clientID (los demás llegan via RTDB).
+    const localHandler = (
+      changes: { added: number[]; updated: number[]; removed: number[] },
+      origin: unknown
+    ) => {
+      if (origin === 'firebase') return;
+      const involvesLocal =
+        changes.added.includes(this.ydoc.clientID) ||
+        changes.updated.includes(this.ydoc.clientID) ||
+        changes.removed.includes(this.ydoc.clientID);
+      if (!involvesLocal) return;
+      this.publishLocalAwareness();
     };
     awareness.on('update', localHandler);
     this.unsubscribeFns.push(() => awareness.off('update', localHandler));
 
-    onDisconnect(this.myAwarenessRef).remove().catch(() => { /* ignore */ });
+    this.armDisconnectTombstone();
 
-    // Listener per-child: O(1) por evento en lugar de O(N) cada cambio.
-    // Antes con onValue cada update de presencia retransmitía el estado de
-    // todos los clientes; en aulas grandes (>20 conectados) esto era O(N²)
-    // en tráfico y costo de parseo.
     const applyChild = (snapshot: { key: string | null; val: () => unknown }) => {
       const clientIdStr = snapshot.key;
-      const rec = snapshot.val() as AwarenessRecord | null;
-      if (!clientIdStr || !rec || typeof rec.state !== 'string') return;
+      const raw = snapshot.val();
+      if (!clientIdStr || !raw || typeof raw !== 'object') return;
       const clientId = Number(clientIdStr);
       if (!Number.isFinite(clientId) || clientId === this.ydoc.clientID) return;
       try {
-        applyAwarenessForClient(awareness, base64ToBytes(rec.state));
+        const bytes = decodeAwarenessRecord(raw);
+        if (!bytes) return;
+        applyAwarenessUpdate(awareness, bytes, 'firebase');
       } catch (e) {
         console.warn('[yjs-firebase] awareness apply failed', e);
       }
@@ -330,7 +363,7 @@ export class FirebaseYjsProvider {
       if (!clientIdStr) return;
       const clientId = Number(clientIdStr);
       if (!Number.isFinite(clientId) || clientId === this.ydoc.clientID) return;
-      removeAwarenessForClient(awareness, clientId);
+      removeAwarenessStates(awareness, [clientId], 'firebase');
     };
 
     const addedHandler = onChildAdded(this.awarenessRef, applyChild);
@@ -347,7 +380,7 @@ export class FirebaseYjsProvider {
       try { removedHandler(); } catch { off(this.awarenessRef, 'child_removed'); }
     });
 
-    localHandler();
+    this.publishLocalAwareness();
   }
 
   /**
@@ -465,86 +498,71 @@ export class FirebaseYjsProvider {
 
   /**
    * Compacta updates a un único snapshot del state-vector cuando supera
-   * el threshold. Usa un mutex (compactionLockRef) para evitar que múltiples
-   * clientes compacten en paralelo y se pisen.
+   * el threshold. Reclama el mutex (compactionLockRef) ANTES de tocar
+   * updateCount o leer updatesRef — sin eso, dos clientes podían entrar
+   * a maybeCompact en paralelo, ambos resetear updateCount a 0, y al
+   * fallar el segundo en el lock dejaba el contador en 0 sin reintento.
    *
-   * Antes de encodear el snapshot, releemos los updates remotos pendientes
-   * y los aplicamos al ydoc local. Sin esto un cliente con state desactualizado
-   * podría compactar perdiendo updates que aún no había recibido.
-   *
-   * El cutoff usa serverTimestamp() para evitar clock skew: un cliente con
-   * reloj adelantado podría descartar updates legítimos posteriores al cutoff
-   * pero anteriores en wall-clock real.
+   * El cutoff se hace por la KEY de Firebase (push() retorna IDs lexico-
+   * gráficamente ordenados por server timestamp; ver
+   * https://firebase.google.com/docs/database/admin/save-data#push).
+   * Esto evita el race de clock skew que tenía la versión anterior con
+   * `Date.now()` cliente.
    */
   private async maybeCompact(): Promise<void> {
     if (this.updateCount < COMPACTION_THRESHOLD || this.destroyed) return;
-    const localCount = this.updateCount;
-    this.updateCount = 0;
 
     const haveLock = await this.claimCompactionLock();
     if (!haveLock) {
-      // Otro cliente está compactando; resetear el contador para no entrar
-      // en loop. El próximo onChildAdded incrementará y reintentaremos si
-      // el otro cliente fallara.
       return;
     }
 
+    const localCount = this.updateCount;
+    this.updateCount = 0;
+
     try {
-      // Pre-compaction: garantizar que tenemos todos los updates del servidor
-      // antes de encodear el snapshot. get() de updatesRef trae el estado
-      // actual incluyendo los que aún no propagamos via onChildAdded.
       const snap = await get(this.updatesRef);
-      if (snap.exists()) {
-        const all = (snap.val() ?? {}) as Record<string, UpdateRecord>;
-        Y.transact(this.ydoc, () => {
-          for (const rec of Object.values(all)) {
-            if (!rec || typeof rec.data !== 'string') continue;
-            try {
-              Y.applyUpdate(this.ydoc, base64ToBytes(rec.data), ORIGIN_REMOTE);
-            } catch { /* ignore — bad record */ }
-          }
-        }, ORIGIN_REMOTE);
+      if (!snap.exists()) {
+        return;
       }
+      const all = (snap.val() ?? {}) as Record<string, UpdateRecord>;
+      const keys = Object.keys(all);
+      if (keys.length < COMPACTION_THRESHOLD) {
+        return;
+      }
+
+      Y.transact(this.ydoc, () => {
+        for (const rec of Object.values(all)) {
+          if (!rec || typeof rec.data !== 'string') continue;
+          try {
+            Y.applyUpdate(this.ydoc, base64ToBytes(rec.data), ORIGIN_REMOTE);
+          } catch { /* ignore — bad record */ }
+        }
+      }, ORIGIN_REMOTE);
+
+      // Cutoff por push-key: el snapshot que estamos leyendo refleja un
+      // punto consistente en RTDB; cualquier key que veamos aquí entra
+      // al snapshot Yjs y puede desaparecer del log. Cualquier key NO
+      // presente en este snap (porque llegó después) sobrevive.
+      const cutoffKeys = new Set(keys);
 
       const stateVector = Y.encodeStateAsUpdate(this.ydoc);
       const compactRecord: UpdateRecord = {
         data: bytesToBase64(stateVector),
         clientId: this.ydoc.clientID,
-        // serverTimestamp() en escrituras anidadas: RTDB lo resuelve a un
-        // número del lado del servidor. Lo guardamos como sentinel; luego
-        // usamos cutoffPlaceholder para el filtro local.
         ts: Date.now()
       };
-
-      // Para el cutoff usamos un sentinel ServerValue al hacer set en el
-      // record final, pero internamente filtramos por > cutoffWindow. Como
-      // runTransaction no expone el server time directamente, hacemos un
-      // primer set/transaction que escribe { __cutoffSentinel: SERVER_TS }
-      // y luego leemos para obtener el valor resuelto. Para simplicidad
-      // aquí hacemos: cutoff = max(ts conocido) + 1ms, lo cual es robusto
-      // ante skew dentro del ciclo del cliente (referencia local consistente).
-      let cutoff = 0;
-      if (snap.exists()) {
-        const all = (snap.val() ?? {}) as Record<string, UpdateRecord>;
-        for (const rec of Object.values(all)) {
-          if (rec && typeof rec.ts === 'number' && rec.ts > cutoff) cutoff = rec.ts;
-        }
-      }
-      // +1 garantiza que cualquier ts <= max conocido se considere "pre-cutoff"
-      // y se pueda eliminar; los nuevos pushes (con ts mayor) sobrevivirán.
-      cutoff = cutoff + 1;
-      compactRecord.ts = cutoff;
 
       const result = await runTransaction(this.updatesRef, (current) => {
         if (current === null || current === undefined) return undefined;
         const entries = current as Record<string, UpdateRecord | null>;
-        const keys = Object.keys(entries);
-        if (keys.length < COMPACTION_THRESHOLD) return undefined;
+        const allKeys = Object.keys(entries);
+        if (allKeys.length < COMPACTION_THRESHOLD) return undefined;
 
         const next: Record<string, UpdateRecord> = { compacted: compactRecord };
         for (const [key, rec] of Object.entries(entries)) {
           if (key === 'compacted' || !rec) continue;
-          if (typeof rec.ts === 'number' && rec.ts >= cutoff) {
+          if (!cutoffKeys.has(key)) {
             next[key] = rec;
           }
         }
@@ -554,11 +572,6 @@ export class FirebaseYjsProvider {
       if (!result.committed) {
         this.updateCount = localCount;
       }
-
-      // Marker server-side timestamp en lock para audit (best-effort).
-      try {
-        await set(this.compactionLockRef, { clientID: this.ydoc.clientID, ts: Date.now(), lastCutoff: serverTimestamp() });
-      } catch { /* ignore */ }
     } catch (e) {
       console.warn('[yjs-firebase] compaction failed', e);
       this.updateCount = localCount;
@@ -567,110 +580,88 @@ export class FirebaseYjsProvider {
     }
   }
 
-  destroy(): void {
-    this.destroyed = true;
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-    unregisterYjsProvider(this.docIdKey);
-    // Lanzar flush + release seedLock en paralelo. NO awaitamos para no
-    // bloquear el unmount, pero sendBeacon-like: el SDK de Firebase mantiene
-    // la cola en memoria mientras la pestaña esté abierta. El TTL del
-    // seedLock cubre el caso de cierre abrupto.
-    void this.flushUpdates().catch(() => { /* logged adentro */ });
-    void this.releaseSeedLock();
-    for (const fn of this.unsubscribeFns) {
-      try { fn(); } catch { /* ignore */ }
-    }
-    this.unsubscribeFns = [];
-    if (this.awareness) {
-      try { void remove(this.myAwarenessRef); } catch { /* ignore */ }
-    }
-    this.opts.onStatusChange?.('disconnected');
-  }
-
   /**
-   * Versión async de destroy que espera flush + release lock antes de
-   * resolver. Usar desde callers que pueden await (cleanup de useEffect
-   * con beforeunload listener, etc).
+   * Cleanup async. Espera flush + release lock antes de resolver. React
+   * no soporta async cleanup en useEffect, así que el caller debe lanzar
+   * `void provider.destroyAsync()` y dejar que termine fuera del frame.
+   * El TTL de seedLock + onDisconnect tombstone cubren el escape si el
+   * navegador se cierra antes de completar.
    */
   async destroyAsync(): Promise<void> {
+    if (this.destroyed) return;
     this.destroyed = true;
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
     unregisterYjsProvider(this.docIdKey);
+
+    if (this.awareness) {
+      try {
+        removeAwarenessStates(this.awareness, [this.ydoc.clientID], 'local');
+      } catch { /* ignore */ }
+    }
+
     try {
       await this.flushUpdates();
     } catch { /* ignore */ }
-    // Esperar inflight pushes en curso
     if (this.inFlightPushes.size > 0) {
       try {
         await Promise.allSettled(Array.from(this.inFlightPushes));
       } catch { /* ignore */ }
     }
+
+    if (this.awareness) {
+      try {
+        const meta = (this.awareness as unknown as { meta: Map<number, { clock: number }> }).meta;
+        const currClock = meta.get(this.ydoc.clientID)?.clock ?? 0;
+        const tombstone = encodeTombstoneAwarenessUpdate(this.ydoc.clientID, currClock);
+        const record: AwarenessRecordV2 = { update: bytesToBase64(tombstone), ts: Date.now() };
+        await set(this.myAwarenessRef, record);
+      } catch { /* ignore */ }
+    }
+
     try {
       await this.releaseSeedLock();
     } catch { /* ignore */ }
+
     for (const fn of this.unsubscribeFns) {
       try { fn(); } catch { /* ignore */ }
     }
     this.unsubscribeFns = [];
-    if (this.awareness) {
-      try { await remove(this.myAwarenessRef); } catch { /* ignore */ }
-    }
+
     this.opts.onStatusChange?.('disconnected');
   }
 }
 
-function encodeAwarenessForClient(awareness: Awareness, clientId: number): Uint8Array | null {
-  const state = awareness.getStates().get(clientId);
-  if (!state) return null;
-  const data = JSON.stringify({ clientId, state });
-  return new TextEncoder().encode(data);
-}
-
-function applyAwarenessForClient(awareness: Awareness, bytes: Uint8Array): void {
+/**
+ * Decodifica un record RTDB v2 ({ update: <base64>, ts }). Devuelve null
+ * si el record está mal formado.
+ */
+function decodeAwarenessRecord(raw: unknown): Uint8Array | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as { update?: unknown };
+  if (typeof r.update !== 'string' || r.update.length === 0) return null;
   try {
-    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as {
-      clientId: number;
-      state: Record<string, unknown>;
-    };
-    if (typeof decoded.clientId !== 'number') return;
-    const a = awareness as unknown as {
-      states: Map<number, Record<string, unknown>>;
-      meta: Map<number, { clock: number; lastUpdated: number }>;
-      emit: (event: string, payload: unknown[]) => void;
-    };
-    const isAdded = !a.states.has(decoded.clientId);
-    a.states.set(decoded.clientId, decoded.state);
-    a.meta.set(decoded.clientId, { clock: Date.now(), lastUpdated: Date.now() });
-    const change = isAdded
-      ? { added: [decoded.clientId], updated: [], removed: [] }
-      : { added: [], updated: [decoded.clientId], removed: [] };
-    a.emit('change', [change, 'firebase']);
-    a.emit('update', [change, 'firebase']);
-  } catch (e) {
-    console.warn('[yjs-firebase] awareness decode failed', e);
+    return base64ToBytes(r.update);
+  } catch {
+    return null;
   }
 }
 
-function removeAwarenessForClient(awareness: Awareness, clientId: number): void {
-  try {
-    const a = awareness as unknown as {
-      states: Map<number, Record<string, unknown>>;
-      meta: Map<number, { clock: number; lastUpdated: number }>;
-      emit: (event: string, payload: unknown[]) => void;
-    };
-    if (!a.states.has(clientId)) return;
-    a.states.delete(clientId);
-    a.meta.delete(clientId);
-    const change = { added: [], updated: [], removed: [clientId] };
-    a.emit('change', [change, 'firebase']);
-    a.emit('update', [change, 'firebase']);
-  } catch (e) {
-    console.warn('[yjs-firebase] awareness remove failed', e);
-  }
+/**
+ * Construye un awareness update binario que representa un tombstone para
+ * `clientID` con el `clock` dado. Layout idéntico al de encodeAwarenessUpdate
+ * de y-protocols: len(1) + clientID(varuint) + clock(varuint) + state("null").
+ *
+ * Usado en onDisconnect (RTDB lo escribe server-side al perder conexión) y
+ * en destroyAsync (cleanup explícito al desmontar).
+ */
+function encodeTombstoneAwarenessUpdate(clientID: number, clock: number): Uint8Array {
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, 1);
+  encoding.writeVarUint(encoder, clientID);
+  encoding.writeVarUint(encoder, clock);
+  encoding.writeVarString(encoder, 'null');
+  return encoding.toUint8Array(encoder);
 }

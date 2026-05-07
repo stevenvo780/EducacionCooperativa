@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { rtdb } from '@/lib/firebase';
 import { getErrorMessage } from '@/lib/error-utils';
-import { ref, onChildAdded, off, push, query, orderByChild, startAt } from 'firebase/database';
+import { ref, onChildAdded, off, onValue, push, query, orderByChild, startAt } from 'firebase/database';
 import { SyncEventSource, SyncEventType, type SyncEvent } from '@/types/sync';
 import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { parseSyncEventPayload } from '@agora/contracts';
@@ -86,25 +86,16 @@ export function useSyncEvents({
     if (!syncPath) return;
 
     const database = rtdb();
-    // Usar orderByChild + startAt(now - margen) para SOLO recibir eventos nuevos.
-    // 60s tolera clock skew y latencia de propagación (server → RTDB → cliente).
-    const nowTs = Date.now() - 60_000;
-    const eventsRef = query(
-      ref(database, syncPath),
-      orderByChild('timestamp'),
-      startAt(nowTs)
-    );
+    let activeUnsubscribe: (() => void) | null = null;
+    let connectedTracked = false;
 
-    // Listener para nuevos eventos
-    const unsubscribe = onChildAdded(eventsRef, (snapshot) => {
+    const handleEvent = (snapshot: { val: () => unknown }) => {
       const parsed = parseSyncEventPayload(snapshot.val());
       if (!parsed.ok) {
         console.warn('[useSyncEvents] payload malformado:', parsed.error);
         return;
       }
       const event = parsed.value;
-
-      // Ignorar eventos propios del frontend
       if (event.source === SyncEventSource.Frontend) return;
 
       const legacy: SyncEvent = {
@@ -116,19 +107,52 @@ export function useSyncEvents({
         source: event.source === 'hub' ? SyncEventSource.Worker : event.source
       };
       onEventRef.current?.(legacy);
-    }, (error) => {
-      // Sin este callback, fallos de RTDB (red caída, reglas denegadas,
-      // canal mal formado) son invisibles. Logueamos para que aparezcan
-      // en console y, en dev, en el toast del GlobalErrorCatcher si bubblea.
+    };
+
+    const handleError = (error: Error) => {
       console.error('[useSyncEvents] RTDB onChildAdded error:', getErrorMessage(error));
+    };
+
+    // Resuscribe el query con un `nowTs` recién calculado. Tras suspend
+    // de laptop el startAt original quedaba stale (potencialmente horas en
+    // el pasado) y al reconectar RTDB replayeaba todos los eventos del
+    // canal en burst. Recalculando en cada reconexión, solo entran eventos
+    // posteriores a la reanudación + un margen de 60s para clock skew.
+    const subscribe = () => {
+      if (activeUnsubscribe) {
+        try { activeUnsubscribe(); } catch { /* ignore */ }
+        activeUnsubscribe = null;
+      }
+      const nowTs = Date.now() - 60_000;
+      const eventsRef = query(
+        ref(database, syncPath),
+        orderByChild('timestamp'),
+        startAt(nowTs)
+      );
+      const unsubscribe = onChildAdded(eventsRef, handleEvent, handleError);
+      activeUnsubscribe = () => {
+        try { unsubscribe(); } catch { off(eventsRef, 'child_added'); }
+      };
+    };
+
+    subscribe();
+
+    const connectedRef = ref(database, '.info/connected');
+    const connectedHandler = onValue(connectedRef, (snap) => {
+      const connected = snap.val() === true;
+      if (connected && connectedTracked) {
+        // Reconexión real (la primera no cuenta — ya nos suscribimos arriba).
+        subscribe();
+      }
+      if (connected) connectedTracked = true;
     });
 
     listenerRef.current = () => {
-      try {
-        unsubscribe();
-      } catch {
-        off(eventsRef, 'child_added');
+      if (activeUnsubscribe) {
+        try { activeUnsubscribe(); } catch { /* ignore */ }
+        activeUnsubscribe = null;
       }
+      try { connectedHandler(); } catch { off(connectedRef, 'value'); }
     };
 
     return () => {

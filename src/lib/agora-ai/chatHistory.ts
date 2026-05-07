@@ -1,4 +1,5 @@
 import type { AgentChatSession, AgentMode, AgentRollbackAction, AgentStoredChatMessage, AIProvider } from '@/lib/agora-ai/types';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 const MAX_CHAT_SESSIONS = 50;
 const MAX_CHAT_MESSAGES = 200;
@@ -179,15 +180,94 @@ export const loadChatSessions = (workspaceId: string): AgentChatSession[] => {
   }
 };
 
+const isQuotaExceededError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: unknown; code?: unknown };
+  if (typeof err.name === 'string' && /quota|exceeded/i.test(err.name)) return true;
+  if (typeof err.code === 'number' && err.code === 22) return true;
+  return false;
+};
+
+const halveSessionMessages = (sessions: AgentChatSession[]): { sessions: AgentChatSession[]; changed: boolean } => {
+  let changed = false;
+  const reduced = sessions.map((session) => {
+    if (session.messages.length <= 1) return session;
+    const half = Math.max(1, Math.floor(session.messages.length / 2));
+    const truncated = session.messages.slice(-half);
+    if (truncated.length !== session.messages.length) changed = true;
+    return { ...session, messages: truncated };
+  });
+  return { sessions: reduced, changed };
+};
+
+const writeSessionsToStorage = (workspaceId: string, sessions: AgentChatSession[]) => {
+  window.localStorage.setItem(getChatHistoryStorageKey(workspaceId), JSON.stringify(sessions));
+};
+
 export const saveChatSessions = (workspaceId: string, sessions: AgentChatSession[]) => {
   const next = trimChatSessions(sessions).map((session) => ({
     ...session,
     messages: clampMessages(session.messages)
   }));
-  if (isBrowser()) {
-    window.localStorage.setItem(getChatHistoryStorageKey(workspaceId), JSON.stringify(next));
+  if (!isBrowser()) return next;
+
+  try {
+    writeSessionsToStorage(workspaceId, next);
+    return next;
+  } catch (error) {
+    if (!isQuotaExceededError(error)) {
+      dispatchAgoraEvent(AGORA_EVENTS.problem, {
+        source: 'agora-ai',
+        uri: 'global',
+        severity: 'warning',
+        message: 'No se pudo guardar el historial de Agora AI en localStorage',
+        detail: error instanceof Error ? error.message : String(error),
+        code: 'agora-ai-history-save'
+      });
+      return next;
+    }
+
+    let attempt = next;
+    for (let i = 0; i < 4; i += 1) {
+      const { sessions: halved, changed } = halveSessionMessages(attempt);
+      if (!changed) break;
+      attempt = halved;
+      try {
+        writeSessionsToStorage(workspaceId, attempt);
+        dispatchAgoraEvent(AGORA_EVENTS.problem, {
+          source: 'agora-ai',
+          uri: 'global',
+          severity: 'warning',
+          message: 'Historial de Agora AI truncado por límite de localStorage',
+          detail: 'Se redujeron mensajes antiguos para liberar espacio. Considera borrar chats antiguos.',
+          code: 'agora-ai-history-truncated'
+        });
+        return attempt;
+      } catch (retryError) {
+        if (!isQuotaExceededError(retryError)) {
+          dispatchAgoraEvent(AGORA_EVENTS.problem, {
+            source: 'agora-ai',
+            uri: 'global',
+            severity: 'warning',
+            message: 'Error inesperado guardando historial de Agora AI',
+            detail: retryError instanceof Error ? retryError.message : String(retryError),
+            code: 'agora-ai-history-save'
+          });
+          return attempt;
+        }
+      }
+    }
+
+    dispatchAgoraEvent(AGORA_EVENTS.problem, {
+      source: 'agora-ai',
+      uri: 'global',
+      severity: 'error',
+      message: 'localStorage sin espacio para el historial de Agora AI',
+      detail: 'Borra chats antiguos desde el panel de historial para liberar cuota.',
+      code: 'agora-ai-history-quota'
+    });
+    return attempt;
   }
-  return next;
 };
 
 export const upsertChatSession = (sessions: AgentChatSession[], session: AgentChatSession) => {

@@ -291,39 +291,65 @@ function joinArgs(args: unknown[]): { message: string; detail?: string } {
     : { message: parts[0] ?? '', detail: parts.slice(1).join(' ') };
 }
 
-export function installDiagnosticsBus() {
-  if (consoleInstalled || typeof window === 'undefined') return;
+type DiagnosticsBusDispose = () => void;
+const NOOP_DISPOSE: DiagnosticsBusDispose = () => { /* idempotente */ };
+let consoleDispose: DiagnosticsBusDispose = NOOP_DISPOSE;
+
+/**
+ * Instala los hooks de diagnostics globales (console.error/warn, window.error,
+ * unhandledrejection, agora:problem). Idempotente: si ya está instalado,
+ * devuelve el disposable vigente. Llamar al disposable restaura los métodos
+ * originales y desuscribe los listeners; útil para HMR/tests.
+ */
+export function installDiagnosticsBus(): DiagnosticsBusDispose {
+  if (typeof window === 'undefined') return NOOP_DISPOSE;
+  if (consoleInstalled) return consoleDispose;
   consoleInstalled = true;
 
-  const origError = console.error.bind(console);
-  const origWarn = console.warn.bind(console);
+  const origError = console.error;
+  const origWarn = console.warn;
 
-  console.error = (...args: unknown[]) => {
+  const onError = (e: ErrorEvent) => {
+    pushConsole('error', e.message || 'Error en la app', e.filename ? `${e.filename}:${e.lineno}` : undefined);
+  };
+  const onUnhandled = (e: PromiseRejectionEvent) => {
+    const reason = e.reason;
+    pushConsole('error', reason instanceof Error ? reason.message : formatArg(reason));
+  };
+
+  const wrappedError = (...args: unknown[]) => {
     const { message, detail } = joinArgs(args);
     pushConsole('error', message, detail);
-    origError(...args);
+    origError.apply(console, args);
   };
-  console.warn = (...args: unknown[]) => {
+  const wrappedWarn = (...args: unknown[]) => {
     const { message, detail } = joinArgs(args);
     pushConsole('warning', message, detail);
-    origWarn(...args);
+    origWarn.apply(console, args);
   };
 
-  window.addEventListener('error', (e) => {
-    pushConsole('error', e.message || 'Error en la app', e.filename ? `${e.filename}:${e.lineno}` : undefined);
-  });
+  console.error = wrappedError;
+  console.warn = wrappedWarn;
 
-  window.addEventListener('unhandledrejection', (e) => {
-    const reason = (e as PromiseRejectionEvent).reason;
-    pushConsole('error', reason instanceof Error ? reason.message : formatArg(reason));
-  });
+  window.addEventListener('error', onError);
+  window.addEventListener('unhandledrejection', onUnhandled);
 
-  // Compat con eventos legacy 'agora:problem' que ya emitían algunos
-  // subsistemas (tratados como source=app, uri=global).
-  subscribeAgoraEvent(AGORA_EVENTS.problem, (d) => {
+  const unsubProblem = subscribeAgoraEvent(AGORA_EVENTS.problem, (d) => {
     if (!d) return;
     pushProblemEvent(d);
   });
+
+  consoleDispose = () => {
+    if (!consoleInstalled) return;
+    consoleInstalled = false;
+    if (console.error === wrappedError) console.error = origError;
+    if (console.warn === wrappedWarn) console.warn = origWarn;
+    window.removeEventListener('error', onError);
+    window.removeEventListener('unhandledrejection', onUnhandled);
+    unsubProblem();
+    consoleDispose = NOOP_DISPOSE;
+  };
+  return consoleDispose;
 }
 
 /* ──────────────────────────────────────────────────────────────────

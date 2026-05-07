@@ -11,6 +11,7 @@ import EditorSettingsMenu from '@/components/editor/EditorSettingsMenu';
 import { type EditorConfig, loadConfig, isTouchDeviceProfile } from '@/components/editor/codemirror';
 import { OutputViewer, ViewModeToggle, type OutputViewMode } from '@/components/editor/STOutputViewer';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
+import { extractInWorker } from '@/lib/st-runtime-worker-client';
 import SnippetGallery from '@/components/SnippetGallery';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { collectSTDiagnostics, hasSTExecutionErrors } from '@/lib/st-execution';
@@ -421,25 +422,25 @@ export default function STRunner({
   }, [code, isTouchTablet, mode, runAnalysisAsync]);
 
   useEffect(() => {
-    const fileId = fileMode?.docName || 'st-runner-scratch';
-    // En tablet/touch, archivos grandes saturan el parser ST y crashean la
-    // pestaña en el primer mount. Diferimos + capamos: <30KB siempre se
-    // parsea; >=30KB sólo desktop, debounceado a 800ms.
+    if (fileMode?.docName) {
+      return;
+    }
+    const fileId = 'st-runner-scratch';
     const TABLET_PARSE_LIMIT = 30_000;
     const skipParse = isTouchTablet && code.length > TABLET_PARSE_LIMIT;
     if (skipParse) {
       return () => { STDefinitionsRegistry.removeFile(fileId); };
     }
     const debounceMs = code.length > 5_000 ? 800 : 200;
+    let cancelled = false;
     const timer = window.setTimeout(() => {
-      try {
-        const defs = STDefinitionsRegistry.extractFromSource(code, fileId);
+      void extractInWorker(code, fileId).then((defs) => {
+        if (cancelled) return;
         STDefinitionsRegistry.setFileDefinitions(fileId, defs);
-      } catch {
-        // El parser puede fallar en input parcial durante edición. Silencioso.
-      }
+      });
     }, debounceMs);
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
       STDefinitionsRegistry.removeFile(fileId);
     };

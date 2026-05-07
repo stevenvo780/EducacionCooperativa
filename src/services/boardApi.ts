@@ -205,23 +205,26 @@ export const createBoardColumnApi = async (params: { workspaceId: string; name: 
 
   const boardId = resolveBoardId(params.workspaceId);
   const boardRef = doc(db(), 'boards', boardId);
-  
-  // Calculate new order (last + 1000) - simplified for offline optimisitc UI, preferably passed from UI state
-  // ideally we should query last one, but for now let's just create it and let UI handle order or passed in params
-  // To keep it robust without query:
+
+  const lastColumnSnap = await getDocs(
+    query(collection(boardRef, 'columns'), orderBy('order', 'desc'), fsLimit(1))
+  );
+  const lastColumn = lastColumnSnap.docs[0]?.data() as { order?: number } | undefined;
+  const nextOrder = typeof lastColumn?.order === 'number' ? lastColumn.order + 1000 : 1000;
+
   const newColData = {
     name: params.name,
-    order: generateOrder(),
+    order: nextOrder,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
 
   const colRef = await addDoc(collection(boardRef, 'columns'), newColData);
-  
+
   return {
     id: colRef.id,
     ...newColData,
-    order: newColData.order // Return number, not serverTimestamp placeholder if local
+    order: newColData.order
   } as unknown as BoardColumn;
 };
 

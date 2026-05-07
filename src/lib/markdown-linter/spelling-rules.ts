@@ -2,6 +2,7 @@ import {
   type LinterRule,
   type LinterDiagnostic,
   type LinterRuleContext,
+  type MathRange,
   getCodeBlockLines,
   lineAt
 } from './types';
@@ -17,8 +18,6 @@ function restoreSuggestionCase(original: string, suggestion: string): string {
 
 const WORD_REGEX = /\b[\p{L}\p{M}][\p{L}\p{M}'’-]*\b/gu;
 
-type Range = { start: number; end: number };
-
 function isEscapedDollar(text: string, index: number): boolean {
   let backslashes = 0;
   for (let pos = index - 1; pos >= 0 && text[pos] === '\\'; pos--) {
@@ -27,19 +26,22 @@ function isEscapedDollar(text: string, index: number): boolean {
   return backslashes % 2 === 1;
 }
 
-function pushMathRange(rangesByLine: Range[][], startLine: number, startCol: number, endLine: number, endCol: number): void {
-  for (let line = startLine; line <= endLine; line++) {
-    const lineStart = line === startLine ? startCol : 0;
-    const lineEnd = line === endLine ? endCol : Number.POSITIVE_INFINITY;
-    rangesByLine[line]?.push({ start: lineStart, end: lineEnd });
-  }
-}
-
-function getMathRangesByLine(lines: string[]): Range[][] {
-  const rangesByLine = lines.map((): Range[] => []);
+function computeMathRangesByLine(lines: readonly string[]): Map<number, MathRange[]> {
+  const rangesByLine = new Map<number, MathRange[]>();
   let current:
     | { delimiter: '$' | '$$'; startLine: number; startCol: number }
     | null = null;
+
+  const push = (startLine: number, startCol: number, endLine: number, endCol: number): void => {
+    for (let line = startLine; line <= endLine; line++) {
+      const lineStart = line === startLine ? startCol : 0;
+      const lineEnd = line === endLine ? endCol : Number.POSITIVE_INFINITY;
+      const list = rangesByLine.get(line);
+      const range: MathRange = { from: lineStart, to: lineEnd };
+      if (list) list.push(range);
+      else rangesByLine.set(line, [range]);
+    }
+  };
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lineAt(lines, lineIndex);
@@ -61,13 +63,7 @@ function getMathRangesByLine(lines: string[]): Range[][] {
 
       if (current.delimiter !== delimiter) continue;
 
-      pushMathRange(
-        rangesByLine,
-        current.startLine,
-        current.startCol,
-        lineIndex,
-        column + delimiterLength
-      );
+      push(current.startLine, current.startCol, lineIndex, column + delimiterLength);
       current = null;
       column += delimiterLength - 1;
     }
@@ -76,8 +72,13 @@ function getMathRangesByLine(lines: string[]): Range[][] {
   return rangesByLine;
 }
 
-function overlapsMathRange(ranges: Range[], start: number, end: number): boolean {
-  return ranges.some(range => start < range.end && end > range.start);
+function getMathRangesByLine(lines: readonly string[], ctx?: LinterRuleContext): Map<number, MathRange[]> {
+  return ctx?.mathRangesByLine ?? computeMathRangesByLine(lines);
+}
+
+function overlapsMathRange(ranges: MathRange[] | undefined, start: number, end: number): boolean {
+  if (!ranges) return false;
+  return ranges.some(range => start < range.to && end > range.from);
 }
 
 function matchesAccentPattern(word: string): boolean {
@@ -98,7 +99,7 @@ export const spellingRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const mathRangesByLine = getMathRangesByLine(lines);
+    const mathRangesByLine = getMathRangesByLine(lines, ctx);
     const spellReady = isSpellEngineReady();
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -112,7 +113,7 @@ export const spellingRule: LinterRule = {
         const end = start + word.length;
 
         if (!spellReady) continue;
-        if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
+        if (overlapsMathRange(mathRangesByLine.get(lineIdx), start, end)) continue;
         if (word.length <= 2) continue;
         if (/^\d+$/.test(word)) continue;
         if (matchesAccentPattern(word)) continue;
@@ -149,7 +150,7 @@ export const doubledWordsRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const mathRangesByLine = getMathRangesByLine(lines);
+    const mathRangesByLine = getMathRangesByLine(lines, ctx);
     const regex = /\b(\w{2,})\s+\1\b/gi;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -159,7 +160,7 @@ export const doubledWordsRule: LinterRule = {
       while ((match = regex.exec(line)) !== null) {
         const start = match.index;
         const end = start + match[0].length;
-        if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
+        if (overlapsMathRange(mathRangesByLine.get(lineIdx), start, end)) continue;
         const repeatedWord = match[1];
         if (!repeatedWord) continue;
         results.push({
@@ -312,7 +313,7 @@ export const accentPatternRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const mathRangesByLine = getMathRangesByLine(lines);
+    const mathRangesByLine = getMathRangesByLine(lines, ctx);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -325,7 +326,7 @@ export const accentPatternRule: LinterRule = {
           const word = match[0];
           const start = match.index;
           const end = start + word.length;
-          if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
+          if (overlapsMathRange(mathRangesByLine.get(lineIdx), start, end)) continue;
           if (/[áéíóú]/i.test(word)) continue;
 
           const fixed = rule.fix(word);
@@ -378,7 +379,7 @@ export const suspiciousPatternsRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const mathRangesByLine = getMathRangesByLine(lines);
+    const mathRangesByLine = getMathRangesByLine(lines, ctx);
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
@@ -390,7 +391,7 @@ export const suspiciousPatternsRule: LinterRule = {
         const word = wordMatch[0];
         const start = wordMatch.index;
         const end = start + word.length;
-        if (overlapsMathRange(mathRangesByLine[lineIdx] ?? [], start, end)) continue;
+        if (overlapsMathRange(mathRangesByLine.get(lineIdx), start, end)) continue;
         const lower = word.toLowerCase();
         if (SUSPICIOUS_WHITELIST.has(lower)) continue;
 

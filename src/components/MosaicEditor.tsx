@@ -239,29 +239,44 @@ export default function MosaicEditor({
       notes.push(f);
       if (notes.length >= NOTE_DIAG_LIMIT) break;
     }
+    if (notes.length === 0) return diags;
+
+    const lineStarts: number[] = [0];
+    for (let i = 0; i < statsContent.length; i++) {
+      if (statsContent.charCodeAt(i) === 10) lineStarts.push(i + 1);
+    }
+
+    const offsetToLineCol = (offset: number): { line: number; column: number } => {
+      let lo = 0;
+      let hi = lineStarts.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >>> 1;
+        const start = lineStarts[mid] ?? 0;
+        if (start <= offset) lo = mid;
+        else hi = mid - 1;
+      }
+      const lineStart = lineStarts[lo] ?? 0;
+      return { line: lo + 1, column: offset - lineStart + 1 };
+    };
 
     for (const n of notes) {
       if (!n.note || !n.text) continue;
       const idx = statsContent.indexOf(n.text);
-      if (idx !== -1) {
-         const before = statsContent.substring(0, idx);
-         const lines = before.split('\n');
-         const line = lines.length;
-         const column = (lines[lines.length - 1] ?? '').length + 1;
+      if (idx === -1) continue;
 
-         const textLines = n.text.split('\n');
-         const endColumn = textLines.length === 1 ? column + n.text.length : undefined;
+      const { line, column } = offsetToLineCol(idx);
+      const isSingleLine = n.text.indexOf('\n') === -1;
+      const endColumn = isSingleLine ? column + n.text.length : undefined;
 
-         diags.push({
-           line,
-           column,
-           ...(endColumn ? { endColumn } : {}),
-           severity: 'info',
-           message: n.note,
-           source: 'Nota',
-           text: n.text
-         });
-      }
+      diags.push({
+        line,
+        column,
+        ...(endColumn ? { endColumn } : {}),
+        severity: 'info',
+        message: n.note,
+        source: 'Nota',
+        text: n.text
+      });
     }
     return diags;
   }, [semanticState.fragments, statsContent, roomId, docName]);

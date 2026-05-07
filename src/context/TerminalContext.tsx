@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, ReactNode } from 'react';
 import { TerminalController, WorkspaceWorkerStatus, DocChangeEvent } from '@/lib/TerminalController';
 import { getErrorMessage } from '@/lib/error-utils';
+import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 import {
     TerminalConnectionStatus,
     WorkerStatusValue,
@@ -13,6 +14,12 @@ import {
 } from '@/types/terminal';
 import { WorkspaceType, type WorkspaceTypeId } from '@/types/workspace';
 import { useAuth } from './AuthContext';
+
+const DOC_CHANGE_ACTION_MAP = {
+    created: 'create',
+    updated: 'update',
+    deleted: 'delete'
+} as const satisfies Record<DocChangeEvent['action'], 'create' | 'update' | 'delete'>;
 
 export interface TerminalSession {
     id: string;
@@ -41,7 +48,6 @@ interface TerminalContextType {
     getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
     subscribeToWorkspace: (workspaceId: string) => void;
     clearActiveSession: () => void;
-    lastDocChange: DocChangeEvent | null;
     onDocChangeCallback: ((cb: (event: DocChangeEvent) => void) => () => void) | null;
 }
 
@@ -176,7 +182,6 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     const [isCreatingSession, setIsCreatingSession] = useState(false);
 
     const [workspaceWorkerStatuses, setWorkspaceWorkerStatuses] = useState<Map<string, WorkerStatus>>(new Map());
-    const [lastDocChange, setLastDocChange] = useState<DocChangeEvent | null>(null);
     const docChangeCallbacksRef = useRef<Set<(event: DocChangeEvent) => void>>(new Set());
     const sessionsLoadedRef = useRef(false);
     const persistedSessionsRef = useRef<Map<string, TerminalSession>>(new Map());
@@ -496,7 +501,12 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 },
                 (docEvent: DocChangeEvent) => {
                     debugLog('[TerminalContext] doc-change received:', docEvent);
-                    setLastDocChange(docEvent);
+                    dispatchAgoraEvent(AGORA_EVENTS.workerDocChange, {
+                        workspaceId: docEvent.workspaceId,
+                        docPath: docEvent.data?.name ?? docEvent.docId,
+                        type: DOC_CHANGE_ACTION_MAP[docEvent.action],
+                        ts: Date.now()
+                    });
                     docChangeCallbacksRef.current.forEach(cb => cb(docEvent));
                 },
                 handleSessionCreated
@@ -589,10 +599,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         getSessionsForWorkspace,
         subscribeToWorkspace,
         clearActiveSession,
-        lastDocChange,
         onDocChangeCallback
     }), [sessions, activeSessionId, status, hubConnected, isCreatingSession, errorMessage,
-        workspaceWorkerStatuses, lastDocChange, initialize, createSession, joinSession,
+        workspaceWorkerStatuses, initialize, createSession, joinSession,
         selectSession, destroySession, renameSession, getWorkerStatusForWorkspace,
         getSessionsForWorkspace, subscribeToWorkspace, clearActiveSession, onDocChangeCallback]);
 

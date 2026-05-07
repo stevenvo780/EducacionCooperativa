@@ -119,7 +119,10 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   const latestRequestIdRef = useRef(0);
   const latestMainThreadDiagnosticsRef = useRef<LinterDiagnostic[]>([]);
   const workerAvailableRef = useRef(false);
+  const workerPermanentlyUnavailableRef = useRef(false);
+  const workerFailureCountRef = useRef(0);
   const hasLintedOnceRef = useRef(false);
+  const MAX_WORKER_FAILURES = 3;
 
   // Track when 'initializing' started for minimum display time
   const initStartRef = useRef<number>(Date.now());
@@ -138,18 +141,63 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   const enabledRulesRef = useRef(enabledRules);
   enabledRulesRef.current = enabledRules;
 
+  const ensureWorkerRef = useRef<() => Worker | null>(() => null);
+
   useEffect(() => {
     if (typeof Worker === 'undefined') { workerAvailableRef.current = false; return; }
 
-    const worker = new Worker(
-      new URL('../workers/markdownLinter.worker.ts', import.meta.url),
-      { type: 'module' }
-    );
-    workerAvailableRef.current = true;
-    workerRef.current = worker;
+    const handleWorkerFailure = () => {
+      const failed = workerRef.current;
+      workerRef.current = null;
+      workerAvailableRef.current = false;
+      if (failed) {
+        try { failed.terminate(); } catch { /* ignore */ }
+      }
 
-    worker.onmessage = (event: MessageEvent<WorkerResultMessage>) => {
-      const message = event.data;
+      workerFailureCountRef.current += 1;
+      if (workerFailureCountRef.current >= MAX_WORKER_FAILURES) {
+        workerPermanentlyUnavailableRef.current = true;
+      }
+
+      const fallback = sortDiagnostics(latestMainThreadDiagnosticsRef.current)
+        .filter(d => !isSuppressed(d.ruleId, d.text));
+      setDiagnostics((prev) => diagnosticsEqual(prev, fallback) ? prev : fallback);
+      setLinterStatus('ready');
+    };
+
+    const attachHandlers = (worker: Worker): void => {
+      worker.onmessage = (event: MessageEvent<WorkerResultMessage>) => {
+        handleWorkerMessage(event.data);
+      };
+      worker.onerror = () => { handleWorkerFailure(); };
+      worker.onmessageerror = () => { handleWorkerFailure(); };
+    };
+
+    const ensureWorker = (): Worker | null => {
+      if (workerPermanentlyUnavailableRef.current) return null;
+      if (workerRef.current) return workerRef.current;
+      try {
+        const worker = new Worker(
+          new URL('../workers/markdownLinter.worker.ts', import.meta.url),
+          { type: 'module' }
+        );
+        workerAvailableRef.current = true;
+        workerRef.current = worker;
+        attachHandlers(worker);
+        return worker;
+      } catch {
+        workerFailureCountRef.current += 1;
+        if (workerFailureCountRef.current >= MAX_WORKER_FAILURES) {
+          workerPermanentlyUnavailableRef.current = true;
+        }
+        workerAvailableRef.current = false;
+        return null;
+      }
+    };
+
+    ensureWorkerRef.current = ensureWorker;
+
+    const handleWorkerMessage = (message: WorkerResultMessage | undefined) => {
       if (!message || message.requestId !== latestRequestIdRef.current) return;
 
       if (message.type === 'lint-result') {
@@ -233,12 +281,16 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       }
     };
 
-    worker.onerror = () => { workerAvailableRef.current = false; };
+    ensureWorker();
 
     return () => {
-      worker.terminate();
+      const w = workerRef.current;
       workerRef.current = null;
       workerAvailableRef.current = false;
+      ensureWorkerRef.current = () => null;
+      if (w) {
+        try { w.terminate(); } catch { /* ignore */ }
+      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -315,8 +367,8 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       setDiagnostics((prev) => diagnosticsEqual(prev, mainDiags) ? prev : mainDiags);
     }
 
-    // Fallback sin worker
-    if (!workerAvailableRef.current || !workerRef.current) {
+    const worker = ensureWorkerRef.current();
+    if (!worker) {
       const ctx = buildLinterRuleContext(text);
       const fallback = sortDiagnostics(builtinEnabled.flatMap((r) => r.check(text, ctx)));
       const combined = sortDiagnostics([...mainDiags, ...fallback]);
@@ -356,7 +408,7 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       prevParagraphs.length > 0;
 
     if (useIncremental) {
-      workerRef.current.postMessage({
+      worker.postMessage({
         type: 'lint-incremental',
         requestId,
         changedParagraphs: changedParagraphs.map(({ text: t, hash }) => ({
@@ -372,7 +424,7 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       // Linting completo — resetear cache de párrafos
       paragraphCacheRef.current.clear();
       documentDiagnosticsRef.current = [];
-      workerRef.current.postMessage({
+      worker.postMessage({
         type: 'lint',
         requestId,
         text,

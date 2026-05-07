@@ -1,9 +1,13 @@
 import { configureStore } from '@reduxjs/toolkit';
-import dashboardReducer from '@/store/dashboardSlice';
+import uiReducer from '@/store/uiSlice';
+import workspacesReducer from '@/store/workspacesSlice';
+import editorPrefsReducer from '@/store/editorPrefsSlice';
 
 export const store = configureStore({
   reducer: {
-    dashboard: dashboardReducer
+    ui: uiReducer,
+    workspaces: workspacesReducer,
+    editorPrefs: editorPrefsReducer
   }
 });
 

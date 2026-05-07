@@ -24,7 +24,6 @@ import dynamic from 'next/dynamic';
 import type { MosaicNode } from 'react-mosaic-component';
 import { DialogKind, type DocItem, type FolderItem, type ViewMode, type Workspace, type DialogConfig, type DialogResult } from '@/components/dashboard/types';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
-import { shallowEqual } from 'react-redux';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 import {
@@ -288,44 +287,22 @@ function DashboardContent() {
         };
     }, [user]);
 
-    // Una sola subscription a Redux con shallowEqual; antes eran 16 selectors
-    // separados que disparaban 16 comparaciones por dispatch y render-cascada
-    // de los hijos sensibles.
-    const {
-        workspaces,
-        invites,
-        currentWorkspace,
-        showNewWorkspaceModal,
-        showMembersModal,
-        showPasswordModal,
-        passwordForm,
-        passwordError,
-        passwordSuccess,
-        isChangingPassword,
-        showQuickSearch,
-        quickSearchQuery,
-        quickSearchIndex,
-        sidebarSearchQuery,
-        showMobileSidebar,
-        deletingWorkspaceId
-    } = useAppSelector(state => ({
-        workspaces: state.dashboard.workspaces,
-        invites: state.dashboard.invites,
-        currentWorkspace: state.dashboard.currentWorkspace,
-        showNewWorkspaceModal: state.dashboard.showNewWorkspaceModal,
-        showMembersModal: state.dashboard.showMembersModal,
-        showPasswordModal: state.dashboard.showPasswordModal,
-        passwordForm: state.dashboard.passwordForm,
-        passwordError: state.dashboard.passwordError,
-        passwordSuccess: state.dashboard.passwordSuccess,
-        isChangingPassword: state.dashboard.isChangingPassword,
-        showQuickSearch: state.dashboard.showQuickSearch,
-        quickSearchQuery: state.dashboard.quickSearchQuery,
-        quickSearchIndex: state.dashboard.quickSearchIndex,
-        sidebarSearchQuery: state.dashboard.sidebarSearchQuery,
-        showMobileSidebar: state.dashboard.showMobileSidebar,
-        deletingWorkspaceId: state.dashboard.deletingWorkspaceId
-    }), shallowEqual);
+    const workspaces = useAppSelector(state => state.workspaces.workspaces);
+    const invites = useAppSelector(state => state.workspaces.invites);
+    const currentWorkspace = useAppSelector(state => state.workspaces.currentWorkspace);
+    const deletingWorkspaceId = useAppSelector(state => state.workspaces.deletingWorkspaceId);
+    const showNewWorkspaceModal = useAppSelector(state => state.ui.showNewWorkspaceModal);
+    const showMembersModal = useAppSelector(state => state.ui.showMembersModal);
+    const showPasswordModal = useAppSelector(state => state.ui.showPasswordModal);
+    const passwordForm = useAppSelector(state => state.ui.passwordForm);
+    const passwordError = useAppSelector(state => state.ui.passwordError);
+    const passwordSuccess = useAppSelector(state => state.ui.passwordSuccess);
+    const isChangingPassword = useAppSelector(state => state.ui.isChangingPassword);
+    const showQuickSearch = useAppSelector(state => state.ui.showQuickSearch);
+    const quickSearchQuery = useAppSelector(state => state.ui.quickSearchQuery);
+    const quickSearchIndex = useAppSelector(state => state.ui.quickSearchIndex);
+    const sidebarSearchQuery = useAppSelector(state => state.ui.sidebarSearchQuery);
+    const showMobileSidebar = useAppSelector(state => state.ui.showMobileSidebar);
 
     useEffect(() => {
         let cancelled = false;
@@ -431,10 +408,14 @@ function DashboardContent() {
         currentDocId: selectedDocId,
         enabled: !!user && !!presenceWorkspaceId
     });
-    const resolvePresenceDocName = useCallback((docId: string) => {
-        const doc = docs.find((d) => d.id === docId);
-        return doc?.name ?? null;
+    const docById = useMemo(() => {
+        const map = new Map<string, DocItem>();
+        for (const doc of docs) map.set(doc.id, doc);
+        return map;
     }, [docs]);
+    const resolvePresenceDocName = useCallback((docId: string) => {
+        return docById.get(docId)?.name ?? null;
+    }, [docById]);
     const [favoriteDocIds, setFavoriteDocIds] = useState<string[]>([]);
     const [openTabs, setOpenTabsRaw] = useState<DocItem[]>([]);
     // Saneo: si entran duplicados (bug histórico del effect que se disparaba 2x),
@@ -447,6 +428,11 @@ function DashboardContent() {
             return dedup.length === next.length ? next : dedup;
         });
     }, []);
+    const openTabsById = useMemo(() => {
+        const map = new Map<string, DocItem>();
+        for (const tab of openTabs) map.set(tab.id, tab);
+        return map;
+    }, [openTabs]);
     const [docModes, setDocModes] = useState<Record<string, ViewMode>>({});
     const [closedFilesTabByWorkspace, setClosedFilesTabByWorkspace] = useState<Record<string, boolean>>({});
     const boardTabId = currentWorkspaceId ? `board-${currentWorkspaceId}` : null;
@@ -680,28 +666,62 @@ function DashboardContent() {
         }
     };
 
-    const lastFetchedSignatureRef = useRef<{ wsId: string; len: number; sumUpdated: number } | null>(null);
+    const lastFetchedSignatureRef = useRef<{
+        wsId: string;
+        len: number;
+        sumUpdated: number;
+        sumIdLen: number;
+        sumNameLen: number;
+        sumOrderInt: number;
+        sumFolderHash: number;
+    } | null>(null);
 
     const applyDocsSnapshot = useCallback((fetched: DocItem[]) => {
         if (!currentWorkspace) return;
 
-        // Short-circuit por equivalencia rápida: si el snapshot crudo tiene
-        // mismo length + suma de updatedAt + mismo workspace que el último
-        // aplicado, salimos antes de las 6 pasadas O(N).
         let sumUpdated = 0;
+        let sumIdLen = 0;
+        let sumNameLen = 0;
+        let sumOrderInt = 0;
+        let sumFolderHash = 0;
         for (let i = 0; i < fetched.length; i += 1) {
-            sumUpdated += getUpdatedAtValue(fetched[i]?.updatedAt);
+            const item = fetched[i];
+            if (!item) continue;
+            sumUpdated += getUpdatedAtValue(item.updatedAt);
+            const id = item.id || '';
+            sumIdLen += id.length;
+            const name = item.name || '';
+            sumNameLen += name.length;
+            sumOrderInt += typeof item.order === 'number' ? Math.trunc(item.order) : 0;
+            const folder = item.folder || '';
+            let h = 0;
+            for (let j = 0; j < folder.length; j += 1) {
+                h = ((h << 5) - h + folder.charCodeAt(j)) | 0;
+            }
+            sumFolderHash = (sumFolderHash + h) | 0;
         }
         const lastSig = lastFetchedSignatureRef.current;
         if (
             lastSig &&
             lastSig.wsId === currentWorkspace.id &&
             lastSig.len === fetched.length &&
-            lastSig.sumUpdated === sumUpdated
+            lastSig.sumUpdated === sumUpdated &&
+            lastSig.sumIdLen === sumIdLen &&
+            lastSig.sumNameLen === sumNameLen &&
+            lastSig.sumOrderInt === sumOrderInt &&
+            lastSig.sumFolderHash === sumFolderHash
         ) {
             return;
         }
-        lastFetchedSignatureRef.current = { wsId: currentWorkspace.id, len: fetched.length, sumUpdated };
+        lastFetchedSignatureRef.current = {
+            wsId: currentWorkspace.id,
+            len: fetched.length,
+            sumUpdated,
+            sumIdLen,
+            sumNameLen,
+            sumOrderInt,
+            sumFolderHash
+        };
 
         const sanitized = fetched.map(docItem => {
             const { content: _content, ...rest } = docItem;
@@ -893,7 +913,7 @@ function DashboardContent() {
             if (!data || typeof data.type !== 'string') return;
 
             if (data.type === 'agora-open-doc' && typeof data.docId === 'string') {
-                const doc = docs.find(item => item.id === data.docId);
+                const doc = docById.get(data.docId);
                 if (!doc) return;
                 void openDocumentInTileRef.current(doc, data.sourceDocId ?? null);
             } else if (data.type === 'agora-open-board') {
@@ -903,7 +923,7 @@ function DashboardContent() {
 
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
-    }, [docs]);
+    }, [docById]);
 
     useEffect(() => {
         return subscribeAgoraEvent(AGORA_EVENTS.openDocuments, (detail) => {
@@ -930,16 +950,16 @@ function DashboardContent() {
                 }
 
                 for (const candidate of detail.documents) {
-                    const resolved = docs.find(doc => doc.id === candidate.id)
-                        || openTabs.find(doc => doc.id === candidate.id)
-                        || normalizeDoc(candidate);
+                    const resolved = docById.get(candidate.id)
+                        ?? openTabsById.get(candidate.id)
+                        ?? normalizeDoc(candidate);
                     await openDocumentRef.current(resolved);
                 }
             };
 
             void openTargets();
         });
-    }, [currentWorkspaceId, docs, openTabs, setActiveFolderSafe, user?.uid]);
+    }, [currentWorkspaceId, docById, openTabsById, setActiveFolderSafe, user?.uid]);
 
     const sidebarFilteredDocs = useMemo(() => {
         const query = deferredSidebarQuery.trim().toLowerCase();
@@ -1393,10 +1413,10 @@ function DashboardContent() {
 
     const getActiveDocument = useCallback(() => {
         if (!selectedDocId) return null;
-        return openTabs.find((doc) => doc.id === selectedDocId)
-            ?? docs.find((doc) => doc.id === selectedDocId)
+        return openTabsById.get(selectedDocId)
+            ?? docById.get(selectedDocId)
             ?? null;
-    }, [docs, openTabs, selectedDocId]);
+    }, [docById, openTabsById, selectedDocId]);
 
     const getDocumentDisplayPath = useCallback((doc: DocItem) => {
         const folder = normalizeFolderPath(doc.folder);
@@ -1837,9 +1857,6 @@ function DashboardContent() {
         });
     }, []);
 
-    // Single source of truth del tree model: una sola pasada por
-    // (folders, docs) que comparten Sidebar, FileExplorer y todo el código que
-    // antes recalculaba `docsByFolder` y `folderChildrenMap` localmente.
     const treeModel = useMemo(
         () => buildWorkspaceTreeModel(folders, docs),
         [folders, docs]
@@ -1973,28 +1990,28 @@ function DashboardContent() {
         }
     }, [folders, activeFolder, folderChildrenMap, setActiveFolderSafe]);
 
-    const handleDocDragStart = (e: ReactDragEvent, docItem: DocItem) => {
+    const handleDocDragStart = useCallback((e: ReactDragEvent, docItem: DocItem) => {
         markInternalDragStart();
         e.dataTransfer.setData('application/x-dashboard-internal-drag', 'doc');
         e.dataTransfer.setData('application/x-doc-id', docItem.id);
         e.dataTransfer.setData('text/plain', docItem.id);
         e.dataTransfer.effectAllowed = 'move';
-    };
+    }, []);
 
-    const handleDocDragEnd = () => {
+    const handleDocDragEnd = useCallback(() => {
         markInternalDragEnd();
         setFolderDragOver(null);
         setDropPosition(null);
-    };
+    }, []);
 
-    const isPureReorderDrag = (types: string[]) => {
+    const isPureReorderDrag = useCallback((types: string[]) => {
         const hasDocId = types.includes('application/x-doc-id') || types.includes('text/plain');
         const hasFolderReorder = types.includes('application/x-folder-reorder');
         const hasDocReorderOnly = types.includes('application/x-doc-reorder') && !hasDocId;
         return hasFolderReorder || hasDocReorderOnly;
-    };
+    }, []);
 
-    const _handleDropZoneDragOver = (e: ReactDragEvent, position: number) => {
+    const _handleDropZoneDragOver = useCallback((e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = isPureReorderDrag(types);
         if (isReorderDrag) return;
@@ -2003,15 +2020,15 @@ function DashboardContent() {
         e.preventDefault();
         e.stopPropagation();
         setDropPosition(prev => (prev === position ? prev : position));
-    };
+    }, [isPureReorderDrag]);
 
-    const _handleDropZoneDragLeave = (e: ReactDragEvent) => {
+    const _handleDropZoneDragLeave = useCallback((e: ReactDragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         setDropPosition(null);
-    };
+    }, []);
 
-    const _handleDropZoneDrop = (e: ReactDragEvent, position: number) => {
+    const _handleDropZoneDrop = useCallback((e: ReactDragEvent, position: number) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = isPureReorderDrag(types);
         if (isReorderDrag) return;
@@ -2022,7 +2039,7 @@ function DashboardContent() {
         e.preventDefault();
         e.stopPropagation();
         setDropPosition(null);
-        const docToOpen = docs.find(d => d.id === docId) || openTabs.find(d => d.id === docId);
+        const docToOpen = docById.get(docId) ?? openTabsById.get(docId);
         if (docToOpen) {
             setOpenTabs(prev => {
                 const filtered = prev.filter(t => t.id !== docToOpen.id);
@@ -2032,9 +2049,9 @@ function DashboardContent() {
             });
             setSelectedDocId(docToOpen.id);
         }
-    };
+    }, [docById, isPureReorderDrag, openTabsById, setOpenTabs]);
 
-    const handleFolderDragOver = (e: ReactDragEvent, folderName: string) => {
+    const handleFolderDragOver = useCallback((e: ReactDragEvent, folderName: string) => {
         const types = Array.from(e.dataTransfer.types ?? []);
         const isReorderDrag = isPureReorderDrag(types);
         if (isReorderDrag) return;
@@ -2048,15 +2065,13 @@ function DashboardContent() {
         if (!hasDocId) return;
         e.preventDefault();
         setFolderDragOver(prev => (prev === folderName ? prev : folderName));
-    };
+    }, [isPureReorderDrag]);
 
-    const handleFolderDragLeave = (folderName: string) => {
-        if (folderDragOver === folderName) {
-            setFolderDragOver(null);
-        }
-    };
+    const handleFolderDragLeave = useCallback((folderName: string) => {
+        setFolderDragOver(prev => (prev === folderName ? null : prev));
+    }, []);
 
-    const handleFolderDrop = async (e: ReactDragEvent, folderName: string) => {
+    const handleFolderDrop = useCallback(async (e: ReactDragEvent, folderName: string) => {
         const didUpload = await uploadDroppedFilesToFolder(e, folderName);
         if (didUpload) {
             setFolderDragOver(null);
@@ -2072,9 +2087,9 @@ function DashboardContent() {
         e.preventDefault();
         setFolderDragOver(null);
         await moveDocumentToFolder(docId, folderName);
-    };
+    }, [isPureReorderDrag, moveDocumentToFolder, uploadDroppedFilesToFolder]);
 
-    const deleteDocument = async (docItem: DocItem, e: ReactMouseEvent) => {
+    const deleteDocument = useCallback(async (docItem: DocItem, e: ReactMouseEvent) => {
         e.stopPropagation();
         if (deletingIds[docItem.id]) return;
         const confirmResult = await showDialog({
@@ -2087,9 +2102,9 @@ function DashboardContent() {
         });
         if (!confirmResult.confirmed) return;
         await deleteDocRecords([docItem.id], docItem.name);
-    };
+    }, [deleteDocRecords, deletingIds, showDialog]);
 
-    const deleteDocuments = async (docItems: DocItem[]) => {
+    const deleteDocuments = useCallback(async (docItems: DocItem[]) => {
         const validDocs = docItems.filter(d => !deletingIds[d.id]);
         if (validDocs.length === 0) return;
         if (validDocs.length === 1) {
@@ -2106,9 +2121,9 @@ function DashboardContent() {
         });
         if (!confirmResult.confirmed) return;
         await deleteDocRecords(validDocs.map(d => d.id), `${validDocs.length} elementos`);
-    };
+    }, [deleteDocRecords, deleteDocument, deletingIds, showDialog]);
 
-    const getIcon = (doc: DocItem) => {
+    const getIcon = useCallback((doc: DocItem) => {
         if (doc.type === 'terminal') return <TerminalIcon className="w-5 h-5" />;
         if (doc.type === 'board') return <KanbanSquare className="w-5 h-5" />;
         if (doc.type === 'file') {
@@ -2117,7 +2132,30 @@ function DashboardContent() {
             return <FileIcon className="w-5 h-5" />;
         }
         return <FileText className="w-5 h-5" />;
-    };
+    }, []);
+
+    const handleSidebarCreateDoc = useCallback(() => { openNewFileModalAt(); }, [openNewFileModalAt]);
+    const handleSidebarCreateFolder = useCallback(() => { void createFolderAtPath(); }, [createFolderAtPath]);
+    const handleSidebarCreateFolderInFolder = useCallback((folderPath: string) => {
+        void createFolderAtPath(folderPath);
+    }, [createFolderAtPath]);
+    const handleSidebarUploadFile = useCallback(() => { openUploadFilePickerAt(); }, [openUploadFilePickerAt]);
+    const handleSidebarUploadFolder = useCallback(() => { openUploadFolderPickerAt(); }, [openUploadFolderPickerAt]);
+    const handleSidebarShowDocProperties = useCallback((doc: DocItem) => {
+        void showDocumentProperties(doc);
+    }, [showDocumentProperties]);
+    const handleSidebarShowFolderProperties = useCallback((folder: FolderItem) => {
+        void showFolderProperties(folder);
+    }, [showFolderProperties]);
+    const handleSidebarShowCurrentLocationProperties = useCallback(() => {
+        void showCurrentLocationProperties();
+    }, [showCurrentLocationProperties]);
+    const handleSidebarRenameFolder = useCallback((folder: FolderItem) => {
+        void promptRenameFolder(folder);
+    }, [promptRenameFolder]);
+    const handleSidebarDeleteFolder = useCallback((folder: FolderItem) => {
+        void deleteFolder(folder);
+    }, [deleteFolder]);
 
     const paletteCommands = useMemo<PaletteCommand[]>(() => [
         {
@@ -2736,19 +2774,20 @@ function DashboardContent() {
                         onFolderDragOver={handleFolderDragOver}
                         onFolderDrop={handleFolderDrop}
                         onFolderDragLeave={handleFolderDragLeave}
-                        onCreateDoc={() => openNewFileModalAt()}
-                        onCreateFolder={() => { void createFolderAtPath(); }}
+                        onCreateDoc={handleSidebarCreateDoc}
+                        onCreateFolder={handleSidebarCreateFolder}
                         onCreateDocInFolder={openNewFileModalAt}
-                        onCreateFolderInFolder={(folderPath) => { void createFolderAtPath(folderPath); }}
-                        onUploadFile={() => openUploadFilePickerAt()}
-                        onUploadFolder={() => openUploadFolderPickerAt()}
+                        onCreateFolderInFolder={handleSidebarCreateFolderInFolder}
+                        onUploadFile={handleSidebarUploadFile}
+                        onUploadFolder={handleSidebarUploadFolder}
                         onUploadFileToFolder={openUploadFilePickerAt}
                         onUploadFolderToFolder={openUploadFolderPickerAt}
-                        onShowDocProperties={(doc) => { void showDocumentProperties(doc); }}
-                        onShowFolderProperties={(folder) => { void showFolderProperties(folder); }}
-                        onShowCurrentLocationProperties={() => { void showCurrentLocationProperties(); }}
-                        onRenameFolder={(folder) => { void promptRenameFolder(folder); }}
-                        onDeleteFolder={(folder) => { void deleteFolder(folder); }}
+                        onShowDocProperties={handleSidebarShowDocProperties}
+                        onShowFolderProperties={handleSidebarShowFolderProperties}
+                        onShowCurrentLocationProperties={handleSidebarShowCurrentLocationProperties}
+                        onRenameFolder={handleSidebarRenameFolder}
+                        onDeleteFolder={handleSidebarDeleteFolder}
+                        docById={docById}
                       />
                     ) : (
                       !isSidebarCollapsed && (
@@ -2791,10 +2830,8 @@ function DashboardContent() {
                               ].includes(t.type ?? '');
 
                               if (selectedDocId) {
-                                const found = docs.find(d => d.id === selectedDocId)
-                                  ?? openTabs.find(t => t.id === selectedDocId);
-                                // Si el selected es un panel virtual, no sirve para Esquema:
-                                // continuar al fallback.
+                                const found = docById.get(selectedDocId)
+                                  ?? openTabsById.get(selectedDocId);
                                 if (found && !isVirtualPanel(found)) return found;
                               }
                               const fromTabs = openTabs.find(t => isTextualName(t.name) && !isVirtualPanel(t));
@@ -2876,7 +2913,7 @@ function DashboardContent() {
                                         openUploadFolderPickerAt(activeFolder);
                                     }}
                                     onDeleteDoc={(docId) => {
-                                        const doc = docs.find(d => d.id === docId);
+                                        const doc = docById.get(docId);
                                         if (doc) deleteDocument(doc, { stopPropagation: () => { } } as ReactMouseEvent);
                                     }}
                                     onDeleteFolder={deleteFolder}
@@ -2948,9 +2985,9 @@ function DashboardContent() {
                                       const s = terminalSessions.find(t => t.id === id);
                                       if (s) void promptRenameTerminalSession(s);
                                     }}
-                                    resolveDocName={(uri) => docs.find(d => d.id === uri)?.name ?? null}
+                                    resolveDocName={(uri) => docById.get(uri)?.name ?? null}
                                     onOpenDocument={(uri, range) => {
-                                      const doc = docs.find(d => d.id === uri);
+                                      const doc = docById.get(uri);
                                       if (!doc) return;
                                       void openDocument(doc);
                                       if (range && typeof range.line === 'number') {
@@ -3014,7 +3051,7 @@ function DashboardContent() {
                         sidebarCollapsed={isSidebarCollapsed}
                         onShowSidebar={handleToggleSidebarCollapse}
                         activeFileExt={(() => {
-                          const doc = selectedDocId ? docs.find((d) => d.id === selectedDocId) : null;
+                          const doc = selectedDocId ? docById.get(selectedDocId) ?? null : null;
                           if (!doc?.name) return null;
                           const dot = doc.name.lastIndexOf('.');
                           if (dot < 0 || dot === doc.name.length - 1) return null;

@@ -35,24 +35,20 @@ export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => 
     });
     if (cursor) params.set('cursor', cursor);
 
-    try {
-      const raw = await fetchZod(`/api/snippets?${params.toString()}`, z.union([z.array(snippetSchema), pagedSnippetSchema]), {
-        cache: 'no-store'
-      });
+    const raw = await fetchZod(`/api/snippets?${params.toString()}`, z.union([z.array(snippetSchema), pagedSnippetSchema]), {
+      cache: 'no-store'
+    });
 
-      if (Array.isArray(raw)) {
-        return raw as Snippet[];
-      }
-
-      accumulated.push(...(raw.items as Snippet[]));
-      const nextCursor = raw.cursor ?? null;
-      if (!nextCursor || raw.items.length < SNIPPET_PAGE_SIZE) {
-        return accumulated;
-      }
-      cursor = nextCursor;
-    } catch {
-      return page === 0 ? [] : accumulated;
+    if (Array.isArray(raw)) {
+      return raw as Snippet[];
     }
+
+    accumulated.push(...(raw.items as Snippet[]));
+    const nextCursor = raw.cursor ?? null;
+    if (!nextCursor || raw.items.length < SNIPPET_PAGE_SIZE) {
+      return accumulated;
+    }
+    cursor = nextCursor;
   }
 
   return accumulated;

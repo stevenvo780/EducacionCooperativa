@@ -68,9 +68,13 @@ export function useYjsDoc({
     setTick((v) => v + 1);
 
     return () => {
-      provider.destroy();
-      awareness.destroy();
-      ydoc.destroy();
+      // React no soporta async cleanup. destroyAsync espera flush + tombstone
+      // sin bloquear el unmount; el TTL de seedLock + onDisconnect cubren el
+      // escape si el navegador cierra antes de completar.
+      void provider.destroyAsync().finally(() => {
+        awareness.destroy();
+        ydoc.destroy();
+      });
       ydocRef.current = null;
       awarenessRef.current = null;
       providerRef.current = null;

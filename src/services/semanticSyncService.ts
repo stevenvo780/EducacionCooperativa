@@ -77,10 +77,10 @@ const syncRegistryFromContent = (fileName: string, content: string) => {
   }
 };
 
-const emitCompanionEvents = (companionName: string, companionDocIds: string[]) => {
+const emitCompanionEvents = (workspaceId: string, companionName: string, companionDocIds: string[]) => {
   if (typeof window === 'undefined' || companionDocIds.length === 0) return;
 
-  dispatchAgoraEvent(AGORA_EVENTS.docsChanged, {});
+  dispatchAgoraEvent(AGORA_EVENTS.docsChanged, { workspaceId });
   companionDocIds.forEach((docId) => {
     dispatchAgoraEvent(AGORA_EVENTS.docContentUpdated, { docId, docName: companionName });
   });
@@ -126,7 +126,7 @@ const syncSemanticCompanionForSourceDocument = async (options: {
 
     const nextContent = mergedContents[0]?.content || '';
     syncRegistryFromContent(companionName, nextContent);
-    emitCompanionEvents(companionName, companionDocs.map((doc) => doc.id));
+    emitCompanionEvents(options.workspaceId, companionName, companionDocs.map((doc) => doc.id));
     return {
       sourceDocName: options.sourceDoc.name,
       companionName,
@@ -148,7 +148,7 @@ const syncSemanticCompanionForSourceDocument = async (options: {
 
   if (created?.id) {
     syncRegistryFromContent(companionName, content);
-    emitCompanionEvents(companionName, [created.id]);
+    emitCompanionEvents(options.workspaceId, companionName, [created.id]);
     return {
       sourceDocName: options.sourceDoc.name,
       companionName,
