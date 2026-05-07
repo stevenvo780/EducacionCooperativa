@@ -177,6 +177,17 @@ async function deleteByKey(storeName: string, key: IDBValidKey): Promise<void> {
  * Almacena múltiples documentos en caché.
  */
 export async function cacheDocuments(docs: CachedDoc[]): Promise<void> {
+  try {
+    await writeCachedDocuments(docs);
+  } catch (err) {
+    const { isQuotaExceededError, checkQuotaAndEvict } = await import('./idb-eviction');
+    if (!isQuotaExceededError(err)) throw err;
+    await checkQuotaAndEvict();
+    await writeCachedDocuments(docs);
+  }
+}
+
+async function writeCachedDocuments(docs: CachedDoc[]): Promise<void> {
   const db = await openDB();
   const transaction = db.transaction(STORE_DOCS, 'readwrite');
   const store = transaction.objectStore(STORE_DOCS);
@@ -243,7 +254,61 @@ export async function clearCachedDocs(workspaceId: string): Promise<void> {
  * Almacena el contenido textual de un documento en caché.
  */
 export async function cacheDocContent(docId: string, content: string): Promise<void> {
-  await putItem(STORE_CONTENT, { docId, content, updatedAt: Date.now() } as CachedContent);
+  const entry: CachedContent = { docId, content, updatedAt: Date.now() };
+  try {
+    await putItem(STORE_CONTENT, entry);
+  } catch (err) {
+    const { isQuotaExceededError, checkQuotaAndEvict } = await import('./idb-eviction');
+    if (!isQuotaExceededError(err)) throw err;
+    await checkQuotaAndEvict();
+    await putItem(STORE_CONTENT, entry);
+  }
+}
+
+/**
+ * Elimina entries de la cache de documentos cuyo `_cachedAt` supere `maxAgeMs`.
+ * Usa cursor sobre el store y borra in-place; no carga todo en RAM. La cache
+ * de contenido asociada se borra en paralelo para mantener consistencia.
+ */
+export async function evictOldDocsCache(maxAgeMs: number): Promise<void> {
+  if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) return;
+  const cutoff = Date.now() - maxAgeMs;
+  let db: IDBDatabase;
+  try {
+    db = await openDB();
+  } catch {
+    return;
+  }
+  const evicted: string[] = [];
+  await new Promise<void>((resolve) => {
+    const transaction = db.transaction(STORE_DOCS, 'readwrite');
+    const store = transaction.objectStore(STORE_DOCS);
+    const cursorReq = store.openCursor();
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (!cursor) return;
+      const v = cursor.value as CachedDoc | undefined;
+      if (v && typeof v._cachedAt === 'number' && v._cachedAt < cutoff) {
+        evicted.push(v.id);
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => resolve();
+    transaction.onabort = () => resolve();
+  });
+
+  if (evicted.length === 0) return;
+
+  await new Promise<void>((resolve) => {
+    const transaction = db.transaction(STORE_CONTENT, 'readwrite');
+    const store = transaction.objectStore(STORE_CONTENT);
+    for (const id of evicted) store.delete(id);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => resolve();
+    transaction.onabort = () => resolve();
+  });
 }
 
 /**

@@ -27,16 +27,17 @@ describe('agora typed browser events', () => {
     }
   });
 
-  it('dispatches plain events when no detail is expected', () => {
+  it('dispatches docsChanged with required workspaceId in detail', () => {
     const listener = vi.fn();
     window.addEventListener(AGORA_EVENTS.docsChanged, listener);
 
     try {
-      dispatchAgoraEvent(AGORA_EVENTS.docsChanged);
+      dispatchAgoraEvent(AGORA_EVENTS.docsChanged, { workspaceId: 'workspace-1' });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener.mock.calls[0]?.[0]).toBeInstanceOf(Event);
-      expect(listener.mock.calls[0]?.[0]).not.toBeInstanceOf(CustomEvent);
+      const event = listener.mock.calls[0]?.[0] as CustomEvent<{ workspaceId: string | null }>;
+      expect(event).toBeInstanceOf(CustomEvent);
+      expect(event.detail).toEqual({ workspaceId: 'workspace-1' });
     } finally {
       window.removeEventListener(AGORA_EVENTS.docsChanged, listener);
     }

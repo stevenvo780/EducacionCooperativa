@@ -1,14 +1,7 @@
-/**
- * Go-to-definition para el editor ST en CodeMirror 6.
- *
- * Soporta Ctrl+Click y F12 para saltar a la definición de:
- * - axiom, theorem, let, claim, theory y fn (definidos en el mismo archivo)
- * - declaraciones exportadas con `export` / `exportar`
- */
-
 import { EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
-import { getSemanticDefinition, getSemanticSymbols } from './st-semantic';
+import { getSemanticDefinition, getSemanticDefinitionAsync, getSemanticSymbolsAsync } from './st-semantic';
+import type { SymbolInfo } from '@/lib/st-api';
 
 interface SymbolDef {
   name: string;
@@ -34,21 +27,8 @@ function clampRange(
   return { from: safeFrom, to: safeTo };
 }
 
-/**
- * Escanea el documento para encontrar todas las definiciones de símbolos ST.
- */
-function findDefinitions(doc: string): SymbolDef[] {
-  const lines = doc.split('\n');
-  const docLength = doc.length;
-  const lineOffsets: number[] = [];
-  let offset = 0;
-
-  for (const line of lines) {
-    lineOffsets.push(offset);
-    offset += line.length + 1;
-  }
-
-  return getSemanticSymbols(doc)
+function symbolsToDefinitions(symbols: SymbolInfo[], docLength: number, lineOffsets: number[]): SymbolDef[] {
+  return symbols
     .filter((symbol) => Boolean(symbol.location?.line))
     .map((symbol) => {
       const line = Math.max(1, symbol.location.line);
@@ -67,9 +47,22 @@ function findDefinitions(doc: string): SymbolDef[] {
     });
 }
 
-/**
- * Obtiene la palabra bajo el cursor en la posición dada.
- */
+function buildLineOffsets(doc: string): { offsets: number[]; length: number } {
+  const offsets: number[] = [];
+  let offset = 0;
+  for (const line of doc.split('\n')) {
+    offsets.push(offset);
+    offset += line.length + 1;
+  }
+  return { offsets, length: doc.length };
+}
+
+async function findDefinitionsAsync(doc: string): Promise<SymbolDef[]> {
+  const { offsets, length } = buildLineOffsets(doc);
+  const symbols = await getSemanticSymbolsAsync(doc);
+  return symbolsToDefinitions(symbols, length, offsets);
+}
+
 function getWordAt(doc: string, pos: number): { word: string; from: number; to: number } | null {
   if (pos < 0 || pos >= doc.length) return null;
 
@@ -83,55 +76,45 @@ function getWordAt(doc: string, pos: number): { word: string; from: number; to: 
   return { word: doc.slice(from, to), from, to };
 }
 
-/**
- * Extensión de go-to-definition para ST.
- * - Ctrl+Click: salta a la definición
- * - F12: salta a la definición
- */
 export function stGotoDef() {
   return [
-    // F12 keybinding
     EditorView.domEventHandlers({
       keydown(event: KeyboardEvent, view: EditorView) {
         if (event.key === 'F12') {
           event.preventDefault();
-          return jumpToDefinition(view);
+          void jumpToDefinition(view);
+          return true;
         }
         return false;
       }
     }),
 
-    // Ctrl+Click
     EditorView.domEventHandlers({
       click(event: MouseEvent, view: EditorView) {
         if (!event.ctrlKey && !event.metaKey) return false;
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-        return jumpToDefinition(view, pos ?? view.state.selection.main.head);
+        void jumpToDefinition(view, pos ?? view.state.selection.main.head);
+        return true;
       }
     }),
 
-    // Ctrl+hover underline effect
     ctrlHoverPlugin
   ];
 }
 
-/**
- * Intenta saltar a la definición del símbolo bajo el cursor.
- */
-function jumpToDefinition(view: EditorView, pos: number = view.state.selection.main.head): boolean {
+async function jumpToDefinition(view: EditorView, pos: number = view.state.selection.main.head): Promise<boolean> {
   const stateDoc = view.state.doc;
   const doc = stateDoc.toString();
   const wordInfo = getWordAt(doc, pos);
 
   if (!wordInfo) return false;
 
-  const defs = findDefinitions(doc);
-  const semanticTarget =
-    defs.find((definition) => definition.name === wordInfo.word)
-    ?? (() => {
-      const location = getSemanticDefinition(doc, wordInfo.word);
-      if (!location?.line) return null;
+  const defs = await findDefinitionsAsync(doc);
+  let semanticTarget: SymbolDef | null = defs.find((definition) => definition.name === wordInfo.word) ?? null;
 
+  if (!semanticTarget) {
+    const location = await getSemanticDefinitionAsync(doc, wordInfo.word);
+    if (location?.line) {
       const lineNumber = Math.max(1, Math.min(location.line, stateDoc.lines));
       const line = stateDoc.line(lineNumber);
       const from = clampDocPos(line.from + Math.max(0, (location.column ?? 1) - 1), stateDoc.length);
@@ -140,21 +123,21 @@ function jumpToDefinition(view: EditorView, pos: number = view.state.selection.m
         from + (wordInfo.word.split('.').pop() || wordInfo.word).length,
         stateDoc.length,
       );
-      if (!range) return null;
-
-      return {
-        name: wordInfo.word,
-        from: range.from,
-        to: range.to,
-        line: lineNumber,
-        column: location.column ?? 1
-      };
-    })();
+      if (range) {
+        semanticTarget = {
+          name: wordInfo.word,
+          from: range.from,
+          to: range.to,
+          line: lineNumber,
+          column: location.column ?? 1
+        };
+      }
+    }
+  }
 
   if (!semanticTarget) return false;
   if (semanticTarget.from === wordInfo.from) return false;
 
-  // Jump to definition
   view.dispatch({
     selection: EditorSelection.single(semanticTarget.from, semanticTarget.to),
     scrollIntoView: true
@@ -163,10 +146,6 @@ function jumpToDefinition(view: EditorView, pos: number = view.state.selection.m
   return true;
 }
 
-/**
- * Debounce ms para re-escanear definiciones tras edits. El parser ST entero
- * corría en cada keystroke + scroll → bloqueo de UI en archivos medianos.
- */
 const DEFINITIONS_REBUILD_DEBOUNCE_MS = 300;
 
 export const ctrlHoverPlugin = ViewPlugin.fromClass(
@@ -174,19 +153,23 @@ export const ctrlHoverPlugin = ViewPlugin.fromClass(
     decorations: DecorationSet;
     isCtrlHeld = false;
     definitions: SymbolDef[] = [];
-    /**
-     * `dirty` indica que el doc cambió pero todavía no re-escaneamos. El
-     * primer Ctrl+hover dispara findDefinitions sincrónico si dirty (para
-     * que la primera intención del user no espere), o lo encola.
-     */
     private dirty = true;
     private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+    private rebuildSeq = 0;
     private latestView: EditorView;
 
     constructor(view: EditorView) {
       this.decorations = Decoration.none;
       this.latestView = view;
-      this.definitions = findDefinitions(view.state.doc.toString());
+      void this.rebuildAsync();
+    }
+
+    private async rebuildAsync(): Promise<void> {
+      const seq = ++this.rebuildSeq;
+      const docString = this.latestView.state.doc.toString();
+      const next = await findDefinitionsAsync(docString);
+      if (seq !== this.rebuildSeq) return;
+      this.definitions = next;
       this.dirty = false;
     }
 
@@ -195,26 +178,13 @@ export const ctrlHoverPlugin = ViewPlugin.fromClass(
       this.rebuildTimer = setTimeout(() => {
         this.rebuildTimer = null;
         if (!this.dirty) return;
-        this.definitions = findDefinitions(this.latestView.state.doc.toString());
-        this.dirty = false;
+        void this.rebuildAsync();
       }, DEFINITIONS_REBUILD_DEBOUNCE_MS);
-    }
-
-    private rebuildNow(): void {
-      if (this.rebuildTimer) {
-        clearTimeout(this.rebuildTimer);
-        this.rebuildTimer = null;
-      }
-      this.definitions = findDefinitions(this.latestView.state.doc.toString());
-      this.dirty = false;
     }
 
     update(update: ViewUpdate) {
       this.latestView = update.view;
       if (update.docChanged) {
-        // No re-parseamos sincrónico — solo marcamos sucio y desencolamos
-        // las decoraciones obsoletas. El rebuild real va al timer (o al
-        // próximo Ctrl-hover).
         this.dirty = true;
         if (this.decorations !== Decoration.none) {
           this.decorations = Decoration.none;
@@ -228,12 +198,14 @@ export const ctrlHoverPlugin = ViewPlugin.fromClass(
       this.rebuildTimer = null;
     }
 
-    /**
-     * Llamado desde el handler de mousemove (this dentro del eventHandler
-     * apunta a la instancia, igual que el patrón original de CM6).
-     */
     ensureDefinitionsFresh(): void {
-      if (this.dirty) this.rebuildNow();
+      if (this.dirty) {
+        if (this.rebuildTimer) {
+          clearTimeout(this.rebuildTimer);
+          this.rebuildTimer = null;
+        }
+        void this.rebuildAsync();
+      }
     }
   },
   {
@@ -258,9 +230,6 @@ export const ctrlHoverPlugin = ViewPlugin.fromClass(
           return;
         }
 
-        // Si el doc cambió y el rebuild de definiciones está pendiente en el
-        // timer, lo forzamos ahora (lazy): el user va a ver underline correcto
-        // en el primer hover post-edit sin esperar 300ms.
         this.ensureDefinitionsFresh();
 
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });

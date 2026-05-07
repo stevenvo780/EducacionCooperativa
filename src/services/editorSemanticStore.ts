@@ -69,12 +69,23 @@ const getStorageKey = ({ workspaceId, userId }: SemanticStoreContext) => (
 
 const isBrowser = () => typeof window !== 'undefined';
 
-// Cache en memoria del state por storage key. Evita JSON.parse + normalize
-// del payload completo en cada mutator. localStorage es hot pero el parse
-// + sort + validación campo-a-campo cuesta milisegundos en workspaces
-// grandes. La cache se invalida al hacer save (siempre encadenamos save→load
-// en el mismo tick).
+// Cache en memoria del state por storage key. Map preserva orden de
+// inserción y lo usamos como LRU: cap = MEMORY_CACHE_MAX_KEYS workspaces;
+// cuando se excede, evictamos el menos recientemente usado (primer key del
+// Map). El "touch" lo hacemos en cada read/write reordenando la entry al
+// final (delete + set).
+const MEMORY_CACHE_MAX_KEYS = 8;
 const memoryStateCache = new Map<string, SemanticWorkspaceState>();
+
+const touchMemoryEntry = (key: string, state: SemanticWorkspaceState) => {
+  if (memoryStateCache.has(key)) memoryStateCache.delete(key);
+  memoryStateCache.set(key, state);
+  while (memoryStateCache.size > MEMORY_CACHE_MAX_KEYS) {
+    const oldest = memoryStateCache.keys().next().value;
+    if (oldest === undefined || oldest === key) break;
+    memoryStateCache.delete(oldest);
+  }
+};
 // Versión por storage key. Cualquier mutación que produce cambios reales
 // la incrementa. Otros consumidores (ej. derived selectors) pueden cachear
 // por versión y bail-out en O(1) cuando no hay cambios.
@@ -142,18 +153,21 @@ export const loadSemanticWorkspaceState = (context: SemanticStoreContext): Seman
   if (!isBrowser()) return EMPTY_SEMANTIC_WORKSPACE_STATE;
   const key = getStorageKey(context);
   const cached = memoryStateCache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    touchMemoryEntry(key, cached);
+    return cached;
+  }
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) {
-      memoryStateCache.set(key, EMPTY_SEMANTIC_WORKSPACE_STATE);
+      touchMemoryEntry(key, EMPTY_SEMANTIC_WORKSPACE_STATE);
       return EMPTY_SEMANTIC_WORKSPACE_STATE;
     }
     const normalized = normalizeSemanticWorkspaceState(JSON.parse(raw));
-    memoryStateCache.set(key, normalized);
+    touchMemoryEntry(key, normalized);
     return normalized;
   } catch {
-    memoryStateCache.set(key, EMPTY_SEMANTIC_WORKSPACE_STATE);
+    touchMemoryEntry(key, EMPTY_SEMANTIC_WORKSPACE_STATE);
     return EMPTY_SEMANTIC_WORKSPACE_STATE;
   }
 };
@@ -174,7 +188,7 @@ export const saveSemanticWorkspaceState = (context: SemanticStoreContext, state:
     ...normalizeSemanticWorkspaceState(state),
     updatedAt: Date.now()
   };
-  memoryStateCache.set(key, nextState);
+  touchMemoryEntry(key, nextState);
   bumpStoreVersion(key);
   // Debounce de escritura a localStorage. Mutaciones consecutivas reusan el
   // timeout: solo la última escribe.
@@ -191,13 +205,53 @@ export const saveSemanticWorkspaceState = (context: SemanticStoreContext, state:
 /**
  * Persiste sincrónicamente el state pendiente. Útil antes de page unload o
  * antes de operaciones que dependen de localStorage (ej. otra tab leyendo).
+ *
+ * Sin contexto, fuerza flush de todas las keys con save pendiente — útil
+ * para listeners `pagehide`/`visibilitychange` que no conocen el ws actual.
  */
-export const flushSemanticWorkspaceState = (context: SemanticStoreContext) => {
+export const flushSemanticWorkspaceState = (context?: SemanticStoreContext) => {
   if (!isBrowser()) return;
-  const key = getStorageKey(context);
-  flushPendingSave(key);
-  const state = memoryStateCache.get(key);
-  if (state) writeStateToStorage(key, state);
+  if (context) {
+    const key = getStorageKey(context);
+    flushPendingSave(key);
+    const state = memoryStateCache.get(key);
+    if (state) writeStateToStorage(key, state);
+    return;
+  }
+  for (const key of Array.from(pendingSaves.keys())) {
+    flushPendingSave(key);
+    const state = memoryStateCache.get(key);
+    if (state) writeStateToStorage(key, state);
+  }
+};
+
+/**
+ * Borra entradas en memoria. Sin argumento, borra todo (ej. logout). Con
+ * `workspaceId`, borra solo las keys cuyo storage key empieza por
+ * `editor-semantic:<workspaceId>:*`. Cualquier save pendiente se flushea
+ * antes de quitar la entry.
+ */
+export const clearSemanticStoreCache = (workspaceId?: string) => {
+  if (!isBrowser()) return;
+  if (!workspaceId) {
+    for (const key of Array.from(pendingSaves.keys())) {
+      flushPendingSave(key);
+      const state = memoryStateCache.get(key);
+      if (state) writeStateToStorage(key, state);
+    }
+    memoryStateCache.clear();
+    storeVersionByKey.clear();
+    return;
+  }
+  const prefix = `editor-semantic:${workspaceId}:`;
+  for (const key of Array.from(memoryStateCache.keys())) {
+    if (!key.startsWith(prefix)) continue;
+    flushPendingSave(key);
+    const state = memoryStateCache.get(key);
+    if (state) writeStateToStorage(key, state);
+    memoryStateCache.delete(key);
+    storeVersionByKey.delete(key);
+  }
 };
 
 const updateState = (

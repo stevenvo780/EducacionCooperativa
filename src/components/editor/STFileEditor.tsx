@@ -7,6 +7,7 @@ import { useTerminal } from '@/context/TerminalContext';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useAuth } from '@/context/AuthContext';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
+import { extractInWorker } from '@/lib/st-runtime-worker-client';
 import { registerStatusSegment, forceUnregisterStatusSegment } from '@/lib/status-bus';
 import { Loader2, Cloud, Check, Users } from 'lucide-react';
 import useYjsDoc from '@/hooks/useYjsDoc';
@@ -298,25 +299,21 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     if (!content) {
       return () => { STDefinitionsRegistry.removeFile(fileId); };
     }
-    // Bug histórico: el parser ST corría en cada setContent (incluyendo cada
-    // keystroke local y cada Y.Text update remoto), duplicando el debounceado
-    // de STRunner. En tablet con archivos medianos (>10KB) eso colgaba la
-    // pestaña. Debounce + cap por tamaño en touch.
     const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
     const TOUCH_PARSE_LIMIT = 30_000;
     if (isTouch && content.length > TOUCH_PARSE_LIMIT) {
       return () => { STDefinitionsRegistry.removeFile(fileId); };
     }
     const debounceMs = content.length > 5_000 ? 1200 : 350;
+    let cancelled = false;
     const timer = window.setTimeout(() => {
-      try {
-        const defs = STDefinitionsRegistry.extractFromSource(content, fileId);
+      void extractInWorker(content, fileId).then((defs) => {
+        if (cancelled) return;
         STDefinitionsRegistry.setFileDefinitions(fileId, defs);
-      } catch {
-        // El parser puede fallar en input parcial. Silencioso.
-      }
+      });
     }, debounceMs);
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
       STDefinitionsRegistry.removeFile(fileId);
     };

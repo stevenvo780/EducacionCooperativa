@@ -375,48 +375,55 @@ export default function SnippetGallery({
 }) {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [editingSnippet, setEditingSnippet] = useState<Partial<Snippet> | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const seededRef = useRef(false);
 
-  /**
-   * Carga los snippets del workspace y aplica semillas por defecto si está vacío.
-   */
   const loadSnippets = useCallback(async () => {
     setLoading(true);
-    const items = await fetchSnippets(workspaceId);
-
-    if (!seededRef.current) {
-      seededRef.current = true;
-      const seeded = await seedDefaultSnippets(workspaceId, items);
-      setSnippets(seeded);
-    } else {
-      setSnippets(items);
+    setLoadError(null);
+    try {
+      const items = await fetchSnippets(workspaceId);
+      if (!seededRef.current) {
+        seededRef.current = true;
+        const seeded = await seedDefaultSnippets(workspaceId, items);
+        setSnippets(seeded);
+      } else {
+        setSnippets(items);
+      }
+    } catch (err) {
+      console.error('[SnippetGallery] fetchSnippets failed', err);
+      setLoadError('No se pudieron cargar los snippets. Intenta nuevamente.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [workspaceId]);
 
   useEffect(() => { void loadSnippets(); }, [loadSnippets]);
 
   const filtered = useMemo(() => {
-    let list = snippets;
-    if (allowedCategories && allowedCategories.length > 0) {
-      list = list.filter((s) => allowedCategories.includes(s.category));
-    }
-    if (activeCategory !== 'all') {
-      list = list.filter((s) => s.category === activeCategory);
-    }
+    const allowedSet = allowedCategories && allowedCategories.length > 0
+      ? new Set(allowedCategories)
+      : null;
+    const categoryFilter = activeCategory !== 'all' ? activeCategory : null;
     const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      list = list.filter((s) =>
-        s.title.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q) ||
-        s.markdown.toLowerCase().includes(q)
-      );
-    }
-    return list;
+
+    if (!allowedSet && !categoryFilter && !q) return snippets;
+
+    return snippets.filter((s) => {
+      if (allowedSet && !allowedSet.has(s.category)) return false;
+      if (categoryFilter && s.category !== categoryFilter) return false;
+      if (q) {
+        const matchTitle = s.title.toLowerCase().includes(q);
+        const matchDesc = s.description.toLowerCase().includes(q);
+        const matchMd = s.markdown.toLowerCase().includes(q);
+        if (!matchTitle && !matchDesc && !matchMd) return false;
+      }
+      return true;
+    });
   }, [allowedCategories, snippets, activeCategory, searchQuery]);
 
   const visibleCategories = useMemo(() => {
@@ -589,6 +596,18 @@ export default function SnippetGallery({
         </div>
 
         <div className="flex-1 overflow-auto p-3">
+          {loadError && (
+            <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              <span>{loadError}</span>
+              <button
+                type="button"
+                onClick={() => { void loadSnippets(); }}
+                className="rounded border border-red-400/60 px-2 py-0.5 text-[10px] text-red-100 transition hover:bg-red-500/20"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-blue-400" />

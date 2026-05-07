@@ -482,7 +482,18 @@ const cardListShallowEqual = (a: BoardCard[], b: BoardCard[]) => {
     const ac = a[i];
     const bc = b[i];
     if (!ac || !bc) return false;
-    if (ac.id !== bc.id || ac.order !== bc.order || ac.columnId !== bc.columnId || ac.title !== bc.title) {
+    if (
+      ac.id !== bc.id ||
+      ac.order !== bc.order ||
+      ac.columnId !== bc.columnId ||
+      ac.title !== bc.title ||
+      ac.description !== bc.description ||
+      ac.ownerId !== bc.ownerId ||
+      ac.sourceDocId !== bc.sourceDocId ||
+      ac.sourceDocName !== bc.sourceDocName ||
+      ac.sourceFragment !== bc.sourceFragment ||
+      ac.sourcePath !== bc.sourcePath
+    ) {
       return false;
     }
   }
@@ -519,6 +530,7 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
   const dragSnapshotRef = useRef<{ type: 'card' | 'column'; cards: BoardCard[]; columns: BoardColumn[] } | null>(null);
   const dragStateRef = useRef<{ cards: BoardCard[] } | null>(null);
   const dragOverRafRef = useRef<number | null>(null);
+  const pendingRemoteSnapshotRef = useRef<{ columns: BoardColumn[]; cards: BoardCard[] } | null>(null);
 
   const columnsOrdered = useMemo(() => {
     return [...columns].sort((a, b) => a.order - b.order);
@@ -562,7 +574,11 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
     const unsubscribe = subscribeBoardApi(
       workspaceId,
       ({ columns: nextColumns, cards: nextCards }) => {
-        if (dragSnapshotRef.current) return;
+        if (dragSnapshotRef.current) {
+          pendingRemoteSnapshotRef.current = { columns: nextColumns, cards: nextCards };
+          return;
+        }
+        pendingRemoteSnapshotRef.current = null;
         setColumns(nextColumns);
         setCards(nextCards);
       },
@@ -726,6 +742,43 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
     });
   };
 
+  const flushPendingRemoteSnapshot = useCallback(() => {
+    const pending = pendingRemoteSnapshotRef.current;
+    if (!pending) return false;
+    pendingRemoteSnapshotRef.current = null;
+    setColumns(pending.columns);
+    setCards(pending.cards);
+    return true;
+  }, []);
+
+  const runWithRetry = useCallback(async <T,>(
+    items: T[],
+    perform: (item: T) => Promise<unknown>
+  ): Promise<{ failed: T[] }> => {
+    if (items.length === 0) return { failed: [] };
+    const first = await Promise.allSettled(items.map((item) => perform(item)));
+    const failedItems: T[] = [];
+    first.forEach((result, idx) => {
+      if (result.status === 'rejected') {
+        const item = items[idx];
+        if (item !== undefined) failedItems.push(item);
+      }
+    });
+    if (failedItems.length === 0) return { failed: [] };
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const second = await Promise.allSettled(failedItems.map((item) => perform(item)));
+    const stillFailed: T[] = [];
+    second.forEach((result, idx) => {
+      if (result.status === 'rejected') {
+        const item = failedItems[idx];
+        if (item !== undefined) stillFailed.push(item);
+      }
+    });
+    return { failed: stillFailed };
+  }, []);
+
   const handleDragEnd = async ({ active, over }: DragEndEvent) => {
     cancelPendingDragOver();
     const activeData = active.data.current as DragData | undefined;
@@ -738,6 +791,7 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
     if (!activeData || !over) {
       if (snapshot?.type === 'card') setCards(snapshot.cards);
       if (snapshot?.type === 'column') setColumns(snapshot.columns);
+      flushPendingRemoteSnapshot();
       return;
     }
 
@@ -749,7 +803,10 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       const ordered = [...columns].sort((a, b) => a.order - b.order);
       const oldIndex = ordered.findIndex(col => col.id === activeData.columnId);
       const newIndex = ordered.findIndex(col => col.id === targetColumnId);
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
+        flushPendingRemoteSnapshot();
+        return;
+      }
 
       const reordered = normalizeColumns(arrayMove(ordered, oldIndex, newIndex));
       setColumns(reordered);
@@ -757,8 +814,18 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       if (workspaceId && snapshot?.type === 'column') {
         const prevMap = new Map(snapshot.columns.map(col => [col.id, col.order]));
         const updates = reordered.filter(col => prevMap.get(col.id) !== col.order);
-        await Promise.all(updates.map(col => updateBoardColumnApi({ workspaceId, columnId: col.id, order: col.order })));
+        const { failed } = await runWithRetry(updates, (col) =>
+          updateBoardColumnApi({ workspaceId, columnId: col.id, order: col.order })
+        );
+        if (failed.length > 0) {
+          console.error('[KanbanBoard] column reorder persistence failed', failed.map((c) => c.id));
+          setColumns(snapshot.columns);
+          setError('Sincronización falló, refrescá la página');
+          flushPendingRemoteSnapshot();
+          return;
+        }
       }
+      flushPendingRemoteSnapshot();
       return;
     }
 
@@ -768,13 +835,23 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
       setCards(normalized);
       if (workspaceId && snapshot?.type === 'card') {
         const changes = diffCardChanges(snapshot.cards, normalized);
-        await Promise.all(changes.map(card => updateBoardCardApi({
-          workspaceId,
-          cardId: card.id,
-          columnId: card.columnId,
-          order: card.order
-        })));
+        const { failed } = await runWithRetry(changes, (card) =>
+          updateBoardCardApi({
+            workspaceId,
+            cardId: card.id,
+            columnId: card.columnId,
+            order: card.order
+          })
+        );
+        if (failed.length > 0) {
+          console.error('[KanbanBoard] card move persistence failed', failed.map((c) => c.id));
+          setCards(snapshot.cards);
+          setError('Sincronización falló, refrescá la página');
+          flushPendingRemoteSnapshot();
+          return;
+        }
       }
+      flushPendingRemoteSnapshot();
     }
   };
 
@@ -786,6 +863,7 @@ const KanbanBoard = ({ workspaceId, workspaceName, ownerId }: KanbanBoardProps) 
     dragSnapshotRef.current = null;
     dragStateRef.current = null;
     if (active?.data?.current) setActiveDrag(null);
+    flushPendingRemoteSnapshot();
   };
 
   if (!workspaceId) {

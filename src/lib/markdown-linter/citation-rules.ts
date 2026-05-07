@@ -1,36 +1,49 @@
-/**
- * Reglas de citación y referencias bibliográficas.
- *
- * Soporta formato APA (el más común en academias de habla hispana),
- * con detección de cross-referencias entre citas en texto y bibliografía.
- *
- * Integración con ST: los bloques `source` en archivos .st actúan como
- * entradas bibliográficas formalizadas y se cruzan con citas en texto.
- */
+import {
+  type LinterRule,
+  type LinterDiagnostic,
+  type LinterRuleContext,
+  type BibliographyEntry,
+  getCodeBlockLines,
+  lineAt
+} from './types';
 
-import { type LinterRule, type LinterDiagnostic, type LinterRuleContext, getCodeBlockLines, lineAt } from './types';
+const BIB_HEADING_REGEX = /^#{1,3}\s+(referencias?|bibliografía|bibliography|fuentes?|works\s+cited|literatura\s+citada)\s*$/i;
+const BIB_ENTRY_REGEX = /^([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:[A-Za-záéíóúüñ\s,\.]+)?)\s*\((\d{4}[a-z]?)\)/;
 
-/**
- * Detecta la línea donde empieza una sección de bibliografía/referencias.
- * Acepta variantes en español e inglés.
- */
-function findBibliographySection(lines: string[]): number {
-  const bibPattern = /^#{1,3}\s+(referencias?|bibliografía|bibliography|fuentes?|works\s+cited|literatura\s+citada)\s*$/i;
+function findBibliographySection(lines: readonly string[]): number {
   for (let i = 0; i < lines.length; i++) {
-    if (bibPattern.test(lineAt(lines, i).trim())) return i;
+    if (BIB_HEADING_REGEX.test(lineAt(lines, i).trim())) return i;
   }
   return -1;
 }
 
-/**
- * Extrae el apellido y año de una cita APA en texto.
- * Formas válidas:
- *   (García, 2020)  (García y López, 2020)  (García et al., 2020)
- *   García (2020)   Smith (2020, p. 45)
- * Devuelve { author, year, raw } o null.
- */
+function parseBibEntry(line: string): string | null {
+  const match = line.trim().match(BIB_ENTRY_REGEX);
+  if (!match) return null;
+  const firstAuthor = (match[1] ?? '').split(',')[0]?.trim().split(/\s+/).pop();
+  const year = match[2];
+  if (!firstAuthor || !year) return null;
+  return `${firstAuthor.toLowerCase()}_${year}`;
+}
+
+function getBibStart(lines: readonly string[], ctx?: LinterRuleContext): number {
+  if (ctx) return ctx.bibliographySectionLineIdx ?? -1;
+  return findBibliographySection(lines);
+}
+
+function getBibEntries(lines: readonly string[], bibStart: number, ctx?: LinterRuleContext): BibliographyEntry[] {
+  if (ctx && bibStart === ctx.bibliographySectionLineIdx) return ctx.bibliographyEntries;
+  if (bibStart === -1) return [];
+  const entries: BibliographyEntry[] = [];
+  for (let i = bibStart + 1; i < lines.length; i++) {
+    const raw = lineAt(lines, i).trim();
+    const key = parseBibEntry(raw);
+    if (key) entries.push({ key, lineIdx: i, raw });
+  }
+  return entries;
+}
+
 function parseInTextCitation(raw: string): { key: string; raw: string } | null {
-  // (Apellido, Año) o (Apellido y Apellido, Año) o (Apellido et al., Año)
   const parenMatch = raw.match(
     /\(([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+(?:y|and|&)\s+[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+)?(?:\s+et\s+al\.?)?),\s*(\d{4}[a-z]?)(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/
   );
@@ -41,7 +54,6 @@ function parseInTextCitation(raw: string): { key: string; raw: string } | null {
     return { key: `${author.toLowerCase()}_${year}`, raw };
   }
 
-  // Apellido (Año) — narrativa
   const narrativeMatch = raw.match(
     /\b([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?)\s*\((\d{4}[a-z]?)(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/
   );
@@ -55,24 +67,6 @@ function parseInTextCitation(raw: string): { key: string; raw: string } | null {
   return null;
 }
 
-/**
- * Normaliza una entrada bibliográfica a una clave comparable con las citas en texto.
- * Acepta formatos como:
- *   García, J. (2020). Título...
- *   García, J., & López, M. (2020). Título...
- *   García García, J. M. (2020). Título...
- */
-function parseBibEntry(line: string): string | null {
-  const match = line.trim().match(/^([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:[A-Za-záéíóúüñ\s,\.]+)?)\s*\((\d{4}[a-z]?)\)/);
-  if (!match) return null;
-  const firstAuthor = (match[1] ?? '').split(',')[0]?.trim().split(/\s+/).pop();
-  const year = match[2];
-  if (!firstAuthor || !year) return null;
-  return `${firstAuthor.toLowerCase()}_${year}`;
-}
-
-// 1. CITAS APA MAL FORMADAS
-
 export const apaMalformedRule: LinterRule = {
   id: 'citation_apa_malformed',
   name: 'Citas APA mal formadas',
@@ -85,11 +79,8 @@ export const apaMalformedRule: LinterRule = {
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
-    // Citas sin coma: (Smith 2020) o (Smith2020)
     const missingComma = /\(([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+[A-Za-záéíóúüñ]+)?)\s+(\d{4}[a-z]?)\)/g;
-    // Comas sin espacio: (Smith,2020)
     const missingSpace = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+,(\d{4})\)/g;
-    // Corchetes en vez de paréntesis: [Smith, 2020]
     const wrongBrackets = /\[([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+),\s*(\d{4}[a-z]?)\]/g;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -142,8 +133,6 @@ export const apaMalformedRule: LinterRule = {
   }
 };
 
-// 2. CITAS EN TEXTO SIN ENTRADA EN BIBLIOGRAFÍA
-
 export const missingBibliographyRule: LinterRule = {
   id: 'citation_missing_bibliography',
   name: 'Citas sin entrada bibliográfica',
@@ -155,18 +144,13 @@ export const missingBibliographyRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const bibStart = findBibliographySection(lines);
-    if (bibStart === -1) return results; // No hay sección de referencias — otra regla lo detecta
+    const bibStart = getBibStart(lines, ctx);
+    if (bibStart === -1) return results;
 
-    // Recopilar entradas bibliográficas
-    const bibKeys = new Set<string>();
-    for (let i = bibStart + 1; i < lines.length; i++) {
-      const key = parseBibEntry(lineAt(lines, i));
-      if (key) bibKeys.add(key);
-    }
-    if (bibKeys.size === 0) return results;
+    const entries = getBibEntries(lines, bibStart, ctx);
+    if (entries.length === 0) return results;
+    const bibKeys = new Set(entries.map((e) => e.key));
 
-    // Buscar citas en el cuerpo del texto (antes de la bibliografía)
     const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ\s,\.&]+,?\s*\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
     const narrativeRegex = /\b[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
 
@@ -198,8 +182,6 @@ export const missingBibliographyRule: LinterRule = {
   }
 };
 
-// 3. ENTRADAS BIBLIOGRÁFICAS SIN CITA EN TEXTO
-
 export const orphanBibliographyRule: LinterRule = {
   id: 'citation_orphan_bibliography',
   name: 'Referencias sin citar en el texto',
@@ -211,17 +193,11 @@ export const orphanBibliographyRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const bibStart = findBibliographySection(lines);
+    const bibStart = getBibStart(lines, ctx);
     if (bibStart === -1) return results;
 
-    // Recopilar entradas bibliográficas con su línea
-    const bibEntries: Array<{ key: string; lineIdx: number; raw: string }> = [];
-    for (let i = bibStart + 1; i < lines.length; i++) {
-      const key = parseBibEntry(lineAt(lines, i));
-      if (key) bibEntries.push({ key, lineIdx: i, raw: lineAt(lines, i).trim() });
-    }
+    const bibEntries = getBibEntries(lines, bibStart, ctx);
 
-    // Recopilar todas las claves citadas en el texto
     const citedKeys = new Set<string>();
     const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ\s,\.&]+,?\s*\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
     const narrativeRegex = /\b[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
@@ -238,7 +214,6 @@ export const orphanBibliographyRule: LinterRule = {
       }
     }
 
-    // Reportar entradas no citadas
     for (const entry of bibEntries) {
       if (!citedKeys.has(entry.key)) {
         results.push({
@@ -257,8 +232,6 @@ export const orphanBibliographyRule: LinterRule = {
   }
 };
 
-// 4. FORMATO DOI
-
 export const doiFormatRule: LinterRule = {
   id: 'citation_doi_format',
   name: 'Formato DOI inválido',
@@ -271,9 +244,7 @@ export const doiFormatRule: LinterRule = {
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
-    // DOI sin protocolo https: doi.org/... o 10.xxxx/...
     const badDoi = /(?<![/\w])(?:doi:\s*|DOI:\s*)(10\.\d{4,}\/\S+)/g;
-    // DOI con http en vez de https
     const httpDoi = /\bhttp:\/\/doi\.org\/(10\.\d{4,}\/\S+)/g;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
@@ -285,7 +256,6 @@ export const doiFormatRule: LinterRule = {
         results.push({
           message: `DOI sin formato URL completo: "${match[0]}"`,
           suggestion: `APA 7ª ed. requiere: https://doi.org/${match[1]}`,
-
           severity: 'warning',
           line: lineIdx + 1,
           column: match.index + 1,
@@ -300,7 +270,6 @@ export const doiFormatRule: LinterRule = {
         results.push({
           message: `DOI con http (inseguro): "${match[0]}"`,
           suggestion: `Usa https://doi.org/${match[1]}`,
-
           severity: 'info',
           line: lineIdx + 1,
           column: match.index + 1,
@@ -315,8 +284,6 @@ export const doiFormatRule: LinterRule = {
   }
 };
 
-// 5. SECCIÓN DE REFERENCIAS FALTANTE
-
 export const missingReferenceSectionRule: LinterRule = {
   id: 'citation_missing_reference_section',
   name: 'Sección de Referencias faltante',
@@ -328,7 +295,6 @@ export const missingReferenceSectionRule: LinterRule = {
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
 
-    // ¿Hay citas en el texto?
     const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+,\s*\d{4}\)/;
     let hasCitations = false;
     for (let i = 0; i < lines.length; i++) {
@@ -339,7 +305,7 @@ export const missingReferenceSectionRule: LinterRule = {
     }
 
     if (!hasCitations) return [];
-    if (findBibliographySection(lines) !== -1) return [];
+    if (getBibStart(lines, ctx) !== -1) return [];
 
     return [{
       message: 'El documento contiene citas bibliográficas pero no tiene sección de "Referencias" o "Bibliografía".',
@@ -353,8 +319,6 @@ export const missingReferenceSectionRule: LinterRule = {
     }];
   }
 };
-
-// 6. CITAS IBID / OP. CIT. (obsoletas en APA)
 
 export const ibidOpCitRule: LinterRule = {
   id: 'citation_ibid_op_cit',

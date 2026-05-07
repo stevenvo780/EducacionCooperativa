@@ -41,7 +41,8 @@ export const AGORA_EVENTS = {
   promptUserChoice: 'agora:prompt-user-choice',
   showDiff: 'agora:show-diff',
   agentStatus: 'agora:agent-status',
-  agentPlan: 'agora:agent-plan'
+  agentPlan: 'agora:agent-plan',
+  workerDocChange: 'agora:worker-doc-change'
 } as const;
 
 export type TouchDropPosition = 'left' | 'right' | 'top' | 'bottom' | 'replace';
@@ -73,11 +74,12 @@ type AgoraWindowEventMap = {
   [AGORA_EVENTS.agentDiagnostic]: AgentDiagnosticEventDetail;
   [AGORA_EVENTS.documentsMutated]: AgentDocumentsMutatedEventDetail;
   /**
-   * Detail opcional. Cuando se dispara desde SyncEventsBridge incluye
-   * `workspaceId` para que los listeners puedan filtrar y solo refresquen
-   * si el evento corresponde al workspace activo.
+   * `workspaceId` es REQUERIDO. Los listeners filtran por workspace activo
+   * para evitar refetch en pestañas que no corresponden al evento. Pasar
+   * `null` solo en flujos puramente personales (workspace personal sin uid
+   * resoluble); pasar el id concreto siempre que sea posible.
    */
-  [AGORA_EVENTS.docsChanged]: { workspaceId?: string | null };
+  [AGORA_EVENTS.docsChanged]: { workspaceId: string | null };
   [AGORA_EVENTS.openDocuments]: AgentOpenDocumentsEventDetail;
   [AGORA_EVENTS.rtdbEvent]: SyncEvent;
   [AGORA_EVENTS.problem]: AgoraProblemEventDetail;
@@ -135,6 +137,12 @@ type AgoraWindowEventMap = {
   [AGORA_EVENTS.showDiff]: unknown;
   [AGORA_EVENTS.agentStatus]: unknown;
   [AGORA_EVENTS.agentPlan]: unknown;
+  [AGORA_EVENTS.workerDocChange]: {
+    workspaceId: string;
+    docPath: string;
+    type: 'create' | 'update' | 'delete';
+    ts: number;
+  };
 };
 
 type AgoraEventName = keyof AgoraWindowEventMap;

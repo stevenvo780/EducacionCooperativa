@@ -20,7 +20,7 @@ import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 export default function SyncEventsBridge() {
     const { user } = useAuth();
-    const currentWorkspace = useAppSelector((s) => s.dashboard.currentWorkspace);
+    const currentWorkspace = useAppSelector((s) => s.workspaces.currentWorkspace);
     const wsId = currentWorkspace?.id ?? null;
     const isPersonal = !wsId || wsId === PERSONAL_WORKSPACE_ID;
 

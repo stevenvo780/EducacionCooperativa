@@ -8,12 +8,12 @@ import {
   type SourceLocation,
   type SymbolInfo
 } from '@/lib/st-api';
+import {
+  symbolsInWorker,
+  hoverInWorker,
+  gotoInWorker
+} from '@/lib/st-runtime-worker-client';
 
-/**
- * djb2 hash compacto. Usado para cachear getSemanticSymbols por contenido,
- * no por identidad de string: dos llamadas con strings idénticos pero
- * objetos diferentes (común con setState/dispatch CM6) ahora hit cache.
- */
 function djb2(s: string): string {
   let h = 5381;
   for (let i = 0; i < s.length; i++) {
@@ -41,6 +41,18 @@ export function getSemanticSymbols(source: string): SymbolInfo[] {
   return cachedSymbols;
 }
 
+export async function getSemanticSymbolsAsync(source: string): Promise<SymbolInfo[]> {
+  const hash = djb2(source);
+  if (hash === cachedSymbolHash) return cachedSymbols;
+
+  const result = await symbolsInWorker(source);
+  if (djb2(source) === hash) {
+    cachedSymbolHash = hash;
+    cachedSymbols = result;
+  }
+  return result;
+}
+
 export function getSemanticHover(
   source: string,
   line: number,
@@ -52,6 +64,15 @@ export function getSemanticHover(
   } catch {
     return null;
   }
+}
+
+export function getSemanticHoverAsync(
+  source: string,
+  line: number,
+  column: number,
+  file?: string
+): Promise<STHoverInfo | null> {
+  return hoverInWorker(source, line, column, file);
 }
 
 export function getSemanticDefinition(
@@ -72,6 +93,23 @@ export function getSemanticDefinition(
   } catch {
     return null;
   }
+}
+
+export async function getSemanticDefinitionAsync(
+  source: string,
+  name: string,
+  file?: string
+): Promise<SourceLocation | null> {
+  const symbols = await getSemanticSymbolsAsync(source);
+  const exactMatch = symbols.find((symbol) => symbol.name === name);
+  if (exactMatch?.location) return exactMatch.location;
+
+  const suffixMatches = symbols.filter((symbol) => symbol.name.endsWith(`.${name}`));
+  if (suffixMatches.length === 1 && suffixMatches[0]?.location) {
+    return suffixMatches[0].location;
+  }
+
+  return gotoInWorker(source, name, file);
 }
 
 export function getStaticSemanticCompletions(): STCompletionItem[] {

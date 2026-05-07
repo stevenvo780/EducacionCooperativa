@@ -307,12 +307,7 @@ export const useDashboardDocsSync = ({
     };
 
     const unsubDocsChanged = subscribeAgoraEvent(AGORA_EVENTS.docsChanged, (detail) => {
-      // SyncEventsBridge incluye `workspaceId` para que solo el dashboard del
-      // workspace activo reaccione. Otros emisores históricos disparan sin
-      // detail (objeto vacío) → mantenemos el comportamiento actual de
-      // refrescar siempre cuando no hay workspaceId explícito.
-      const eventWsId = detail?.workspaceId;
-      if (eventWsId && !matchesActiveWorkspace(eventWsId)) return;
+      if (!matchesActiveWorkspace(detail?.workspaceId)) return;
       triggerRefresh('agora:docs-changed');
     });
     const unsubDocsMutated = subscribeAgoraEvent(AGORA_EVENTS.documentsMutated, (detail) => {

@@ -245,7 +245,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             // Dispara el evento global que el dashboard escucha para refrescar
             // la jerarquía sin recargar la página (mismo bus que usa MosaicEditor).
-            dispatchAgoraEvent(AGORA_EVENTS.docsChanged, {});
+            dispatchAgoraEvent(AGORA_EVENTS.docsChanged, { workspaceId });
             await refreshAll();
             setToast('.gitignore creado en la raíz. Búscalo en el explorador para editarlo.');
         } catch (e) {
