@@ -95,7 +95,7 @@ import { useDeleteDocument } from '@/hooks/dashboard/useDeleteDocument';
 import { useTerminalTabs } from '@/hooks/dashboard/useTerminalTabs';
 import { useMosaicTabs } from '@/hooks/dashboard/useMosaicTabs';
 import { useDocumentActions } from '@/hooks/dashboard/useDocumentActions';
-import { useSidebarLayout } from '@/hooks/dashboard/useSidebarLayout';
+import { useSidebarLayout, readPersistedSidebarWidth } from '@/hooks/dashboard/useSidebarLayout';
 import { useWorkspaceActions } from '@/hooks/dashboard/useWorkspaceActions';
 import { ALL_SEARCH_RESULT_FILTER } from '@/lib/search/types';
 import type { AgentDocumentTarget, AgentUiCommandEventDetail } from '@/lib/agora-ai/types';
@@ -2500,6 +2500,7 @@ function DashboardContent() {
     ]);
 
     if (loading || !user) {
+        const skeletonSidebarWidth = readPersistedSidebarWidth();
         return (
             <div className="flex h-[100dvh] flex-col bg-surface-900 text-white overflow-hidden">
                 <div className="h-12 border-b border-surface-700/40 bg-surface-800/40 flex items-center px-4 gap-3">
@@ -2508,12 +2509,12 @@ function DashboardContent() {
                     <div className="ml-auto h-4 w-20 rounded bg-surface-700/60 animate-pulse" />
                 </div>
                 <div className="flex-1 flex">
-                    <div className="w-12 border-r border-surface-700/40 bg-surface-800/30 flex flex-col items-center gap-3 py-3">
+                    <div className="w-12 border-r border-surface-700/40 bg-surface-800/30 flex flex-col items-center gap-3 py-3 shrink-0">
                         {Array.from({ length: 6 }).map((_, i) => (
                             <div key={i} className="h-6 w-6 rounded bg-surface-700/60 animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
                         ))}
                     </div>
-                    <div className="w-64 border-r border-surface-700/40 bg-surface-900 px-3 py-3 space-y-2">
+                    <div className="border-r border-surface-700/40 bg-surface-900 px-3 py-3 space-y-2 shrink-0" style={{ width: skeletonSidebarWidth }}>
                         {Array.from({ length: 8 }).map((_, i) => (
                             <div key={i} className="h-7 rounded bg-surface-700/40 animate-pulse" style={{ animationDelay: `${i * 60}ms` }} />
                         ))}
