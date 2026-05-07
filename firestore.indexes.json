@@ -62,14 +62,6 @@
       ]
     },
     {
-      "collectionGroup": "documents",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "storagePath", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "agentAuditLog",
       "queryScope": "COLLECTION",
       "fields": [
