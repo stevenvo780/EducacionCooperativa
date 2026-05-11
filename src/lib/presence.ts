@@ -25,7 +25,29 @@ import {
   set,
   update
 } from 'firebase/database';
-import { rtdb } from '@/lib/firebase';
+import { auth as getAuthSingleton, rtdb } from '@/lib/firebase';
+
+/**
+ * Verifica que el browser tiene un usuario autenticado y, si el wsId es
+ * `personal_<uid>`, que el uid actual coincide. Las rules RTDB son:
+ *   /presence/<wsId> writable if auth != null && (!wsId.startsWith('personal_')
+ *                                                  || wsId === 'personal_' + auth.uid)
+ * Si emitimos writes sin esto, Firebase loguea `permission_denied` aunque
+ * nosotros silenciemos la rejection — la única forma de evitar la línea de
+ * error en consola es no enviar el write.
+ */
+function canWritePresence(workspaceId: string): boolean {
+  try {
+    const currentUid = getAuthSingleton().currentUser?.uid;
+    if (!currentUid) return false;
+    if (workspaceId.startsWith('personal_')) {
+      return workspaceId === `personal_${currentUid}`;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const PRESENCE_HEARTBEAT_MS = 25_000;
 export const PRESENCE_TTL_MS = 90_000;
@@ -88,6 +110,16 @@ export async function joinPresence(args: JoinPresenceArgs): Promise<{
   heartbeat: () => Promise<void>;
   leave: () => Promise<void>;
 }> {
+  if (!canWritePresence(args.workspaceId)) {
+    // Sin auth o con uid distinto del personal workspace: no podemos escribir.
+    // Devolvemos handle no-op para que el caller no rompa.
+    return {
+      updateCurrentDoc: async () => undefined,
+      heartbeat: async () => undefined,
+      leave: async () => undefined
+    };
+  }
+
   const database = rtdb();
   const myRef = ref(database, presencePath(args.workspaceId, args.sessionId));
   const color = colorForUser(args.userId);
@@ -109,6 +141,7 @@ export async function joinPresence(args: JoinPresenceArgs): Promise<{
 
   return {
     updateCurrentDoc: async (docId) => {
+      if (!canWritePresence(args.workspaceId)) return;
       const patch: PresenceUpdate = { currentDocId: docId ?? undefined };
       await update(myRef, {
         ...stripUndefined(patch),
@@ -118,9 +151,11 @@ export async function joinPresence(args: JoinPresenceArgs): Promise<{
       });
     },
     heartbeat: async () => {
+      if (!canWritePresence(args.workspaceId)) return;
       await update(myRef, { lastSeen: Date.now(), lastSeenServer: serverTimestamp() });
     },
     leave: async () => {
+      if (!canWritePresence(args.workspaceId)) return;
       try { await remove(myRef); } catch { /* ignore */ }
     }
   };
@@ -140,6 +175,11 @@ export function subscribePresence(
   workspaceId: string,
   callback: (entries: PresenceEntry[]) => void
 ): () => void {
+  if (!canWritePresence(workspaceId)) {
+    // No-op: sin auth o sin uid coincidente para personal_<uid> el listener
+    // fallaría con permission_denied en cuanto el server emita el primer event.
+    return () => undefined;
+  }
   const database = rtdb();
   const channelRef = ref(database, presencePath(workspaceId));
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue, startTransition } from 'react';
 import ReactDOM from 'react-dom';
 import {
   AdmonitionDirectiveDescriptor,
@@ -152,6 +152,9 @@ export default function MosaicEditor({
   const [linkableDocuments, setLinkableDocuments] = useState<Array<{ id: string; name: string; folder?: string }>>([]);
   const [loadingLinkableDocuments, setLoadingLinkableDocuments] = useState(false);
   const [isDocLoading, setIsDocLoading] = useState(false);
+  // Cuando el doc devuelve 401/403/404 dejamos de reintentar loadDoc y stream
+  // hasta que cambie roomId. Evita bucles infinitos sobre docs sin permiso.
+  const [docUnavailable, setDocUnavailable] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
@@ -167,6 +170,9 @@ export default function MosaicEditor({
   const { onDocChangeCallback } = useTerminal();
   const isPageVisible = usePageVisibility();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Debounce del broadcast 'agora:document-content' (Bug 5: cada keystroke
+  // dispatchaba un CustomEvent que pateaba OutlineView y otros listeners).
+  const contentBroadcastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
   const contentRef = useRef(initialContent);
   const lastSyncedContentRef = useRef(initialContent);
@@ -704,10 +710,14 @@ export default function MosaicEditor({
 
   const loadDoc = useCallback(async () => {
     if (!roomId) return;
+    if (docUnavailable) return;
     setIsDocLoading(true);
     try {
       const res = await authFetch(`/api/documents/${roomId}`, { cache: 'no-store' });
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 410) {
+          setDocUnavailable(true);
+        }
         if (!hasUnsavedLocalChanges()) {
           resetDocState();
         }
@@ -720,7 +730,7 @@ export default function MosaicEditor({
     } finally {
       setIsDocLoading(false);
     }
-  }, [roomId, applyDocData, hasUnsavedLocalChanges, resetDocState]);
+  }, [roomId, docUnavailable, applyDocData, hasUnsavedLocalChanges, resetDocState]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -728,6 +738,7 @@ export default function MosaicEditor({
     pendingLocalChangeRef.current = false;
     hasLocalEditsThisSessionRef.current = false;
     lastRawKeyRef.current = null;
+    setDocUnavailable(false);
     loadDoc();
   }, [roomId, loadDoc]);
 
@@ -751,19 +762,26 @@ export default function MosaicEditor({
     applyDocData(data as Parameters<typeof applyDocData>[0]);
   }, [applyDocData, hasUnsavedLocalChanges]);
 
+  const handleStreamUnavailable = useCallback((status: number) => {
+    console.warn(`[MosaicEditor] stream no disponible (HTTP ${status}); deteniendo retries para doc ${roomId}`);
+    setDocUnavailable(true);
+  }, [roomId]);
+
   useEditorSSEStream({
-    roomId,
+    roomId: docUnavailable ? undefined : roomId,
     isPageVisible,
     onSnapshot: handleSSESnapshot,
-    onDeleted: resetDocState
+    onDeleted: resetDocState,
+    onUnavailable: handleStreamUnavailable
   });
 
   // Refresh al volver a la pestaña, también condicionado a no pisar edits.
   useEffect(() => {
     if (!isPageVisible || !roomId) return;
+    if (docUnavailable) return;
     if (pendingLocalChangeRef.current || hasUnsavedLocalChanges()) return;
     loadDoc();
-  }, [isPageVisible, roomId, loadDoc, hasUnsavedLocalChanges]);
+  }, [isPageVisible, roomId, docUnavailable, loadDoc, hasUnsavedLocalChanges]);
 
   useEffect(() => {
     if (viewMode === 'preview') {
@@ -796,9 +814,18 @@ export default function MosaicEditor({
 
   const handleContentChange = useCallback((val: string) => {
     contentRef.current = val;
-    setStatsContent(val);
+    // Bug 5: las re-renderizaciones derivadas (linter, preview, stats) son
+    // pesadas en mobile. startTransition deja el keystroke commitear primero
+    // y agenda el re-render con baja prioridad. Combinado con useDeferredValue
+    // ya existente sobre statsContent quita el lag de ~2.7s por tecla.
+    startTransition(() => setStatsContent(val));
+    // Broadcast a OutlineView u otros listeners externos: debounce 200ms para
+    // no spamear CustomEvents por tecla.
     if (roomId) {
-      dispatchAgoraEvent(AGORA_EVENTS.documentContent, { docId: roomId, content: val });
+      if (contentBroadcastTimeoutRef.current) clearTimeout(contentBroadcastTimeoutRef.current);
+      contentBroadcastTimeoutRef.current = setTimeout(() => {
+        dispatchAgoraEvent(AGORA_EVENTS.documentContent, { docId: roomId, content: val });
+      }, 200);
     }
     if (!roomId || docType === DocumentType.File) return;
     if (!hasLoadedRef.current) return;
@@ -879,6 +906,7 @@ export default function MosaicEditor({
 
   useEffect(() => () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (contentBroadcastTimeoutRef.current) clearTimeout(contentBroadcastTimeoutRef.current);
     saveAbortRef.current?.abort();
     saveAbortRef.current = null;
   }, []);
