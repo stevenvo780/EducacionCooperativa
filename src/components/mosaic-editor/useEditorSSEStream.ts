@@ -4,23 +4,37 @@ import { getErrorMessage, isAbortError } from '@/lib/error-utils';
 
 const SSE_DATA_PREFIX = 'data: ';
 const MAX_EVENT_BYTES = 5 * 1024 * 1024;
-const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000] as const;
+const RECONNECT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000] as const;
+const MAX_RECONNECT_ATTEMPTS = 3;
 const STABLE_RECONNECT_RESET_MS = 60_000;
 const YIELD_EVERY_EVENTS = 10;
 const YIELD_EVERY_BYTES = 64 * 1024;
+
+/**
+ * Status codes terminales: el cliente NO debe reintentar. 403 ocurre con docs
+ * sin permiso (ej. archivos sin extensión .md que el endpoint stream rechaza)
+ * y 404 cuando el doc no existe. Reintentar sólo amplifica el ruido en logs.
+ */
+const TERMINAL_HTTP_STATUSES = new Set<number>([401, 403, 404, 410]);
 
 interface UseEditorSSEStreamOptions {
   roomId: string | undefined;
   isPageVisible: boolean;
   onSnapshot: (data: unknown) => void;
   onDeleted: () => void;
+  /**
+   * Llamado cuando el endpoint devuelve un status terminal (401/403/404/410).
+   * El consumidor puede mostrar un placeholder "no editable en vivo".
+   */
+  onUnavailable?: (status: number) => void;
 }
 
 export function useEditorSSEStream({
   roomId,
   isPageVisible,
   onSnapshot,
-  onDeleted
+  onDeleted,
+  onUnavailable
 }: UseEditorSSEStreamOptions) {
   useEffect(() => {
     if (!roomId || !isPageVisible) return;
@@ -28,11 +42,17 @@ export function useEditorSSEStream({
     let cancelled = false;
     let activeController: AbortController | null = null;
     let backoffIndex = 0;
+    let attempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     const yieldToEventLoop = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    const runOnce = async (): Promise<{ ok: boolean; deleted: boolean; openedAt: number }> => {
+    const runOnce = async (): Promise<{
+      ok: boolean;
+      deleted: boolean;
+      openedAt: number;
+      terminalStatus?: number;
+    }> => {
       const openedAt = Date.now();
       const token = await getAuthToken();
       if (cancelled) return { ok: false, deleted: false, openedAt };
@@ -46,7 +66,12 @@ export function useEditorSSEStream({
           signal: controller.signal
         });
 
-        if (!res.ok) throw new Error(`Stream connection failed: HTTP ${res.status}`);
+        if (!res.ok) {
+          if (TERMINAL_HTTP_STATUSES.has(res.status)) {
+            return { ok: false, deleted: false, openedAt, terminalStatus: res.status };
+          }
+          throw new Error(`Stream connection failed: HTTP ${res.status}`);
+        }
         if (!res.body) throw new Error('No body');
 
         const reader = res.body.getReader();
@@ -110,11 +135,16 @@ export function useEditorSSEStream({
     const loop = async () => {
       while (!cancelled) {
         try {
-          const { deleted, openedAt } = await runOnce();
+          const { deleted, openedAt, terminalStatus } = await runOnce();
           if (cancelled) return;
+          if (terminalStatus !== undefined) {
+            onUnavailable?.(terminalStatus);
+            return;
+          }
           if (deleted) return;
           if (Date.now() - openedAt >= STABLE_RECONNECT_RESET_MS) {
             backoffIndex = 0;
+            attempts = 0;
           }
         } catch (error: unknown) {
           if (isAbortError(error) || cancelled) return;
@@ -122,6 +152,11 @@ export function useEditorSSEStream({
         }
 
         if (cancelled) return;
+        attempts += 1;
+        if (attempts > MAX_RECONNECT_ATTEMPTS) {
+          console.warn('[useEditorSSEStream] giving up after', MAX_RECONNECT_ATTEMPTS, 'attempts');
+          return;
+        }
 
         const waitMs = RECONNECT_BACKOFF_MS[Math.min(backoffIndex, RECONNECT_BACKOFF_MS.length - 1)]!;
         backoffIndex = Math.min(backoffIndex + 1, RECONNECT_BACKOFF_MS.length - 1);
@@ -146,5 +181,5 @@ export function useEditorSSEStream({
       activeController?.abort();
       activeController = null;
     };
-  }, [roomId, isPageVisible, onSnapshot, onDeleted]);
+  }, [roomId, isPageVisible, onSnapshot, onDeleted, onUnavailable]);
 }

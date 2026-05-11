@@ -12,6 +12,7 @@ import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomT
 import { apiUrl, parseApiResponse } from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
+import { purgeUserScopedStorage } from '@/lib/auth-storage-purge';
 
 interface AuthContextType {
     user: User | null;
@@ -418,10 +419,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         setUser(null);
         setUserEmail(null);
-        localStorage.removeItem('agora_user');
-        localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
-        localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
-        localStorage.removeItem('agora_user_email');
+        // Purga claves del user previo. Sin esto, el siguiente user que loguea
+        // en el mismo browser ve IDs/estado del anterior (favorites, dashboard
+        // state, chats IA) y recibe 403 al abrir docs ajenos.
+        purgeUserScopedStorage();
         STDefinitionsRegistry.clear();
         router.push('/');
     }, [router]);
