@@ -42,6 +42,7 @@ import {
   loadAgentUserInstructions,
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
+import { listAgentSecrets, type AgentKeyProvider } from '@/lib/agora-ai/agentKeysApi';
 import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy, profileAutoConfirms, resolveAgentMaxIterations } from '@/lib/agora-ai/accessPolicy';
 import {
   contextWindowForModel as contextWindowFromCatalog,
@@ -435,6 +436,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const [traceExpanded, setTraceExpanded] = useState<boolean>(loadAgentTraceExpanded);
   const [showProviderMenu, setShowProviderMenu] = useState(false);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(getModelCatalogSync);
+  const [serverKeyProviders, setServerKeyProviders] = useState<Set<AgentKeyProvider>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -442,16 +444,28 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     return () => { cancelled = true; };
   }, []);
 
+  const refreshServerKeys = useCallback(async () => {
+    try {
+      const items = await listAgentSecrets();
+      setServerKeyProviders(new Set(items.map((it) => it.provider)));
+    } catch {
+      setServerKeyProviders(new Set());
+    }
+  }, []);
+
+  useEffect(() => { void refreshServerKeys(); }, [refreshServerKeys]);
+
   useEffect(() => {
     const handler = () => {
       setConfig(loadAIProviderConfig());
       setAccessPolicy(loadAgentAccessPolicy());
       setTraceExpanded(loadAgentTraceExpanded());
       setUserInstructions(loadAgentUserInstructions(workspaceId || PERSONAL_WORKSPACE_ID));
+      void refreshServerKeys();
     };
     window.addEventListener(AI_SETTINGS_CHANGED_EVENT, handler);
     return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, handler);
-  }, [workspaceId]);
+  }, [refreshServerKeys, workspaceId]);
 
   const toggleTraceExpanded = useCallback(() => {
     setTraceExpanded(prev => {
@@ -523,7 +537,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     if (typeof window === 'undefined') return;
     setUserInstructions(loadAgentUserInstructions(resolvedWorkspaceId));
   }, [resolvedWorkspaceId]);
-  const canSend = !loading && (!meta.needsKey || Boolean(config.apiKey));
+  const hasKeyForProvider = !meta.needsKey || serverKeyProviders.has(config.provider as AgentKeyProvider);
+  const canSend = !loading && hasKeyForProvider;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
 
   useEffect(() => {
@@ -764,7 +779,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         messages: history.map(serializeMessageForHistory),
         workspaceId: resolvedWorkspaceId,
         provider: config.provider,
-        apiKey: config.apiKey,
         model: config.model || meta.defaultModel,
         mode,
         accessPolicy,
@@ -976,7 +990,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
 
     return finalPayload;
-  }, [accessPolicy, config.apiKey, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
+  }, [accessPolicy, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
 
   // Memoizar el array de tools por accessPolicy: toOllamaTools recorre la
   // tabla de ~140 definitions y arma un payload pesado.
@@ -1731,10 +1745,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               <p className="text-xs mt-1 max-w-md text-surface-500">
                 El agente puede trabajar con documentos, snippets, glosario semántico, tablero Kanban, formalización, ST y worker/terminal cuando esté conectado.
               </p>
-              {!meta.needsKey || config.apiKey ? null : (
+              {hasKeyForProvider ? null : (
                 <p className="text-xs text-amber-400 mt-2 flex items-center justify-center gap-1">
                   <AlertCircle className="w-3 h-3" />
-                  Configura tu API key primero
+                  Configura tu API key en Ajustes → Agora IA
                 </p>
               )}
             </div>
@@ -1857,7 +1871,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder={meta.needsKey && !config.apiKey ? 'Configura tu API key primero…' : 'Pídele una acción al agente…'}
+            placeholder={!hasKeyForProvider ? 'Configura tu API key en Ajustes…' : 'Pídele una acción al agente…'}
             disabled={loading || !canSend}
             rows={1}
             wrap="soft"
