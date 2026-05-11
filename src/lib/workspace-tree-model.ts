@@ -1,6 +1,15 @@
 import type { DocItem, FolderItem } from '@/types/document-item';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 
+const nameCollator = typeof Intl !== 'undefined' && typeof Intl.Collator === 'function'
+  ? new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
+  : null;
+
+const compareNames = (a: string, b: string): number => {
+  if (nameCollator) return nameCollator.compare(a, b);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
 const getUpdatedAtMs = (value: DocItem['updatedAt']): number => {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
@@ -31,7 +40,7 @@ const compareFolders = (a: FolderItem, b: FolderItem): number => {
   if (orderA === null && orderB !== null) return 1;
   const weightDiff = FOLDER_KIND_WEIGHT[a.kind] - FOLDER_KIND_WEIGHT[b.kind];
   if (weightDiff !== 0) return weightDiff;
-  return a.name.localeCompare(b.name);
+  return compareNames(a.name, b.name);
 };
 
 const compareDocs = (a: DocItem, b: DocItem): number => {
@@ -43,31 +52,42 @@ const compareDocs = (a: DocItem, b: DocItem): number => {
   const dateA = getUpdatedAtMs(a.updatedAt);
   const dateB = getUpdatedAtMs(b.updatedAt);
   if (dateA !== dateB) return dateB - dateA;
-  return (a.name || '').localeCompare(b.name || '');
+  return compareNames(a.name || '', b.name || '');
 };
 
 export const buildEffectiveFolders = (folders: FolderItem[], docs: DocItem[]): FolderItem[] => {
   const byPath = new Map<string, FolderItem>();
   const derived: FolderItem[] = [];
 
-  for (const folder of folders) {
+  for (let i = 0; i < folders.length; i += 1) {
+    const folder = folders[i]!;
     byPath.set(folder.path, folder);
   }
 
-  const ensureFolder = (rawPath?: string) => {
-    const normalized = normalizeFolderPath(rawPath);
-    if (!normalized) return; // raíz: no crea nodo
-    if (byPath.has(normalized)) return;
+  const normalizeCache = new Map<string, string>();
+  const normalize = (raw: string | undefined): string => {
+    if (!raw) return '';
+    const cached = normalizeCache.get(raw);
+    if (cached !== undefined) return cached;
+    const computed = normalizeFolderPath(raw);
+    normalizeCache.set(raw, computed);
+    return computed;
+  };
+
+  for (let i = 0; i < docs.length; i += 1) {
+    const doc = docs[i]!;
+    const normalized = normalize(doc.folder);
+    if (!normalized) continue;
+    if (byPath.has(normalized)) continue;
 
     const parts = normalized.split('/');
     let acc = '';
-
-    for (let i = 0; i < parts.length; i += 1) {
-      const part = parts[i] ?? '';
-      acc = i === 0 ? part : `${acc}/${part}`;
+    for (let j = 0; j < parts.length; j += 1) {
+      const part = parts[j] ?? '';
+      acc = j === 0 ? part : `${acc}/${part}`;
       if (byPath.has(acc)) continue;
 
-      const parentPath = i === 0 ? '' : acc.slice(0, acc.lastIndexOf('/'));
+      const parentPath = j === 0 ? '' : acc.slice(0, acc.lastIndexOf('/'));
       const virtualFolder: FolderItem = {
         id: `virtual-${acc}`,
         name: part,
@@ -75,14 +95,12 @@ export const buildEffectiveFolders = (folders: FolderItem[], docs: DocItem[]): F
         parentPath,
         kind: 'virtual'
       };
-
       byPath.set(acc, virtualFolder);
       derived.push(virtualFolder);
     }
-  };
+  }
 
-  for (const doc of docs) ensureFolder(doc.folder);
-
+  if (derived.length === 0) return folders;
   return [...folders, ...derived];
 };
 
@@ -90,12 +108,17 @@ export const buildFolderChildrenMap = (
   effectiveFolders: FolderItem[]
 ): Record<string, FolderItem[]> => {
   const map: Record<string, FolderItem[]> = { '': [] };
-  for (const folder of effectiveFolders) {
+  for (let i = 0; i < effectiveFolders.length; i += 1) {
+    const folder = effectiveFolders[i]!;
     const parent = folder.parentPath || '';
-    if (!map[parent]) map[parent] = [];
-    map[parent].push(folder);
+    const bucket = map[parent];
+    if (bucket) bucket.push(folder);
+    else map[parent] = [folder];
   }
-  for (const list of Object.values(map)) list.sort(compareFolders);
+  for (const key in map) {
+    const list = map[key];
+    if (list && list.length > 1) list.sort(compareFolders);
+  }
   return map;
 };
 
@@ -104,14 +127,28 @@ export const buildDocsByFolder = (
   options: { sorted?: boolean } = {}
 ): Record<string, DocItem[]> => {
   const result: Record<string, DocItem[]> = {};
-  for (const doc of docs) {
+  const normalizeCache = new Map<string, string>();
+  for (let i = 0; i < docs.length; i += 1) {
+    const doc = docs[i]!;
     if (doc.type === 'folder') continue;
-    const folder = normalizeFolderPath(doc.folder);
-    if (!result[folder]) result[folder] = [];
-    result[folder].push(doc);
+    const raw = doc.folder ?? '';
+    let folder = normalizeCache.get(raw);
+    if (folder === undefined) {
+      folder = normalizeFolderPath(raw);
+      normalizeCache.set(raw, folder);
+    }
+    const bucket = result[folder];
+    if (bucket) {
+      bucket.push(doc);
+    } else {
+      result[folder] = [doc];
+    }
   }
   if (options.sorted !== false) {
-    for (const list of Object.values(result)) list.sort(compareDocs);
+    for (const key in result) {
+      const list = result[key];
+      if (list && list.length > 1) list.sort(compareDocs);
+    }
   }
   return result;
 };

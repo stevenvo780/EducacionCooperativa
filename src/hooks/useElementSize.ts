@@ -4,13 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const SIZE_DEBOUNCE_MS = 50;
 
+type Size = { width: number; height: number };
+
 export const useElementSize = <T extends HTMLElement>() => {
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const observerRef = useRef<ResizeObserver | null>(null);
   const rafRef = useRef<number | null>(null);
+  const initialRafRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
-  const lastAppliedRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
+  const pendingSizeRef = useRef<Size>({ width: 0, height: 0 });
+  const lastAppliedRef = useRef<Size>({ width: 0, height: 0 });
+  const nodeRef = useRef<T | null>(null);
 
   const cancelPending = useCallback(() => {
     if (timerRef.current !== null) {
@@ -22,6 +26,12 @@ export const useElementSize = <T extends HTMLElement>() => {
         cancelAnimationFrame(rafRef.current);
       }
       rafRef.current = null;
+    }
+    if (initialRafRef.current !== null) {
+      if (typeof cancelAnimationFrame !== 'undefined') {
+        cancelAnimationFrame(initialRafRef.current);
+      }
+      initialRafRef.current = null;
     }
   }, []);
 
@@ -44,17 +54,31 @@ export const useElementSize = <T extends HTMLElement>() => {
       observerRef.current = null;
     }
     cancelPending();
+    nodeRef.current = node;
 
     if (node === null) return;
 
-    const applyImmediate = () => {
+    const measureAndApply = () => {
+      initialRafRef.current = null;
+      if (nodeRef.current !== node) return;
       const rect = node.getBoundingClientRect();
-      pendingSizeRef.current = { width: rect.width, height: rect.height };
-      lastAppliedRef.current = pendingSizeRef.current;
-      setSize(pendingSizeRef.current);
+      const next: Size = { width: rect.width, height: rect.height };
+      pendingSizeRef.current = next;
+      if (
+        next.width === lastAppliedRef.current.width &&
+        next.height === lastAppliedRef.current.height
+      ) {
+        return;
+      }
+      lastAppliedRef.current = next;
+      setSize(next);
     };
 
-    applyImmediate();
+    if (typeof requestAnimationFrame === 'undefined') {
+      measureAndApply();
+    } else {
+      initialRafRef.current = requestAnimationFrame(measureAndApply);
+    }
 
     if (typeof ResizeObserver === 'undefined') return;
 

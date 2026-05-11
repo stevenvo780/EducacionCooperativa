@@ -517,11 +517,23 @@ function DashboardContent() {
     const isCompact = useIsCompact();
     // En mobile el sidebar se reajusta para que el conjunto activity+sidebar
     // quepa en el viewport sin overflow horizontal.
-    const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024);
+    const [viewportWidth, setViewportWidth] = useState<number>(1024);
     useEffect(() => {
-        const onResize = () => setViewportWidth(window.innerWidth);
-        window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
+        let rafId: number | null = null;
+        const readWidth = () => {
+            rafId = null;
+            setViewportWidth(window.innerWidth);
+        };
+        const scheduleRead = () => {
+            if (rafId !== null) return;
+            rafId = window.requestAnimationFrame(readWidth);
+        };
+        scheduleRead();
+        window.addEventListener('resize', scheduleRead);
+        return () => {
+            window.removeEventListener('resize', scheduleRead);
+            if (rafId !== null) window.cancelAnimationFrame(rafId);
+        };
     }, []);
     const effectiveSidebarWidth = useMemo(() => {
         if (!isCompact) return sidebarWidth;
