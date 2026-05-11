@@ -2,6 +2,7 @@ import { auth as getAuth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { toast } from 'sonner';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
+import { isAbortError } from '@/lib/error-utils';
 
 const LOCAL_DEV_TOKEN_STORAGE_KEY = 'agora_local_dev_token';
 
@@ -172,6 +173,9 @@ export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}
     }
     return response;
   } catch (err: unknown) {
+    // AbortError es esperado al cancelar fetches en cleanup de useEffect
+    // (ej. switch rápido de workspace). No molestar al usuario con un toast.
+    if (isAbortError(err)) throw err;
     const msg = err instanceof Error ? err.message : 'No se pudo contactar al servidor.';
     toast.error('Fallo de Red', { description: msg });
     throw err;
