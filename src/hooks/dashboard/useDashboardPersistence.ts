@@ -98,7 +98,19 @@ export const useDashboardPersistence = ({
     setOpenTabs([]);
     setMosaicNode(null);
     setSelectedDocId(null);
-    setClosedFilesTabByWorkspace(prev => ({ ...prev, [currentWorkspaceId]: false }));
+    // Cap el Map closedFilesTabByWorkspace para que no crezca con cada workspace
+    // que el user visita en la sesión. 16 workspaces es más que suficiente para
+    // navegación realista y evita retener pares { wsId, boolean } ad infinitum.
+    setClosedFilesTabByWorkspace(prev => {
+      const next = { ...prev, [currentWorkspaceId]: false };
+      const keys = Object.keys(next);
+      const MAX_TRACKED = 16;
+      if (keys.length > MAX_TRACKED) {
+        const toDelete = keys.filter(k => k !== currentWorkspaceId).slice(0, keys.length - MAX_TRACKED);
+        for (const key of toDelete) delete next[key];
+      }
+      return next;
+    });
     stateRestoredForWorkspaceRef.current = null;
     clearActiveSession();
     // Al cambiar de workspace los diagnostics de los linters por documento

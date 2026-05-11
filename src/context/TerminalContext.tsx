@@ -235,6 +235,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         if (!user?.uid) {
             setSessions([]);
             setActiveSessionId(null);
+            setWorkspaceWorkerStatuses(new Map());
             return;
         }
 
@@ -491,8 +492,21 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 handleSessionEnded,
                 (workspaceStatus: WorkspaceWorkerStatus) => {
                     setWorkspaceWorkerStatuses(prev => {
+                        // LRU cap: cada vez que el user navega entre workspaces, el hub
+                        // emite un status update. Sin cap, este Map crece sin techo en
+                        // sesiones largas. 32 entradas cubre cualquier escenario realista
+                        // (un user no consulta más de ~10 workspaces por sesión).
+                        const MAX_TRACKED_WORKSPACES = 32;
                         const newMap = new Map(prev);
+                        if (newMap.has(workspaceStatus.workspaceId)) {
+                            newMap.delete(workspaceStatus.workspaceId);
+                        }
                         newMap.set(workspaceStatus.workspaceId, workspaceStatus.status);
+                        while (newMap.size > MAX_TRACKED_WORKSPACES) {
+                            const oldestKey = newMap.keys().next().value;
+                            if (oldestKey === undefined || oldestKey === workspaceStatus.workspaceId) break;
+                            newMap.delete(oldestKey);
+                        }
                         return newMap;
                     });
                     if (workspaceStatus.status === WorkerStatusValue.Online) {
@@ -574,9 +588,15 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     useEffect(() => {
+        const docChangeCallbacks = docChangeCallbacksRef.current;
+        const persistedSessions = persistedSessionsRef.current;
+        const restoringSessionIds = restoringSessionIdsRef.current;
         return () => {
             controllerRef.current?.destroy();
             controllerRef.current = null;
+            docChangeCallbacks.clear();
+            persistedSessions.clear();
+            restoringSessionIds.clear();
         };
     }, []);
 

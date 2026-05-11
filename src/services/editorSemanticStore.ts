@@ -231,6 +231,12 @@ export const flushSemanticWorkspaceState = (context?: SemanticStoreContext) => {
  * `workspaceId`, borra solo las keys cuyo storage key empieza por
  * `editor-semantic:<workspaceId>:*`. Cualquier save pendiente se flushea
  * antes de quitar la entry.
+ *
+ * Cuando se pasa `workspaceId` también purgamos el `STDefinitionsRegistry`:
+ * sus definiciones por archivo viven globalmente y al cambiar de workspace
+ * las del anterior quedan retenidas (~0.5-1MB en sesiones largas). Las
+ * definiciones del nuevo workspace se rehidratan al abrir cada .st o al
+ * correr `syncRegistryFromContent` en el companion sync.
  */
 export const clearSemanticStoreCache = (workspaceId?: string) => {
   if (!isBrowser()) return;
@@ -254,6 +260,7 @@ export const clearSemanticStoreCache = (workspaceId?: string) => {
     memoryStateCache.delete(key);
     storeVersionByKey.delete(key);
   }
+  STDefinitionsRegistry.clear();
 };
 
 const updateState = (
