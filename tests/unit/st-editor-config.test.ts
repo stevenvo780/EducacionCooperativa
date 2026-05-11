@@ -93,12 +93,17 @@ describe('st-editor-config adaptive defaults', () => {
     Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 });
     setMatchMedia(true);
 
-    localStorage.setItem('st-editor-config', JSON.stringify({ lint: true, autocomplete: true }));
+    // En touch devices, las features pesadas (lint, hover, autocomplete,
+    // foldGutter, rainbowParens, bracketMatching, minimap, gotoDef) están
+    // FORZADAS al baseline TOUCH_DEVICE_CONFIG para evitar crashes en
+    // tablets (ver st-editor-config.ts). Sólo prefs ligeras como lightTheme
+    // y lineWrapping se preservan desde localStorage.
+    localStorage.setItem('st-editor-config', JSON.stringify({ lightTheme: true, lineWrapping: true }));
 
     expect(loadConfig()).toEqual({
       ...TOUCH_DEVICE_CONFIG,
-      lint: true,
-      autocomplete: true
+      lightTheme: true,
+      lineWrapping: true
     });
   });
 

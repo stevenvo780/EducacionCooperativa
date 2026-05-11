@@ -78,8 +78,10 @@ describe('HTTP service wrappers', () => {
     authFetchMock.mockResolvedValueOnce(jsonResponse([snippet]));
     await expect(fetchSnippets('ws 1')).resolves.toEqual([snippet]);
 
+    // fetchSnippets ahora usa fetchZod que lanza error en respuestas no-ok
+    // (antes silenciaba el 500 y devolvía []); ver src/lib/fetch-zod.ts.
     authFetchMock.mockResolvedValueOnce(new Response('fail', { status: 500 }));
-    await expect(fetchSnippets('ws-1')).resolves.toEqual([]);
+    await expect(fetchSnippets('ws-1')).rejects.toThrow('HTTP error! status: 500');
 
     authFetchMock.mockResolvedValueOnce(jsonResponse({ id: 's2', title: 'Nuevo' }));
     await expect(createSnippet({
@@ -118,6 +120,14 @@ describe('HTTP service wrappers', () => {
     let call = 0;
     authFetchMock.mockImplementation((_: string, init?: RequestInit) => {
       call += 1;
+      // call 1 = fetchSnippets GET inicial dentro de seedDefaultSnippets;
+      // ahora valida con zod la lista (o estructura paginada), no acepta
+      // objetos arbitrarios. Devolvemos lista vacía.
+      if (call === 1) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      // call 2 = primer POST createSnippet — forzamos fallo (queda null y
+      // se filtra de los seeds creados → DEFAULT_SNIPPETS.length - 1).
       if (call === 2) {
         return Promise.resolve(new Response('fail', { status: 500 }));
       }
