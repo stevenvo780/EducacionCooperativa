@@ -1352,19 +1352,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             aria-label="Árbol de carpetas"
             className="flex-1 min-h-0"
           >
-            {visibleFolderTree.length > 0 && (
+            {visibleFolderTree.length > 0 && folderTreeListSize.height > 0 && folderTreeListSize.width > 0 && (
               <VirtualizedList
                 rowCount={visibleFolderTree.length}
                 rowHeight={FOLDER_TREE_ROW_HEIGHT}
                 overscanCount={8}
                 className="scrollbar-hide"
-                style={{
-                  // Mismo patrón que el sidebar: default 400 hasta que el
-                  // ResizeObserver reporte el alto real, así no rendea todos
-                  // los folders en un solo frame.
-                  height: Math.max(folderTreeListSize.height, 400),
-                  width: Math.max(folderTreeListSize.width, 1)
-                }}
+                style={{ height: folderTreeListSize.height, width: folderTreeListSize.width }}
                 rowComponent={renderFolderTreeRow}
                 rowProps={{}}
               />
@@ -1389,18 +1383,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
           ) : (
             <div ref={contentListRef} className="flex-1 min-h-0">
-              <VirtualizedList
-                rowCount={contentItems.length}
-                rowHeight={CONTENT_ROW_HEIGHT}
-                overscanCount={6}
-                className="scrollbar-hide"
-                style={{
-                  height: Math.max(contentListSize.height, 400),
-                  width: Math.max(contentListSize.width, 1)
-                }}
-                rowComponent={renderContentRow}
-                rowProps={{}}
-              />
+              {contentListSize.height > 0 && contentListSize.width > 0 && (
+                <VirtualizedList
+                  rowCount={contentItems.length}
+                  rowHeight={CONTENT_ROW_HEIGHT}
+                  overscanCount={6}
+                  className="scrollbar-hide"
+                  style={{ height: contentListSize.height, width: contentListSize.width }}
+                  rowComponent={renderContentRow}
+                  rowProps={{}}
+                />
+              )}
             </div>
           )}
         </section>

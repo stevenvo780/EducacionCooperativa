@@ -819,18 +819,17 @@ const Sidebar = ({
 
               {listItems.length > 0 && !isDocsStale && (
                 <div ref={listRef} className="h-full min-h-[200px]" role="tree" aria-label="Árbol de archivos">
-                  <VirtualizedList
-                    rowCount={listItems.length}
-                    rowHeight={ROW_HEIGHT}
-                    overscanCount={6}
-                    className="scrollbar-hide"
-                    style={{
-                      height: Math.max(listSize.height, 400),
-                      width: Math.max(listSize.width, 1)
-                    }}
-                    rowComponent={SidebarRow as unknown as (props: SidebarRowComponentProps) => React.ReactElement | null}
-                    rowProps={sidebarRowProps}
-                  />
+                  {listSize.height > 0 && listSize.width > 0 ? (
+                    <VirtualizedList
+                      rowCount={listItems.length}
+                      rowHeight={ROW_HEIGHT}
+                      overscanCount={6}
+                      className="scrollbar-hide"
+                      style={{ height: listSize.height, width: listSize.width }}
+                      rowComponent={SidebarRow as unknown as (props: SidebarRowComponentProps) => React.ReactElement | null}
+                      rowProps={sidebarRowProps}
+                    />
+                  ) : null}
                 </div>
               )}
             </div>
