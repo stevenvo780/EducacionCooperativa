@@ -7,6 +7,7 @@ import { fetchWorkspacesApi } from '@/services/dashboardApi';
 import { normalizeWorkspace } from '@/services/dashboardUtils';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
+import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 
 interface RouterLike {
   replace: (href: string, options?: { scroll?: boolean }) => void;
@@ -26,6 +27,7 @@ interface UseDashboardWorkspacesParams {
   setInvites: (value: Workspace[]) => void;
   setCurrentWorkspace: (value: Workspace | null) => void;
   subscribeToWorkspace: (workspaceToken: string) => void;
+  unsubscribeFromWorkspace?: (workspaceToken: string) => void;
 }
 
 export const useDashboardWorkspaces = ({
@@ -41,7 +43,8 @@ export const useDashboardWorkspaces = ({
   setWorkspaces,
   setInvites,
   setCurrentWorkspace,
-  subscribeToWorkspace
+  subscribeToWorkspace,
+  unsubscribeFromWorkspace
 }: UseDashboardWorkspacesParams) => {
   const urlSyncInProgressRef = useRef(false);
   const lastSubscribedWorkspaceRef = useRef<string | null>(null);
@@ -61,10 +64,23 @@ export const useDashboardWorkspaces = ({
     const workerToken = currentWorkspace.type === WorkspaceType.Personal || currentWorkspace.id === personalWorkspaceId
       ? `${PERSONAL_WORKSPACE_ID}:${user.uid}`
       : currentWorkspace.id;
-    if (lastSubscribedWorkspaceRef.current === workerToken) return;
+    const previousToken = lastSubscribedWorkspaceRef.current;
+    if (previousToken === workerToken) return;
+    // Desuscribir el workspace anterior antes de moverse al nuevo. Sin esto,
+    // el TerminalController acumula tokens en `subscribedWorkspaces` y al
+    // reconectar el hub re-emite suscripciones para todos los workspaces
+    // tocados en la sesión, reteniendo entradas en `workspaceStatuses` y
+    // closures asociadas (residual ~0.24MB por switch tras el fix de LRU caps).
+    if (previousToken && unsubscribeFromWorkspace) {
+      try { unsubscribeFromWorkspace(previousToken); } catch { /* no-op */ }
+    }
     lastSubscribedWorkspaceRef.current = workerToken;
     subscribeToWorkspace(workerToken);
-  }, [user, currentWorkspace, personalWorkspaceId, subscribeToWorkspace]);
+    // Limpia definitions ST registradas por docs del workspace anterior. Antes
+    // sólo se limpiaba en logout; al alternar workspaces A→B→C→A la unión
+    // quedaba residente en heap hasta cerrar sesión.
+    STDefinitionsRegistry.clear();
+  }, [user, currentWorkspace, personalWorkspaceId, subscribeToWorkspace, unsubscribeFromWorkspace]);
 
   const selectWorkspace = useCallback((workspace: Workspace | null) => {
     if (!workspace) {

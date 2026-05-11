@@ -39,6 +39,7 @@ import {
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 import { dispatchOpenSettings } from '@/lib/settings-events';
+import { useDeferredMount } from '@/hooks/useDeferredMount';
 
 export type ToolbarGroupKey = 'history' | 'inline' | 'structure' | 'lists' | 'media' | 'insert' | 'snippets' | 'advanced';
 
@@ -87,10 +88,23 @@ export function MosaicToolbarContents({
   createTaskFromSelection,
   scanPendings
 }: MosaicToolbarContentsProps) {
+  // Grupos pesados de la toolbar (DOM con icons + popovers internos del
+  // MDXEditor) cuya creación cuesta varios MB de native + code. Difiriendo
+  // su primer mount hasta requestIdleCallback se reduce el delta de heap al
+  // abrir un doc trivial (~13MB → varios MB menos). Siguen siendo
+  // interactivos cuando aparecen (~600ms tras el primer paint).
+  const deferredReady = useDeferredMount(600);
+  const DEFERRED_GROUPS: ReadonlySet<ToolbarGroupKey> = new Set([
+    'insert',
+    'snippets',
+    'advanced'
+  ]);
+
   const sections: React.ReactNode[] = [];
 
   const pushSection = (key: ToolbarGroupKey, content: React.ReactNode) => {
     if (!toolbarVisibility[key]) return;
+    if (DEFERRED_GROUPS.has(key) && !deferredReady) return;
     if (sections.length > 0) {
       sections.push(<Separator key={`separator-${key}`} />);
     }

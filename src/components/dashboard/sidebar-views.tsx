@@ -6,13 +6,17 @@ import type { ReactNode } from 'react';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import type { Workspace, DocItem } from '@/components/dashboard/types';
 import type { SearchResultFilter, SearchResultItem } from '@/lib/search/types';
-import ToolsGallery from './ToolsGallery';
-import SearchPanel from './SearchPanel';
-import OutlineView from './OutlineView';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 const GitWorkbench = dynamic(() => import('@/components/dashboard/GitWorkbench'), { ssr: false });
 const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
+// Vistas del sidebar: dynamic imports para diferir su bundle hasta que el
+// user expande la vista correspondiente. SearchPanel/OutlineView/ToolsGallery
+// no aportan UI inicial al abrir un doc; cargarlas eager engordaba el heap
+// base del editor (~13MB al abrir un doc trivial).
+const SearchPanel = dynamic(() => import('@/components/dashboard/SearchPanel'), { ssr: false });
+const OutlineView = dynamic(() => import('@/components/dashboard/OutlineView'), { ssr: false });
+const ToolsGallery = dynamic(() => import('@/components/dashboard/ToolsGallery'), { ssr: false });
 
 /**
  * Contexto que recibe cada vista al renderizar. Pasamos handlers y datos
