@@ -229,6 +229,37 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
 
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
+  "img-src 'self' data: blob: https://*.googleusercontent.com https://lh3.googleusercontent.com https://www.gravatar.com",
+  "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",
+  "connect-src 'self' https://hub.humanizar-dev.cloud wss://hub.humanizar-dev.cloud https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://s3.proxy.humanizar-dev.cloud https://git.proxy.humanizar-dev.cloud https://api.deepseek.com https://api.openai.com https://api.anthropic.com",
+  "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "upgrade-insecure-requests"
+].join('; ');
+
+const SECURITY_HEADERS = [
+  { key: 'Content-Security-Policy', value: CSP_DIRECTIVES },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  // Sobrescribe el `Access-Control-Allow-Origin: *` default de Vercel CDN
+  // sobre páginas HTML (login/dashboard). Restringimos al origin canónico
+  // y a humanizar.cloud (alias activo). Vercel deja al CDN el de assets
+  // estáticos, donde * es estándar y seguro.
+  { key: 'Access-Control-Allow-Origin', value: 'https://agora.elenxos.com' },
+  { key: 'Vary', value: 'Origin' }
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: useStandaloneOutput ? 'standalone' : undefined,
@@ -241,6 +272,14 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '50mb'
     }
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: SECURITY_HEADERS
+      }
+    ];
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {

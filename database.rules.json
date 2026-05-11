@@ -2,8 +2,8 @@
   "rules": {
     "sync-events": {
       "$workspaceId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
+        ".read": "auth != null && (!$workspaceId.beginsWith('personal_') || $workspaceId === 'personal_' + auth.uid)",
+        ".write": "auth != null && (!$workspaceId.beginsWith('personal_') || $workspaceId === 'personal_' + auth.uid)",
         ".indexOn": ["timestamp"],
         "$eventId": {
           ".validate": "newData.hasChildren(['type', 'path', 'timestamp'])"
@@ -12,7 +12,7 @@
     },
     "presence": {
       "$wsId": {
-        ".read": "auth != null",
+        ".read": "auth != null && (!$wsId.beginsWith('personal_') || $wsId === 'personal_' + auth.uid)",
         ".write": "auth != null && (!$wsId.beginsWith('personal_') || $wsId === 'personal_' + auth.uid)"
       }
     }
