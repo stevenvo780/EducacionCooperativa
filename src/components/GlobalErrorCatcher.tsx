@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { toast } from 'sonner';
+import { isAbortError } from '@/lib/error-utils';
 
 export default function GlobalErrorCatcher() {
   useEffect(() => {
@@ -9,6 +10,7 @@ export default function GlobalErrorCatcher() {
     const handleError = (event: ErrorEvent) => {
       // Ignoramos errores de origen cruzado u otros que ya estén prevenidos
       if (event.defaultPrevented) return;
+      if (isAbortError(event.error)) return;
 
       const msg = event.message || 'Ocurrió un error inesperado';
       toast.error('Error de Aplicación', {
@@ -20,6 +22,11 @@ export default function GlobalErrorCatcher() {
 
     // Escuchar promesas rechazadas (ej. llamadas asíncronas no capturadas)
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      // AbortError de fetches en cleanup de useEffect no debe alarmar al user.
+      if (isAbortError(event.reason)) {
+        event.preventDefault();
+        return;
+      }
       let msg = 'Operación fallida inesperadamente';
       if (event.reason instanceof Error) {
         msg = event.reason.message;

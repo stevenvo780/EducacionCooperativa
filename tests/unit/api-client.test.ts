@@ -147,4 +147,38 @@ describe('api client auth wrappers', () => {
     await expect(apiClient.withAuthToken('/ruta')).resolves.toBe('/ruta');
     expect(warnSpy).toHaveBeenCalled();
   });
+
+  it('does NOT show a network toast when the fetch is aborted (workspace switch)', async () => {
+    authState.currentUser = {
+      getIdToken: vi.fn().mockResolvedValue('token-abc')
+    };
+    const sonner = await import('sonner');
+    const toastSpy = vi.spyOn(sonner.toast, 'error').mockImplementation(() => 'id' as never);
+    const abortError = new DOMException('signal is aborted without reason', 'AbortError');
+    const fetchMock = vi.fn().mockRejectedValue(abortError);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const apiClient = await loadApiClient();
+    await expect(apiClient.authFetch('/api/test')).rejects.toBe(abortError);
+
+    expect(toastSpy).not.toHaveBeenCalled();
+  });
+
+  it('still surfaces a network toast for non-abort fetch failures', async () => {
+    authState.currentUser = {
+      getIdToken: vi.fn().mockResolvedValue('token-abc')
+    };
+    const sonner = await import('sonner');
+    const toastSpy = vi.spyOn(sonner.toast, 'error').mockImplementation(() => 'id' as never);
+    const networkError = new TypeError('Failed to fetch');
+    const fetchMock = vi.fn().mockRejectedValue(networkError);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const apiClient = await loadApiClient();
+    await expect(apiClient.authFetch('/api/test')).rejects.toBe(networkError);
+
+    expect(toastSpy).toHaveBeenCalledWith('Fallo de Red', expect.objectContaining({
+      description: 'Failed to fetch'
+    }));
+  });
 });
