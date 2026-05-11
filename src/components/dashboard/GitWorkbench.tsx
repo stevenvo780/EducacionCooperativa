@@ -14,8 +14,6 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchZod } from '@/lib/fetch-zod';
 import { gitWorkbenchStatusSchema, gitWorkbenchCommitsSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
-import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
-import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
 function parseGitInfo(raw: unknown): { cloneUrl?: string; repoFullName?: string } {
     if (typeof raw !== 'object' || raw === null) throw new Error('parseGitInfo: respuesta no es un objeto');
@@ -46,20 +44,6 @@ function parseForgejoCommitResult(raw: unknown): { commit?: { sha: string } } {
     const c = r['commit'] as Record<string, unknown>;
     return { commit: typeof c['sha'] === 'string' ? { sha: c['sha'] } : undefined };
 }
-
-const GITIGNORE_TEMPLATE = `# .gitignore — reglas para excluir archivos del commit Git.
-# Una regla por línea, formato gitignore estándar.
-# Ejemplos (descomenta los que apliquen):
-
-# node_modules/
-# .next/
-# dist/
-# build/
-# *.log
-# .env
-# .env.local
-# .DS_Store
-`;
 
 interface GitInfo {
     provisioned: boolean;
@@ -215,40 +199,6 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             if (data.token) setRevealedToken(data.token);
             await refreshAll();
             setToast('Repositorio creado.');
-        } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-        } finally { setBusy(false); }
-    }, [workspaceId, refreshAll]);
-
-    const hasGitignore = useMemo(
-        () => items.some(i => i.repoPath === '.gitignore' || i.repoPath.endsWith('/.gitignore')),
-        [items]
-    );
-
-    const ensureGitignore = useCallback(async () => {
-        setBusy(true);
-        setError(null);
-        try {
-            // Workspace personal en Firestore es '__personal__' (no 'personal:<uid>').
-            const wsForApi = workspaceId.startsWith('personal:') ? PERSONAL_WORKSPACE_ID : workspaceId;
-            const res = await authFetch('/api/documents', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: '.gitignore',
-                    content: GITIGNORE_TEMPLATE,
-                    type: 'text',
-                    mimeType: 'text/plain',
-                    workspaceId: wsForApi,
-                    folder: ''
-                })
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            // Dispara el evento global que el dashboard escucha para refrescar
-            // la jerarquía sin recargar la página (mismo bus que usa MosaicEditor).
-            dispatchAgoraEvent(AGORA_EVENTS.docsChanged, { workspaceId });
-            await refreshAll();
-            setToast('.gitignore creado en la raíz. Búscalo en el explorador para editarlo.');
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         } finally { setBusy(false); }
@@ -507,17 +457,6 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                     <span>Git · <span className="text-emerald-600 dark:text-emerald-400">{workspaceName ?? workspaceId}</span></span>
                 </div>
                 <div className="flex items-center gap-2">
-                    {info?.provisioned && !hasGitignore && (
-                        <button
-                            type="button"
-                            onClick={ensureGitignore}
-                            disabled={busy || loading}
-                            className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
-                            title="Crea un .gitignore en la raíz del workspace para excluir archivos del commit"
-                        >
-                            + .gitignore
-                        </button>
-                    )}
                     {info?.htmlUrl && (
                         <a href={info.htmlUrl} target="_blank" rel="noreferrer noopener" className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Abrir en Forgejo">
                             <ExternalLink className="h-4 w-4" aria-hidden />

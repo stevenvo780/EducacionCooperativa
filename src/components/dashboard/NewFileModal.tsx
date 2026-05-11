@@ -2,9 +2,9 @@
 
 import { useEffect } from 'react';
 import { AnimatePresence, m, type Transition } from 'framer-motion';
-import { FileText, Code, X } from 'lucide-react';
+import { FileText, Code, FilePlus, X } from 'lucide-react';
 
-export type FileKind = 'md' | 'st';
+export type FileKind = 'md' | 'st' | 'custom';
 
 interface FileTypeOption {
   kind: FileKind;
@@ -34,6 +34,15 @@ const FILE_TYPES: FileTypeOption[] = [
     accent: 'text-emerald-400',
     border: 'border-emerald-500/40 hover:border-emerald-400',
     bg: 'hover:bg-emerald-500/10'
+  },
+  {
+    kind: 'custom',
+    label: 'Otro formato',
+    description: 'Cualquier extensión: .json, .yaml, .py, .txt, dotfiles, etc.',
+    icon: <FilePlus className="w-6 h-6" />,
+    accent: 'text-amber-400',
+    border: 'border-amber-500/40 hover:border-amber-400',
+    bg: 'hover:bg-amber-500/10'
   }
 ];
 
