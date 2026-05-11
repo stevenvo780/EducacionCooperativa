@@ -41,11 +41,6 @@ export function useDeleteDocument({
         deleteStatusTimer.current = setTimeout(() => setDeleteStatus(null), 2000);
     }, []);
 
-    const isWithinFolder = useCallback((candidate: string, folderPath: string) => {
-        if (!candidate) return false;
-        return candidate === folderPath || candidate.startsWith(`${folderPath}/`);
-    }, []);
-
     const deleteDocRecords = useCallback(async (uniqueIds: string[], label: string) => {
         setDeletingIds(prev => {
             const next = { ...prev };
@@ -74,7 +69,8 @@ export function useDeleteDocument({
             const succeeded = results.filter(result => result.ok).map(result => result.id);
 
             if (succeeded.length > 0) {
-                setDocs(prev => prev.filter(item => !succeeded.includes(item.id)));
+                const succeededSet = new Set(succeeded);
+                setDocs(prev => prev.filter(item => !succeededSet.has(item.id)));
                 succeeded.forEach(id => closeTabById(id));
             }
             await requestDocsRefresh({ force: true });
@@ -108,21 +104,31 @@ export function useDeleteDocument({
             await showDialog({ type: DialogKind.Info, title: 'No se puede eliminar la carpeta raíz.' });
         }
 
+        const folderPathSet = new Set(filteredFolderPaths);
         const folderDocIds = new Set<string>();
         const docIdsFromFolders = new Set<string>();
 
-        filteredFolderPaths.forEach(folderPath => {
-            folders.forEach(folder => {
-                if (folder.docId && isWithinFolder(folder.path, folderPath)) {
-                    folderDocIds.add(folder.docId);
-                }
-            });
-            docs.forEach(doc => {
-                const docFolder = normalizeFolderPath(doc.folder);
-                if (isWithinFolder(docFolder, folderPath)) {
-                    docIdsFromFolders.add(doc.id);
-                }
-            });
+        const isPathInTargets = (path: string): boolean => {
+            if (!path) return false;
+            if (folderPathSet.has(path)) return true;
+            let cursor = path;
+            while (cursor.includes('/')) {
+                cursor = cursor.slice(0, cursor.lastIndexOf('/'));
+                if (folderPathSet.has(cursor)) return true;
+            }
+            return false;
+        };
+
+        folders.forEach(folder => {
+            if (folder.docId && isPathInTargets(folder.path)) {
+                folderDocIds.add(folder.docId);
+            }
+        });
+        docs.forEach(doc => {
+            const docFolder = normalizeFolderPath(doc.folder);
+            if (isPathInTargets(docFolder)) {
+                docIdsFromFolders.add(doc.id);
+            }
         });
 
         const allDocIds = Array.from(new Set([...docIds, ...folderDocIds, ...docIdsFromFolders]));
@@ -156,7 +162,7 @@ export function useDeleteDocument({
         });
         if (!confirmResult.confirmed) return;
         await deleteDocRecords(allDocIds, label);
-    }, [deleteDocRecords, docs, folders, isWithinFolder, requestDocsRefresh, scheduleDeleteStatusClear, showDialog]);
+    }, [deleteDocRecords, docs, folders, requestDocsRefresh, scheduleDeleteStatusClear, showDialog]);
 
     const deleteFolder = useCallback(async (folder: FolderItem) => {
         if (folder.path === DEFAULT_FOLDER_NAME || folder.kind === 'system') {

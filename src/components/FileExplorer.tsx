@@ -148,7 +148,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(800);
 
-  const normalizedDocs = useMemo(() => {
+  const normalizedDocs = useMemo<DocItem[]>(() => {
+    let allNormalized = true;
+    for (let i = 0; i < docs.length; i += 1) {
+      const doc = docs[i];
+      if (!doc) continue;
+      if (doc.folder !== normalizeFolderPath(doc.folder)) {
+        allNormalized = false;
+        break;
+      }
+    }
+    if (allNormalized) return docs;
     return docs.map(doc => ({ ...doc, folder: normalizeFolderPath(doc.folder) }));
   }, [docs]);
 

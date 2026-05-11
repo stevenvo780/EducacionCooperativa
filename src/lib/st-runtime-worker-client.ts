@@ -210,12 +210,31 @@ export function symbolsInWorker(code: string, file?: string): Promise<SymbolInfo
   });
 }
 
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(() => resolve(), { timeout: 50 });
+      return;
+    }
+    setTimeout(resolve, 0);
+  });
+}
+
+async function extractInlineChunked(code: string, fileId: string): Promise<STDefinition[]> {
+  await yieldToBrowser();
+  return extractDefinitions(code, fileId);
+}
+
 export function extractInWorker(code: string, fileId: string): Promise<STDefinition[]> {
   const w = getWorker();
-  if (!w) return Promise.resolve(extractDefinitions(code, fileId));
+  if (!w) return extractInlineChunked(code, fileId);
   return new Promise((resolve) => {
     const requestId = nextRequestId++;
-    pending.set(requestId, { type: 'extract', resolve, fallback: () => extractDefinitions(code, fileId) });
+    pending.set(requestId, {
+      type: 'extract',
+      resolve,
+      fallback: () => extractDefinitions(code, fileId)
+    });
     w.postMessage({ type: 'extract', requestId, code, file: fileId });
   });
 }

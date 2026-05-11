@@ -328,9 +328,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                 return btoa(binary);
             };
 
-            // 4) Chunking: max 10 archivos / 30 MB por chunk para no saturar Forgejo.
-            const MAX_FILES = 10;
-            const MAX_BYTES = 30 * 1024 * 1024;
+            const CHUNK_BYTES_BUDGET = 30 * 1024 * 1024;
 
             type Plan = { docId: string; repoPath: string; size: number; lastSha?: string };
             const plans: Plan[] = stagedItems.map(it => ({
@@ -344,7 +342,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             let cur: Plan[] = []; let curSz = 0;
             for (const p of plans) {
                 const sz = Math.max(p.size, 1024);
-                if (cur.length > 0 && (cur.length >= MAX_FILES || curSz + sz > MAX_BYTES)) {
+                if (cur.length > 0 && curSz + sz > CHUNK_BYTES_BUDGET) {
                     chunks.push(cur); cur = []; curSz = 0;
                 }
                 cur.push(p); curSz += sz;

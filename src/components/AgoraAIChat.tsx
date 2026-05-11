@@ -42,7 +42,7 @@ import {
   loadAgentUserInstructions,
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
-import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy, profileAutoConfirms } from '@/lib/agora-ai/accessPolicy';
+import { AGENT_ACCESS_PROFILE_ORDER, AGENT_ACCESS_PROFILES, normalizeAgentAccessPolicy, profileAutoConfirms, resolveAgentMaxIterations } from '@/lib/agora-ai/accessPolicy';
 import {
   contextWindowForModel as contextWindowFromCatalog,
   getModelCatalogSync,
@@ -151,7 +151,6 @@ function serializeMessageForHistory(message: { role: string; content: string; ag
     return { role: message.role, content: message.content };
   }
   const toolDigest = toolSteps
-    .slice(-12)
     .map(step => {
       const name = step.call?.name || step.title || 'tool';
       const summary = step.result?.summary?.trim();
@@ -290,6 +289,7 @@ const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeKatex];
 
 const STREAM_BUFFER_CAP_BYTES = 4 * 1024 * 1024;
+const MAX_LIVE_STEPS = 1000;
 
 interface MarkdownContentProps {
   content: string;
@@ -798,6 +798,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     let latestStatus = '';
     let finalPayload: AgentResponseBody | null = null;
     const liveSteps: AgentTraceStep[] = [];
+    let liveStepsCapWarned = false;
 
     // Throttle de syncPartialRun: el SSE puede emitir step events cada pocos
     // ms y antes hacíamos un setMessages por cada uno → re-render de TODOS los
@@ -908,7 +909,19 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         }
 
         if (event.type === 'step') {
-          liveSteps.push(event.step);
+          if (liveSteps.length >= MAX_LIVE_STEPS) {
+            if (!liveStepsCapWarned) {
+              liveStepsCapWarned = true;
+              publishAgentProblem({
+                severity: 'warning',
+                message: `Agora AI excedió ${MAX_LIVE_STEPS} steps en vivo`,
+                detail: 'Los steps adicionales no se mostrarán para evitar congelar el navegador. La ejecución del agente continúa en el servidor.',
+                code: 'agora-ai-live-steps-cap'
+              });
+            }
+          } else {
+            liveSteps.push(event.step);
+          }
           const preview = event.step.type === 'plan' && event.step.content
             ? event.step.content
             : event.step.type === 'final' && event.step.content
@@ -1024,7 +1037,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     let finalReply = '';
     let pendingConfirmation: AgentPendingConfirmation | undefined;
 
-    for (let iteration = 1; iteration <= 10; iteration += 1) {
+    const maxIterations = resolveAgentMaxIterations(normalizedPolicy);
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
       const response = await callOllamaDirect(loopMessages, signal, true);
       const rawContent = response.message?.content ?? '';
       // Ollama models (e.g. qwen3) may return thinking in a separate field
@@ -1182,7 +1196,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     return {
       mode,
       provider: 'ollama',
-      iterations: 10,
+      iterations: maxIterations,
       steps,
       finalReply,
       pendingConfirmation,

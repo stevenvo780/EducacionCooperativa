@@ -299,11 +299,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
     if (!content) {
       return () => { STDefinitionsRegistry.removeFile(fileId); };
     }
-    const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
-    const TOUCH_PARSE_LIMIT = 30_000;
-    if (isTouch && content.length > TOUCH_PARSE_LIMIT) {
-      return () => { STDefinitionsRegistry.removeFile(fileId); };
-    }
     const debounceMs = content.length > 5_000 ? 1200 : 350;
     let cancelled = false;
     const timer = window.setTimeout(() => {

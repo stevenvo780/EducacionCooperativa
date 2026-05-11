@@ -2,14 +2,14 @@ import { fetchZod } from '@/lib/fetch-zod';
 import { semanticStateResponseSchema } from '@agora/contracts';
 import type { SemanticWorkspaceState, SemanticFragmentRecord } from '@/lib/semantic/workspace-state';
 
-// In-flight dedupe: si MosaicEditor + GlobalSemanticBrowser piden el mismo
-// workspaceId al mismo tiempo, comparten la promesa para evitar 3x roundtrips
-// al backend en cada mount del dashboard.
 const inFlightFetches = new Map<string, Promise<SemanticWorkspaceState | undefined>>();
 
-const FRAGMENT_TEXT_CAP = 1500;
-const FRAGMENT_EXCERPT_CAP = 400;
-const TOTAL_FRAGMENT_CAP = 3000;
+/* Límites de payload de red (defensa contra respuestas >50MB), NO caps de
+ * processing. El cliente procesa todos los fragments recibidos via Web
+ * Workers + virtualización; estos topes solo evitan saturar la conexión. */
+const FRAGMENT_TEXT_CAP = 8000;
+const FRAGMENT_EXCERPT_CAP = 2000;
+const TOTAL_FRAGMENT_CAP = 10000;
 
 const truncateFragment = (f: SemanticFragmentRecord): SemanticFragmentRecord => ({
   ...f,
@@ -23,8 +23,6 @@ const sanitizeStateForClient = (state: SemanticWorkspaceState | undefined): Sema
   if (fragments.length <= TOTAL_FRAGMENT_CAP && fragments.every((f) => (f.text?.length ?? 0) <= FRAGMENT_TEXT_CAP)) {
     return state;
   }
-  // Recortar agresivamente fragments para evitar que tablets/mobile colapsen.
-  // El usuario sigue pudiendo ver y editar; los textos largos se truncan.
   const sortedByDate = [...fragments].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   const trimmed = sortedByDate.slice(0, TOTAL_FRAGMENT_CAP).map(truncateFragment);
   return { ...state, fragments: trimmed };

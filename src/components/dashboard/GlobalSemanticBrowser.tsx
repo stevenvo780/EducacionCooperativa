@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from 'react';
-import { Sparkles } from 'lucide-react';
 import { SemanticBrowser, type SemanticTab } from '@/components/editor/SemanticBrowser';
 import {
   loadSemanticWorkspaceState,
@@ -18,6 +17,7 @@ import {
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
   mergeSemanticWorkspaceStates,
+  hasSemanticWorkspaceStateChanged,
   type SemanticFragmentRecord,
   type SemanticDocumentRef
 } from '@/lib/semantic/workspace-state';
@@ -27,10 +27,34 @@ import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
 import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
 import { syncSTSourceToSemanticWorkspace } from '@/services/semanticSyncService';
 import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
-import { buildTheoryGraphFromSemanticState, type TheoryGraph, type TheoryGraphQuickFix } from '@/lib/semantic/theory-graph';
-import { buildSTFromSemantic } from '@/lib/buildSTFromSemantic';
+import type {
+  PairwiseClaimSnapshot,
+  TheoryGraph,
+  TheoryGraphQuickFix
+} from '@/lib/semantic/theory-graph';
+import { buildSemanticGraphAsync, verifyPairwiseAsync } from '@/lib/semantic/semantic-worker-client';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+
+const EMPTY_THEORY_GRAPH: TheoryGraph = {
+  nodes: [],
+  edges: [],
+  diagnostics: [],
+  outline: [],
+  profileIds: []
+};
+
+interface SemanticDerivation {
+  graph: TheoryGraph;
+  stPreview: string;
+  pairwiseSnapshots: PairwiseClaimSnapshot[];
+}
+
+const EMPTY_DERIVATION: SemanticDerivation = {
+  graph: EMPTY_THEORY_GRAPH,
+  stPreview: '',
+  pairwiseSnapshots: []
+};
 
 interface GlobalSemanticBrowserProps {
   workspaceId?: string;
@@ -176,8 +200,10 @@ export default function GlobalSemanticBrowser({
       }
 
       /* 3. Ensure localStorage stays consistent with the persisted state */
-      saveSemanticWorkspaceState({ workspaceId: ctx.workspaceId, userId: ctx.userId ?? null }, stateToSync);
-      setState(stateToSync);
+      if (stateToSync !== nextState && hasSemanticWorkspaceStateChanged(nextState, stateToSync)) {
+        saveSemanticWorkspaceState({ workspaceId: ctx.workspaceId, userId: ctx.userId ?? null }, stateToSync);
+        setState(stateToSync);
+      }
 
       /* 4. Sync companion .st files */
       try {
@@ -267,36 +293,90 @@ export default function GlobalSemanticBrowser({
 
   const noop = useMemo(() => () => {}, []);
 
-  // Deferred state: en workspaces grandes (cientos/miles de conceptos)
-  // buildTheoryGraphFromSemanticState y buildSTFromSemantic son sincrónicos
-  // y bloquean el main thread. useDeferredValue permite que React renderize
-  // la UI primero con el estado anterior y compute las derivadas en idle.
   const deferredState = useDeferredValue(state);
 
-  // Cap defensivo para WS muy grandes (Lógica/Neurociencias). Por encima
-  // de este umbral, computar el grafo y la preview ST congela la tablet.
-  const HEAVY_DERIVATION_LIMIT = 600;
-  const stateIsLarge = (
-    deferredState.concepts.length > HEAVY_DERIVATION_LIMIT ||
-    deferredState.fragments.length > HEAVY_DERIVATION_LIMIT * 2 ||
-    deferredState.relations.length > HEAVY_DERIVATION_LIMIT
-  );
+  const [derivation, setDerivation] = useState<SemanticDerivation>(EMPTY_DERIVATION);
+  const [derivationStatus, setDerivationStatus] = useState<'idle' | 'building' | 'ready' | 'error'>('idle');
+  const [pairwiseProgress, setPairwiseProgress] = useState<{ processed: number; total: number } | null>(null);
+  const derivationDocName = filterDocName || 'Espacio de trabajo';
 
-  const theoryGraph = useMemo<TheoryGraph>(() => {
-    if (stateIsLarge) {
-      return { nodes: [], edges: [], diagnostics: [], outline: [], profileIds: [] };
+  useEffect(() => {
+    if (deferredState.concepts.length === 0 && deferredState.fragments.length === 0 && deferredState.relations.length === 0) {
+      setDerivation(EMPTY_DERIVATION);
+      setDerivationStatus('ready');
+      return;
     }
-    return buildTheoryGraphFromSemanticState(deferredState, {
-      sourceDocument: { docName: filterDocName || 'Espacio de trabajo' }
-    });
-  }, [filterDocName, deferredState, stateIsLarge]);
 
-  const stPreviewContent = useMemo(() => {
-    if (stateIsLarge) {
-      return `// Espacio con >${HEAVY_DERIVATION_LIMIT} conceptos. Vista previa ST omitida\n// para mantener fluido el editor. Usa la pestaña "Conceptos" para explorar.\n`;
+    let cancelled = false;
+    setDerivationStatus('building');
+
+    buildSemanticGraphAsync({
+      state: deferredState,
+      docName: derivationDocName,
+      sourceDocument: { docName: derivationDocName },
+      runPairwise: true
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setDerivation({
+          graph: result.graph,
+          stPreview: result.stPreview,
+          pairwiseSnapshots: result.pairwiseSnapshots
+        });
+        setDerivationStatus('ready');
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('[GlobalSemanticBrowser] buildSemanticGraphAsync failed', err);
+        setDerivationStatus('error');
+      });
+
+    return () => { cancelled = true; };
+  }, [deferredState, derivationDocName]);
+
+  useEffect(() => {
+    const snapshots = derivation.pairwiseSnapshots;
+    if (snapshots.length < 2) {
+      setPairwiseProgress(null);
+      return;
     }
-    return buildSTFromSemantic(deferredState, filterDocName || 'Espacio de trabajo');
-  }, [filterDocName, deferredState, stateIsLarge]);
+    const controller = new AbortController();
+    setPairwiseProgress({ processed: 0, total: (snapshots.length * (snapshots.length - 1)) / 2 });
+
+    verifyPairwiseAsync({
+      snapshots,
+      signal: controller.signal,
+      onProgress: ({ processed, total, partial }) => {
+        setPairwiseProgress({ processed, total });
+        if (partial.length === 0) return;
+        setDerivation((prev) => {
+          if (prev.pairwiseSnapshots !== snapshots) return prev;
+          return {
+            ...prev,
+            graph: {
+              ...prev.graph,
+              diagnostics: [...prev.graph.diagnostics, ...partial]
+            }
+          };
+        });
+      }
+    })
+      .then(() => {
+        setPairwiseProgress(null);
+      })
+      .catch((err) => {
+        if (err instanceof Error && err.message === 'aborted') return;
+        console.error('[GlobalSemanticBrowser] verifyPairwiseAsync failed', err);
+        setPairwiseProgress(null);
+      });
+
+    return () => { controller.abort(); };
+  }, [derivation.pairwiseSnapshots]);
+
+  const theoryGraph = derivation.graph;
+  const stPreviewContent = derivationStatus === 'building' && derivation.stPreview === ''
+    ? `// Construyendo proyección ST para ${deferredState.concepts.length} conceptos...\n`
+    : derivation.stPreview;
 
   const handleExperienceModeChange = useCallback((mode: 'assisted' | 'hybrid' | 'expert') => {
     if (!ctx) return;
@@ -366,57 +446,19 @@ export default function GlobalSemanticBrowser({
     }
   }, [ctx, persistAndSync, state, theoryGraph.nodes, conceptsById, fragmentsById]);
 
-  // Circuit breaker para tablets/mobile: en workspaces XXL la propia mesa
-  // semántica satura el thread principal aún con virtualización. Le damos
-  // al user un opt-in explícito para "abrir igualmente" si es desktop.
-  // Threshold bajo (300/500) porque incluso ~600 fragments con conceptos
-  // genera memoization en cadena que cuelga tablets viejas.
-  const isTouchDevice = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad/.test(navigator.userAgent));
-  const SAFETY_CONCEPT_CAP = isTouchDevice ? 250 : 600;
-  const SAFETY_FRAG_CAP = isTouchDevice ? 500 : 1500;
-  const SAFETY_REL_CAP = isTouchDevice ? 250 : 600;
-  const stateOverwhelming = (
-    deferredState.concepts.length > SAFETY_CONCEPT_CAP ||
-    deferredState.fragments.length > SAFETY_FRAG_CAP ||
-    deferredState.relations.length > SAFETY_REL_CAP
-  );
-  const [forceOpenHeavy, setForceOpenHeavy] = useState(false);
-
-  if (stateOverwhelming && !forceOpenHeavy) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center bg-slate-950 text-slate-200 px-6 py-12">
-        <div className="max-w-md text-center space-y-4">
-          <div className="mx-auto h-14 w-14 rounded-full bg-amber-500/15 flex items-center justify-center">
-            <Sparkles className="h-7 w-7 text-amber-300" />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-base font-semibold text-white">Mesa Semántica deshabilitada por tamaño</h2>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Este workspace tiene <strong>{deferredState.concepts.length}</strong> conceptos y
-              <strong> {deferredState.fragments.length}</strong> fragmentos.
-              {isTouchDevice
-                ? ' Abrir la mesa puede colgar la tablet.'
-                : ' Abrir la mesa puede ralentizar el navegador unos segundos.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setForceOpenHeavy(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-200 hover:bg-amber-500/20 transition"
-          >
-            Abrir igualmente
-          </button>
-          <p className="text-[10px] text-slate-500">
-            Usa la búsqueda en el sidebar para filtrar conceptos sin abrir la mesa completa.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const buildNotice = useMemo(() => {
+    if (derivationStatus === 'building') {
+      return `Construyendo grafo… ${deferredState.concepts.length} conceptos, ${deferredState.fragments.length} fragmentos.`;
+    }
+    if (pairwiseProgress && pairwiseProgress.total > 0 && pairwiseProgress.processed < pairwiseProgress.total) {
+      return `Verificando satisfacibilidad par a par: ${pairwiseProgress.processed}/${pairwiseProgress.total}.`;
+    }
+    return undefined;
+  }, [derivationStatus, pairwiseProgress, deferredState.concepts.length, deferredState.fragments.length]);
 
   return (
     <SemanticBrowser
-      docName={filterDocName || 'Espacio de trabajo'}
+      docName={derivationDocName}
       state={state}
       linkedTasks={emptyTasks}
       onBack={noop}
@@ -432,6 +474,7 @@ export default function GlobalSemanticBrowser({
       verificationDiagnostics={theoryGraph.diagnostics}
       onApplyQuickFix={handleApplyQuickFix}
       stPreviewContent={stPreviewContent}
+      buildNotice={buildNotice}
       onDeleteConcept={handleDeleteConcept}
       onDeleteFragment={handleDeleteFragment}
       onDeleteRelation={handleDeleteRelation}

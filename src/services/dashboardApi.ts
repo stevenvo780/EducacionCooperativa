@@ -242,14 +242,10 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
 
   const promise = (async () => {
     try {
-      // Paginar con cursor hasta agotar. Antes el cliente recibía solo los
-      // primeros 200 docs (default backend) y archivos con id alfabético tras
-      // el ultimo recibido quedaban invisibles en el sidebar. Bug 2026-05-06
-      // (FilosofiaDeLaNeurologia, >1000 docs).
       const allDocs: DocItem[] = [];
       let cursor: string | null = null;
       let safety = 0;
-      const MAX_PAGES = 20; // 20 × 1000 = 20000 docs hard cap defensivo
+      const PAGINATION_SAFETY_GUARD = 1000;
       do {
         const url = cursor
           ? `/api/documents?${key}&cursor=${encodeURIComponent(cursor)}`
@@ -260,8 +256,8 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
         allDocs.push(...page);
         cursor = res.headers.get('X-Next-Cursor') || null;
         safety += 1;
-        if (safety >= MAX_PAGES) {
-          console.warn('[fetchDocsApi] Pagination cap reached at', safety, 'pages,', allDocs.length, 'docs');
+        if (safety >= PAGINATION_SAFETY_GUARD) {
+          console.warn('[fetchDocsApi] Safety guard hit at', safety, 'pages,', allDocs.length, 'docs — server keeps returning cursors');
           break;
         }
       } while (cursor);

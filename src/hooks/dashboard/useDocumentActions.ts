@@ -406,11 +406,13 @@ export function useDocumentActions({
             });
         }
 
+        const childrenIdSet = new Set(childrenToUpdate.map(c => c.id));
+
         setDocs(prev => prev.map(item => {
             if (item.id === doc.id) {
                 return { ...item, name: trimmed };
             }
-            if (doc.type === 'folder' && childrenToUpdate.some(c => c.id === item.id)) {
+            if (doc.type === 'folder' && childrenIdSet.has(item.id)) {
                 const oldFolder = normalizeFolderPath(item.folder);
                 let newFolder = oldFolder;
                 if (oldFolder === oldFullPath) {

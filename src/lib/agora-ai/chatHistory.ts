@@ -1,9 +1,6 @@
 import type { AgentChatSession, AgentMode, AgentRollbackAction, AgentStoredChatMessage, AIProvider } from '@/lib/agora-ai/types';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 
-const MAX_CHAT_SESSIONS = 50;
-const MAX_CHAT_MESSAGES = 200;
-
 const isBrowser = () => typeof window !== 'undefined';
 
 // Truncar tool outputs largos de cada agentRun antes de persistir. Tool outputs
@@ -67,8 +64,8 @@ const truncateAgentRun = (msg: AgentStoredChatMessage): AgentStoredChatMessage =
   if (compactSteps) nextRun['steps'] = compactSteps;
   return { ...msg, agentRun: nextRun } as unknown as AgentStoredChatMessage;
 };
-const clampMessages = (messages: AgentStoredChatMessage[]) => (
-  messages.slice(-MAX_CHAT_MESSAGES).map(truncateAgentRun)
+const compactMessages = (messages: AgentStoredChatMessage[]) => (
+  messages.map(truncateAgentRun)
 );
 
 export const getChatHistoryStorageKey = (workspaceId: string) => `agora-ai-chats:${workspaceId}`;
@@ -150,7 +147,7 @@ const normalizeSession = (value: unknown): AgentChatSession | null => {
     workspaceId: raw.workspaceId,
     provider,
     mode,
-    messages: clampMessages(messages),
+    messages: compactMessages(messages),
     rollbackQueue: normalizeRollbackQueue(raw.rollbackQueue),
     createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now()
@@ -161,7 +158,7 @@ export const sortChatSessions = (sessions: AgentChatSession[]) => (
   sessions.slice().sort((left, right) => right.updatedAt - left.updatedAt)
 );
 
-export const trimChatSessions = (sessions: AgentChatSession[]) => sortChatSessions(sessions).slice(0, MAX_CHAT_SESSIONS);
+export const orderChatSessions = (sessions: AgentChatSession[]) => sortChatSessions(sessions);
 
 export const loadChatSessions = (workspaceId: string): AgentChatSession[] => {
   if (!isBrowser()) return [];
@@ -170,7 +167,7 @@ export const loadChatSessions = (workspaceId: string): AgentChatSession[] => {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return trimChatSessions(
+    return orderChatSessions(
       parsed
         .map(normalizeSession)
         .filter((session): session is AgentChatSession => session !== null && session.workspaceId === workspaceId)
@@ -200,14 +197,29 @@ const halveSessionMessages = (sessions: AgentChatSession[]): { sessions: AgentCh
   return { sessions: reduced, changed };
 };
 
+const evictOldestSession = (sessions: AgentChatSession[]): { sessions: AgentChatSession[]; evicted: AgentChatSession | null } => {
+  if (sessions.length <= 1) return { sessions, evicted: null };
+  let oldestIdx = 0;
+  for (let i = 1; i < sessions.length; i += 1) {
+    const current = sessions[i];
+    const oldest = sessions[oldestIdx];
+    if (current && oldest && current.updatedAt < oldest.updatedAt) {
+      oldestIdx = i;
+    }
+  }
+  const evicted = sessions[oldestIdx] ?? null;
+  const next = sessions.filter((_, idx) => idx !== oldestIdx);
+  return { sessions: next, evicted };
+};
+
 const writeSessionsToStorage = (workspaceId: string, sessions: AgentChatSession[]) => {
   window.localStorage.setItem(getChatHistoryStorageKey(workspaceId), JSON.stringify(sessions));
 };
 
 export const saveChatSessions = (workspaceId: string, sessions: AgentChatSession[]) => {
-  const next = trimChatSessions(sessions).map((session) => ({
+  const next = orderChatSessions(sessions).map((session) => ({
     ...session,
-    messages: clampMessages(session.messages)
+    messages: compactMessages(session.messages)
   }));
   if (!isBrowser()) return next;
 
@@ -228,21 +240,19 @@ export const saveChatSessions = (workspaceId: string, sessions: AgentChatSession
     }
 
     let attempt = next;
-    for (let i = 0; i < 4; i += 1) {
+    let evictedCount = 0;
+    let halvedAttempts = 0;
+    let succeeded = false;
+
+    for (let i = 0; i < 8; i += 1) {
       const { sessions: halved, changed } = halveSessionMessages(attempt);
       if (!changed) break;
       attempt = halved;
+      halvedAttempts += 1;
       try {
         writeSessionsToStorage(workspaceId, attempt);
-        dispatchAgoraEvent(AGORA_EVENTS.problem, {
-          source: 'agora-ai',
-          uri: 'global',
-          severity: 'warning',
-          message: 'Historial de Agora AI truncado por límite de localStorage',
-          detail: 'Se redujeron mensajes antiguos para liberar espacio. Considera borrar chats antiguos.',
-          code: 'agora-ai-history-truncated'
-        });
-        return attempt;
+        succeeded = true;
+        break;
       } catch (retryError) {
         if (!isQuotaExceededError(retryError)) {
           dispatchAgoraEvent(AGORA_EVENTS.problem, {
@@ -258,12 +268,48 @@ export const saveChatSessions = (workspaceId: string, sessions: AgentChatSession
       }
     }
 
+    while (!succeeded && attempt.length > 1) {
+      const { sessions: pruned, evicted } = evictOldestSession(attempt);
+      if (!evicted) break;
+      attempt = pruned;
+      evictedCount += 1;
+      try {
+        writeSessionsToStorage(workspaceId, attempt);
+        succeeded = true;
+        break;
+      } catch (retryError) {
+        if (!isQuotaExceededError(retryError)) {
+          dispatchAgoraEvent(AGORA_EVENTS.problem, {
+            source: 'agora-ai',
+            uri: 'global',
+            severity: 'warning',
+            message: 'Error inesperado guardando historial de Agora AI',
+            detail: retryError instanceof Error ? retryError.message : String(retryError),
+            code: 'agora-ai-history-save'
+          });
+          return attempt;
+        }
+      }
+    }
+
+    if (succeeded) {
+      dispatchAgoraEvent(AGORA_EVENTS.problem, {
+        source: 'agora-ai',
+        uri: 'global',
+        severity: 'warning',
+        message: 'Historial de Agora AI ajustado por límite de localStorage',
+        detail: `Se aplicó LRU sobre el historial (mensajes recortados: ${halvedAttempts} rondas, sesiones más antiguas evictadas: ${evictedCount}).`,
+        code: 'agora-ai-history-truncated'
+      });
+      return attempt;
+    }
+
     dispatchAgoraEvent(AGORA_EVENTS.problem, {
       source: 'agora-ai',
       uri: 'global',
       severity: 'error',
       message: 'localStorage sin espacio para el historial de Agora AI',
-      detail: 'Borra chats antiguos desde el panel de historial para liberar cuota.',
+      detail: `Borra chats antiguos desde el panel de historial para liberar cuota (rondas: ${halvedAttempts}, evictadas: ${evictedCount}).`,
       code: 'agora-ai-history-quota'
     });
     return attempt;
@@ -275,7 +321,7 @@ export const upsertChatSession = (sessions: AgentChatSession[], session: AgentCh
   next.push({
     ...session,
     title: session.title?.trim() || deriveChatSessionTitle(session.messages),
-    messages: clampMessages(session.messages)
+    messages: compactMessages(session.messages)
   });
-  return trimChatSessions(next);
+  return orderChatSessions(next);
 };

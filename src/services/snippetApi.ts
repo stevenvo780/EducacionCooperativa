@@ -16,8 +16,8 @@ export interface Snippet {
 
 export type SnippetInput = Omit<Snippet, 'id' | 'ownerId'>;
 
-const SNIPPET_PAGE_SIZE = 100;
-const SNIPPET_PAGE_HARD_LIMIT = 50;
+const SNIPPET_PAGE_SIZE = 500;
+const SNIPPET_PAGINATION_SAFETY_GUARD = 1000;
 
 const pagedSnippetSchema = z.object({
   items: z.array(snippetSchema),
@@ -28,7 +28,7 @@ export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => 
   const accumulated: Snippet[] = [];
   let cursor: string | null = null;
 
-  for (let page = 0; page < SNIPPET_PAGE_HARD_LIMIT; page++) {
+  for (let page = 0; page < SNIPPET_PAGINATION_SAFETY_GUARD; page++) {
     const params = new URLSearchParams({
       workspaceId,
       limit: String(SNIPPET_PAGE_SIZE)
@@ -51,6 +51,7 @@ export const fetchSnippets = async (workspaceId: string): Promise<Snippet[]> => 
     cursor = nextCursor;
   }
 
+  console.warn('[fetchSnippets] safety guard reached at', SNIPPET_PAGINATION_SAFETY_GUARD, 'pages — server keeps returning cursors');
   return accumulated;
 };
 

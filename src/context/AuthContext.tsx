@@ -11,6 +11,7 @@ import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { auth as getAuth, googleProvider as getGoogleProvider, signInWithCustomToken } from '@/lib/firebase';
 import { apiUrl, parseApiResponse } from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
+import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 
 interface AuthContextType {
     user: User | null;
@@ -421,6 +422,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
         localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
         localStorage.removeItem('agora_user_email');
+        STDefinitionsRegistry.clear();
         router.push('/');
     }, [router]);
 

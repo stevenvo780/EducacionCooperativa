@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, useDeferredValue } from 'react';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import {
   AlertCircle,
@@ -44,12 +44,6 @@ import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { dispatchOpenSettings } from '@/lib/settings-events';
 
 export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
-
-// Salvavidas anti-crash: workspaces con miles de items intentaban renderizar
-// todas las cards de un solo golpe, lockeando el main thread y crasheando
-// la pestaña. Cap defensivo + banner sugiriendo búsqueda. Si necesitas ver
-// más, filtra por término. Sube si la app se vuelve lenta pero no crashea.
-const RENDER_SAFETY_LIMIT = 500;
 
 const VIRTUALIZE_THRESHOLD = 80;
 const CONCEPT_ROW_HEIGHT = 232;
@@ -107,12 +101,10 @@ function SemanticList<T>({ items, rowHeight, renderItem, itemKey, emptyState, la
   const shouldVirtualize = items.length > VIRTUALIZE_THRESHOLD;
 
   if (!shouldVirtualize) {
-    const visible = items.slice(0, RENDER_SAFETY_LIMIT);
     return (
       <div className="h-full overflow-y-auto p-4">
         <div className="max-w-4xl mx-auto space-y-3">
-          <TruncatedBanner shown={visible.length} total={items.length} label={label} />
-          {visible.map((item, index) => (
+          {items.map((item, index) => (
             <React.Fragment key={itemKey(item, index)}>
               {renderItem(item, index)}
             </React.Fragment>
@@ -137,15 +129,6 @@ function SemanticList<T>({ items, rowHeight, renderItem, itemKey, emptyState, la
         rowProps={{ items, render: renderItem, rowHeight }}
         style={{ height: Math.max(size.height - 36, 1), width: '100%' }}
       />
-    </div>
-  );
-}
-
-function TruncatedBanner({ shown, total, label }: { shown: number; total: number; label: string }) {
-  if (total <= shown) return null;
-  return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-      Mostrando los primeros <strong>{shown}</strong> de <strong>{total}</strong> {label}. Usa la búsqueda para filtrar resultados.
     </div>
   );
 }
@@ -197,6 +180,8 @@ interface SemanticBrowserProps {
   onApplyQuickFix?: (fix: TheoryGraphQuickFix) => void;
   /** Código ST generado desde el estado semántico (preview). */
   stPreviewContent?: string;
+  /** Mensaje informativo sobre construcción/verificación en background. */
+  buildNotice?: string;
 }
 
 const compactText = (value: string, maxLength = 140) => {
@@ -778,20 +763,14 @@ export function SemanticBrowser({
   onExperienceModeChange,
   verificationDiagnostics,
   onApplyQuickFix,
-  stPreviewContent
+  stPreviewContent,
+  buildNotice
 }: SemanticBrowserProps) {
   const [activeTab, setActiveTab] = useState<SemanticTab>(initialTab ?? 'resumen');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fragments cap: en WS gigantes (Lógica/Neurociencias) limitamos los 5
-  // arrays derivados a una ventana de los últimos 1500 fragments para evitar
-  // que useMemo en cadena bloquee el thread y crashee la pestaña.
-  const FRAGMENT_PROCESS_CAP = 1500;
-  const processFragments = useMemo(() => {
-    if (state.fragments.length <= FRAGMENT_PROCESS_CAP) return state.fragments;
-    // Quedarnos con los más recientes
-    return [...state.fragments].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, FRAGMENT_PROCESS_CAP);
-  }, [state.fragments]);
+  const deferredFragments = useDeferredValue(state.fragments);
+  const processFragments = deferredFragments;
 
   const notes = useMemo(() => processFragments.filter(f => f.kind === 'note'), [processFragments]);
   const evidence = useMemo(() => processFragments.filter(f => f.kind === 'evidence'), [processFragments]);
@@ -973,6 +952,12 @@ export function SemanticBrowser({
           ))}
         </div>
       </div>
+
+      {buildNotice && (
+        <div className="shrink-0 border-b border-blue-500/30 bg-blue-500/10 px-4 py-2 text-[11px] text-blue-200">
+          {buildNotice}
+        </div>
+      )}
 
       {/* ── Content ── */}
       <div className="flex-1 min-h-0 overflow-hidden">

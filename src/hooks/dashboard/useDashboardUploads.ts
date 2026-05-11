@@ -16,9 +16,108 @@ import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/f
 import { createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
 import { isMarkdownConvertibleFile, isMarkdownDocItem, isMarkdownFile } from '@/services/dashboardDocUtils';
 import { convertToMarkdown, canConvertToMarkdown } from '@/lib/clientMarkdownConversion';
+import {
+  MULTIPART_THRESHOLD_BYTES,
+  MultipartUnsupportedError,
+  uploadFileMultipart
+} from '@/lib/multipart-upload';
+import { authFetch } from '@/services/apiClient';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { DocumentType } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+
+interface UploadLargeFileParams {
+  file: File;
+  workspaceId: string;
+  folder: string;
+  ownerId: string;
+  onProgress?: (loadedBytes: number, totalBytes: number) => void;
+}
+
+async function uploadLargeFile(params: UploadLargeFileParams): Promise<DocItem> {
+  const { file, workspaceId, folder, onProgress } = params;
+  const mimeType = (file.type && file.type.trim()) || 'application/octet-stream';
+
+  try {
+    const completed = await uploadFileMultipart({
+      file,
+      workspaceId,
+      folder,
+      onProgress: (event) => onProgress?.(event.loadedBytes, event.totalBytes)
+    });
+    return {
+      id: completed.id,
+      name: completed.originalName,
+      type: DocumentType.File,
+      mimeType: completed.mimeType,
+      ownerId: params.ownerId,
+      updatedAt: { seconds: Date.now() / 1000 },
+      folder: completed.folder,
+      storagePath: completed.storagePath,
+      size: completed.size
+    };
+  } catch (err) {
+    if (!(err instanceof MultipartUnsupportedError)) throw err;
+  }
+
+  const signedUrlRes = await authFetch('/api/upload/signed-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      mimeType,
+      workspaceId,
+      folder,
+      fileSize: file.size
+    })
+  });
+
+  if (!signedUrlRes.ok) {
+    if (signedUrlRes.status === 413) {
+      throw new Error('Límite de almacenamiento alcanzado');
+    }
+    throw new Error(`Failed to get upload URL: HTTP ${signedUrlRes.status}`);
+  }
+
+  const rawSigned = await signedUrlRes.json() as Record<string, unknown>;
+  const signedUrl = typeof rawSigned['signedUrl'] === 'string' ? rawSigned['signedUrl'] : null;
+  const storagePath = typeof rawSigned['storagePath'] === 'string' ? rawSigned['storagePath'] : null;
+  const fileName = typeof rawSigned['fileName'] === 'string' ? rawSigned['fileName'] : file.name;
+  const originalName = typeof rawSigned['originalName'] === 'string' ? rawSigned['originalName'] : file.name;
+  const signedMime = typeof rawSigned['mimeType'] === 'string' ? rawSigned['mimeType'] : mimeType;
+  const respWorkspaceId = typeof rawSigned['workspaceId'] === 'string' ? rawSigned['workspaceId'] : workspaceId;
+  const respFolder = typeof rawSigned['folder'] === 'string' ? rawSigned['folder'] : folder;
+  if (!signedUrl || !storagePath) {
+    throw new Error('Signed URL response inválido: signedUrl/storagePath ausente');
+  }
+
+  const putRes = await fetch(signedUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': signedMime },
+    body: file
+  });
+  if (!putRes.ok) {
+    throw new Error(`Direct upload failed: HTTP ${putRes.status}`);
+  }
+  onProgress?.(file.size, file.size);
+
+  const registerRes = await authFetch('/api/upload/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storagePath,
+      fileName,
+      originalName,
+      mimeType: signedMime,
+      workspaceId: respWorkspaceId,
+      folder: respFolder
+    })
+  });
+  if (!registerRes.ok) {
+    throw new Error(`Failed to register upload: HTTP ${registerRes.status}`);
+  }
+  return (await registerRes.json()) as DocItem;
+}
 
 interface UseDashboardUploadsParams {
   user: FirebaseUser | null;
@@ -48,7 +147,6 @@ export const useDashboardUploads = ({
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragCounter = useRef(0);
-  const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
   useEffect(() => {
     const folderInput = folderInputRef.current;
@@ -158,22 +256,6 @@ export const useDashboardUploads = ({
     options?: { preservePaths?: boolean }
   ) => {
     if (!user || files.length === 0) return;
-    const oversized = files.filter(file => file.size > MAX_FILE_SIZE).map(file => file.name);
-    const allowedFiles = files.filter(file => file.size <= MAX_FILE_SIZE);
-    if (oversized.length > 0) {
-      setUploadStatus({
-        total: files.length,
-        currentIndex: 0,
-        currentName: '',
-        progress: 0,
-        phase: UploadPhase.Error,
-        error: `Estos archivos superan 50MB: ${oversized.slice(0, 3).join(', ')}${oversized.length > 3 ? '…' : ''}`
-      });
-      scheduleUploadStatusClear();
-    }
-    if (allowedFiles.length === 0) {
-      return;
-    }
     const baseFolder = options?.preservePaths
       ? normalizePath(targetFolder ?? '')
       : normalizeFolderPath(targetFolder ?? DEFAULT_FOLDER_NAME);
@@ -184,7 +266,7 @@ export const useDashboardUploads = ({
       clearTimeout(uploadStatusTimer.current);
     }
     setUploadStatus({
-      total: allowedFiles.length,
+      total: files.length,
       currentIndex: 0,
       currentName: '',
       progress: 0,
@@ -192,8 +274,8 @@ export const useDashboardUploads = ({
     });
     try {
       const createdDocs: DocItem[] = [];
-      for (let i = 0; i < allowedFiles.length; i += 1) {
-        const file = allowedFiles[i]!;
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i]!;
         setUploadStatus(prev => prev ? {
           ...prev,
           currentIndex: i + 1,
@@ -233,13 +315,26 @@ export const useDashboardUploads = ({
           continue;
         }
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('ownerId', user.uid);
-        formData.append('workspaceId', context.workspaceId || PERSONAL_WORKSPACE_ID);
-        formData.append('folder', resolvedFolder);
-
-        const newDoc = await uploadFileApi(formData);
+        let newDoc: DocItem;
+        if (file.size > MULTIPART_THRESHOLD_BYTES) {
+          newDoc = await uploadLargeFile({
+            file,
+            workspaceId: context.workspaceId || PERSONAL_WORKSPACE_ID,
+            folder: resolvedFolder,
+            ownerId: user.uid,
+            onProgress: (loaded, total) => {
+              const progress = total > 0 ? Math.round((loaded / total) * 100) : 0;
+              setUploadStatus(prev => prev ? { ...prev, progress } : prev);
+            }
+          });
+        } else {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('ownerId', user.uid);
+          formData.append('workspaceId', context.workspaceId || PERSONAL_WORKSPACE_ID);
+          formData.append('folder', resolvedFolder);
+          newDoc = await uploadFileApi(formData);
+        }
         const fileDoc = { ...newDoc, folder: newDoc.folder ?? resolvedFolder };
         createdDocs.push(fileDoc);
 
@@ -317,7 +412,6 @@ export const useDashboardUploads = ({
     scheduleUploadStatusClear,
     getRelativeDir,
     joinPaths,
-    MAX_FILE_SIZE,
     fetchDocs,
     openDocument,
     showDialog

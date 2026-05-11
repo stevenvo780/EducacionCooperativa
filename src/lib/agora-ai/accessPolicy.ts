@@ -113,6 +113,16 @@ export function profileAutoConfirms(profile: AgentAccessProfileId): boolean {
   return AGENT_AUTO_CONFIRM_PROFILES.has(profile);
 }
 
+export const DEFAULT_AGENT_MAX_ITERATIONS = 20;
+
+export function resolveAgentMaxIterations(policy?: Partial<AgentAccessPolicy>): number {
+  const raw = policy?.maxIterations;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+    return Math.min(Math.floor(raw), 100);
+  }
+  return DEFAULT_AGENT_MAX_ITERATIONS;
+}
+
 export const DEFAULT_AGENT_ACCESS_POLICY: AgentAccessPolicy = {
   profile: 'developer',
   capabilities: AGENT_ACCESS_PROFILES.developer.capabilities
@@ -153,13 +163,20 @@ export function normalizeAgentAccessPolicy(
       )
     : undefined;
 
+  const rawMaxIter = policy?.maxIterations;
+  const maxIterations =
+    typeof rawMaxIter === 'number' && Number.isFinite(rawMaxIter) && rawMaxIter > 0
+      ? Math.min(Math.floor(rawMaxIter), 100)
+      : undefined;
+
   return {
     profile,
     capabilities: {
       ...profileDefaults,
       ...(policy?.capabilities || {})
     },
-    ...(toolPermissions && Object.keys(toolPermissions).length > 0 ? { toolPermissions } : {})
+    ...(toolPermissions && Object.keys(toolPermissions).length > 0 ? { toolPermissions } : {}),
+    ...(typeof maxIterations === 'number' ? { maxIterations } : {})
   };
 }
 

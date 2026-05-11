@@ -34,6 +34,11 @@ export interface AgentAccessPolicy {
    * true/false = permite/bloquea esa tool concreta.
    */
   toolPermissions?: AgentToolPermissionMap;
+  /**
+   * Tope de iteraciones de tool-loop por turno (Ollama loop local).
+   * Undefined = usar default del orchestrator.
+   */
+  maxIterations?: number;
 }
 
 export interface ChatMessage {

@@ -1,5 +1,8 @@
 import withPWAInit from 'next-pwa';
-import runtimeCaching from 'next-pwa/cache.js';
+
+const ONE_HOUR = 60 * 60;
+const ONE_DAY = 24 * ONE_HOUR;
+const ONE_YEAR = 365 * ONE_DAY;
 
 const withPWA = withPWAInit({
   dest: 'public',
@@ -9,15 +12,29 @@ const withPWA = withPWAInit({
   cacheOnFrontEndNav: true,
   runtimeCaching: [
     {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/auth/'),
+      handler: 'NetworkOnly',
+      method: 'GET'
+    },
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/auth/'),
+      handler: 'NetworkOnly',
+      method: 'POST'
+    },
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname === '/api/diag',
+      handler: 'NetworkOnly',
+      method: 'GET'
+    },
+    {
       urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/documents'),
       handler: 'NetworkFirst',
       method: 'GET',
       options: {
         cacheName: 'api-documents',
-        networkTimeoutSeconds: 10,
+        networkTimeoutSeconds: 5,
         expiration: {
-          maxEntries: 200,
-          maxAgeSeconds: 7 * 24 * 60 * 60 // 7 days
+          maxAgeSeconds: 7 * ONE_DAY
         },
         cacheableResponse: {
           statuses: [0, 200]
@@ -25,28 +42,187 @@ const withPWA = withPWAInit({
       }
     },
     {
-      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
-      handler: 'StaleWhileRevalidate',
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/workspaces'),
+      handler: 'NetworkFirst',
+      method: 'GET',
       options: {
-        cacheName: 'static-images',
+        cacheName: 'api-workspaces',
+        networkTimeoutSeconds: 3,
         expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+          maxAgeSeconds: 7 * ONE_DAY
+        },
+        cacheableResponse: {
+          statuses: [0, 200]
         }
       }
     },
     {
-      urlPattern: /\.(?:woff|woff2|eot|ttf|otf)$/,
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/users/'),
+      handler: 'NetworkFirst',
+      method: 'GET',
+      options: {
+        cacheName: 'api-users',
+        networkTimeoutSeconds: 3,
+        expiration: {
+          maxAgeSeconds: ONE_DAY
+        },
+        cacheableResponse: {
+          statuses: [0, 200]
+        }
+      }
+    },
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/'),
+      handler: 'NetworkFirst',
+      method: 'GET',
+      options: {
+        cacheName: 'api-general',
+        networkTimeoutSeconds: 5,
+        expiration: {
+          maxAgeSeconds: ONE_DAY
+        },
+        cacheableResponse: {
+          statuses: [0, 200]
+        }
+      }
+    },
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/_next/static/'),
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'next-static',
+        expiration: {
+          maxAgeSeconds: ONE_YEAR
+        },
+        cacheableResponse: {
+          statuses: [0, 200]
+        }
+      }
+    },
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/_next/image'),
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'next-image',
+        expiration: {
+          maxAgeSeconds: 30 * ONE_DAY
+        }
+      }
+    },
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/_next/data/'),
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'next-data',
+        expiration: {
+          maxAgeSeconds: ONE_DAY
+        }
+      }
+    },
+    {
+      urlPattern: /\.(?:woff|woff2|eot|ttf|otf)$/i,
       handler: 'CacheFirst',
       options: {
         cacheName: 'static-fonts',
         expiration: {
-          maxEntries: 20,
-          maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
+          maxAgeSeconds: ONE_YEAR
+        },
+        cacheableResponse: {
+          statuses: [0, 200]
         }
       }
     },
-    ...runtimeCaching
+    {
+      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico|avif)$/i,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'static-images',
+        expiration: {
+          maxAgeSeconds: 30 * ONE_DAY
+        }
+      }
+    },
+    {
+      urlPattern: /\.(?:css|less)$/i,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'static-styles',
+        expiration: {
+          maxAgeSeconds: 30 * ONE_DAY
+        }
+      }
+    },
+    {
+      urlPattern: /\.(?:js|mjs)$/i,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'static-scripts',
+        expiration: {
+          maxAgeSeconds: 30 * ONE_DAY
+        }
+      }
+    },
+    {
+      urlPattern: /\.(?:mp3|wav|ogg|mp4|webm)$/i,
+      handler: 'CacheFirst',
+      options: {
+        rangeRequests: true,
+        cacheName: 'static-media',
+        expiration: {
+          maxAgeSeconds: 7 * ONE_DAY
+        }
+      }
+    },
+    {
+      urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'google-fonts-webfonts',
+        expiration: {
+          maxAgeSeconds: ONE_YEAR
+        },
+        cacheableResponse: {
+          statuses: [0, 200]
+        }
+      }
+    },
+    {
+      urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'google-fonts-stylesheets',
+        expiration: {
+          maxAgeSeconds: 7 * ONE_DAY
+        }
+      }
+    },
+    {
+      urlPattern: ({ url }) => url.origin === self.origin && !url.pathname.startsWith('/api/'),
+      handler: 'NetworkFirst',
+      method: 'GET',
+      options: {
+        cacheName: 'pages',
+        networkTimeoutSeconds: 5,
+        expiration: {
+          maxAgeSeconds: 7 * ONE_DAY
+        },
+        cacheableResponse: {
+          statuses: [0, 200]
+        }
+      }
+    },
+    {
+      urlPattern: ({ url }) => url.origin !== self.origin,
+      handler: 'NetworkFirst',
+      method: 'GET',
+      options: {
+        cacheName: 'cross-origin',
+        networkTimeoutSeconds: 5,
+        expiration: {
+          maxAgeSeconds: ONE_HOUR
+        }
+      }
+    }
   ]
 });
 

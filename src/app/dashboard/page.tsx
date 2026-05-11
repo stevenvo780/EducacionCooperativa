@@ -56,37 +56,26 @@ import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
 import { loadFavoriteDocIds, MAX_FAVORITE_DOCS, saveFavoriteDocIds } from '@/services/dashboardPersistence';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
 import { useDashboardPersistence } from '@/hooks/dashboard/useDashboardPersistence';
-import QuickSearchModal from '@/components/dashboard/QuickSearchModal';
 import StatusToasts from '@/components/dashboard/StatusToasts';
-import DialogModal from '@/components/dashboard/DialogModal';
-import NewFileModal, { type FileKind } from '@/components/dashboard/NewFileModal';
+import type { FileKind } from '@/components/dashboard/NewFileModal';
 import DragOverlay from '@/components/dashboard/DragOverlay';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ActivityBar, { type ActivityView } from '@/components/dashboard/ActivityBar';
 import WorkspaceTopBar from '@/components/dashboard/WorkspaceTopBar';
 import usePresence from '@/hooks/usePresence';
-import SettingsModal from '@/components/dashboard/SettingsModal';
 import { OPEN_SETTINGS_EVENT, isSettingsSectionId, type SettingsSectionId } from '@/lib/settings-events';
-import LeftPanel from '@/components/dashboard/LeftPanel';
 import { SIDEBAR_VIEWS } from '@/components/dashboard/sidebar-views';
-import BottomDock from '@/components/dashboard/BottomDock';
-import CommandPalette, { type Command as PaletteCommand } from '@/components/dashboard/CommandPalette';
+import type { Command as PaletteCommand } from '@/components/dashboard/CommandPalette';
 import UserMenu from '@/components/dashboard/UserMenu';
 import MobileTopBar from '@/components/dashboard/MobileTopBar';
-import RightPanel from '@/components/dashboard/RightPanel';
 import StatusBar from '@/components/dashboard/StatusBar';
-import KeyboardShortcuts from '@/components/dashboard/KeyboardShortcuts';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { useIsCompact } from '@/hooks/useMediaQuery';
 import WelcomeView from '@/components/dashboard/WelcomeView';
-import MembersModal from '@/components/dashboard/MembersModal';
-import ChangePasswordModal from '@/components/dashboard/ChangePasswordModal';
-import NewWorkspaceModal from '@/components/dashboard/NewWorkspaceModal';
-import WorkspaceManagerModal from '@/components/dashboard/WorkspaceManagerModal';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { PLANS } from '@/types/subscription';
-import PricingModal from '@/components/dashboard/PricingModal';
+import { RightPanelSkeleton, LeftPanelSkeleton, BottomDockSkeleton } from '@/components/dashboard/PanelSkeletons';
 import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
 import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
 import { useSubscription } from '@/hooks/dashboard/useSubscription';
@@ -103,6 +92,30 @@ import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 
 const MosaicLayout = dynamic(() => import('@/components/MosaicLayout'), { ssr: false });
+
+const RightPanel = dynamic(() => import('@/components/dashboard/RightPanel'), {
+  ssr: false,
+  loading: () => <RightPanelSkeleton />
+});
+const LeftPanel = dynamic(() => import('@/components/dashboard/LeftPanel'), {
+  ssr: false,
+  loading: () => <LeftPanelSkeleton />
+});
+const BottomDock = dynamic(() => import('@/components/dashboard/BottomDock'), {
+  ssr: false,
+  loading: () => <BottomDockSkeleton />
+});
+const SettingsModal = dynamic(() => import('@/components/dashboard/SettingsModal'), { ssr: false });
+const WorkspaceManagerModal = dynamic(() => import('@/components/dashboard/WorkspaceManagerModal'), { ssr: false });
+const MembersModal = dynamic(() => import('@/components/dashboard/MembersModal'), { ssr: false });
+const ChangePasswordModal = dynamic(() => import('@/components/dashboard/ChangePasswordModal'), { ssr: false });
+const NewWorkspaceModal = dynamic(() => import('@/components/dashboard/NewWorkspaceModal'), { ssr: false });
+const PricingModal = dynamic(() => import('@/components/dashboard/PricingModal'), { ssr: false });
+const CommandPalette = dynamic(() => import('@/components/dashboard/CommandPalette'), { ssr: false });
+const QuickSearchModal = dynamic(() => import('@/components/dashboard/QuickSearchModal'), { ssr: false });
+const KeyboardShortcuts = dynamic(() => import('@/components/dashboard/KeyboardShortcuts'), { ssr: false });
+const NewFileModal = dynamic(() => import('@/components/dashboard/NewFileModal'), { ssr: false });
+const DialogModal = dynamic(() => import('@/components/dashboard/DialogModal'), { ssr: false });
 
 const ROOT_FOLDER_PATH = '';
 
@@ -1430,6 +1443,24 @@ function DashboardContent() {
             ?? null;
     }, [docById, openTabsById, selectedDocId]);
 
+    const selectedDocForOutline = useMemo<DocItem | null>(() => {
+        const isTextualName = (n?: string) => !!n && /\.(md|markdown|mdx|st|txt)$/i.test(n);
+        const virtualTypes = new Set([
+            'semantic-browser', 'board', 'kanban', 'st-runner', 'formalizer',
+            'agora-ai', 'snippets', 'file-explorer', 'terminal', 'folder'
+        ]);
+        const isVirtualPanel = (t?: { type?: string }) => !!t && virtualTypes.has(t.type ?? '');
+
+        if (selectedDocId) {
+            const found = docById.get(selectedDocId) ?? openTabsById.get(selectedDocId);
+            if (found && !isVirtualPanel(found)) return found;
+        }
+        const fromTabs = openTabs.find(t => isTextualName(t.name) && !isVirtualPanel(t));
+        if (fromTabs) return fromTabs;
+        const fromDocs = docs.find(d => isTextualName(d.name) && !isVirtualPanel(d));
+        return fromDocs ?? null;
+    }, [selectedDocId, docById, openTabsById, openTabs, docs]);
+
     const getDocumentDisplayPath = useCallback((doc: DocItem) => {
         const folder = normalizeFolderPath(doc.folder);
         return folder ? `${folder}/${doc.name}` : doc.name;
@@ -2558,42 +2589,48 @@ function DashboardContent() {
                         onMouseUp={stopResizingSidebar}
                     />
                 )}
-                <QuickSearchModal
-                    open={showQuickSearch}
-                    query={quickSearchQuery}
-                    onQueryChange={setQuickSearchQuery}
-                    results={semanticSearchResults}
-                    loading={semanticSearchLoading}
-                    errorMessage={semanticSearchError}
-                    activeFilter={quickSearchFilter}
-                    onFilterChange={setQuickSearchFilter}
-                    selectedIndex={quickSearchIndex}
-                    onSelectIndex={setQuickSearchIndex}
-                    onClose={closeQuickSearch}
-                    onSelect={(result) => {
-                        void handleQuickSearchSelect(result);
-                    }}
-                    onKeyDown={handleQuickSearchKeyDown}
-                    inputRef={quickSearchInputRef}
-                    getDocumentIcon={(doc) => getIcon(doc as DocItem)}
-                    modalFade={modalFade}
-                    modalPop={modalPop}
-                />
+                {showQuickSearch && (
+                    <QuickSearchModal
+                        open={showQuickSearch}
+                        query={quickSearchQuery}
+                        onQueryChange={setQuickSearchQuery}
+                        results={semanticSearchResults}
+                        loading={semanticSearchLoading}
+                        errorMessage={semanticSearchError}
+                        activeFilter={quickSearchFilter}
+                        onFilterChange={setQuickSearchFilter}
+                        selectedIndex={quickSearchIndex}
+                        onSelectIndex={setQuickSearchIndex}
+                        onClose={closeQuickSearch}
+                        onSelect={(result) => {
+                            void handleQuickSearchSelect(result);
+                        }}
+                        onKeyDown={handleQuickSearchKeyDown}
+                        inputRef={quickSearchInputRef}
+                        getDocumentIcon={(doc) => getIcon(doc as DocItem)}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
 
-                <CommandPalette
-                    open={showCommandPalette}
-                    onClose={() => setShowCommandPalette(false)}
-                    commands={paletteCommands}
-                    modalFade={modalFade}
-                    modalPop={modalPop}
-                />
+                {showCommandPalette && (
+                    <CommandPalette
+                        open={showCommandPalette}
+                        onClose={() => setShowCommandPalette(false)}
+                        commands={paletteCommands}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
 
-                <KeyboardShortcuts
-                    open={showKeyboardHelp}
-                    onClose={() => setShowKeyboardHelp(false)}
-                    modalFade={modalFade}
-                    modalPop={modalPop}
-                />
+                {showKeyboardHelp && (
+                    <KeyboardShortcuts
+                        open={showKeyboardHelp}
+                        onClose={() => setShowKeyboardHelp(false)}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
 
                 <UserMenu
                     open={userMenuOpen}
@@ -2614,46 +2651,52 @@ function DashboardContent() {
                     onLogout={() => logout()}
                 />
 
-                <SettingsModal
-                    open={settingsOpen}
-                    onClose={() => setSettingsOpen(false)}
-                    initialSection={settingsInitialSection}
-                    activeWorkspaceId={currentWorkspace?.id}
-                    activeUserId={user?.uid}
-                    onOpenChangePassword={() => {
-                        setPasswordForm({ current: '', new: '', confirm: '' });
-                        setPasswordError('');
-                        setPasswordSuccess(false);
-                        setShowPasswordModal(true);
-                    }}
-                    onOpenMembers={() => setShowMembersModal(true)}
-                />
+                {settingsOpen && (
+                    <SettingsModal
+                        open={settingsOpen}
+                        onClose={() => setSettingsOpen(false)}
+                        initialSection={settingsInitialSection}
+                        activeWorkspaceId={currentWorkspace?.id}
+                        activeUserId={user?.uid}
+                        onOpenChangePassword={() => {
+                            setPasswordForm({ current: '', new: '', confirm: '' });
+                            setPasswordError('');
+                            setPasswordSuccess(false);
+                            setShowPasswordModal(true);
+                        }}
+                        onOpenMembers={() => setShowMembersModal(true)}
+                    />
+                )}
 
                 <DragOverlay isDragActive={isDragActive} workspaceName={currentWorkspace?.name} activeFolder={activeFolder} onDismiss={dismissDragOverlay} />
                 <StatusToasts uploadStatus={uploadStatus} deleteStatus={deleteStatus} />
-                <DialogModal
-                    dialogConfig={dialogConfig}
-                    dialogInputValue={dialogInputValue}
-                    onDialogInputChange={setDialogInputValue}
-                    onConfirm={confirmDialog}
-                    onCancel={cancelDialog}
-                    modalFade={modalFade}
-                    modalPop={modalPop}
-                />
-                <NewFileModal
-                    open={showNewFileModal}
-                    onClose={() => setShowNewFileModal(false)}
-                    onSelect={(kind: FileKind) => {
-                        setShowNewFileModal(false);
-                        if (kind === 'st') {
-                            void createStDoc(newFileTargetFolder);
-                        } else {
-                            void createDoc(undefined, newFileTargetFolder);
-                        }
-                    }}
-                    modalFade={modalFade}
-                    modalPop={modalPop}
-                />
+                {dialogConfig && (
+                    <DialogModal
+                        dialogConfig={dialogConfig}
+                        dialogInputValue={dialogInputValue}
+                        onDialogInputChange={setDialogInputValue}
+                        onConfirm={confirmDialog}
+                        onCancel={cancelDialog}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
+                {showNewFileModal && (
+                    <NewFileModal
+                        open={showNewFileModal}
+                        onClose={() => setShowNewFileModal(false)}
+                        onSelect={(kind: FileKind) => {
+                            setShowNewFileModal(false);
+                            if (kind === 'st') {
+                                void createStDoc(newFileTargetFolder);
+                            } else {
+                                void createDoc(undefined, newFileTargetFolder);
+                            }
+                        }}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
 
                 {/* HeaderBar eliminada: workspace, tools, terminales y user menu viven ahora en ActivityBar/LeftPanel.
                     Los inputs file/folder antes vivían en HeaderBar; sin ellos los refs quedaban null y los botones
@@ -2834,26 +2877,7 @@ function DashboardContent() {
                             isStRunnerOpen={isStRunnerOpen}
                             isSemanticBrowserOpen={isSemanticBrowserOpen}
                             isFormalizerOpen={isFormalizerOpen}
-                            selectedDoc={(() => {
-                              // El panel Esquema necesita un doc TEXTUAL (.md/.st). Si el
-                              // selectedDocId apunta a un panel virtual del mosaico (Mesa Semántica,
-                              // Tablero, ST Logic, Formalizador, etc.) caemos a un doc real.
-                              const isTextualName = (n?: string) => !!n && /\.(md|markdown|mdx|st|txt)$/i.test(n);
-                              const isVirtualPanel = (t?: { type?: string }) => !!t && [
-                                'semantic-browser', 'board', 'kanban', 'st-runner', 'formalizer',
-                                'agora-ai', 'snippets', 'file-explorer', 'terminal', 'folder'
-                              ].includes(t.type ?? '');
-
-                              if (selectedDocId) {
-                                const found = docById.get(selectedDocId)
-                                  ?? openTabsById.get(selectedDocId);
-                                if (found && !isVirtualPanel(found)) return found;
-                              }
-                              const fromTabs = openTabs.find(t => isTextualName(t.name) && !isVirtualPanel(t));
-                              if (fromTabs) return fromTabs;
-                              const fromDocs = docs.find(d => isTextualName(d.name) && !isVirtualPanel(d));
-                              return fromDocs ?? null;
-                            })()}
+                            selectedDoc={selectedDocForOutline}
                             onJumpToLine={(line) => {
                               dispatchAgoraEvent(AGORA_EVENTS.jumpToLine, { line });
                             }}
@@ -3075,38 +3099,42 @@ function DashboardContent() {
                     />
                 )}
 
-                <WorkspaceManagerModal
-                    isOpen={showWorkspaceManagerModal}
-                    onClose={() => setShowWorkspaceManagerModal(false)}
-                    workspaces={workspaces}
-                    invites={invites}
-                    currentWorkspace={currentWorkspace}
-                    user={user}
-                    isAdmin={isAdmin}
-                    deletingWorkspaceId={deletingWorkspaceId}
-                    personalWorkspaceId={PERSONAL_WORKSPACE_ID}
-                    onAcceptInvite={acceptInvite}
-                    onSelectWorkspace={selectWorkspace}
-                    onRenameWorkspace={renameWorkspace}
-                    onDuplicateWorkspace={duplicateWorkspace}
-                    onMergeWorkspace={mergeWorkspaceIntoCurrent}
-                    onDeleteWorkspace={deleteWorkspace}
-                    onNewWorkspace={() => setShowNewWorkspaceModal(true)}
-                    onOpenMembers={openMembersForWorkspace}
-                    modalFade={modalFade}
-                    modalPop={modalPop}
-                />
+                {showWorkspaceManagerModal && (
+                    <WorkspaceManagerModal
+                        isOpen={showWorkspaceManagerModal}
+                        onClose={() => setShowWorkspaceManagerModal(false)}
+                        workspaces={workspaces}
+                        invites={invites}
+                        currentWorkspace={currentWorkspace}
+                        user={user}
+                        isAdmin={isAdmin}
+                        deletingWorkspaceId={deletingWorkspaceId}
+                        personalWorkspaceId={PERSONAL_WORKSPACE_ID}
+                        onAcceptInvite={acceptInvite}
+                        onSelectWorkspace={selectWorkspace}
+                        onRenameWorkspace={renameWorkspace}
+                        onDuplicateWorkspace={duplicateWorkspace}
+                        onMergeWorkspace={mergeWorkspaceIntoCurrent}
+                        onDeleteWorkspace={deleteWorkspace}
+                        onNewWorkspace={() => setShowNewWorkspaceModal(true)}
+                        onOpenMembers={openMembersForWorkspace}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
 
-                <NewWorkspaceModal
-                    isOpen={showNewWorkspaceModal}
-                    onClose={() => setShowNewWorkspaceModal(false)}
-                    workspaceName={newWorkspaceName}
-                    setWorkspaceName={setNewWorkspaceName}
-                    onCreate={createWorkspace}
-                    modalFade={modalFade}
-                />
+                {showNewWorkspaceModal && (
+                    <NewWorkspaceModal
+                        isOpen={showNewWorkspaceModal}
+                        onClose={() => setShowNewWorkspaceModal(false)}
+                        workspaceName={newWorkspaceName}
+                        setWorkspaceName={setNewWorkspaceName}
+                        onCreate={createWorkspace}
+                        modalFade={modalFade}
+                    />
+                )}
 
-                {currentWorkspace && (
+                {currentWorkspace && showMembersModal && (
                     <MembersModal
                         isOpen={showMembersModal}
                         onClose={() => setShowMembersModal(false)}
@@ -3121,29 +3149,33 @@ function DashboardContent() {
                     />
                 )}
 
-                <ChangePasswordModal
-                    isOpen={showPasswordModal}
-                    onClose={() => setShowPasswordModal(false)}
-                    passwordForm={passwordForm}
-                    setPasswordForm={setPasswordForm}
-                    passwordError={passwordError}
-                    setPasswordError={setPasswordError}
-                    passwordSuccess={passwordSuccess}
-                    setPasswordSuccess={setPasswordSuccess}
-                    isChangingPassword={isChangingPassword}
-                    setIsChangingPassword={setIsChangingPassword}
-                    changePassword={changePassword}
-                    modalFade={modalFade}
-                    modalPop={modalPop}
-                />
+                {showPasswordModal && (
+                    <ChangePasswordModal
+                        isOpen={showPasswordModal}
+                        onClose={() => setShowPasswordModal(false)}
+                        passwordForm={passwordForm}
+                        setPasswordForm={setPasswordForm}
+                        passwordError={passwordError}
+                        setPasswordError={setPasswordError}
+                        passwordSuccess={passwordSuccess}
+                        setPasswordSuccess={setPasswordSuccess}
+                        isChangingPassword={isChangingPassword}
+                        setIsChangingPassword={setIsChangingPassword}
+                        changePassword={changePassword}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
 
-                <PricingModal
-                    isOpen={showPricingModal}
-                    onClose={() => setShowPricingModal(false)}
-                    currentPlan={currentPlan}
-                    userEmail={userEmail}
-                    endDate={subscriptionEndDate}
-                />
+                {showPricingModal && (
+                    <PricingModal
+                        isOpen={showPricingModal}
+                        onClose={() => setShowPricingModal(false)}
+                        currentPlan={currentPlan}
+                        userEmail={userEmail}
+                        endDate={subscriptionEndDate}
+                    />
+                )}
                 <style jsx global>{`
                     body.sidebar-resizing-active,
                     body.sidebar-resizing-active * {
