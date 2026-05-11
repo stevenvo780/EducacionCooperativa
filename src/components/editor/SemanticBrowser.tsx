@@ -11,6 +11,7 @@ import {
   ClipboardList,
   FileCode2,
   FileText,
+  GitFork,
   Info,
   Link2,
   MessageSquareText,
@@ -43,7 +44,7 @@ import type {
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { dispatchOpenSettings } from '@/lib/settings-events';
 
-export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos';
+export type SemanticTab = 'resumen' | 'conceptos' | 'notas' | 'evidencias' | 'fijados' | 'relaciones' | 'archivos' | 'grafo';
 
 const VIRTUALIZE_THRESHOLD = 80;
 const CONCEPT_ROW_HEIGHT = 232;
@@ -140,7 +141,8 @@ const TABS: { key: SemanticTab; label: string; icon: React.ReactNode }[] = [
   { key: 'evidencias', label: 'Evidencias', icon: <Quote className="h-3.5 w-3.5" /> },
   { key: 'fijados', label: 'Fijados', icon: <Pin className="h-3.5 w-3.5" /> },
   { key: 'relaciones', label: 'Relaciones', icon: <Link2 className="h-3.5 w-3.5" /> },
-  { key: 'archivos', label: 'Archivos ST', icon: <FileCode2 className="h-3.5 w-3.5" /> }
+  { key: 'archivos', label: 'Archivos ST', icon: <FileCode2 className="h-3.5 w-3.5" /> },
+  { key: 'grafo', label: 'Grafo', icon: <GitFork className="h-3.5 w-3.5" /> }
 ];
 
 const EXPERIENCE_MODE_LABELS: Record<WorkspaceExperienceMode, string> = {
@@ -182,6 +184,8 @@ interface SemanticBrowserProps {
   stPreviewContent?: string;
   /** Mensaje informativo sobre construcción/verificación en background. */
   buildNotice?: string;
+  /** Slot para el panel del grafo de citas (tab "grafo"). Si se omite, la tab no aparece habilitada. */
+  citationGraphSlot?: React.ReactNode;
 }
 
 const compactText = (value: string, maxLength = 140) => {
@@ -764,7 +768,8 @@ export function SemanticBrowser({
   verificationDiagnostics,
   onApplyQuickFix,
   stPreviewContent,
-  buildNotice
+  buildNotice,
+  citationGraphSlot
 }: SemanticBrowserProps) {
   const [activeTab, setActiveTab] = useState<SemanticTab>(initialTab ?? 'resumen');
   const [searchQuery, setSearchQuery] = useState('');
@@ -856,7 +861,8 @@ export function SemanticBrowser({
     evidencias: evidence.length,
     fijados: pinned.length,
     relaciones: state.relations.length,
-    archivos: STDefinitionsRegistry.getRegisteredFiles().length
+    archivos: STDefinitionsRegistry.getRegisteredFiles().length,
+    grafo: 0
   };
 
   const handleTabChange = useCallback((tab: SemanticTab) => {
@@ -926,7 +932,7 @@ export function SemanticBrowser({
 
         {/* ── Tabs ── */}
         <div className="flex items-center gap-0.5 px-4 overflow-x-auto">
-          {TABS.map(tab => (
+          {TABS.filter(t => t.key !== 'grafo' || Boolean(citationGraphSlot)).map(tab => (
             <button
               key={tab.key}
               type="button"
@@ -1250,6 +1256,16 @@ export function SemanticBrowser({
             <div className="max-w-4xl mx-auto">
               <STFilesPanel filterFileName={filterSTFile} />
             </div>
+          </div>
+        )}
+
+        {activeTab === 'grafo' && (
+          <div className="h-full">
+            {citationGraphSlot ?? (
+              <div className="flex h-full w-full items-center justify-center p-6 text-center text-xs text-slate-500">
+                El grafo de citas no está disponible en este contexto (falta workspaceId).
+              </div>
+            )}
           </div>
         )}
       </div>
