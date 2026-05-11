@@ -281,7 +281,8 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
       }
     };
 
-    ensureWorker();
+    // Worker se instancia perezosamente desde runLint via ensureWorkerRef —
+    // evita crear el Worker en docs vacíos / mount inicial.
 
     return () => {
       const w = workerRef.current;
@@ -436,6 +437,15 @@ export function useMarkdownLinter(content: string, customRules: LinterRule[] = [
   }, [runCustomRules]);
 
   useEffect(() => {
+    // Skip lint cycle for empty/trivial documents — evita instanciar el Worker
+    // y ejecutar reglas pesadas en el mount inicial de docs vacíos.
+    if (!content || content.trim().length < 10) {
+      if (!hasLintedOnceRef.current) hasLintedOnceRef.current = true;
+      // Limpiar diagnósticos previos si los hubiera y marcar como listo
+      setDiagnostics((prev) => prev.length === 0 ? prev : []);
+      setLinterStatus((prev) => prev === 'ready' ? prev : 'ready');
+      return;
+    }
     const delay = hasLintedOnceRef.current ? 300 : 50;
     const timer = setTimeout(() => {
       hasLintedOnceRef.current = true;

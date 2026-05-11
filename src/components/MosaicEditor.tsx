@@ -83,10 +83,23 @@ import { DocumentType, type DocumentTypeId } from '@/types/documents';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import { EditorUtilityMenu } from '@/components/editor/EditorUtilityMenu';
-import { LinterOverlay } from '@/components/editor/LinterOverlay';
-import { LinterPlugin } from '@/components/mosaic-editor/LinterPlugin';
-import { LinterConfirmModal, type LinterActionRequest } from '@/components/mosaic-editor/LinterConfirmModal';
-import { LinterConfigPanel } from '@/components/mosaic-editor/LinterConfigPanel';
+import type { LinterActionRequest } from '@/components/mosaic-editor/LinterConfirmModal';
+const LinterOverlay = dynamic(
+  () => import('@/components/editor/LinterOverlay').then((m) => ({ default: m.LinterOverlay })),
+  { ssr: false }
+);
+const LinterPlugin = dynamic(
+  () => import('@/components/mosaic-editor/LinterPlugin').then((m) => ({ default: m.LinterPlugin })),
+  { ssr: false }
+);
+const LinterConfirmModal = dynamic(
+  () => import('@/components/mosaic-editor/LinterConfirmModal').then((m) => ({ default: m.LinterConfirmModal })),
+  { ssr: false }
+);
+const LinterConfigPanel = dynamic(
+  () => import('@/components/mosaic-editor/LinterConfigPanel').then((m) => ({ default: m.LinterConfigPanel })),
+  { ssr: false }
+);
 import {
   EMPTY_SEMANTIC_WORKSPACE_STATE,
   filterSemanticWorkspaceStateByDocument,
@@ -106,7 +119,11 @@ import {
   fetchSemanticWorkspaceStateApi,
   saveSemanticWorkspaceStateApi
 } from '@/services/semanticStateApi';
-import SnippetGallery, { SnippetEditorModal } from '@/components/SnippetGallery';
+const SnippetGallery = dynamic(() => import('@/components/SnippetGallery'), { ssr: false });
+const SnippetEditorModal = dynamic(
+  () => import('@/components/SnippetGallery').then((m) => ({ default: m.SnippetEditorModal })),
+  { ssr: false }
+);
 import { registerStatusSegment, forceUnregisterStatusSegment } from '@/lib/status-bus';
 import { dispatchOpenSettings } from '@/lib/settings-events';
 import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
