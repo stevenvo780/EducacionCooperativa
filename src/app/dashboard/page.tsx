@@ -2709,6 +2709,7 @@ function DashboardContent() {
                     )}
 
                     <div
+                      data-mobile-drawer={showMobileSidebar ? 'open' : 'closed'}
                       className={`
                         flex flex-col shrink-0 z-40 h-full bg-surface-900
                         md:relative md:translate-x-0 md:transform-none
@@ -2716,9 +2717,6 @@ function DashboardContent() {
                         ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
                         ${isZenMode ? 'hidden md:hidden' : ''}
                       `}
-                      style={isCompact && !showMobileSidebar
-                        ? { contentVisibility: 'hidden', containIntrinsicSize: '0 0' }
-                        : undefined}
                       aria-hidden={isCompact && !showMobileSidebar}
                     >
                     {!isZenMode && (

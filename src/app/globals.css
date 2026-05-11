@@ -640,3 +640,10 @@ div[data-separator][data-active="true"] {
     min-height: 40px !important;
   }
 }
+
+@media (max-width: 767px) {
+  [data-mobile-drawer="closed"] {
+    content-visibility: hidden;
+    contain-intrinsic-size: 0 0;
+  }
+}
