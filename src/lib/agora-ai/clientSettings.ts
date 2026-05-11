@@ -8,7 +8,6 @@ import type { AgentAccessPolicy, AgentAccessProfileId, AgentMode, AIProvider } f
 
 export interface AIProviderConfig {
   provider: AIProvider;
-  apiKey: string;
   model: string;
   endpoint: string;
 }
@@ -67,7 +66,6 @@ export const AGENT_USER_INSTRUCTIONS_MAX_LENGTH = 4000;
 
 export const DEFAULT_CONFIG: AIProviderConfig = {
   provider: 'ollama',
-  apiKey: '',
   model: '',
   endpoint: ''
 };
@@ -75,10 +73,13 @@ export const DEFAULT_CONFIG: AIProviderConfig = {
 const CONFIG_STORAGE = {
   storageKey: CONFIG_KEY,
   defaults: DEFAULT_CONFIG,
-  sensitiveKeys: ['apiKey'] as const
+  sensitiveKeys: [] as const
 };
 
 export function loadAIProviderConfig(): AIProviderConfig {
+  if (typeof window !== 'undefined') {
+    try { window.sessionStorage.removeItem(`${CONFIG_KEY}:session`); } catch { /* ignore */ }
+  }
   return loadClientConfig(CONFIG_STORAGE);
 }
 

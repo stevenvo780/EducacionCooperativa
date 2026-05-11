@@ -400,7 +400,7 @@ function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
     <div className="space-y-5">
       <div>
         <SectionHelper>
-          Configuración local del asistente. La API key se guarda solo en sessionStorage del navegador.
+          Elige proveedor y modelo. Las API keys se gestionan en el panel de abajo (cifradas server-side); este navegador nunca conserva el plaintext.
         </SectionHelper>
         <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
           {(Object.keys(PROVIDER_META) as AIProvider[]).map((provider) => (
@@ -422,19 +422,6 @@ function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {meta.needsKey && (
-          <label className="block text-xs">
-            <span className="mb-1 block text-surface-400">API Key</span>
-            <input
-              type="password"
-              value={config.apiKey}
-              onChange={(e) => updateConfig({ apiKey: e.target.value })}
-              placeholder={`Pega tu ${meta.label} API key`}
-              className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
-            />
-          </label>
-        )}
-
         {config.provider === 'ollama' && (
           <label className="block text-xs">
             <span className="mb-1 block text-surface-400">URL de Ollama</span>
