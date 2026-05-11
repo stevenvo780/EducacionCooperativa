@@ -262,10 +262,6 @@ const updateState = (
 ) => {
   const current = loadSemanticWorkspaceState(context);
   const next = updater(current);
-  // Skip notify si shallow-equal. updater puede haber retornado la misma
-  // referencia tras un branch no-op (ej. concept inexistente). En ese caso
-  // no hay nada que persistir y no incrementamos versión.
-  if (next === current) return current;
   return saveSemanticWorkspaceState(context, next);
 };
 

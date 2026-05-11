@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     GitBranch, GitCommit, RefreshCcw, AlertCircle, Check, History,
-    FileText, FilePlus, Loader2, ExternalLink, Plus, GitCompare
+    FileText, FilePlus, Loader2, ExternalLink, Plus, GitCompare, Globe
 } from 'lucide-react';
 import GitGraphPanel from '@/components/dashboard/git/GitGraphPanel';
 import GitCommitDetail from '@/components/dashboard/git/GitCommitDetail';
 import GitComparePanel from '@/components/dashboard/git/GitComparePanel';
+import RemotesPanel from '@/components/dashboard/RemotesPanel';
 import { gitGraphResponseSchema, type GitGraphCommit } from '@/components/dashboard/git/schemas';
 import { useAuth } from '@/context/AuthContext';
 import { fetchZod } from '@/lib/fetch-zod';
@@ -106,7 +107,7 @@ interface GitWorkbenchProps {
     onClose?: () => void;
 }
 
-type Tab = 'changes' | 'history' | 'compare';
+type Tab = 'changes' | 'history' | 'compare' | 'remotes';
 
 export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenchProps) {
     const { user } = useAuth();
@@ -562,6 +563,9 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                         <button type="button" onClick={() => setTab('compare')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'compare' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
                             <GitCompare className="h-3.5 w-3.5" /> Comparar
                         </button>
+                        <button type="button" onClick={() => setTab('remotes')} className={`flex items-center gap-1 px-3 py-2 transition ${tab === 'remotes' ? 'border-b-2 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}>
+                            <Globe className="h-3.5 w-3.5" /> Remotes
+                        </button>
                     </div>
 
                     {tab === 'changes' && (
@@ -693,6 +697,10 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                                 refs: []
                             }))} />
                         </div>
+                    )}
+
+                    {tab === 'remotes' && (
+                        <RemotesPanel workspaceId={workspaceId} />
                     )}
 
                     {revealedToken && (

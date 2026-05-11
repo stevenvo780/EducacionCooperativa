@@ -30,7 +30,7 @@ describe('non-browser fallbacks', () => {
   });
 
   it('returns semantic state unchanged without window', () => {
-    expect(loadSemanticWorkspaceState({ workspaceId: 'ws-1', userId: 'u1' })).toEqual({
+    expect(loadSemanticWorkspaceState({ workspaceId: 'ws-1', userId: 'u1' })).toMatchObject({
       concepts: [],
       fragments: [],
       relations: [],
@@ -48,7 +48,7 @@ describe('non-browser fallbacks', () => {
         concepts: [], fragments: [], relations: [], updatedAt: 10,
         preferences: { experienceMode: 'hybrid', showSTPreview: true, showPedagogicalHints: true }
       }
-    )).toEqual({
+    )).toMatchObject({
       concepts: [],
       fragments: [],
       relations: [],

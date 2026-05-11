@@ -1,8 +1,4 @@
-import reducer, {
-  setCurrentWorkspace,
-  setDeletingWorkspaceId,
-  setEditorToolbarVisibility,
-  setInvites,
+import uiReducer, {
   setIsChangingPassword,
   setPasswordError,
   setPasswordForm,
@@ -15,33 +11,36 @@ import reducer, {
   setShowPasswordModal,
   setShowQuickSearch,
   setShowWorkspaceMenu,
-  setSidebarSearchQuery,
+  setSidebarSearchQuery
+} from '@/store/uiSlice';
+import workspacesReducer, {
+  setCurrentWorkspace,
+  setDeletingWorkspaceId,
+  setInvites,
   setWorkspaces
-} from '@/store/dashboardSlice';
+} from '@/store/workspacesSlice';
+import editorPrefsReducer, {
+  setEditorToolbarVisibility
+} from '@/store/editorPrefsSlice';
 import { selectEditorToolbarVisibility } from '@/store/dashboard.selectors';
 
 describe('dashboard store', () => {
-  it('applies every dashboard reducer action', () => {
-    let state = reducer(undefined, { type: 'unknown' });
+  it('applies every ui slice reducer action', () => {
+    let state = uiReducer(undefined, { type: 'unknown' });
 
-    state = reducer(state, setShowWorkspaceMenu(true));
-    state = reducer(state, setShowNewWorkspaceModal(true));
-    state = reducer(state, setShowMembersModal(true));
-    state = reducer(state, setShowPasswordModal(true));
-    state = reducer(state, setPasswordForm({ current: 'a', new: 'b', confirm: 'b' }));
-    state = reducer(state, setPasswordError('error'));
-    state = reducer(state, setPasswordSuccess(true));
-    state = reducer(state, setIsChangingPassword(true));
-    state = reducer(state, setShowQuickSearch(true));
-    state = reducer(state, setQuickSearchQuery('buscar'));
-    state = reducer(state, setQuickSearchIndex(2));
-    state = reducer(state, setSidebarSearchQuery('sidebar'));
-    state = reducer(state, setShowMobileSidebar(true));
-    state = reducer(state, setDeletingWorkspaceId('ws-1'));
-    state = reducer(state, setWorkspaces([{ id: 'ws-1' }] as never[]));
-    state = reducer(state, setInvites([{ id: 'ws-2' }] as never[]));
-    state = reducer(state, setCurrentWorkspace({ id: 'ws-1' } as never));
-    state = reducer(state, setEditorToolbarVisibility({ history: false }));
+    state = uiReducer(state, setShowWorkspaceMenu(true));
+    state = uiReducer(state, setShowNewWorkspaceModal(true));
+    state = uiReducer(state, setShowMembersModal(true));
+    state = uiReducer(state, setShowPasswordModal(true));
+    state = uiReducer(state, setPasswordForm({ current: 'a', new: 'b', confirm: 'b' }));
+    state = uiReducer(state, setPasswordError('error'));
+    state = uiReducer(state, setPasswordSuccess(true));
+    state = uiReducer(state, setIsChangingPassword(true));
+    state = uiReducer(state, setShowQuickSearch(true));
+    state = uiReducer(state, setQuickSearchQuery('buscar'));
+    state = uiReducer(state, setQuickSearchIndex(2));
+    state = uiReducer(state, setSidebarSearchQuery('sidebar'));
+    state = uiReducer(state, setShowMobileSidebar(true));
 
     expect(state).toMatchObject({
       showWorkspaceMenu: true,
@@ -56,18 +55,38 @@ describe('dashboard store', () => {
       quickSearchQuery: 'buscar',
       quickSearchIndex: 2,
       sidebarSearchQuery: 'sidebar',
-      showMobileSidebar: true,
+      showMobileSidebar: true
+    });
+  });
+
+  it('applies every workspaces slice reducer action', () => {
+    let state = workspacesReducer(undefined, { type: 'unknown' });
+
+    state = workspacesReducer(state, setDeletingWorkspaceId('ws-1'));
+    state = workspacesReducer(state, setWorkspaces([{ id: 'ws-1' }] as never[]));
+    state = workspacesReducer(state, setInvites([{ id: 'ws-2' }] as never[]));
+    state = workspacesReducer(state, setCurrentWorkspace({ id: 'ws-1' } as never));
+
+    expect(state).toMatchObject({
       deletingWorkspaceId: 'ws-1',
       workspaces: [{ id: 'ws-1' }],
       invites: [{ id: 'ws-2' }],
-      currentWorkspace: { id: 'ws-1' },
+      currentWorkspace: { id: 'ws-1' }
+    });
+  });
+
+  it('applies editor prefs toolbar visibility action', () => {
+    let state = editorPrefsReducer(undefined, { type: 'unknown' });
+    state = editorPrefsReducer(state, setEditorToolbarVisibility({ history: false }));
+
+    expect(state).toMatchObject({
       editorToolbarVisibility: { history: false }
     });
   });
 
   it('merges toolbar visibility with defaults in the selector', () => {
     const result = selectEditorToolbarVisibility({
-      dashboard: {
+      editorPrefs: {
         editorToolbarVisibility: {
           history: false,
           insert: false
