@@ -2711,11 +2711,12 @@ function DashboardContent() {
                     <div
                       className={`
                         flex flex-col shrink-0 z-40 h-full bg-surface-900
-                        md:relative md:translate-x-0 md:transform-none
+                        md:relative md:translate-x-0 md:transform-none md:[content-visibility:visible]
                         fixed inset-y-0 left-0 transform transition-transform duration-150
-                        ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
+                        ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full [content-visibility:hidden]'}
                         ${isZenMode ? 'hidden md:hidden' : ''}
                       `}
+                      aria-hidden={isCompact && !showMobileSidebar}
                     >
                     {!isZenMode && (
                       <WorkspaceTopBar

@@ -632,7 +632,10 @@ const Sidebar = ({
   return (
     <>
       <div
-        style={{ width: effectiveWidth }}
+        style={{
+          width: effectiveWidth,
+          contentVisibility: isCollapsedView ? 'hidden' : 'visible'
+        }}
         className={`
           bg-surface-800 border-r border-surface-600/50 flex flex-col shrink-0 h-full
           ${isCollapsedView ? 'overflow-hidden border-r-0 pointer-events-none' : ''}
