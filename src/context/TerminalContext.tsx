@@ -286,18 +286,18 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         const controller = new TerminalController(nexusUrl);
         controllerRef.current = controller;
 
-        // Conectar al hub PRIMERO, independiente de xterm (que carga
-        // desde CDN y puede tardar o fallar). El socket es lo que
-        // habilita doc-change, worker-status y session-restore — la UI
-        // de xterm sólo hace falta cuando el user abre la terminal.
-        const ok = await controller.initialize();
-        debugLog('[TerminalContext] Controller xterm initialized:', ok);
-        if (!ok) {
-            // No abortamos: el hub sigue siendo útil sin xterm. Sólo
-            // marcamos el estado para que la UI muestre el aviso si la
-            // user intenta abrir la terminal.
+        // xterm carga desde CDN (puede tardar/fallar/bloquear). NO se debe
+        // awaitear antes del socket.io: si la CDN cuelga, el hub nunca se
+        // conecta. Disparamos xterm en paralelo; el socket avanza independiente.
+        controller.initialize().then((ok) => {
+            debugLog('[TerminalContext] Controller xterm initialized:', ok);
+            if (!ok) {
+                setErrorMessage('No se pudo cargar xterm. La terminal interactiva no estará disponible, pero el hub seguirá conectado.');
+            }
+        }).catch((err) => {
+            console.warn('[TerminalContext] xterm initialize failed:', err);
             setErrorMessage('No se pudo cargar xterm. La terminal interactiva no estará disponible, pero el hub seguirá conectado.');
-        }
+        });
 
         try {
             if (!currentUser.getIdToken) {
