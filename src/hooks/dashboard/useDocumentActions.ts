@@ -662,7 +662,11 @@ export function useDocumentActions({
         try {
             const data = await createDocumentApi({
                 name,
-                content: `# ${name}`,
+                // Trailing `\n\n` deja un párrafo vacío bajo el título: así el
+                // cursor del editor MDX cae en una línea nueva al abrir el doc,
+                // en lugar de quedar al final del H1 (cualquier texto tipeado se
+                // anexaba al título y se aplastaban los párrafos siguientes).
+                content: `# ${name}\n\n`,
                 type: 'text',
                 ownerId: user.uid,
                 workspaceId: docWorkspaceId,
