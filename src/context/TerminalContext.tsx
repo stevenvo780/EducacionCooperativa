@@ -47,6 +47,7 @@ interface TerminalContextType {
     getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
     getSessionsForWorkspace: (workspaceId: string) => TerminalSession[];
     subscribeToWorkspace: (workspaceId: string) => void;
+    unsubscribeFromWorkspace: (workspaceId: string) => void;
     clearActiveSession: () => void;
     onDocChangeCallback: ((cb: (event: DocChangeEvent) => void) => () => void) | null;
 }
@@ -283,15 +284,20 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         setErrorMessage(null);
 
         const controller = new TerminalController(nexusUrl);
-        const ok = await controller.initialize();
-        debugLog('[TerminalContext] Controller initialized:', ok);
-        if (!ok) {
-            setStatus(TerminalConnectionStatus.Error);
-            setErrorMessage('Failed to initialize terminal controller');
-            return;
-        }
-
         controllerRef.current = controller;
+
+        // Conectar al hub PRIMERO, independiente de xterm (que carga
+        // desde CDN y puede tardar o fallar). El socket es lo que
+        // habilita doc-change, worker-status y session-restore — la UI
+        // de xterm sólo hace falta cuando el user abre la terminal.
+        const ok = await controller.initialize();
+        debugLog('[TerminalContext] Controller xterm initialized:', ok);
+        if (!ok) {
+            // No abortamos: el hub sigue siendo útil sin xterm. Sólo
+            // marcamos el estado para que la UI muestre el aviso si la
+            // user intenta abrir la terminal.
+            setErrorMessage('No se pudo cargar xterm. La terminal interactiva no estará disponible, pero el hub seguirá conectado.');
+        }
 
         try {
             if (!currentUser.getIdToken) {
@@ -583,6 +589,10 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         controllerRef.current?.checkWorkerStatus(workspaceId);
     }, []);
 
+    const unsubscribeFromWorkspace = useCallback((workspaceId: string) => {
+        controllerRef.current?.unsubscribeFromWorkspace(workspaceId);
+    }, []);
+
     const clearActiveSession = useCallback(() => {
         setActiveSessionId(null);
     }, []);
@@ -618,12 +628,13 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         getWorkerStatusForWorkspace,
         getSessionsForWorkspace,
         subscribeToWorkspace,
+        unsubscribeFromWorkspace,
         clearActiveSession,
         onDocChangeCallback
     }), [sessions, activeSessionId, status, hubConnected, isCreatingSession, errorMessage,
         workspaceWorkerStatuses, initialize, createSession, joinSession,
         selectSession, destroySession, renameSession, getWorkerStatusForWorkspace,
-        getSessionsForWorkspace, subscribeToWorkspace, clearActiveSession, onDocChangeCallback]);
+        getSessionsForWorkspace, subscribeToWorkspace, unsubscribeFromWorkspace, clearActiveSession, onDocChangeCallback]);
 
     return (
         <TerminalContext.Provider value={contextValue}>

@@ -134,6 +134,7 @@ function DashboardContent() {
         getSessionsForWorkspace,
         getWorkerStatusForWorkspace,
         subscribeToWorkspace,
+        unsubscribeFromWorkspace,
         clearActiveSession,
         onDocChangeCallback
     } = useTerminal();
@@ -658,7 +659,8 @@ function DashboardContent() {
         setWorkspaces,
         setInvites,
         setCurrentWorkspace,
-        subscribeToWorkspace
+        subscribeToWorkspace,
+        unsubscribeFromWorkspace
     });
 
     const openMembersForWorkspace = useCallback((workspace: Workspace) => {
