@@ -93,8 +93,14 @@ const NewFileModal = ({ open, onClose, onSelect, modalFade, modalPop }: NewFileM
                   Elige el tipo de archivo que deseas crear
                 </p>
               </div>
-              <button onClick={onClose} className="p-1 text-surface-500 hover:text-surface-200 rounded">
-                <X className="w-4 h-4" />
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Cerrar"
+                title="Cerrar"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-surface-400 hover:bg-surface-700 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -102,8 +108,9 @@ const NewFileModal = ({ open, onClose, onSelect, modalFade, modalPop }: NewFileM
               {FILE_TYPES.map(({ kind, label, description, icon, accent, border, bg }) => (
                 <button
                   key={kind}
+                  type="button"
                   onClick={() => onSelect(kind)}
-                  className={`flex items-start gap-3 w-full text-left p-3 rounded-xl border transition ${border} ${bg} bg-surface-900/40`}
+                  className={`flex items-start gap-3 w-full text-left p-3 rounded-xl border transition ${border} ${bg} bg-surface-900/40 min-h-[44px]`}
                 >
                   <span className={`mt-0.5 ${accent}`}>{icon}</span>
                   <div className="min-w-0">

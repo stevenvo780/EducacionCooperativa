@@ -267,11 +267,11 @@ export default function WorkspaceManagerModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-lg p-2 text-surface-500 transition hover:bg-surface-700 hover:text-surface-200"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-surface-400 transition hover:bg-surface-700 hover:text-white"
                   aria-label="Cerrar"
                   title="Cerrar"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
             </div>

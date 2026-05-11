@@ -40,7 +40,9 @@ function LoginPage() {
     }
   };
 
-  const handleGoogle = async () => {
+  const handleGoogle = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setError(null);
     setLoading(true);
     try {
@@ -308,8 +310,10 @@ function LoginPage() {
                 </div>
 
                 <button
+                    type="button"
                     onClick={handleGoogle}
-                    className="w-full bg-surface-700 border border-surface-600 text-surface-200 font-medium py-2.5 rounded-lg hover:bg-surface-600 transition flex items-center justify-center gap-2"
+                    disabled={loading}
+                    className="w-full max-w-full bg-surface-700 border border-surface-600 text-surface-200 font-medium py-2.5 rounded-lg hover:bg-surface-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                     <Chrome className="w-5 h-5 text-surface-400" />
                     Continuar con Google
