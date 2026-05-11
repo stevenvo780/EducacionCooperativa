@@ -42,7 +42,10 @@ body {
   outline-color: rgba(233, 69, 96, 0.6);
 }
 
-@import 'katex/dist/katex.min.css';
+/* Bug 9: KaTeX CSS y sus woff2 NO se cargan eager. Se inyecta on-demand
+ * desde src/components/mosaic-editor/MarkdownPreview.tsx (loadKatexCss)
+ * sólo cuando el doc tiene matemáticas. Evita ~52KB de fonts en /login y
+ * otras rutas sin math. */
 
 .markdown-preview {
   color: #e2e8f0;
