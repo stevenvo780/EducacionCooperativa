@@ -2,6 +2,7 @@
 
 import React, { useDeferredValue, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
+import { fold } from '@/lib/text-fold';
 import { List as VirtualizedList, type RowComponentProps } from 'react-window';
 import {
   Folder,
@@ -242,14 +243,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
   const filteredChildFolders = useMemo(() => {
     if (!deferredSearchQuery.trim()) return activeChildFolders;
-    const query = deferredSearchQuery.toLowerCase();
-    return effectiveFolders.filter(folder => folder.name.toLowerCase().includes(query));
+    const query = fold(deferredSearchQuery);
+    return effectiveFolders.filter(folder => fold(folder.name).includes(query));
   }, [activeChildFolders, effectiveFolders, deferredSearchQuery]);
 
   const filteredFolderDocs = useMemo(() => {
     if (!deferredSearchQuery.trim()) return activeFolderDocs;
-    const query = deferredSearchQuery.toLowerCase();
-    return normalizedDocs.filter(doc => doc.name.toLowerCase().includes(query));
+    const query = fold(deferredSearchQuery);
+    return normalizedDocs.filter(doc => fold(doc.name).includes(query));
   }, [activeFolderDocs, normalizedDocs, deferredSearchQuery]);
 
   const contentItems = useMemo<ContentItem[]>(() => {

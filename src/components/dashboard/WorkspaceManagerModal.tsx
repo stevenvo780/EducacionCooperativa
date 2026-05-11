@@ -7,6 +7,7 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import type { Workspace } from '@/components/dashboard/types';
 import { WorkspaceType } from '@/types/workspace';
 import { useEscapeClose } from '@/hooks/useModalA11y';
+import { fold } from '@/lib/text-fold';
 
 interface WorkspaceManagerModalProps {
   isOpen: boolean;
@@ -103,11 +104,11 @@ export default function WorkspaceManagerModal({
   }, [actionMenuId]);
 
   const filteredWorkspaces = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = fold(query.trim());
     if (!normalizedQuery) return workspaces;
     return workspaces.filter(workspace => (
-      workspace.name.toLowerCase().includes(normalizedQuery)
-      || workspace.id.toLowerCase().includes(normalizedQuery)
+      fold(workspace.name).includes(normalizedQuery)
+      || fold(workspace.id).includes(normalizedQuery)
     ));
   }, [query, workspaces]);
 

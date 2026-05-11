@@ -17,6 +17,7 @@ import {
   type EditorConfig as StEditorConfig
 } from '@/components/editor/codemirror/st-editor-config';
 import { LinterRegistry } from '@/lib/linters/registry';
+import { fold } from '@/lib/text-fold';
 import { MarkdownLinterRegistry, type RuleState } from '@/lib/markdown-linter/registry';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
 import { RULE_CATEGORY_LABELS, type RuleCategory } from '@/lib/markdown-linter/types';
@@ -838,10 +839,10 @@ function LintersSection() {
   const filtered = query.trim().length === 0
     ? allRules
     : allRules.filter((r) => {
-        const q = query.toLowerCase();
-        return r.meta.name.toLowerCase().includes(q)
-          || r.meta.description.toLowerCase().includes(q)
-          || r.meta.id.toLowerCase().includes(q);
+        const q = fold(query);
+        return fold(r.meta.name).includes(q)
+          || fold(r.meta.description).includes(q)
+          || fold(r.meta.id).includes(q);
       });
 
   const grouped = new Map<RuleCategory, RuleState[]>();
