@@ -1,7 +1,20 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from 'react';
+import dynamic from 'next/dynamic';
 import { SemanticBrowser, type SemanticTab } from '@/components/editor/SemanticBrowser';
+
+const CitationGraphView = dynamic(
+  () => import('@/components/dashboard/CitationGraphView'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
+        Cargando grafo de citas…
+      </div>
+    )
+  }
+);
 import {
   loadSemanticWorkspaceState,
   saveSemanticWorkspaceState,
@@ -24,7 +37,7 @@ import {
 import type { BoardCard } from '@/components/dashboard/types';
 import { fetchSemanticWorkspaceStateApi, saveSemanticWorkspaceStateApi } from '@/services/semanticStateApi';
 import { syncSemanticCompanionFiles } from '@/services/semanticCompanionSync';
-import { AGORA_EVENTS, subscribeAgoraEvent } from '@/lib/agora-events';
+import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
 import { syncSTSourceToSemanticWorkspace } from '@/services/semanticSyncService';
 import { removeSemanticBlockFromDocument } from '@/services/semanticDocumentSync';
 import type {
@@ -61,12 +74,15 @@ interface GlobalSemanticBrowserProps {
   userId?: string;
   /** When set, auto-navigate to the "archivos" tab and filter definitions to this file. */
   filterDocName?: string;
+  /** Active doc to focus the citation graph on. Optional — when missing, graph uses workspace-wide view. */
+  activeDocId?: string;
 }
 
 export default function GlobalSemanticBrowser({
   workspaceId,
   userId,
-  filterDocName
+  filterDocName,
+  activeDocId
 }: GlobalSemanticBrowserProps) {
   const [state, setState] = useState<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
   const isPageVisible = usePageVisibility();
@@ -456,6 +472,28 @@ export default function GlobalSemanticBrowser({
     return undefined;
   }, [derivationStatus, pairwiseProgress, deferredState.concepts.length, deferredState.fragments.length]);
 
+  const handleCitationNodeClick = useCallback((docId: string) => {
+    if (!workspaceId) return;
+    dispatchAgoraEvent(AGORA_EVENTS.openDocuments, {
+      workspaceId,
+      documents: [{ id: docId, name: docId }],
+      source: 'agora-ai'
+    });
+  }, [workspaceId]);
+
+  const citationGraphSlot = useMemo(() => {
+    if (!workspaceId) return null;
+    const focusDocIds = activeDocId ? [activeDocId] : [];
+    return (
+      <CitationGraphView
+        workspaceId={workspaceId}
+        focusDocIds={focusDocIds}
+        height={520}
+        onNodeClick={handleCitationNodeClick}
+      />
+    );
+  }, [workspaceId, activeDocId, handleCitationNodeClick]);
+
   return (
     <SemanticBrowser
       docName={derivationDocName}
@@ -480,6 +518,7 @@ export default function GlobalSemanticBrowser({
       onDeleteRelation={handleDeleteRelation}
       onEditConcept={handleEditConcept}
       onEditFragment={handleEditFragment}
+      citationGraphSlot={citationGraphSlot}
     />
   );
 }
