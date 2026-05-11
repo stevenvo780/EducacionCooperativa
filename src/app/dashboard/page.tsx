@@ -2711,11 +2711,14 @@ function DashboardContent() {
                     <div
                       className={`
                         flex flex-col shrink-0 z-40 h-full bg-surface-900
-                        md:relative md:translate-x-0 md:transform-none md:[content-visibility:visible]
+                        md:relative md:translate-x-0 md:transform-none
                         fixed inset-y-0 left-0 transform transition-transform duration-150
-                        ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full [content-visibility:hidden]'}
+                        ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
                         ${isZenMode ? 'hidden md:hidden' : ''}
                       `}
+                      style={isCompact && !showMobileSidebar
+                        ? { contentVisibility: 'hidden', containIntrinsicSize: '0 0' }
+                        : undefined}
                       aria-hidden={isCompact && !showMobileSidebar}
                     >
                     {!isZenMode && (
