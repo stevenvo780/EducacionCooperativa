@@ -33,7 +33,8 @@ import {
   isMarkdownName, isMarkdownMime,
   stripQueryAndHash, isExternalMarkdownHref, isBrowserNavigationHref,
   normalizeRelativeMarkdownPath, ensureMarkdownCandidateNames,
-  buildWorkspaceAwarePathCandidates, extractWorkspaceSegments, generateId
+  buildWorkspaceAwarePathCandidates, extractWorkspaceSegments, generateId,
+  hasKatexContent
 } from '@/components/mosaic-editor/utils';
 import { useEditorSearch } from '@/components/mosaic-editor/useEditorSearch';
 import { useEditorUI } from '@/components/mosaic-editor/useEditorUI';
@@ -41,7 +42,10 @@ import { useEditorModals } from '@/components/mosaic-editor/useEditorModals';
 import { useEditorSSEStream } from '@/components/mosaic-editor/useEditorSSEStream';
 import { useSemanticStateSyncer } from '@/components/mosaic-editor/useSemanticStateSyncer';
 import { useCompanionSTSync } from '@/components/mosaic-editor/useCompanionSTSync';
-import { MarkdownPreview } from '@/components/mosaic-editor/MarkdownPreview';
+const MarkdownPreview = dynamic(
+  () => import('@/components/mosaic-editor/MarkdownPreview').then((m) => m.MarkdownPreview),
+  { ssr: false }
+);
 import { mermaidCodeBlockDescriptor } from '@/components/mosaic-editor/MermaidCodeBlockEditor';
 import { useKatexOverlayDecorations } from '@/components/mosaic-editor/useKatexOverlayDecorations';
 import { mosaicEditorStyles } from '@/components/mosaic-editor/styles';
@@ -55,7 +59,6 @@ import { useMosaicSemanticActions } from '@/components/mosaic-editor/useMosaicSe
 import { MosaicToolbarContents, type ToolbarGroupKey } from '@/components/mosaic-editor/MosaicToolbarContents';
 import { FilePreviewPane } from '@/components/mosaic-editor/FilePreviewPane';
 import clsx from 'clsx';
-import 'katex/dist/katex.min.css';
 
 import { createSnippet } from '@/services/snippetApi';
 import { fetchZod } from '@/lib/fetch-zod';
@@ -1522,8 +1525,9 @@ export default function MosaicEditor({
     setSnippetDraft(null);
   }, [currentWorkspaceId, setSemanticNotice, setSnippetDraft]);
 
-  // Obsidian-style inline LaTeX rendering (extracted to hook)
-  useKatexOverlayDecorations({ editorShellRef, viewMode });
+  const docNeedsKatex = useMemo(() => hasKatexContent(statsContent), [statsContent]);
+
+  useKatexOverlayDecorations({ editorShellRef, viewMode, enabled: docNeedsKatex });
 
   // Disable native browser spellcheck on MDXEditor's contentEditable so only our
   // LinterPlugin underlines are shown (avoids conflicting red wavy + yellow marks).

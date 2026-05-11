@@ -1,19 +1,42 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import { AlertTriangle } from 'lucide-react';
+import type { PluggableList } from 'unified';
 import MermaidDiagram from '@/components/MermaidDiagram';
 import {
   convertWikiLinksToMarkdown,
+  hasKatexContent,
   isBrowserNavigationHref,
   isExternalMarkdownHref,
   unescapeLatex
 } from './utils';
+
+type RemarkMathModule = typeof import('remark-math');
+type RehypeKatexModule = typeof import('rehype-katex');
+
+let mathPluginsPromise: Promise<{ remarkMath: RemarkMathModule['default']; rehypeKatex: RehypeKatexModule['default'] }> | null = null;
+let cachedMathPlugins: { remarkMath: RemarkMathModule['default']; rehypeKatex: RehypeKatexModule['default'] } | null = null;
+
+const loadMathPlugins = async (): Promise<{ remarkMath: RemarkMathModule['default']; rehypeKatex: RehypeKatexModule['default'] }> => {
+  if (cachedMathPlugins) return cachedMathPlugins;
+  if (!mathPluginsPromise) {
+    mathPluginsPromise = Promise.all([
+      import('remark-math'),
+      import('rehype-katex')
+    ]).then(([rm, rk]) => {
+      cachedMathPlugins = {
+        remarkMath: rm.default,
+        rehypeKatex: rk.default
+      };
+      return cachedMathPlugins;
+    });
+  }
+  return mathPluginsPromise;
+};
 
 class DiagramErrorBoundary extends React.Component<
   { children: React.ReactNode; fallback: string },
@@ -84,11 +107,36 @@ export const MarkdownPreview = React.memo(function MarkdownPreview({
     [content]
   );
 
+  const needsMath = useMemo(() => hasKatexContent(processed), [processed]);
+  const [mathPlugins, setMathPlugins] = useState<{ remarkMath: RemarkMathModule['default']; rehypeKatex: RehypeKatexModule['default'] } | null>(cachedMathPlugins);
+
+  useEffect(() => {
+    if (!needsMath) return;
+    if (mathPlugins) return;
+    let cancelled = false;
+    void loadMathPlugins().then((plugins) => {
+      if (!cancelled) setMathPlugins(plugins);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsMath, mathPlugins]);
+
+  const remarkPlugins = useMemo<PluggableList>(() => {
+    if (needsMath && mathPlugins) return [mathPlugins.remarkMath, remarkGfm];
+    return [remarkGfm];
+  }, [needsMath, mathPlugins]);
+
+  const rehypePlugins = useMemo<PluggableList>(() => {
+    if (needsMath && mathPlugins) return [rehypeRaw, mathPlugins.rehypeKatex];
+    return [rehypeRaw];
+  }, [needsMath, mathPlugins]);
+
   return (
     <div className="markdown-preview-container overflow-auto h-full">
       <ReactMarkdown
-        remarkPlugins={[remarkMath, remarkGfm]}
-        rehypePlugins={[rehypeRaw, rehypeKatex]}
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
         components={{
           pre({ children }) {
             const childArray = React.Children.toArray(children);

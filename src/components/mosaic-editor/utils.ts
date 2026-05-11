@@ -6,6 +6,24 @@ export const isMarkdownName = (name?: string) => {
 };
 
 export const isMarkdownMime = (mime?: string) => (mime ?? '').toLowerCase().includes('markdown');
+
+const KATEX_PATTERNS: readonly RegExp[] = [
+  /\$\$[\s\S]+?\$\$/,
+  /(?<!\$)\$[^$\n]+?\$(?!\$)/,
+  /\\\$\\\$[\s\S]+?\\\$\\\$/,
+  /```math\b/,
+  /\\begin\s*\{[a-zA-Z*]+\}/
+];
+
+export const hasKatexContent = (md: string): boolean => {
+  if (!md) return false;
+  return KATEX_PATTERNS.some((re) => re.test(md));
+};
+
+export const hasMermaidContent = (md: string): boolean => {
+  if (!md) return false;
+  return /```\s*mermaid\b/.test(md);
+};
 export const isImageMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('image/');
 export const isVideoMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('video/');
 export const isAudioMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('audio/');
