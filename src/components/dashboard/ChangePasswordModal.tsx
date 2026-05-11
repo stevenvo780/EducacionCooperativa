@@ -72,8 +72,14 @@ export default function ChangePasswordModal({
                                 <Key className="w-5 h-5 text-mandy-400" />
                                 Cambiar Contraseña
                             </h2>
-                            <button onClick={onClose} className="p-1 hover:bg-surface-700 rounded-full text-surface-400">
-                                <X className="w-4 h-4" />
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                aria-label="Cerrar"
+                                title="Cerrar"
+                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-surface-400 hover:bg-surface-700 hover:text-white transition"
+                            >
+                                <X className="w-5 h-5" />
                             </button>
                         </div>
 

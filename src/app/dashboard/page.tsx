@@ -1500,6 +1500,15 @@ function DashboardContent() {
             const matchesShortcut = (code: string, key: string) => e.code === code || normalizedKey === key;
             const target = e.target instanceof HTMLElement ? e.target : null;
             const targetIsTerminal = Boolean(target?.closest('.xterm, .xterm-screen, .xterm-helper-textarea'));
+            const targetIsEditable = Boolean(
+                target && (
+                    target.tagName === 'INPUT'
+                    || target.tagName === 'TEXTAREA'
+                    || target.tagName === 'SELECT'
+                    || target.isContentEditable
+                    || target.closest('[contenteditable="true"]')
+                )
+            );
             const hasBlockingOverlay = Boolean(
                 dialogConfig
                 || showNewFileModal
@@ -1533,6 +1542,11 @@ function DashboardContent() {
                     setShowKeyboardHelp(true);
                     return;
                 }
+            }
+
+            if (chordActive && targetIsEditable) {
+                clearShortcutChord();
+                return;
             }
 
             if (chordActive) {
@@ -1610,6 +1624,10 @@ function DashboardContent() {
             }
 
             if (hasBlockingOverlay || showQuickSearch || !hasPrimaryModifier) {
+                return;
+            }
+
+            if (targetIsEditable && !targetIsTerminal) {
                 return;
             }
 

@@ -168,10 +168,11 @@ export default function SettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-7 w-7 items-center justify-center rounded text-surface-400 hover:bg-surface-800/70 hover:text-white"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-surface-400 hover:bg-surface-800/70 hover:text-white"
               aria-label="Cerrar"
+              title="Cerrar"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
           </header>
 
