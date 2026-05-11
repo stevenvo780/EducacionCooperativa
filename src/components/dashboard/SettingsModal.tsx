@@ -48,6 +48,7 @@ import {
   type ModelCatalog
 } from '@/lib/agora-ai/modelCatalog';
 import type { AgentAccessCapability, AgentAccessPolicy, AIProvider } from '@/lib/agora-ai/types';
+import AgentApiKeysPanel from '@/components/dashboard/AgentApiKeysPanel';
 import type { SettingsSectionId } from '@/lib/settings-events';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EMPTY_SEMANTIC_WORKSPACE_STATE } from '@/lib/semantic/workspace-state';
@@ -488,6 +489,8 @@ function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
           </span>
         </label>
       </div>
+
+      <AgentApiKeysPanel />
 
       <div className="border-t border-surface-700/40 pt-4">
         <div className="mb-2 flex items-center justify-between gap-2">
