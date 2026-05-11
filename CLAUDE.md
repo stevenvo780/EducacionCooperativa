@@ -25,8 +25,9 @@ Stack:
 - **Git por workspace**: Forgejo en NAS. Cada workspace = repo en la org
   `agora`. El user/CLI puede clonar via HTTPS + token.
 - **Workers**: contenedores Docker `edu-worker-<wsId>` corriendo en
-  `stev-server`. Cada uno expone una terminal y monta `/workspace`.
-- **Daemon de sync**: `agora-host-sync` corre en `stev-server` como systemd
+  `humanizar2` (host activo; reemplazó al viejo `stev-server`). Cada uno
+  expone una terminal y monta `/workspace`.
+- **Daemon de sync**: `agora-host-sync` corre en `humanizar2` como systemd
   unit; mantiene el `/workspace` de cada worker espejado contra MinIO+Firestore
   bidireccionalmente y revive contenedores caídos.
 
@@ -37,8 +38,8 @@ Stack:
         ↕                                       ↕
         └─────────── RTDB pings ────────────────┘
                         ↕
-   stev-server  ──  agora-host-sync.service  ──→  workers Docker (volumen
-                                                  /home/stev/edu-worker/
+   humanizar2   ──  agora-host-sync.service  ──→  workers Docker (volumen
+                                                  /home/humanizar/edu-worker/
                                                   workspaces/<wsId>/)
 ```
 
@@ -71,20 +72,34 @@ Reglas que ya aprendí (no reintroducir bugs):
 
 ## 4. Despliegue
 
+Desde el split a 7 repos (commit `858d0ec`), AgoraFront consume
+`@agora/contracts`, `@stevenvo780/st-lang` y `@stevenvo780/autologic`
+desde el registro npm — ya **no** hay deps `file:../*` ni el script
+histórico `scripts/prepare-deploy.mjs`. El deploy es un comando único:
+
 ```bash
-npm run typecheck && npm run build
-vercel --prod --yes
-# después de "● Ready", obtén la URL nueva:
-vercel ls --prod | head -7 | tail -1
-# y aliasea a producción:
+npm run typecheck && npm run build           # sanity local antes de subir
+vercel deploy --prod --yes                   # build + deploy en Vercel
+# si el alias automático a producción no está, aliasea manualmente:
 vercel alias set <visormarkdown-XXX>.vercel.app agora.elenxos.com
 ```
+
+`vercel deploy --prod` devuelve la URL `Production: https://visormarkdown-…`
+y, cuando el aliasing automático está configurado, `Aliased: https://agora.elenxos.com`.
 
 Una sola vez tras tocar env vars Vercel:
 ```bash
 # Si cambias env, redeploy es necesario para que las funciones la lean.
 vercel env ls production
 printf 'valor-sin-newline' | vercel env add NOMBRE production
+```
+
+Para el backend (Cloud Run), ver `../AgoraBack/CLAUDE.md`. Comando
+equivalente:
+```bash
+cd ../AgoraBack
+npm run typecheck
+gcloud run deploy agora-backend --source . --region us-central1
 ```
 
 ## 5. Operación de la infraestructura
@@ -94,16 +109,18 @@ Acceso a hosts y servicios: **`.claude/secrets.md`** (gitignored).
 Hosts principales:
 - **NAS** — `nas@100.98.67.189` (NetBird). Hostea MinIO, Forgejo, Postgres,
   filebrowser. `docker exec agora-{minio,forgejo,...}` para acción directa.
-- **stev-server** — `stev@100.98.8.227` (NetBird) o LAN fallback. Hostea
-  todos los workers `edu-worker-*` y el daemon `agora-host-sync`. Acceso por
-  jump host (NAS) habitual: `ssh nas ssh stev-server '...'`.
+- **humanizar2** — `humanizar@100.98.5.11` (NetBird, alias SSH
+  `humanizar2`). Host activo: hostea todos los workers `edu-worker-*`,
+  el daemon `agora-host-sync` y el `edu-hub`. Acceso por jump host (NAS):
+  `ssh nas ssh humanizar2 '...'`. Reemplazó a `stev-server`
+  (`stev@100.98.8.227`) como host de producción.
 
 Comandos diagnóstico que uso seguido (sin secretos en este file):
 
 ```bash
-# Estado del daemon de sync
+# Estado del daemon de sync (ejecutar dentro de humanizar2)
 systemctl status agora-host-sync
-tail -50 /home/stev/logs/agora-host-sync.log
+tail -50 /home/humanizar/logs/agora-host-sync.log
 
 # Workers
 docker ps --filter name=edu-worker --format 'table {{.Names}}\t{{.Status}}'
@@ -117,12 +134,12 @@ curl -s https://agora.elenxos.com/api/diag | python3 -m json.tool
 
 ## 6. Workers — comportamiento conocido
 
-- Docker 28.2.2 en stev-server crashea ocasionalmente con un bug HTTP/2
+- Docker 28.2.2 en humanizar2 crashea ocasionalmente con un bug HTTP/2
   (`golang.org/x/net/http2.(*Framer).ReadFrame`). Cuando crashea, todos los
   workers reciben SIGTERM→SIGKILL. `agora-host-sync` los revive en el siguiente
   ciclo (cada 5s).
 - Para añadir un worker manualmente sin sudo: replica `docker run` con
-  `--network=host`, `--user=estudiante`, mounts en `/home/stev/edu-worker/...`,
+  `--network=host`, `--user=estudiante`, mounts en `/home/humanizar/edu-worker/...`,
   env igual a otro worker pero con `WORKER_TOKEN=<wsId>`.
 - Existe `edu-worker-manager add <wsId>` que requiere sudo.
 
@@ -159,7 +176,7 @@ curl -s https://agora.elenxos.com/api/diag | python3 -m json.tool
 ## 9. Tareas pendientes recurrentes
 
 Revisar y comunicar al user si reaparecen:
-- **Docker daemon** crashes recurrentes en stev-server — recomendar `apt
+- **Docker daemon** crashes recurrentes en humanizar2 — recomendar `apt
   upgrade docker-ce` cuando haya ventana de mantenimiento.
 - **MinIO basura histórica** (~32 objetos en raíz: `21Vu.../.git/...`,
   `dev-user-123/`, `groups/`, `system/`) — no afecta nada pero ensucia.
