@@ -504,19 +504,6 @@ function DashboardContent() {
     const [bottomDockOpen, setBottomDockOpen] = useState(false);
     const [dockInitialTab, setDockInitialTab] = useState<string>('terminal');
     const [rightPanelOpen, setRightPanelOpen] = useState(false);
-    const [mobileOverlayReady, setMobileOverlayReady] = useState(false);
-    useEffect(() => {
-        const ric = typeof window.requestIdleCallback === 'function'
-            ? window.requestIdleCallback(() => setMobileOverlayReady(true), { timeout: 1000 })
-            : window.setTimeout(() => setMobileOverlayReady(true), 800);
-        return () => {
-            if (typeof window.cancelIdleCallback === 'function' && typeof ric === 'number') {
-                window.cancelIdleCallback(ric);
-            } else {
-                window.clearTimeout(ric as number);
-            }
-        };
-    }, []);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -3052,7 +3039,7 @@ function DashboardContent() {
                           </>
                         )}
                       </PanelGroup>
-                      {rightPanelOpen && isCompact && mobileOverlayReady && (
+                      {rightPanelOpen && isCompact && (
                         <div
                           className="fixed inset-x-0 bottom-0 top-11 z-40 flex bg-surface-900"
                           role="dialog"
