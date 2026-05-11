@@ -128,6 +128,18 @@ class STDefinitionsRegistryClass {
     return () => { this._listeners.delete(listener); };
   }
 
+  clear(): void {
+    if (this._fileDefinitions.size === 0 && this._nameIndex.size === 0 && !this._lastConflictsByVersion) {
+      return;
+    }
+    this._fileDefinitions.clear();
+    this._nameIndex.clear();
+    this._nameIndexDirty = true;
+    this._lastConflictsByVersion = null;
+    this._version += 1;
+    this._notify();
+  }
+
   extractFromSource(code: string, fileId: string): STDefinition[] {
     return extractDefinitions(code, fileId);
   }

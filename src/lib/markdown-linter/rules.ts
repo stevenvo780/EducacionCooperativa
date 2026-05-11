@@ -1312,14 +1312,52 @@ export const sentenceStartConjunctionRule: LinterRule = {
 
 // 13. CONSISTENCY — Reglas adicionales
 
-const TERMINOLOGY_PAIRS: Array<[RegExp, RegExp, string, string]> = [
-  [/\bcap\.\s/gi, /\bcapítulo\s/gi, 'cap.', 'capítulo'],
-  [/\bfig\.\s/gi, /\bfigura\s/gi, 'fig.', 'figura'],
-  [/\btab\.\s/gi, /\btabla\s/gi, 'tab.', 'tabla'],
-  [/\bec\.\s/gi, /\becuación\s/gi, 'ec.', 'ecuación'],
-  [/\bpág\.\s/gi, /\bpágina\s/gi, 'pág.', 'página'],
-  [/\bsec\.\s/gi, /\bsección\s/gi, 'sec.', 'sección']
+type TerminologyPair = {
+  abbr: string;
+  full: string;
+};
+
+const TERMINOLOGY_PAIRS: TerminologyPair[] = [
+  { abbr: 'cap.', full: 'capítulo' },
+  { abbr: 'fig.', full: 'figura' },
+  { abbr: 'tab.', full: 'tabla' },
+  { abbr: 'ec.', full: 'ecuación' },
+  { abbr: 'pág.', full: 'página' },
+  { abbr: 'sec.', full: 'sección' }
 ];
+
+type TerminologyMatchKind = 'abbr' | 'full';
+
+type TerminologyDictEntry = { pairIdx: number; kind: TerminologyMatchKind };
+
+const TERMINOLOGY_DICT: Map<string, TerminologyDictEntry> = (() => {
+  const dict = new Map<string, TerminologyDictEntry>();
+  for (let i = 0; i < TERMINOLOGY_PAIRS.length; i++) {
+    const pair = TERMINOLOGY_PAIRS[i];
+    if (!pair) continue;
+    dict.set(pair.abbr.toLowerCase(), { pairIdx: i, kind: 'abbr' });
+    dict.set(pair.full.toLowerCase(), { pairIdx: i, kind: 'full' });
+  }
+  return dict;
+})();
+
+const TERMINOLOGY_MAX_TOKEN_LEN = (() => {
+  let max = 0;
+  for (const key of TERMINOLOGY_DICT.keys()) {
+    if (key.length > max) max = key.length;
+  }
+  return max;
+})();
+
+function isTerminologyTokenChar(ch: string): boolean {
+  if (ch === '.') return true;
+  const code = ch.charCodeAt(0);
+  if (code >= 48 && code <= 57) return true;
+  if (code >= 65 && code <= 90) return true;
+  if (code >= 97 && code <= 122) return true;
+  if ('áéíóúüñÁÉÍÓÚÜÑ'.indexOf(ch) >= 0) return true;
+  return false;
+}
 
 export const inconsistentTerminologyRule: LinterRule = {
   id: 'consistency_terminology',
@@ -1332,35 +1370,77 @@ export const inconsistentTerminologyRule: LinterRule = {
     const results: LinterDiagnostic[] = [];
     const lines = ctx?.lines ?? text.split('\n');
     const codeLines = ctx?.codeBlockLines ?? getCodeBlockLines(lines);
-    const plainText = lines.filter((_, i) => !codeLines.has(i)).join('\n');
 
-    for (const [abbrRe, fullRe, abbrLabel, fullLabel] of TERMINOLOGY_PAIRS) {
-      abbrRe.lastIndex = 0;
-      fullRe.lastIndex = 0;
-      const hasAbbr = abbrRe.test(plainText);
-      const hasFull = fullRe.test(plainText);
+    const seenAbbr = new Array<boolean>(TERMINOLOGY_PAIRS.length).fill(false);
+    const seenFull = new Array<boolean>(TERMINOLOGY_PAIRS.length).fill(false);
+    const firstAbbrHit = new Array<{ lineIdx: number; column: number } | null>(TERMINOLOGY_PAIRS.length).fill(null);
 
-      if (hasAbbr && hasFull) {
-        // Find the first occurrence of the abbreviation to mark
-        for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-          if (codeLines.has(lineIdx)) continue;
-          const re = new RegExp(`\\b${abbrLabel.replace('.', '\\.')}\\s`, 'i');
-          const m = re.exec(lineAt(lines, lineIdx));
-          if (m) {
-            results.push({
-              message: `Mezcla de "${abbrLabel}" y "${fullLabel}" en el documento.`,
-              suggestion: `Elige un estilo consistente: usa siempre "${abbrLabel}" o siempre "${fullLabel}".`,
-              severity: 'info',
-              line: lineIdx + 1,
-              column: m.index + 1,
-              endLine: lineIdx + 1,
-              endColumn: m.index + 1 + abbrLabel.length,
-              source: 'Consistency'
-            });
-            break;
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+      if (codeLines.has(lineIdx)) continue;
+      const line = lineAt(lines, lineIdx);
+      const lineLower = line.toLowerCase();
+      const len = lineLower.length;
+
+      let i = 0;
+      while (i < len) {
+        const prevIsBoundary = i === 0 || !isTerminologyTokenChar(lineLower.charAt(i - 1));
+        if (!prevIsBoundary) {
+          i++;
+          continue;
+        }
+        let tokenEnd = i;
+        while (tokenEnd < len && tokenEnd - i < TERMINOLOGY_MAX_TOKEN_LEN && isTerminologyTokenChar(lineLower.charAt(tokenEnd))) {
+          tokenEnd++;
+        }
+        if (tokenEnd === i) {
+          i++;
+          continue;
+        }
+
+        let matched = false;
+        for (let endTry = tokenEnd; endTry > i; endTry--) {
+          const slice = lineLower.slice(i, endTry);
+          const entry = TERMINOLOGY_DICT.get(slice);
+          if (!entry) continue;
+          const nextChar = endTry < len ? lineLower.charAt(endTry) : ' ';
+          if (entry.kind === 'abbr') {
+            if (nextChar !== ' ' && nextChar !== '\t') continue;
+          } else {
+            if (isTerminologyTokenChar(nextChar)) continue;
           }
+          if (entry.kind === 'abbr') {
+            if (!seenAbbr[entry.pairIdx]) {
+              seenAbbr[entry.pairIdx] = true;
+              firstAbbrHit[entry.pairIdx] = { lineIdx, column: i };
+            }
+          } else {
+            seenFull[entry.pairIdx] = true;
+          }
+          matched = true;
+          i = endTry;
+          break;
+        }
+        if (!matched) {
+          i = tokenEnd;
         }
       }
+    }
+
+    for (let p = 0; p < TERMINOLOGY_PAIRS.length; p++) {
+      if (!seenAbbr[p] || !seenFull[p]) continue;
+      const hit = firstAbbrHit[p];
+      const pair = TERMINOLOGY_PAIRS[p];
+      if (!hit || !pair) continue;
+      results.push({
+        message: `Mezcla de "${pair.abbr}" y "${pair.full}" en el documento.`,
+        suggestion: `Elige un estilo consistente: usa siempre "${pair.abbr}" o siempre "${pair.full}".`,
+        severity: 'info',
+        line: hit.lineIdx + 1,
+        column: hit.column + 1,
+        endLine: hit.lineIdx + 1,
+        endColumn: hit.column + 1 + pair.abbr.length,
+        source: 'Consistency'
+      });
     }
     return results;
   }

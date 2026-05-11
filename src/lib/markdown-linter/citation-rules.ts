@@ -10,6 +10,33 @@ import {
 const BIB_HEADING_REGEX = /^#{1,3}\s+(referencias?|bibliografía|bibliography|fuentes?|works\s+cited|literatura\s+citada)\s*$/i;
 const BIB_ENTRY_REGEX = /^([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:[A-Za-záéíóúüñ\s,\.]+)?)\s*\((\d{4}[a-z]?)\)/;
 
+const CITATION_LINE_MAX_LEN = 4000;
+const CITATION_SPECIAL_DENSITY_LIMIT = 50;
+
+function isAdversarialCitationLine(line: string): boolean {
+  if (line.length > CITATION_LINE_MAX_LEN) return true;
+  let specials = 0;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line.charCodeAt(i);
+    if (
+      ch === 0x28 ||
+      ch === 0x29 ||
+      ch === 0x2c ||
+      ch === 0x2e ||
+      ch === 0x26 ||
+      ch === 0x5b ||
+      ch === 0x5d ||
+      ch === 0x2d ||
+      ch === 0x5c ||
+      ch === 0x2f
+    ) {
+      specials++;
+      if (specials > CITATION_SPECIAL_DENSITY_LIMIT) return true;
+    }
+  }
+  return false;
+}
+
 function findBibliographySection(lines: readonly string[]): number {
   for (let i = 0; i < lines.length; i++) {
     if (BIB_HEADING_REGEX.test(lineAt(lines, i).trim())) return i;
@@ -44,8 +71,9 @@ function getBibEntries(lines: readonly string[], bibStart: number, ctx?: LinterR
 }
 
 function parseInTextCitation(raw: string): { key: string; raw: string } | null {
+  if (raw.length > 200) return null;
   const parenMatch = raw.match(
-    /\(([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+(?:y|and|&)\s+[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+)?(?:\s+et\s+al\.?)?),\s*(\d{4}[a-z]?)(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/
+    /\(([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+(?:y|and|&)\s+[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+)?(?:\s+et\s+al\.?)?),\s*(\d{4}[a-z]?)(?:,\s*p{1,2}(?:ág)?\.\s*[\d-]{1,30})?\)/
   );
   if (parenMatch) {
     const author = (parenMatch[1] ?? '').split(/\s+(?:y|and|&)\s+/)[0]?.split(/\s+et\s+al/)[0]?.trim();
@@ -55,7 +83,7 @@ function parseInTextCitation(raw: string): { key: string; raw: string } | null {
   }
 
   const narrativeMatch = raw.match(
-    /\b([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?)\s*\((\d{4}[a-z]?)(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/
+    /\b([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?)\s*\((\d{4}[a-z]?)(?:,\s*p{1,2}(?:ág)?\.\s*[\d-]{1,30})?\)/
   );
   if (narrativeMatch) {
     const author = narrativeMatch[1];
@@ -86,6 +114,7 @@ export const apaMalformedRule: LinterRule = {
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
       const line = lineAt(lines, lineIdx);
+      if (isAdversarialCitationLine(line)) continue;
 
       let match;
       while ((match = missingComma.exec(line)) !== null) {
@@ -151,12 +180,13 @@ export const missingBibliographyRule: LinterRule = {
     if (entries.length === 0) return results;
     const bibKeys = new Set(entries.map((e) => e.key));
 
-    const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ\s,\.&]+,?\s*\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
-    const narrativeRegex = /\b[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
+    const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ\s,\.&]+,?\s*\d{4}[a-z]?(?:,\s*p{1,2}(?:ág)?\.\s*[\d-]{1,30})?\)/g;
+    const narrativeRegex = /\b[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?(?:,\s*p{1,2}(?:ág)?\.\s*[\d-]{1,30})?\)/g;
 
     for (let lineIdx = 0; lineIdx < Math.min(bibStart, lines.length); lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
       const line = lineAt(lines, lineIdx);
+      if (isAdversarialCitationLine(line)) continue;
 
       for (const regex of [citationRegex, narrativeRegex]) {
         let match;
@@ -199,12 +229,13 @@ export const orphanBibliographyRule: LinterRule = {
     const bibEntries = getBibEntries(lines, bibStart, ctx);
 
     const citedKeys = new Set<string>();
-    const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ\s,\.&]+,?\s*\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
-    const narrativeRegex = /\b[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?(?:,\s*p[pág]+\.\s*[\d\-]+)?\)/g;
+    const citationRegex = /\([A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ\s,\.&]+,?\s*\d{4}[a-z]?(?:,\s*p{1,2}(?:ág)?\.\s*[\d-]{1,30})?\)/g;
+    const narrativeRegex = /\b[A-ZÁÉÍÓÚÜÑ][A-Za-záéíóúüñ]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?(?:,\s*p{1,2}(?:ág)?\.\s*[\d-]{1,30})?\)/g;
 
     for (let lineIdx = 0; lineIdx < bibStart; lineIdx++) {
       if (codeLines.has(lineIdx)) continue;
       const line = lineAt(lines, lineIdx);
+      if (isAdversarialCitationLine(line)) continue;
       for (const regex of [citationRegex, narrativeRegex]) {
         let match;
         while ((match = regex.exec(line)) !== null) {

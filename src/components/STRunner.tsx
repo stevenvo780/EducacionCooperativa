@@ -426,11 +426,6 @@ export default function STRunner({
       return;
     }
     const fileId = 'st-runner-scratch';
-    const TABLET_PARSE_LIMIT = 30_000;
-    const skipParse = isTouchTablet && code.length > TABLET_PARSE_LIMIT;
-    if (skipParse) {
-      return () => { STDefinitionsRegistry.removeFile(fileId); };
-    }
     const debounceMs = code.length > 5_000 ? 800 : 200;
     let cancelled = false;
     const timer = window.setTimeout(() => {

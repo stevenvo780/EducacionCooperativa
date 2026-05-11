@@ -469,7 +469,7 @@ export const buildTheoryGraphFromSemanticState = (
     sourceDocument: options?.sourceDocument
   };
 
-  graph.diagnostics = verifyTheoryGraph(graph);
+  graph.diagnostics = verifyTheoryGraphStatic(graph);
   return graph;
 };
 
@@ -878,7 +878,7 @@ export const buildTheoryGraphFromSTSource = (
     diagnostics,
     profileIds: Array.from(profiles.values())
   };
-  graph.diagnostics = verifyTheoryGraph(graph);
+  graph.diagnostics = verifyTheoryGraphStatic(graph);
   return graph;
 };
 
@@ -902,7 +902,65 @@ const stDiagnosticToTheoryGraphDiagnostic = (diagnostic: STDiagnostic): TheoryGr
   }]
 });
 
-export const verifyTheoryGraph = (graph: TheoryGraph): TheoryGraphDiagnostic[] => {
+export interface PairwiseClaimSnapshot {
+  id: string;
+  label: string;
+  formula: string;
+  logicProfile: string;
+  sourceRefs: SemanticSourceRef[];
+}
+
+export const collectPairwiseClaimSnapshots = (graph: TheoryGraph): PairwiseClaimSnapshot[] => {
+  const snapshots: PairwiseClaimSnapshot[] = [];
+  graph.nodes.forEach((node) => {
+    if (node.kind !== 'claim') return;
+    if (!node.formula || !node.logicProfile) return;
+    snapshots.push({
+      id: node.id,
+      label: node.label,
+      formula: node.formula,
+      logicProfile: node.logicProfile,
+      sourceRefs: node.sourceRefs
+    });
+  });
+  return snapshots;
+};
+
+export const runPairwiseSatisfiabilityCheck = (
+  left: PairwiseClaimSnapshot,
+  right: PairwiseClaimSnapshot
+): TheoryGraphDiagnostic | null => {
+  if (left.logicProfile !== right.logicProfile) return null;
+  try {
+    const leftFormula = canonicalizeSTFormula(left.formula, left.logicProfile);
+    const rightFormula = canonicalizeSTFormula(right.formula, right.logicProfile);
+    const result = evaluate(
+      `logic ${left.logicProfile}\ncheck satisfiable ((${leftFormula}) & (${rightFormula}))`
+    );
+    if (result.results[0]?.status !== 'unsatisfiable') return null;
+    return {
+      id: createDiagnosticId('contradiction', [left.id, right.id, left.logicProfile]),
+      type: 'contradiction',
+      severity: 'warning',
+      message: `Los claims "${left.label}" y "${right.label}" no son satisfacibles juntos en ${left.logicProfile}.`,
+      nodeIds: [left.id, right.id],
+      edgeIds: [],
+      quickFixes: [{
+        id: createStableSemanticId('quick-fix', 'mark-dialectical-tension', left.id, right.id),
+        kind: 'mark-dialectical-tension',
+        label: 'Marcar tensión dialéctica',
+        description: 'Conserva ambos claims y explicita la tensión como parte del argumento.',
+        sourceNodeId: left.id,
+        targetNodeId: right.id
+      }],
+      sourceRefs: [...left.sourceRefs, ...right.sourceRefs]
+    };
+  } catch {
+    return null;
+  }
+};
+
+export const verifyTheoryGraphStatic = (graph: TheoryGraph): TheoryGraphDiagnostic[] => {
   const diagnostics: TheoryGraphDiagnostic[] = [];
   const incoming = new Map<string, TheoryGraphEdge[]>();
   const outgoing = new Map<string, TheoryGraphEdge[]>();
@@ -1051,53 +1109,22 @@ export const verifyTheoryGraph = (graph: TheoryGraph): TheoryGraphDiagnostic[] =
     });
   });
 
-  // Cap defensivo: con N claims con fórmula esto era O(N²) × ST evaluate síncrono.
-  // Con N=18 = 153 ejecuciones del runtime ST en main thread. Para N>30 era inviable
-  // en tablets. Saltamos las verificaciones par-a-par de satisfacibilidad cuando
-  // el costo total estimado supera el umbral. Las contradicciones quedan
-  // detectables on-demand desde otro flujo.
-  const formulaClaims = claimNodes.filter((node) => node.formula && node.logicProfile);
-  const PAIRWISE_VERIFY_LIMIT = 25;
-  if (formulaClaims.length <= PAIRWISE_VERIFY_LIMIT) {
-    for (let index = 0; index < formulaClaims.length; index += 1) {
-      const left = formulaClaims[index];
-      if (!left) continue;
-      for (let next = index + 1; next < formulaClaims.length; next += 1) {
-        const right = formulaClaims[next];
-        if (!right) continue;
-        if (!left.logicProfile || left.logicProfile !== right.logicProfile || !left.formula || !right.formula) continue;
-        try {
-          const leftFormula = canonicalizeSTFormula(left.formula, left.logicProfile);
-          const rightFormula = canonicalizeSTFormula(right.formula, right.logicProfile);
-          const result = evaluate(
-            `logic ${left.logicProfile}\ncheck satisfiable ((${leftFormula}) & (${rightFormula}))`
-          );
-          if (result.results[0]?.status === 'unsatisfiable') {
-            diagnostics.push({
-              id: createDiagnosticId('contradiction', [left.id, right.id, left.logicProfile]),
-              type: 'contradiction',
-              severity: 'warning',
-              message: `Los claims "${left.label}" y "${right.label}" no son satisfacibles juntos en ${left.logicProfile}.`,
-              nodeIds: [left.id, right.id],
-              edgeIds: [],
-              quickFixes: [{
-                id: createStableSemanticId('quick-fix', 'mark-dialectical-tension', left.id, right.id),
-                kind: 'mark-dialectical-tension',
-                label: 'Marcar tensión dialéctica',
-                description: 'Conserva ambos claims y explicita la tensión como parte del argumento.',
-                sourceNodeId: left.id,
-                targetNodeId: right.id
-              }],
-              sourceRefs: [...left.sourceRefs, ...right.sourceRefs]
-            });
-          }
-        } catch {
-          // Ignore verification failures for profiles/formulas the runtime cannot compare safely here.
-        }
-      }
+  return diagnostics;
+};
+
+export const verifyTheoryGraph = (graph: TheoryGraph): TheoryGraphDiagnostic[] => {
+  const diagnostics = verifyTheoryGraphStatic(graph);
+  const snapshots = collectPairwiseClaimSnapshots(graph);
+  for (let index = 0; index < snapshots.length; index += 1) {
+    const left = snapshots[index];
+    if (!left) continue;
+    for (let next = index + 1; next < snapshots.length; next += 1) {
+      const right = snapshots[next];
+      if (!right) continue;
+      const diagnostic = runPairwiseSatisfiabilityCheck(left, right);
+      if (diagnostic) diagnostics.push(diagnostic);
     }
   }
-
   return diagnostics;
 };
 

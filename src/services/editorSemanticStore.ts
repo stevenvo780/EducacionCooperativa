@@ -16,6 +16,7 @@ import {
   type SemanticWorkspaceState
 } from '@/lib/semantic/workspace-state';
 import { createStableSemanticId } from '@/lib/semantic/ids';
+import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 
 export type {
   SemanticConceptRecord,
@@ -241,6 +242,7 @@ export const clearSemanticStoreCache = (workspaceId?: string) => {
     }
     memoryStateCache.clear();
     storeVersionByKey.clear();
+    STDefinitionsRegistry.clear();
     return;
   }
   const prefix = `editor-semantic:${workspaceId}:`;
@@ -267,15 +269,62 @@ const updateState = (
   return saveSemanticWorkspaceState(context, next);
 };
 
-// Index derivado de fragments por (selectionHash, kind, docId, conceptId)
-// y por stableKey. WeakMap por state para que se libere cuando el state
-// se reemplaza por el siguiente save. Antes el find era O(F) por cada
-// keystroke que dispara un mutator (relate, capture, etc). Para un
-// workspace con cientos de fragments y user tipeando rápido era visible.
 const fragmentLookupCache = new WeakMap<
   SemanticFragmentRecord[],
-  { byStableKey: Map<string, SemanticFragmentRecord>; bySemanticKey: Map<string, SemanticFragmentRecord> }
+  {
+    byId: Map<string, SemanticFragmentRecord>;
+    byStableKey: Map<string, SemanticFragmentRecord>;
+    bySemanticKey: Map<string, SemanticFragmentRecord>;
+  }
 >();
+
+const conceptLookupCache = new WeakMap<
+  SemanticConceptRecord[],
+  { byId: Map<string, SemanticConceptRecord>; byStableKey: Map<string, SemanticConceptRecord>; bySourceFragmentId: Map<string, SemanticConceptRecord> }
+>();
+
+const relationLookupCache = new WeakMap<
+  SemanticRelationRecord[],
+  { byId: Map<string, SemanticRelationRecord>; byStableKey: Map<string, SemanticRelationRecord>; byTriple: Set<string> }
+>();
+
+const relationTripleKey = (fragmentId: string, conceptId: string, relationType: SemanticRelationType) => (
+  `${fragmentId}::${conceptId}::${relationType}`
+);
+
+const getConceptLookup = (concepts: SemanticConceptRecord[]) => {
+  let cache = conceptLookupCache.get(concepts);
+  if (!cache) {
+    const byId = new Map<string, SemanticConceptRecord>();
+    const byStableKey = new Map<string, SemanticConceptRecord>();
+    const bySourceFragmentId = new Map<string, SemanticConceptRecord>();
+    for (const concept of concepts) {
+      byId.set(concept.id, concept);
+      if (concept.stableKey) byStableKey.set(concept.stableKey, concept);
+      if (concept.sourceFragmentId) bySourceFragmentId.set(concept.sourceFragmentId, concept);
+    }
+    cache = { byId, byStableKey, bySourceFragmentId };
+    conceptLookupCache.set(concepts, cache);
+  }
+  return cache;
+};
+
+const getRelationLookup = (relations: SemanticRelationRecord[]) => {
+  let cache = relationLookupCache.get(relations);
+  if (!cache) {
+    const byId = new Map<string, SemanticRelationRecord>();
+    const byStableKey = new Map<string, SemanticRelationRecord>();
+    const byTriple = new Set<string>();
+    for (const relation of relations) {
+      byId.set(relation.id, relation);
+      if (relation.stableKey) byStableKey.set(relation.stableKey, relation);
+      byTriple.add(relationTripleKey(relation.fragmentId, relation.conceptId, relation.relationType));
+    }
+    cache = { byId, byStableKey, byTriple };
+    relationLookupCache.set(relations, cache);
+  }
+  return cache;
+};
 
 const fragmentSemanticKey = (
   kind: SemanticFragmentKind,
@@ -287,16 +336,18 @@ const fragmentSemanticKey = (
 const getFragmentLookup = (fragments: SemanticFragmentRecord[]) => {
   let cache = fragmentLookupCache.get(fragments);
   if (!cache) {
+    const byId = new Map<string, SemanticFragmentRecord>();
     const byStableKey = new Map<string, SemanticFragmentRecord>();
     const bySemanticKey = new Map<string, SemanticFragmentRecord>();
     for (const fragment of fragments) {
+      byId.set(fragment.id, fragment);
       if (fragment.stableKey) byStableKey.set(fragment.stableKey, fragment);
       bySemanticKey.set(
         fragmentSemanticKey(fragment.kind, fragment.selectionHash, fragment.docId, fragment.conceptId),
         fragment
       );
     }
-    cache = { byStableKey, bySemanticKey };
+    cache = { byId, byStableKey, bySemanticKey };
     fragmentLookupCache.set(fragments, cache);
   }
   return cache;
@@ -386,6 +437,7 @@ const ensureFragment = (
     ...extra
   };
   state.fragments.unshift(fragment);
+  lookup.byId.set(fragment.id, fragment);
   if (fragment.stableKey) lookup.byStableKey.set(fragment.stableKey, fragment);
   lookup.bySemanticKey.set(
     fragmentSemanticKey(fragment.kind, fragment.selectionHash, fragment.docId, fragment.conceptId),
@@ -413,13 +465,14 @@ export const registerConceptFromSelection = (
     sourceFragment.selectionHash
   );
 
-  const existing = state.concepts.find((concept) => (
-    concept.stableKey === stableKey
-    || concept.id === stableKey
-    || concept.sourceFragmentId === sourceFragment.id
-  ));
+  const conceptLookup = getConceptLookup(state.concepts);
+  const existing = conceptLookup.byStableKey.get(stableKey)
+    || conceptLookup.byId.get(stableKey)
+    || conceptLookup.bySourceFragmentId.get(sourceFragment.id);
 
   if (existing) {
+    const prevStableKey = existing.stableKey;
+    const prevSourceFragmentId = existing.sourceFragmentId;
     existing.updatedAt = Date.now();
     existing.title = normalizedTitle;
     existing.entityKind = entityKind;
@@ -436,10 +489,20 @@ export const registerConceptFromSelection = (
     if (options?.logicProfile !== undefined) existing.logicProfile = options.logicProfile;
     if (options?.formula !== undefined) existing.formula = options.formula;
     if (confidence !== undefined) existing.confidence = confidence;
+    if (prevStableKey && prevStableKey !== existing.stableKey) {
+      conceptLookup.byStableKey.delete(prevStableKey);
+    }
+    if (existing.stableKey) conceptLookup.byStableKey.set(existing.stableKey, existing);
+    if (prevSourceFragmentId && prevSourceFragmentId !== existing.sourceFragmentId) {
+      conceptLookup.bySourceFragmentId.delete(prevSourceFragmentId);
+    }
+    if (existing.sourceFragmentId) {
+      conceptLookup.bySourceFragmentId.set(existing.sourceFragmentId, existing);
+    }
     return state;
   }
 
-  state.concepts.unshift({
+  const concept: SemanticConceptRecord = {
     id: stableKey,
     title: normalizedTitle,
     entityKind,
@@ -459,7 +522,11 @@ export const registerConceptFromSelection = (
     stableKey,
     sourceRefs: buildSourceRefs(payload),
     ...(confidence !== undefined ? { confidence } : {})
-  });
+  };
+  state.concepts.unshift(concept);
+  conceptLookup.byId.set(concept.id, concept);
+  if (concept.stableKey) conceptLookup.byStableKey.set(concept.stableKey, concept);
+  if (concept.sourceFragmentId) conceptLookup.bySourceFragmentId.set(concept.sourceFragmentId, concept);
 
   return state;
 });
@@ -525,7 +592,8 @@ export const relateSelectionToConcept = (
   conceptId: string,
   relationType: SemanticRelationType = 'supports'
 ) => updateState(context, (state) => {
-  const concept = state.concepts.find((item) => item.id === conceptId);
+  const conceptLookup = getConceptLookup(state.concepts);
+  const concept = conceptLookup.byId.get(conceptId);
   if (!concept) return state;
 
   const fragment = ensureFragment(state, 'relation', payload, {
@@ -544,13 +612,11 @@ export const relateSelectionToConcept = (
     concept.id,
     relationType
   );
-  const relationExists = state.relations.some((relation) => relation.stableKey === stableKey || (
-    relation.fragmentId === fragment.id
-    && relation.conceptId === concept.id
-    && relation.relationType === relationType
-  ));
+  const relationLookup = getRelationLookup(state.relations);
+  const tripleKey = relationTripleKey(fragment.id, concept.id, relationType);
+  const relationExists = relationLookup.byStableKey.has(stableKey) || relationLookup.byTriple.has(tripleKey);
   if (!relationExists) {
-    state.relations.unshift({
+    const relation: SemanticRelationRecord = {
       id: stableKey,
       fragmentId: fragment.id,
       conceptId: concept.id,
@@ -568,7 +634,11 @@ export const relateSelectionToConcept = (
       sourceEntityId: fragment.id,
       targetEntityId: concept.id,
       sourceRefs: buildSourceRefs(payload)
-    });
+    };
+    state.relations.unshift(relation);
+    relationLookup.byId.set(relation.id, relation);
+    relationLookup.byStableKey.set(stableKey, relation);
+    relationLookup.byTriple.add(tripleKey);
   }
 
   return state;
@@ -654,7 +724,7 @@ export const deleteFragmentsByDocBlockId = (context: SemanticStoreContext, docBl
 });
 
 export const deleteRelation = (context: SemanticStoreContext, relationId: string) => updateState(context, (state) => {
-  const relation = state.relations.find(r => r.id === relationId);
+  const relation = getRelationLookup(state.relations).byId.get(relationId);
   if (relation) {
     state.fragments = state.fragments.filter(f => !(f.id === relation.fragmentId && f.kind === 'relation'));
   }
@@ -675,7 +745,7 @@ export const updateConcept = (
     entityKind?: SemanticEntityKind;
   }
 ) => updateState(context, (state) => {
-  const concept = state.concepts.find(c => c.id === conceptId);
+  const concept = getConceptLookup(state.concepts).byId.get(conceptId);
   if (!concept) return state;
   if (updates.title !== undefined) concept.title = updates.title;
   if (updates.definition !== undefined) concept.definition = updates.definition;
@@ -693,7 +763,7 @@ export const updateFragment = (
   fragmentId: string,
   updates: { text?: string; note?: string; status?: SemanticStatus; confidence?: number }
 ) => updateState(context, (state) => {
-  const fragment = state.fragments.find(f => f.id === fragmentId);
+  const fragment = getFragmentLookup(state.fragments).byId.get(fragmentId);
   if (!fragment) return state;
   if (updates.text !== undefined) {
     fragment.text = updates.text;

@@ -224,26 +224,27 @@ export default function MosaicEditor({
   );
   const { diagnostics: markdownDiagnostics, runLint, linterStatus } = useMarkdownLinter(statsContent, linterRules, roomId ?? null);
 
+  const deferredNoteFragments = useDeferredValue(semanticState.fragments);
+  const deferredNoteContent = useDeferredValue(statsContent);
+
   const noteDiagnostics = useMemo<LinterDiagnostic[]>(() => {
     const diags: LinterDiagnostic[] = [];
     const activeDocId = roomId ?? null;
     const activeDocName = docName || currentDocMetaRef.current.name || null;
-    const NOTE_DIAG_LIMIT = 200;
     const notes: SemanticFragmentRecord[] = [];
-    for (const f of semanticState.fragments) {
+    for (const f of deferredNoteFragments) {
       if (f.kind !== 'note' || !f.note || !f.text) continue;
       const matchesDoc = activeDocId
         ? (f.docId === activeDocId || (!f.docId && f.docName === activeDocName))
         : (!f.docId);
       if (!matchesDoc) continue;
       notes.push(f);
-      if (notes.length >= NOTE_DIAG_LIMIT) break;
     }
     if (notes.length === 0) return diags;
 
     const lineStarts: number[] = [0];
-    for (let i = 0; i < statsContent.length; i++) {
-      if (statsContent.charCodeAt(i) === 10) lineStarts.push(i + 1);
+    for (let i = 0; i < deferredNoteContent.length; i++) {
+      if (deferredNoteContent.charCodeAt(i) === 10) lineStarts.push(i + 1);
     }
 
     const offsetToLineCol = (offset: number): { line: number; column: number } => {
@@ -261,7 +262,7 @@ export default function MosaicEditor({
 
     for (const n of notes) {
       if (!n.note || !n.text) continue;
-      const idx = statsContent.indexOf(n.text);
+      const idx = deferredNoteContent.indexOf(n.text);
       if (idx === -1) continue;
 
       const { line, column } = offsetToLineCol(idx);
@@ -279,7 +280,7 @@ export default function MosaicEditor({
       });
     }
     return diags;
-  }, [semanticState.fragments, statsContent, roomId, docName]);
+  }, [deferredNoteFragments, deferredNoteContent, roomId, docName]);
 
   const allDiagnostics = useMemo(() => {
     return [...markdownDiagnostics, ...noteDiagnostics];

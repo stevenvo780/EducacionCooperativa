@@ -5,7 +5,8 @@ import { buildSTFromSemantic } from '@/lib/buildSTFromSemantic';
 import {
   buildTheoryGraphFromSTSource,
   buildTheoryGraphFromSemanticState,
-  projectTheoryGraphToSemanticState
+  projectTheoryGraphToSemanticState,
+  verifyTheoryGraph
 } from '@/lib/semantic/theory-graph';
 import { evaluate } from '@/lib/st-api';
 import type { SemanticWorkspaceState } from '@/services/editorSemanticStore';
@@ -78,8 +79,9 @@ describe('theory graph ST round-trip', () => {
     };
 
     const graph = buildTheoryGraphFromSemanticState(state, { sourceDocument: { docName: 'Documento Demo' } });
+    const diagnostics = verifyTheoryGraph(graph);
 
-    expect(graph.diagnostics.some((diagnostic) => (
+    expect(diagnostics.some((diagnostic) => (
       diagnostic.type === 'contradiction'
       && diagnostic.message.includes('Claim 1')
       && diagnostic.message.includes('Claim 13')

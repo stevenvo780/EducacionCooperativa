@@ -526,15 +526,6 @@ export const useKatexOverlayDecorations = ({
 
       if (container.dataset.renderKey === renderKey) return;
 
-      // Cap el límite para no construir miles de overlays en docs gigantes.
-      // Block math caps en 200; inline math en 400. El usuario puede ver las
-      // fórmulas faltantes desplazándose (la lista se reconstruye cada lint).
-      const cappedBlocks = blocks.length > 200 ? blocks.slice(0, 200) : blocks;
-      const cappedInlines = inlines.length > 400 ? inlines.slice(0, 400) : inlines;
-
-      // Determinar qué overlays están dentro del viewport del scroll parent
-      // (aproximación geométrica antes de insertarlos al DOM). Los que estén
-      // fuera entran como placeholders LAZY y se rellenan al scrollear.
       const sp = editable.parentElement;
       const viewTop = sp ? sp.scrollTop : 0;
       const viewBottom = sp ? viewTop + sp.clientHeight : Number.POSITIVE_INFINITY;
@@ -545,7 +536,6 @@ export const useKatexOverlayDecorations = ({
         return top + height < viewTop - viewMargin || top > viewBottom + viewMargin;
       };
 
-      // Limpiar tracking de IntersectionObserver del decorate previo
       if (viewportObserver) {
         viewportObserver.disconnect();
         viewportObserver = null;
@@ -555,7 +545,7 @@ export const useKatexOverlayDecorations = ({
       const fragment = document.createDocumentFragment();
       const lazyOverlays: HTMLElement[] = [];
 
-      for (const block of cappedBlocks) {
+      for (const block of blocks) {
         try {
           const offscreen = isOffscreen(block.top, block.height);
           const overlay = createBlockOverlay(block, offscreen);
@@ -565,7 +555,7 @@ export const useKatexOverlayDecorations = ({
           // ignore katex errors for malformed blocks
         }
       }
-      for (const inlineMath of cappedInlines) {
+      for (const inlineMath of inlines) {
         try {
           const offscreen = isOffscreen(inlineMath.top, inlineMath.height);
           const overlay = createInlineOverlay(container, inlineMath, offscreen);
@@ -578,7 +568,6 @@ export const useKatexOverlayDecorations = ({
       container.dataset.renderKey = renderKey;
       container.replaceChildren(fragment);
 
-      // Observar todos los overlays perezosos para rellenar al scrollear
       for (const overlay of lazyOverlays) {
         observer.observe(overlay);
       }
