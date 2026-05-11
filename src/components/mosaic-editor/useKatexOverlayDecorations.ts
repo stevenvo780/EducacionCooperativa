@@ -1,6 +1,24 @@
 import { useEffect, type MutableRefObject } from 'react';
-import katex from 'katex';
 import type { ViewMode } from './types';
+
+type KatexRenderer = {
+  renderToString: (tex: string, options?: { displayMode?: boolean; throwOnError?: boolean; trust?: boolean }) => string;
+};
+
+let katexModulePromise: Promise<KatexRenderer> | null = null;
+let katexModule: KatexRenderer | null = null;
+
+const loadKatexModule = (): Promise<KatexRenderer> => {
+  if (katexModule) return Promise.resolve(katexModule);
+  if (!katexModulePromise) {
+    katexModulePromise = import('katex').then((mod) => {
+      const resolved = ((mod as { default?: KatexRenderer }).default ?? mod) as KatexRenderer;
+      katexModule = resolved;
+      return resolved;
+    });
+  }
+  return katexModulePromise;
+};
 
 const OVERLAY_CONTAINER_CLASS = 'katex-overlay-container';
 const EDITING_ATTR = 'data-katex-editing';
@@ -16,14 +34,14 @@ function getCachedKatex(latex: string, displayMode: boolean): string {
   const key = `${displayMode ? '1' : '0'}::${latex}`;
   const hit = _katexCache.get(key);
   if (hit !== undefined) {
-    // Re-insert to mark as most-recently-used
     _katexCache.delete(key);
     _katexCache.set(key, hit);
     return hit;
   }
+  if (!katexModule) return '';
   let html: string;
   try {
-    html = katex.renderToString(latex, { displayMode, throwOnError: false, trust: true });
+    html = katexModule.renderToString(latex, { displayMode, throwOnError: false, trust: true });
   } catch {
     html = '';
   }
@@ -476,16 +494,20 @@ const fillLazyOverlay = (overlay: HTMLElement) => {
 
 export const useKatexOverlayDecorations = ({
   editorShellRef,
-  viewMode
+  viewMode,
+  enabled = true
 }: {
   editorShellRef: MutableRefObject<HTMLDivElement | null>;
   viewMode: ViewMode;
+  enabled?: boolean;
 }) => {
   useEffect(() => {
+    if (!enabled) return;
     if (viewMode !== 'edit') return;
     const shell = editorShellRef.current;
     if (!shell) return;
 
+    let cancelled = false;
     let observedEditable: HTMLElement | null = null;
     let editableObserver: MutationObserver | null = null;
     let shellObserver: MutationObserver | null = null;
@@ -641,6 +663,13 @@ export const useKatexOverlayDecorations = ({
       requestAnimationFrame(runDecorate);
     };
 
+    if (katexModule === null) {
+      void loadKatexModule().then(() => {
+        if (cancelled) return;
+        runDecorate();
+      });
+    }
+
     const initialTimer = setTimeout(() => {
       attachEditableBindings();
       runDecorate();
@@ -658,6 +687,7 @@ export const useKatexOverlayDecorations = ({
     document.addEventListener('click', handleClickOutside);
 
     return () => {
+      cancelled = true;
       clearTimeout(initialTimer);
       if (decorateTimer) clearTimeout(decorateTimer);
       if (decorateFrame !== null) cancelAnimationFrame(decorateFrame);
@@ -670,5 +700,5 @@ export const useKatexOverlayDecorations = ({
       if (container) container.remove();
       shell.querySelectorAll(`[${EDITING_ATTR}]`).forEach((element) => element.removeAttribute(EDITING_ATTR));
     };
-  }, [editorShellRef, viewMode]);
+  }, [editorShellRef, viewMode, enabled]);
 };
