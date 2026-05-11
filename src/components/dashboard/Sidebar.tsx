@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useDeferredValue, useTransition, memo } from 'react';
 import { List as VirtualizedList } from 'react-window';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, ListCollapse, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
@@ -12,6 +12,8 @@ import { useElementSize } from '@/hooks/useElementSize';
 import { useIsTouchDeviceProfile } from '@/lib/device-input';
 
 const ROW_HEIGHT = 28;
+const EMPTY_DOCS: DocItem[] = [];
+const EMPTY_FOLDERS: FolderItem[] = [];
 
 interface SidebarRowProps {
   listItems: SidebarListItem[];
@@ -396,24 +398,75 @@ const Sidebar = ({
     });
   }, []);
 
-  // Si page.tsx pasa el tree model como prop, lo usamos sin recomputar.
-  // Fallback al build local: necesario para tests/storybook que monten
-  // <Sidebar/> sin haber pre-computado el tree.
+  // Deferred mount: en React 18 useDeferredValue retorna el valor inicial en
+  // el primer render, así que necesitamos un gate explícito. Renderemos un
+  // skeleton vacío en el primer paint y, tras un microtask en transition,
+  // habilitamos el cómputo del tree real. Esto libera el LCP del walk O(N)
+  // de buildWorkspaceTreeModel + flatTree con 1k+ docs.
+  const [treeReady, setTreeReady] = useState(false);
+  const [, startTreeTransition] = useTransition();
+
+  useEffect(() => {
+    if (treeReady) return;
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      startTreeTransition(() => setTreeReady(true));
+    };
+    if (typeof window === 'undefined') {
+      run();
+      return;
+    }
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(run, { timeout: 200 });
+      return () => {
+        cancelled = true;
+        if (typeof window.cancelIdleCallback === 'function') {
+          window.cancelIdleCallback(handle);
+        }
+      };
+    }
+    const id = window.setTimeout(run, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [treeReady]);
+
+  const deferredDocs = useDeferredValue(docs);
+  const deferredFolders = useDeferredValue(folders);
+  const deferredDocsByFolderProp = useDeferredValue(docsByFolderProp);
+  const deferredFolderChildrenMapProp = useDeferredValue(folderChildrenMapProp);
+
+  const effectiveDocs = treeReady ? deferredDocs : EMPTY_DOCS;
+  const effectiveFolders = treeReady ? deferredFolders : EMPTY_FOLDERS;
+  const effectiveDocsByFolderProp = treeReady ? deferredDocsByFolderProp : undefined;
+  const effectiveFolderChildrenMapProp = treeReady ? deferredFolderChildrenMapProp : undefined;
+
   const localTreeModel = useMemo(
-    () => (docsByFolderProp && folderChildrenMapProp)
+    () => (effectiveDocsByFolderProp && effectiveFolderChildrenMapProp)
       ? null
-      : buildWorkspaceTreeModel(folders, docs),
-    [folders, docs, docsByFolderProp, folderChildrenMapProp]
+      : buildWorkspaceTreeModel(effectiveFolders, effectiveDocs),
+    [effectiveFolders, effectiveDocs, effectiveDocsByFolderProp, effectiveFolderChildrenMapProp]
   );
-  const folderChildrenMap = folderChildrenMapProp ?? localTreeModel!.folderChildrenMap;
-  const docsByFolder = docsByFolderProp ?? localTreeModel!.docsByFolder;
+  const folderChildrenMap = effectiveFolderChildrenMapProp ?? localTreeModel!.folderChildrenMap;
+  const docsByFolder = effectiveDocsByFolderProp ?? localTreeModel!.docsByFolder;
   const localDocById = useMemo(() => {
     if (docByIdProp) return null;
     const map = new Map<string, DocItem>();
-    for (const d of docs) map.set(d.id, d);
+    for (let i = 0; i < effectiveDocs.length; i += 1) {
+      const d = effectiveDocs[i]!;
+      map.set(d.id, d);
+    }
     return map;
-  }, [docByIdProp, docs]);
+  }, [docByIdProp, effectiveDocs]);
   const docById = docByIdProp ?? localDocById!;
+
+  const isDocsStale = !treeReady
+    || docs !== deferredDocs
+    || folders !== deferredFolders
+    || docsByFolderProp !== deferredDocsByFolderProp
+    || folderChildrenMapProp !== deferredFolderChildrenMapProp;
 
   const collapseAllFolders = useCallback(() => {
     const allPaths: string[] = [];
@@ -446,24 +499,25 @@ const Sidebar = ({
 
     const walk = (parentPath: string, depth: number, ancestors: string[]) => {
       const children = folderChildrenMap[parentPath] ?? [];
-      for (const folder of children) {
+      for (let i = 0; i < children.length; i += 1) {
+        const folder = children[i]!;
         const subfolders = folderChildrenMap[folder.path] ?? [];
         const folderFiles = docsByFolder[folder.path] ?? [];
         const hasChildren = subfolders.length > 0 || folderFiles.length > 0;
         items.push({ kind: 'folder', folder, depth, hasChildren, ancestors });
 
-        const childAncestors = [...ancestors, folder.path];
+        const childAncestors = ancestors.length === 0 ? [folder.path] : [...ancestors, folder.path];
         walk(folder.path, depth + 1, childAncestors);
-        for (const doc of folderFiles) {
-          items.push({ kind: 'doc', doc, depth: depth + 1, ancestors: childAncestors });
+        for (let j = 0; j < folderFiles.length; j += 1) {
+          items.push({ kind: 'doc', doc: folderFiles[j]!, depth: depth + 1, ancestors: childAncestors });
         }
       }
     };
 
     walk('', 0, []);
     const rootDocs = docsByFolder[''] ?? [];
-    for (const doc of rootDocs) {
-      items.push({ kind: 'doc', doc, depth: 0, ancestors: [] });
+    for (let i = 0; i < rootDocs.length; i += 1) {
+      items.push({ kind: 'doc', doc: rootDocs[i]!, depth: 0, ancestors: [] });
     }
     return items;
   }, [docsByFolder, folderChildrenMap]);
@@ -742,16 +796,16 @@ const Sidebar = ({
             </div>
 
             <div className="mt-2 px-1 flex-1 min-h-0 relative">
-              {loadingDocs && docs.length === 0 && (
+              {(loadingDocs && docs.length === 0) || (isDocsStale && docs.length > 0 && !isSearchMode) ? (
                 <div className="h-full min-h-[200px] flex items-start justify-center pt-6">
                   <div className="flex items-center gap-2 text-xs text-surface-500">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Cargando archivos...
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {!loadingDocs && docs.length === 0 && !isSearchMode && (
+              {!loadingDocs && docs.length === 0 && !isSearchMode && !isDocsStale && (
                 <div className="h-full min-h-[200px] flex items-start justify-center pt-6">
                   <div className="text-xs text-surface-500">Espacio vacío</div>
                 </div>
@@ -763,7 +817,7 @@ const Sidebar = ({
                 </div>
               )}
 
-              {listItems.length > 0 && (
+              {listItems.length > 0 && !isDocsStale && (
                 <div ref={listRef} className="h-full min-h-[200px]" role="tree" aria-label="Árbol de archivos">
                   <VirtualizedList
                     rowCount={listItems.length}
