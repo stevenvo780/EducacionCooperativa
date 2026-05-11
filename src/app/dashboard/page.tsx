@@ -2,6 +2,7 @@
 
 import { markInternalDragStart, markInternalDragEnd } from '@/lib/internal-drag-flag';
 import { initTouchDragPolyfill } from '@/lib/touch-drag-polyfill';
+import { fold } from '@/lib/text-fold';
 
 import {
   Suspense,
@@ -987,9 +988,9 @@ function DashboardContent() {
     }, [currentWorkspaceId, docById, openTabsById, setActiveFolderSafe, user?.uid]);
 
     const sidebarFilteredDocs = useMemo(() => {
-        const query = deferredSidebarQuery.trim().toLowerCase();
+        const query = fold(deferredSidebarQuery.trim());
         if (!query) return deferredDocs;
-        return deferredDocs.filter(d => d.name.toLowerCase().includes(query));
+        return deferredDocs.filter(d => fold(d.name).includes(query));
     }, [deferredDocs, deferredSidebarQuery]);
 
     const favoriteDocs = useMemo(() => {
