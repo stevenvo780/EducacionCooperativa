@@ -24,6 +24,35 @@ export const hasMermaidContent = (md: string): boolean => {
   if (!md) return false;
   return /```\s*mermaid\b/.test(md);
 };
+
+// Detectores de sintaxis para gating de plugins pesados del MDXEditor.
+// Mantenidos baratos: una sola regex y short-circuit en strings vacíos.
+export const hasTableContent = (md: string): boolean => {
+  if (!md) return false;
+  // Tabla pipe markdown: línea con `|...|` seguida por separador `|---|`.
+  return /^\s*\|.+\|\s*\n\s*\|[\s:-]*-+[\s:-]*\|/m.test(md);
+};
+
+export const hasImageContent = (md: string): boolean => {
+  if (!md) return false;
+  return /!\[[^\]]*\]\([^)]+\)/.test(md);
+};
+
+export const hasCodeBlockContent = (md: string): boolean => {
+  if (!md) return false;
+  return /```/.test(md);
+};
+
+export const hasDirectiveContent = (md: string): boolean => {
+  if (!md) return false;
+  // Admonitions y directivas: ::: o ::label
+  return /(^|\n):::/.test(md);
+};
+
+export const hasFrontmatterContent = (md: string): boolean => {
+  if (!md) return false;
+  return md.startsWith('---\n') || md.startsWith('---\r\n');
+};
 export const isImageMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('image/');
 export const isVideoMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('video/');
 export const isAudioMime = (mime?: string) => (mime ?? '').toLowerCase().startsWith('audio/');

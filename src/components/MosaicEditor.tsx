@@ -18,7 +18,8 @@ import {
   directivesPlugin,
   frontmatterPlugin,
   toolbarPlugin,
-  type MDXEditorMethods
+  type MDXEditorMethods,
+  type RealmPlugin
 } from '@mdxeditor/editor';
 import dynamic from 'next/dynamic';
 import { DynamicMDXEditor } from '@/components/editor/DynamicMDXEditor';
@@ -34,8 +35,11 @@ import {
   stripQueryAndHash, isExternalMarkdownHref, isBrowserNavigationHref,
   normalizeRelativeMarkdownPath, ensureMarkdownCandidateNames,
   buildWorkspaceAwarePathCandidates, extractWorkspaceSegments, generateId,
-  hasKatexContent
+  hasKatexContent,
+  hasTableContent, hasImageContent, hasCodeBlockContent,
+  hasDirectiveContent, hasFrontmatterContent
 } from '@/components/mosaic-editor/utils';
+import { useDeferredMount } from '@/hooks/useDeferredMount';
 import { useEditorSearch } from '@/components/mosaic-editor/useEditorSearch';
 import { useEditorUI } from '@/components/mosaic-editor/useEditorUI';
 import { useEditorModals } from '@/components/mosaic-editor/useEditorModals';
@@ -1623,52 +1627,124 @@ export default function MosaicEditor({
   // without recreating the plugins array (which would cause MDXEditor remount)
   renderToolbarContentsRef.current = renderToolbarContents;
 
-  // MDXEditor plugins configuration — created once, toolbar uses a stable ref wrapper
-  const editorPlugins = useMemo(() => [
-    headingsPlugin(),
-    listsPlugin(),
-    quotePlugin(),
-    thematicBreakPlugin(),
-    markdownShortcutPlugin(),
-    tablePlugin(),
-    linkPlugin(),
-    linkDialogPlugin(),
-    imagePlugin({ imageUploadHandler: async () => '/placeholder.png' }),
-    codeBlockPlugin({ defaultCodeBlockLanguage: '', codeBlockEditorDescriptors: [mermaidCodeBlockDescriptor] }),
-    codeMirrorPlugin({
-      codeBlockLanguages: {
-        js: 'JavaScript',
-        javascript: 'JavaScript',
-        ts: 'TypeScript',
-        typescript: 'TypeScript',
-        python: 'Python',
-        py: 'Python',
-        css: 'CSS',
-        html: 'HTML',
-        json: 'JSON',
-        bash: 'Bash',
-        sh: 'Shell',
-        sql: 'SQL',
-        yaml: 'YAML',
-        xml: 'XML',
-        markdown: 'Markdown',
-        mermaid: 'Mermaid',
-        rust: 'Rust',
-        go: 'Go',
-        java: 'Java',
-        cpp: 'C++',
-        c: 'C',
-        '': 'Texto plano'
-      }
-    }),
-    directivesPlugin({
-      directiveDescriptors: [AdmonitionDirectiveDescriptor]
-    }),
-    frontmatterPlugin(),
-    toolbarPlugin({
-      toolbarContents: () => renderToolbarContentsRef.current?.() ?? null
-    })
-  ], []);
+  // Plugins pesados del MDXEditor (table/image/codeBlock/codeMirror/directives/
+  // frontmatter) inflan native + code size en el primer mount. Estrategia:
+  //
+  // 1) Detección de contenido al montar: si el doc usa la sintaxis, el plugin
+  //    se incluye desde T0 (sin glitch visual).
+  // 2) Si NO usa la sintaxis, esperamos `useDeferredMount` (idle ~700ms) y
+  //    luego incluimos los plugins. El editorKey bump remounta MDXEditor con
+  //    el set completo — barato porque ya está la cadena lexical viva, sólo
+  //    se reinicializa con plugins extra registrados.
+  //
+  // Para un .md trivial (sin tables/imgs/code/directives/frontmatter) el
+  // primer paint sólo paga: headings + lists + quote + thematicBreak +
+  // markdownShortcut + link + linkDialog + toolbar. Eso quita ~3-4MB de
+  // heap (native+code) y ~150-200KB de chunk del dashboard.
+  const pluginsDeferredReady = useDeferredMount(700);
+
+  const needsHeavyPlugins = useMemo(() => {
+    // initialMarkdown se setea en mount y al cambiar de doc. Detectores
+    // baratos (regex) — sin allocations pesadas.
+    return {
+      table: hasTableContent(initialMarkdown),
+      image: hasImageContent(initialMarkdown),
+      codeBlock: hasCodeBlockContent(initialMarkdown),
+      directives: hasDirectiveContent(initialMarkdown),
+      frontmatter: hasFrontmatterContent(initialMarkdown)
+    };
+  }, [initialMarkdown]);
+
+  // Cuando el deferred timer expire, bump editorKey para que MDXEditor
+  // remonte con el set completo de plugins. Sin remount los plugins
+  // añadidos al array no se registran (MDXEditor lee plugins al mount).
+  const pluginsArmedRef = useRef(false);
+  useEffect(() => {
+    if (!pluginsDeferredReady) return;
+    if (pluginsArmedRef.current) return;
+    // Solo bump si actualmente faltaba algún plugin pesado.
+    const allHeavyAlreadyIn =
+      needsHeavyPlugins.table &&
+      needsHeavyPlugins.image &&
+      needsHeavyPlugins.codeBlock &&
+      needsHeavyPlugins.directives &&
+      needsHeavyPlugins.frontmatter;
+    pluginsArmedRef.current = true;
+    if (allHeavyAlreadyIn) return;
+    setEditorKey(k => k + 1);
+  }, [pluginsDeferredReady, needsHeavyPlugins]);
+
+  // MDXEditor plugins configuration — la dependencia de `editorKey` garantiza
+  // que el set se recalcule cuando bumpeamos por defer. Mantengo el
+  // toolbar callback via ref para no remount por cambios de toolbar.
+  const editorPlugins = useMemo(() => {
+    const plugins: RealmPlugin[] = [
+      headingsPlugin(),
+      listsPlugin(),
+      quotePlugin(),
+      thematicBreakPlugin(),
+      markdownShortcutPlugin(),
+      linkPlugin(),
+      linkDialogPlugin()
+    ];
+
+    if (needsHeavyPlugins.table || pluginsDeferredReady) {
+      plugins.push(tablePlugin());
+    }
+    if (needsHeavyPlugins.image || pluginsDeferredReady) {
+      plugins.push(imagePlugin({ imageUploadHandler: async () => '/placeholder.png' }));
+    }
+    if (needsHeavyPlugins.codeBlock || pluginsDeferredReady) {
+      plugins.push(
+        codeBlockPlugin({ defaultCodeBlockLanguage: '', codeBlockEditorDescriptors: [mermaidCodeBlockDescriptor] }),
+        codeMirrorPlugin({
+          codeBlockLanguages: {
+            js: 'JavaScript',
+            javascript: 'JavaScript',
+            ts: 'TypeScript',
+            typescript: 'TypeScript',
+            python: 'Python',
+            py: 'Python',
+            css: 'CSS',
+            html: 'HTML',
+            json: 'JSON',
+            bash: 'Bash',
+            sh: 'Shell',
+            sql: 'SQL',
+            yaml: 'YAML',
+            xml: 'XML',
+            markdown: 'Markdown',
+            mermaid: 'Mermaid',
+            rust: 'Rust',
+            go: 'Go',
+            java: 'Java',
+            cpp: 'C++',
+            c: 'C',
+            '': 'Texto plano'
+          }
+        })
+      );
+    }
+    if (needsHeavyPlugins.directives || pluginsDeferredReady) {
+      plugins.push(
+        directivesPlugin({
+          directiveDescriptors: [AdmonitionDirectiveDescriptor]
+        })
+      );
+    }
+    if (needsHeavyPlugins.frontmatter || pluginsDeferredReady) {
+      plugins.push(frontmatterPlugin());
+    }
+
+    plugins.push(
+      toolbarPlugin({
+        toolbarContents: () => renderToolbarContentsRef.current?.() ?? null
+      })
+    );
+    return plugins;
+    // editorKey en deps fuerza re-cálculo cuando bumpeamos para remount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginsDeferredReady, needsHeavyPlugins, editorKey]);
 
   const handleLinterFix = useCallback((diag: LinterDiagnostic, replacement: string) => {
     const md = mdxEditorRef.current?.getMarkdown() ?? contentRef.current;
