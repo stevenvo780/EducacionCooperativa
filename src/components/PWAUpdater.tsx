@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 
 interface WorkboxInstance {
@@ -16,13 +16,11 @@ declare global {
   }
 }
 
-/**
- * PWAUpdater - Componente para notificar nuevas versiones de la aplicación (PWA).
- * Se encarga de escuchar eventos de Workbox y mostrar una UI de actualización.
- */
 export default function PWAUpdater() {
   const [show, setShow] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -54,12 +52,26 @@ export default function PWAUpdater() {
     }
   }, [mounted, onWaiting]);
 
+  useEffect(() => {
+    return () => {
+      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    };
+  }, []);
+
   const reloadPage = () => {
+    if (updating) return;
+    setUpdating(true);
+
     if (typeof window !== 'undefined' && window.workbox !== undefined) {
-      window.workbox.addEventListener('controlling', () => {
+      const wb = window.workbox;
+      wb.addEventListener('controlling', () => {
         window.location.reload();
       });
-      window.workbox.messageSkipWaiting();
+      wb.messageSkipWaiting();
+
+      fallbackTimerRef.current = setTimeout(() => {
+        window.location.reload();
+      }, 6000);
     } else {
       window.location.reload();
     }
@@ -68,26 +80,38 @@ export default function PWAUpdater() {
   if (!mounted || !show) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9999] flex items-center gap-3 rounded-lg border border-sky-500/30 bg-slate-900/95 p-4 text-white shadow-2xl backdrop-blur-sm animate-in slide-in-from-bottom-5">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-4 right-4 z-[9999] flex items-center gap-3 rounded-lg border border-sky-500/30 bg-slate-900/95 p-4 text-white shadow-2xl backdrop-blur-sm animate-in slide-in-from-bottom-5"
+    >
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/20 text-sky-400">
-          <RefreshCw className="h-4 w-4 animate-spin-slow" />
+          <RefreshCw className={updating ? 'h-4 w-4 animate-spin' : 'h-4 w-4 animate-spin-slow'} />
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-slate-100">Nueva versión disponible</span>
-          <span className="text-xs text-slate-400">Actualiza para recibir las últimas mejoras.</span>
+          <span className="text-sm font-semibold text-slate-100">
+            {updating ? 'Actualizando…' : 'Nueva versión disponible'}
+          </span>
+          <span className="text-xs text-slate-400">
+            {updating ? 'Aplicando la nueva versión, no cierres la pestaña.' : 'Actualiza para recibir las últimas mejoras.'}
+          </span>
         </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           onClick={reloadPage}
-          className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors shadow-lg active:scale-95"
+          disabled={updating}
+          aria-busy={updating}
+          className="flex items-center gap-1.5 rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white shadow-lg transition-colors hover:bg-sky-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          Actualizar
+          {updating && <RefreshCw className="h-3 w-3 animate-spin" />}
+          {updating ? 'Actualizando…' : 'Actualizar'}
         </button>
         <button
           onClick={() => setShow(false)}
-          className="rounded p-1.5 text-slate-400 hover:bg-slate-800 transition-colors"
+          disabled={updating}
+          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Cerrar notificación"
         >
           <X className="h-4 w-4" />
