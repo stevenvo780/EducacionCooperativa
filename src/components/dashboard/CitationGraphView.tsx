@@ -2,9 +2,15 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { forceCollide, forceCenter, forceLink, forceManyBody } from 'd3-force-3d';
 import { AlertCircle, GitFork, Loader2, RefreshCw, Search } from 'lucide-react';
 import clsx from 'clsx';
 import { apiUrl, authFetch, parseApiResponse } from '@/services/apiClient';
+
+interface GraphMethods {
+  d3Force: (name: string, force?: unknown) => unknown;
+  zoomToFit: (durationMs?: number, padding?: number) => void;
+}
 
 interface ForceGraph2DProps {
   graphData: { nodes: ForceGraphNode[]; links: ForceGraphLink[] };
@@ -19,8 +25,14 @@ interface ForceGraph2DProps {
   linkDirectionalArrowLength?: number;
   linkDirectionalArrowRelPos?: number;
   cooldownTicks?: number;
+  warmupTicks?: number;
+  onEngineStop?: () => void;
   onNodeClick?: (node: ForceGraphNode) => void;
 }
+
+type ForceGraph2DComponent = React.ForwardRefExoticComponent<
+  ForceGraph2DProps & React.RefAttributes<GraphMethods>
+>;
 
 const ForceGraph2D = dynamic<ForceGraph2DProps>(
   () => import('react-force-graph-2d').then((mod) => {
@@ -28,7 +40,7 @@ const ForceGraph2D = dynamic<ForceGraph2DProps>(
     return Component as unknown as React.ComponentType<ForceGraph2DProps>;
   }),
   { ssr: false, loading: () => <GraphSkeleton /> }
-);
+) as unknown as ForceGraph2DComponent;
 
 export type CitationKind = 'wiki' | 'link' | 'concept' | 'bib';
 
@@ -168,6 +180,7 @@ export default function CitationGraphView({
   const [backfillNotice, setBackfillNotice] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const fgRef = useRef<GraphMethods>(null);
   const [containerWidth, setContainerWidth] = useState<number>(600);
 
   useEffect(() => {
@@ -248,6 +261,25 @@ export default function CitationGraphView({
 
     return { nodes, links };
   }, [data, searchQuery]);
+
+  const nodeCount = filteredGraphData.nodes.length;
+
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    const linkDist = Math.max(80, 40 + nodeCount * 0.5);
+    const chargeStr = Math.min(-80, -150 - nodeCount * 0.5);
+    fg.d3Force('link', forceLink().distance(linkDist).strength(0.4).iterations(2));
+    fg.d3Force('charge', forceManyBody().strength(chargeStr).theta(0.9).distanceMax(400));
+    fg.d3Force('collide', forceCollide(14).strength(0.8).iterations(2));
+    fg.d3Force('center', forceCenter(0, 0).strength(0.05));
+  }, [nodeCount]);
+
+  const handleEngineStop = useCallback(() => {
+    if (fgRef.current && nodeCount > 0) {
+      fgRef.current.zoomToFit(400, 50);
+    }
+  }, [nodeCount]);
 
   const toggleKind = useCallback((kind: CitationKind) => {
     setActiveKinds((prev) => {
@@ -419,6 +451,7 @@ export default function CitationGraphView({
 
         {status === 'success' && !isEmpty && (
           <ForceGraph2D
+            ref={fgRef}
             graphData={filteredGraphData}
             width={containerWidth}
             height={height}
@@ -430,7 +463,9 @@ export default function CitationGraphView({
             linkWidth={(link: ForceGraphLink) => link.width}
             linkDirectionalArrowLength={3}
             linkDirectionalArrowRelPos={1}
-            cooldownTicks={50}
+            warmupTicks={nodeCount > 50 ? 100 : 50}
+            cooldownTicks={nodeCount > 100 ? 200 : 100}
+            onEngineStop={handleEngineStop}
             onNodeClick={handleNodeClick}
           />
         )}
