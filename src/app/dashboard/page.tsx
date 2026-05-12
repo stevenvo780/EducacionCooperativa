@@ -117,6 +117,8 @@ const QuickSearchModal = dynamic(() => import('@/components/dashboard/QuickSearc
 const KeyboardShortcuts = dynamic(() => import('@/components/dashboard/KeyboardShortcuts'), { ssr: false });
 const NewFileModal = dynamic(() => import('@/components/dashboard/NewFileModal'), { ssr: false });
 const DialogModal = dynamic(() => import('@/components/dashboard/DialogModal'), { ssr: false });
+const WorkerInstallModal = dynamic(() => import('@/components/dashboard/WorkerInstallModal'), { ssr: false });
+const WhatsNewModal = dynamic(() => import('@/components/dashboard/WhatsNewModal'), { ssr: false });
 
 const ROOT_FOLDER_PATH = '';
 
@@ -274,6 +276,16 @@ function DashboardContent() {
                 : 'https://hub.humanizar-dev.cloud');
         initialize(nexusUrl);
     }, [initialize, user]);
+
+    useEffect(() => {
+        if (!user || typeof window === 'undefined') return;
+        try {
+            const dismissed = window.localStorage.getItem('agora-whats-new-v1.0:dismissed') === 'true';
+            if (!dismissed) setShowWhatsNew(true);
+        } catch {
+            /* localStorage no disponible (modo privado, etc.) — no mostrar */
+        }
+    }, [user]);
 
     useEffect(() => {
         let cancelled = false;
@@ -460,6 +472,8 @@ function DashboardContent() {
     const [dialogConfig, setDialogConfig] = useState<DialogConfig | null>(null);
     const [dialogInputValue, setDialogInputValue] = useState('');
     const [showNewFileModal, setShowNewFileModal] = useState(false);
+    const [showWorkerInstallModal, setShowWorkerInstallModal] = useState(false);
+    const [showWhatsNew, setShowWhatsNew] = useState(false);
     const [showWorkspaceManagerModal, setShowWorkspaceManagerModal] = useState(false);
     const [newFileTargetFolder, setNewFileTargetFolder] = useState<string>(ROOT_FOLDER_PATH);
     const [activeFolder, setActiveFolder] = useState<string>(ROOT_FOLDER_PATH);
@@ -2684,6 +2698,36 @@ function DashboardContent() {
                             setShowPasswordModal(true);
                         }}
                         onOpenMembers={() => setShowMembersModal(true)}
+                        onOpenWorkerInstall={() => setShowWorkerInstallModal(true)}
+                    />
+                )}
+
+                {showWorkerInstallModal && (
+                    <WorkerInstallModal
+                        open={showWorkerInstallModal}
+                        onClose={() => setShowWorkerInstallModal(false)}
+                        workspaceId={currentWorkspace?.id}
+                        workspaceName={currentWorkspace?.name}
+                        isOwner={!!user && !!currentWorkspace && (currentWorkspace.ownerId === user.uid || isAdmin)}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
+                    />
+                )}
+
+                {showWhatsNew && (
+                    <WhatsNewModal
+                        open={showWhatsNew}
+                        version="v1.0"
+                        onDismiss={() => {
+                            setShowWhatsNew(false);
+                            try {
+                                window.localStorage.setItem('agora-whats-new-v1.0:dismissed', 'true');
+                            } catch {
+                                /* noop */
+                            }
+                        }}
+                        modalFade={modalFade}
+                        modalPop={modalPop}
                     />
                 )}
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X, Settings as SettingsIcon, Wrench, Sparkles, Code2, Shield, FolderGit2, KeyRound, Users, BookMarked, RotateCcw, Copy, Eye, EyeOff, RefreshCcw, Terminal, ExternalLink, Check, Download, Loader2, type LucideIcon } from 'lucide-react';
+import { X, Settings as SettingsIcon, Wrench, Sparkles, Code2, Shield, FolderGit2, KeyRound, Users, BookMarked, RotateCcw, Copy, Eye, EyeOff, RefreshCcw, Terminal, ExternalLink, Check, Download, Loader2, Cpu, type LucideIcon } from 'lucide-react';
 import { authFetch } from '@/services/apiClient';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setEditorToolbarVisibility } from '@/store/dashboardSlice';
@@ -87,6 +87,7 @@ interface SettingsModalProps {
   activeUserId?: string;
   onOpenChangePassword: () => void;
   onOpenMembers: () => void;
+  onOpenWorkerInstall?: () => void;
 }
 
 export default function SettingsModal({
@@ -96,7 +97,8 @@ export default function SettingsModal({
   activeWorkspaceId,
   activeUserId,
   onOpenChangePassword,
-  onOpenMembers
+  onOpenMembers,
+  onOpenWorkerInstall
 }: SettingsModalProps) {
   const [section, setSection] = useState<SettingsSectionId>(initialSection);
 
@@ -192,6 +194,7 @@ export default function SettingsModal({
                 onOpenChangePassword={() => { onOpenChangePassword(); onClose(); }}
                 onOpenMembers={() => { onOpenMembers(); onClose(); }}
                 onOpenGitAccess={() => setSection('git-access')}
+                onOpenWorkerInstall={onOpenWorkerInstall ? () => { onOpenWorkerInstall(); onClose(); } : undefined}
               />
             )}
           </div>
@@ -988,11 +991,13 @@ function LintersSection() {
 function CuentaSection({
   onOpenChangePassword,
   onOpenMembers,
-  onOpenGitAccess
+  onOpenGitAccess,
+  onOpenWorkerInstall
 }: {
   onOpenChangePassword: () => void;
   onOpenMembers: () => void;
   onOpenGitAccess: () => void;
+  onOpenWorkerInstall?: () => void;
 }) {
   return (
     <div className="space-y-2">
@@ -1014,6 +1019,14 @@ function CuentaSection({
         description="Tokens y URLs de clone. Abre la sección dedicada del modal."
         onClick={onOpenGitAccess}
       />
+      {onOpenWorkerInstall && (
+        <ActionRow
+          icon={Cpu}
+          title="Mi computadora como worker"
+          description="Convertí tu laptop en un worker Linux (Fedora/Podman, Ubuntu/Arch/Docker)."
+          onClick={onOpenWorkerInstall}
+        />
+      )}
     </div>
   );
 }
