@@ -16,12 +16,12 @@ import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
 import { fetchZod } from '@/lib/fetch-zod';
 import { agentContextResponseSchema } from '@agora/contracts';
 import {
-  createEmptyChatSession,
   deriveChatSessionTitle,
   loadChatSessions,
-  saveChatSessions,
-  upsertChatSession
+  saveChatSessions
 } from '@/lib/agora-ai/chatHistory';
+import { useAgentChatHistory } from '@/hooks/useAgentChatHistory';
+import type { RemoteAgentChat, RemoteAgentChatMessage } from '@/lib/agora-ai/agentChatApi';
 import { AgentThinkingBlock } from '@/components/chat/AgentThinkingBlock';
 import { ToolCallBlock } from '@/components/chat/ToolCallBlock';
 import { InlineConfirmation } from '@/components/chat/InlineConfirmation';
@@ -167,7 +167,9 @@ function truncateDebug(value: string | undefined, max = 3000) {
   return value.length > max ? `${value.slice(0, max)}\n\n[...truncado por Agora AI...]` : value;
 }
 
-function parseAgentStreamEvent(raw: string): AgentStreamEvent | null {
+type ChatCreatedSideEvent = { type: 'chat-created'; chatId: string };
+
+function parseAgentStreamEvent(raw: string): AgentStreamEvent | ChatCreatedSideEvent | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -189,6 +191,12 @@ function parseAgentStreamEvent(raw: string): AgentStreamEvent | null {
   }
   if (type === 'error' && typeof obj.error === 'string') {
     return { type: 'error', error: obj.error };
+  }
+  // Evento out-of-band emitido por el stream backend cuando crea/resuelve el
+  // chat persistido. No forma parte del union `AgentStreamEvent` (que es
+  // contrato compartido). El consumidor lo trata como side-channel.
+  if (type === 'chat-created' && typeof obj.chatId === 'string') {
+    return { type: 'chat-created', chatId: obj.chatId };
   }
   return null;
 }
@@ -486,8 +494,18 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   // Historial cerrado por defecto: el RightPanel es solo chat. El usuario
   // abre el historial como overlay clickeando el botón "Historial".
   const [showHistory, setShowHistory] = useState(false);
+  // Sesiones legadas (localStorage) — read-only, sólo para que el user pueda
+  // recuperar chats viejos hasta que decida borrarlos. El historial activo
+  // ahora vive en el backend (useAgentChatHistory).
   const [sessions, setSessions] = useState<AgentChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // Chat persistido activo en backend. `null` significa que el próximo
+  // stream lo creará y el evento SSE `chat-created` nos dará el id.
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const currentChatIdRef = useRef<string | null>(null);
+  useEffect(() => { currentChatIdRef.current = currentChatId; }, [currentChatId]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const remoteHistory = useAgentChatHistory(true);
   const [messages, setMessages] = useState<UIChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -540,6 +558,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const hasKeyForProvider = !meta.needsKey || serverKeyProviders.has(config.provider as AgentKeyProvider);
   const canSend = !loading && hasKeyForProvider;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeRemoteChat: RemoteAgentChat | null = currentChatId
+    ? (remoteHistory.chats.find((chat) => chat.id === currentChatId) ?? null)
+    : null;
+  const hasActiveChat = Boolean(currentChatId || activeSession || messages.length > 0);
 
   useEffect(() => {
     sessionDefaultsRef.current = { provider: config.provider, mode };
@@ -552,69 +574,29 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   }, []);
 
   useEffect(() => {
+    // Cargamos los chats legados de localStorage SOLO para preview read-only
+    // en el historial. No los reactivamos como sesión viva — eso correría
+    // contra el backend persistente. El user los puede revisar y borrar
+    // manualmente desde el panel "Chats antiguos".
     const loaded = loadChatSessions(resolvedWorkspaceId);
-    const firstSession = loaded[0];
-    if (firstSession) {
-      setSessions(loaded);
-      setActiveSessionId(firstSession.id);
-      setMessages(firstSession.messages);
-      setRollbackQueue(firstSession.rollbackQueue || []);
-    } else {
-      const fresh = createEmptyChatSession({
-        workspaceId: resolvedWorkspaceId,
-        provider: sessionDefaultsRef.current.provider,
-        mode: sessionDefaultsRef.current.mode
-      });
-      const saved = saveChatSessions(resolvedWorkspaceId, [fresh]);
-      setSessions(saved);
-      setActiveSessionId(fresh.id);
-      setMessages([]);
-      setRollbackQueue([]);
-    }
+    setSessions(loaded);
+    setActiveSessionId(null);
+    setCurrentChatId(null);
+    currentChatIdRef.current = null;
+    setMessages([]);
+    setRollbackQueue([]);
     setInput('');
     historyHydratedRef.current = true;
   }, [resolvedWorkspaceId]);
 
+  // El historial activo se persiste server-side por el stream
+  // (POST `/api/agora-ai/chats/<id>/messages` desde el backend en cada turno).
+  // Sólo mantenemos las sesiones legadas (localStorage) en memoria como
+  // lectura — sin re-escribirlas.
   const sessionsRef = useRef<AgentChatSession[]>(sessions);
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
-
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!historyHydratedRef.current || !activeSessionId) return;
-    if (loading) return;
-    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = setTimeout(() => {
-      persistTimerRef.current = null;
-      const prev = sessionsRef.current;
-      const current = prev.find((session) => session.id === activeSessionId);
-      const nextSession: AgentChatSession = {
-        id: activeSessionId,
-        title: deriveChatSessionTitle(messages),
-        workspaceId: resolvedWorkspaceId,
-        provider: current?.provider || config.provider,
-        mode,
-        messages,
-        rollbackQueue,
-        createdAt: current?.createdAt || Date.now(),
-        updatedAt: Date.now()
-      };
-      const saved = saveChatSessions(resolvedWorkspaceId, upsertChatSession(prev, nextSession));
-      setSessions(saved);
-    }, 500);
-    return () => {
-      if (persistTimerRef.current) {
-        clearTimeout(persistTimerRef.current);
-        persistTimerRef.current = null;
-      }
-    };
-  }, [activeSessionId, config.provider, messages, mode, resolvedWorkspaceId, rollbackQueue, loading]);
-
-  // Flush forzado al desmontar para no perder el último delta tras cerrar el panel.
-  useEffect(() => () => {
-    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-  }, []);
 
   const updateMode = useCallback((_nextMode: AgentMode) => {}, []);
 
@@ -783,7 +765,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         mode,
         accessPolicy,
         userInstructions: streamUserInstructions,
-        dryRun: dryRunFlag
+        dryRun: dryRunFlag,
+        // Si ya hay un chat persistido vivo, el backend hace append. Si es
+        // null, el stream crea uno y emite `chat-created` con el id.
+        ...(currentChatIdRef.current ? { chatId: currentChatIdRef.current } : {})
       })
     });
 
@@ -903,6 +888,17 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           console.warn('[agora-ai] evento SSE inválido, ignorado');
           continue;
         }
+        if (event.type === 'chat-created') {
+          // Backend creó (o resolvió) el chat persistido. Guardamos el id
+          // para que el siguiente turno haga append en lugar de crear otro,
+          // y refrescamos el listado de chats recientes.
+          if (currentChatIdRef.current !== event.chatId) {
+            currentChatIdRef.current = event.chatId;
+            setCurrentChatId(event.chatId);
+            void remoteHistory.refresh();
+          }
+          continue;
+        }
         if (event.type === 'status') {
           latestStatus = event.status;
           setStreamStatus(event.status);
@@ -990,7 +986,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
 
     return finalPayload;
-  }, [accessPolicy, config.model, config.provider, meta.defaultModel, mode, resolvedWorkspaceId, updateMessageById]);
+  }, [accessPolicy, config.model, config.provider, meta.defaultModel, mode, remoteHistory, resolvedWorkspaceId, updateMessageById]);
 
   // Memoizar el array de tools por accessPolicy: toOllamaTools recorre la
   // tabla de ~140 definitions y arma un payload pesado.
@@ -1232,11 +1228,52 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
   }, []);
 
+  const remoteMessageToUi = useCallback((message: RemoteAgentChatMessage): UIChatMessage | null => {
+    // Sólo mostramos roles user/assistant en la UI. Los mensajes 'tool'
+    // viven embebidos en `agentRun.toolResults` del assistant correspondiente.
+    if (message.role !== 'user' && message.role !== 'assistant') return null;
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.content
+    };
+  }, []);
+
+  const activateRemoteChat = useCallback(async (chatId: string) => {
+    autoConfirmedRef.current.clear();
+    setLoadingMessages(true);
+    try {
+      const remoteMessages = await remoteHistory.loadMessages(chatId);
+      const uiMessages = remoteMessages
+        .map(remoteMessageToUi)
+        .filter((m): m is UIChatMessage => m !== null);
+      setActiveSessionId(null);
+      setCurrentChatId(chatId);
+      currentChatIdRef.current = chatId;
+      setMessages(uiMessages);
+      setRollbackQueue([]);
+      setInput('');
+    } catch (error) {
+      publishAgentProblem({
+        severity: 'error',
+        message: 'No se pudo cargar el chat',
+        detail: error instanceof Error ? error.message : String(error),
+        code: 'agora-ai-chat-load'
+      });
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [remoteHistory, remoteMessageToUi]);
+
+  // Activar sesión legada (localStorage, read-only). Mantiene flujo viejo
+  // hasta que el user borre el chat antiguo.
   const activateSession = useCallback((sessionId: string) => {
     const target = sessions.find((session) => session.id === sessionId);
     if (!target) return;
     autoConfirmedRef.current.clear();
     setActiveSessionId(target.id);
+    setCurrentChatId(null);
+    currentChatIdRef.current = null;
     setMessages(target.messages);
     setRollbackQueue(target.rollbackQueue || []);
     setInput('');
@@ -1246,52 +1283,71 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   }, [mode, sessions, updateMode]);
 
   const startNewChat = useCallback(() => {
-    const fresh = createEmptyChatSession({
-      workspaceId: resolvedWorkspaceId,
-      provider: config.provider,
-      mode
-    });
+    // No pre-creamos el chat en backend — el stream lo crea en el primer
+    // turno y emite `chat-created`. Esto evita chats vacíos huérfanos.
     autoConfirmedRef.current.clear();
-    const next = saveChatSessions(resolvedWorkspaceId, upsertChatSession(sessions, fresh));
-    setSessions(next);
-    setActiveSessionId(fresh.id);
+    setActiveSessionId(null);
+    setCurrentChatId(null);
+    currentChatIdRef.current = null;
     setMessages([]);
     setRollbackQueue([]);
     setInput('');
     textareaRef.current?.focus();
-  }, [config.provider, mode, resolvedWorkspaceId, sessions]);
+  }, []);
 
   const deleteActiveChat = useCallback(() => {
-    if (!activeSessionId) return;
     autoConfirmedRef.current.clear();
-    const remaining = sessions.filter((session) => session.id !== activeSessionId);
-    if (remaining.length === 0) {
-      const fresh = createEmptyChatSession({
-        workspaceId: resolvedWorkspaceId,
-        provider: config.provider,
-        mode
+    // Caso 1: chat persistido activo → DELETE al backend, refresh listado.
+    if (currentChatId) {
+      const targetId = currentChatId;
+      setCurrentChatId(null);
+      currentChatIdRef.current = null;
+      setMessages([]);
+      setRollbackQueue([]);
+      setInput('');
+      remoteHistory.removeChat(targetId).catch((error) => {
+        publishAgentProblem({
+          severity: 'error',
+          message: 'No se pudo eliminar el chat persistido',
+          detail: error instanceof Error ? error.message : String(error),
+          code: 'agora-ai-chat-delete'
+        });
       });
-      const saved = saveChatSessions(resolvedWorkspaceId, [fresh]);
+      return;
+    }
+    // Caso 2: sesión legada activa → borrar de localStorage.
+    if (activeSessionId) {
+      const remaining = sessions.filter((session) => session.id !== activeSessionId);
+      const saved = saveChatSessions(resolvedWorkspaceId, remaining);
       setSessions(saved);
-      setActiveSessionId(fresh.id);
+      setActiveSessionId(null);
       setMessages([]);
       setRollbackQueue([]);
       setInput('');
       return;
     }
-
-    const saved = saveChatSessions(resolvedWorkspaceId, remaining);
-    const nextActive = saved[0];
-    setSessions(saved);
-    if (!nextActive) return;
-    setActiveSessionId(nextActive.id);
-    setMessages(nextActive.messages);
-    setRollbackQueue(nextActive.rollbackQueue || []);
+    // Caso 3: chat nuevo sin id todavía (no creado en backend) → sólo reset UI.
+    setMessages([]);
+    setRollbackQueue([]);
     setInput('');
-    if (nextActive.mode !== mode) {
-      updateMode(nextActive.mode);
+  }, [activeSessionId, currentChatId, remoteHistory, resolvedWorkspaceId, sessions]);
+
+  const renameCurrentChat = useCallback(async () => {
+    if (!currentChatId) return;
+    const fallback = deriveChatSessionTitle(messages);
+    const next = window.prompt('Nuevo título para el chat:', fallback);
+    if (!next || !next.trim()) return;
+    try {
+      await remoteHistory.renameChat(currentChatId, next.trim());
+    } catch (error) {
+      publishAgentProblem({
+        severity: 'error',
+        message: 'No se pudo renombrar el chat',
+        detail: error instanceof Error ? error.message : String(error),
+        code: 'agora-ai-chat-rename'
+      });
     }
-  }, [activeSessionId, config.provider, mode, resolvedWorkspaceId, sessions, updateMode]);
+  }, [currentChatId, messages, remoteHistory]);
 
   const clearPendingConfirmation = useCallback((messageId: string) => {
     setMessages(prev => prev.map(msg => (
@@ -1629,9 +1685,15 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-surface-200">
                   <History className="w-4 h-4 text-sky-400" />
-                  <span className="text-sm font-medium">Historial local</span>
+                  <span className="text-sm font-medium">Historial</span>
                 </div>
-                <p className="text-[10px] text-surface-500 mt-0.5">Privado en tu navegador · sin Firebase</p>
+                <p className="text-[10px] text-surface-500 mt-0.5">
+                  {loadingMessages
+                    ? 'Cargando conversación…'
+                    : remoteHistory.loading
+                      ? 'Sincronizando…'
+                      : 'Sincronizado en tu cuenta · todos los dispositivos'}
+                </p>
               </div>
               <button
                 type="button"
@@ -1644,27 +1706,68 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-              {sessions.map((session) => {
-                const isActive = session.id === activeSessionId;
+              {remoteHistory.error && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-300">
+                  {remoteHistory.error}
+                </div>
+              )}
+              {remoteHistory.chats.length === 0 && !remoteHistory.loading && (
+                <div className="text-[10px] text-surface-500 px-1 py-2">
+                  No tenés chats todavía. Mandá tu primer mensaje y se guardará automáticamente.
+                </div>
+              )}
+              {remoteHistory.chats.map((chat) => {
+                const isActive = chat.id === currentChatId;
                 return (
                   <button
-                    key={session.id}
+                    key={chat.id}
                     type="button"
-                    onClick={() => { activateSession(session.id); setShowHistory(false); }}
+                    onClick={() => { void activateRemoteChat(chat.id); setShowHistory(false); }}
                     className={`w-full text-left rounded-lg border px-2.5 py-2 transition ${
                       isActive
                         ? 'border-sky-500/40 bg-sky-500/10 text-surface-100'
                         : 'border-surface-800 bg-surface-900/60 text-surface-300 hover:border-surface-700 hover:bg-surface-900'
                     }`}
                   >
-                    <div className="text-xs font-medium truncate">{session.title || 'Nuevo chat'}</div>
+                    <div className="text-xs font-medium truncate">{chat.title || 'Nuevo chat'}</div>
                     <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-surface-500">
-                      <span className="truncate">{session.messages.length} msg</span>
-                      <span>{formatSessionTimestamp(session.updatedAt)}</span>
+                      <span className="truncate">{chat.provider ?? '—'}</span>
+                      <span>{formatSessionTimestamp(chat.updatedAt)}</span>
                     </div>
                   </button>
                 );
               })}
+
+              {sessions.length > 0 && (
+                <>
+                  <div className="mt-3 pt-2 border-t border-surface-800">
+                    <div className="px-1 pb-1 text-[10px] uppercase tracking-wide text-surface-500">
+                      Chats antiguos · solo este dispositivo
+                    </div>
+                  </div>
+                  {sessions.map((session) => {
+                    const isActive = session.id === activeSessionId;
+                    return (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => { activateSession(session.id); setShowHistory(false); }}
+                        className={`w-full text-left rounded-lg border px-2.5 py-2 transition opacity-90 ${
+                          isActive
+                            ? 'border-amber-500/40 bg-amber-500/10 text-surface-100'
+                            : 'border-surface-800 bg-surface-900/40 text-surface-400 hover:border-surface-700 hover:bg-surface-900'
+                        }`}
+                      >
+                        <div className="text-xs font-medium truncate">{session.title || 'Nuevo chat'}</div>
+                        <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-surface-500">
+                          <span className="truncate">{session.messages.length} msg · local</span>
+                          <span>{formatSessionTimestamp(session.updatedAt)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </aside>
         </>
@@ -1715,7 +1818,17 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           >
             <MessageSquarePlus className="w-3.5 h-3.5" />
           </button>
-          {(messages.length > 0 || activeSession) && (
+          {currentChatId && (
+            <button
+              onClick={() => { void renameCurrentChat(); }}
+              className="p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
+              title={activeRemoteChat?.title ? `Renombrar "${activeRemoteChat.title}"` : 'Renombrar chat'}
+              aria-label="Renombrar chat"
+            >
+              <ListTree className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {hasActiveChat && (
             <button
               onClick={deleteActiveChat}
               className="p-1 rounded text-surface-500 hover:text-surface-300 hover:bg-surface-700 transition"
