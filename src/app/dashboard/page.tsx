@@ -168,7 +168,6 @@ function DashboardContent() {
     const isPageVisible = usePageVisibility();
     const { isOnline, syncNow, pendingCount } = useOfflineSync();
 
-    // Initialize touch drag polyfill for tablet/mobile support
     useEffect(() => { initTouchDragPolyfill(); }, []);
     useEffect(() => { void import('@/lib/diagnostics-bus').then(m => m.installDiagnosticsBus()); }, []);
 
@@ -2429,7 +2428,6 @@ function DashboardContent() {
             keywords: ['focus', 'concentración', 'pantalla limpia'],
             run: () => handleToggleZenMode()
         },
-        // Comandos auto-generados para cada vista del sidebar.
         ...SIDEBAR_VIEWS.map((v) => ({
             id: `view.${v.id}`,
             category: 'Vista',
