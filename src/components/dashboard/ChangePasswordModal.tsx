@@ -2,7 +2,8 @@
 
 import { AnimatePresence, m, type Transition } from 'framer-motion';
 import { Check, Key, Loader2, X } from 'lucide-react';
-import { getErrorMessage } from '@/lib/error-utils';
+import { translateAuthError } from '@/lib/auth-errors';
+import { validatePasswordPolicy, PASSWORD_HELP_TEXT, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface PasswordForm {
@@ -108,8 +109,9 @@ export default function ChangePasswordModal({
                                         return;
                                     }
 
-                                    if (passwordForm.new.length < 6) {
-                                        setPasswordError('La nueva contraseña debe tener al menos 6 caracteres');
+                                    const policy = validatePasswordPolicy(passwordForm.new);
+                                    if (!policy.ok) {
+                                        setPasswordError(policy.error ?? 'Contraseña inválida.');
                                         return;
                                     }
 
@@ -118,7 +120,7 @@ export default function ChangePasswordModal({
                                         await changePassword(passwordForm.current, passwordForm.new);
                                         setPasswordSuccess(true);
                                     } catch (error: unknown) {
-                                        setPasswordError(getErrorMessage(error, 'Error al cambiar la contraseña'));
+                                        setPasswordError(translateAuthError(error, 'Error al cambiar la contraseña'));
                                     } finally {
                                         setIsChangingPassword(false);
                                     }
@@ -152,10 +154,11 @@ export default function ChangePasswordModal({
                                         value={passwordForm.new}
                                         onChange={(e) => setPasswordForm({ ...passwordForm, new: e.target.value })}
                                         className="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-lg text-white placeholder:text-surface-500 focus:ring-2 focus:ring-mandy-500/50 focus:border-mandy-500 outline-none"
-                                        placeholder="Mínimo 6 caracteres"
+                                        placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
                                         required
-                                        minLength={6}
+                                        minLength={PASSWORD_MIN_LENGTH}
                                     />
+                                    <p className="text-[11px] text-surface-500 mt-1.5">{PASSWORD_HELP_TEXT}</p>
                                 </div>
 
                                 <div>
