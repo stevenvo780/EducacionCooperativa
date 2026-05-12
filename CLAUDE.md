@@ -24,12 +24,18 @@ Stack:
   `workspaces/<wsId>/<folder>/<file>` o `users/<uid>/<folder>/<file>`.
 - **Git por workspace**: Forgejo en NAS. Cada workspace = repo en la org
   `agora`. El user/CLI puede clonar via HTTPS + token.
-- **Workers**: contenedores Docker `edu-worker-<wsId>` corriendo en
+- **Workers**: ~35 contenedores Docker `edu-worker-<wsId>` corriendo en
   `humanizar2` (host activo; reemplazó al viejo `stev-server`). Cada uno
-  expone una terminal y monta `/workspace`.
+  expone una terminal y monta `/workspace`. Apuntan al hub vía
+  `NEXUS_URL=https://hub.humanizar-dev.cloud`.
+- **Hub**: VM dedicada GCP Compute Engine e2-micro free tier
+  (`agora-hub`, IP `34.72.204.171`, dominio `hub.humanizar-dev.cloud`,
+  Caddy `protocols h1` only por engine.io). Reemplazó al viejo hub en
+  `humanizar2`.
 - **Daemon de sync**: `agora-host-sync` corre en `humanizar2` como systemd
   unit; mantiene el `/workspace` de cada worker espejado contra MinIO+Firestore
-  bidireccionalmente y revive contenedores caídos.
+  bidireccionalmente y revive contenedores caídos. Ignora `.scratch/`,
+  `.agent-tmp/`, `tmp-*`, `*.tmp` (Bug I-2 Opción B).
 
 ## 2. Arquitectura de sync (no la rompas)
 
@@ -110,10 +116,16 @@ Hosts principales:
 - **NAS** — `nas@100.98.67.189` (NetBird). Hostea MinIO, Forgejo, Postgres,
   filebrowser. `docker exec agora-{minio,forgejo,...}` para acción directa.
 - **humanizar2** — `humanizar@100.98.5.11` (NetBird, alias SSH
-  `humanizar2`). Host activo: hostea todos los workers `edu-worker-*`,
-  el daemon `agora-host-sync` y el `edu-hub`. Acceso por jump host (NAS):
-  `ssh nas ssh humanizar2 '...'`. Reemplazó a `stev-server`
-  (`stev@100.98.8.227`) como host de producción.
+  `humanizar2`). Hostea todos los workers `edu-worker-*` y el daemon
+  `agora-host-sync`. Acceso por jump host (NAS): `ssh nas ssh humanizar2
+  '...'`. Reemplazó a `stev-server` (`stev@100.98.8.227`) como host de
+  workers.
+- **agora-hub** — VM GCP Compute Engine e2-micro free tier en us-central1,
+  IP `34.72.204.171`, dominio `hub.humanizar-dev.cloud`. Hostea AgoraHub
+  como systemd unit (no `--user`) con usuario no-root `edu-hub`.
+  Hardening: ProtectSystem, apt cron weekly, firewall raw 3010 cerrado
+  (solo 443 via Caddy). Acceso: `gcloud compute ssh agora-hub
+  --zone=us-central1-a`.
 
 Comandos diagnóstico que uso seguido (sin secretos en este file):
 
@@ -180,8 +192,8 @@ Revisar y comunicar al user si reaparecen:
   upgrade docker-ce` cuando haya ventana de mantenimiento.
 - **MinIO basura histórica** (~32 objetos en raíz: `21Vu.../.git/...`,
   `dev-user-123/`, `groups/`, `system/`) — no afecta nada pero ensucia.
-- **Vulnerabilidades npm** — 1 critical (protobufjs) + 5 high. Fix con
-  `npm install firebase-admin@latest next@latest` (cambia lockfile).
+- **Vulnerabilidades npm** — Next.js 15.5.18 ya cubre 4 CVEs recientes;
+  quedan menores. Fix continúa con `npm install <paquete>@latest`.
 - **`MERCADOPAGO_WEBHOOK_SECRET`** falta en Vercel prod — el webhook hace
   fail-closed pero el secret debería estar para que la firma HMAC proteja.
 - **`noUncheckedIndexedAccess`** activado solo en `src/lib/contracts/` y
@@ -190,6 +202,13 @@ Revisar y comunicar al user si reaparecen:
 - **`no-floating-promises`** activado solo en `src/lib/**` y
   `src/app/api/**` (typed linting con parser TS, ver `.eslintrc.json`
   override). Lo demás sería slow para CI sin más beneficio.
+- **Heap doc trivial** target <5MB — sesión sucia da ~65MB pero delta
+  puro ~5-7MB estimado. No estrictamente medido.
+- **Migración AgoraAIChat sección "agentRun reconstruido"** no
+  implementada: chats viejos backend muestran solo texto plano (no
+  thinking/tools/citations).
+- **Custom claims Cloud Function trigger** creado pero no deployado —
+  `syncWorkspaceClaims` ya cubre desde backend (defense in depth).
 
 ### Resueltos (no perseguir)
 
@@ -197,6 +216,29 @@ Revisar y comunicar al user si reaparecen:
 - ~~Outbox sin drainer~~ → `/api/cron/drain-outbox` cada 5min.
 - ~~Workspace personal sync rechazado~~ → `isPersonalWorkspaceId` + `userId`
   en HMAC en todos los endpoints `/api/sync/*`.
+- ~~next-pwa@5.6.0 EOL~~ → migrado a `@ducanh2912/next-pwa@10.2.9`
+  (fork mantenido). SW auto-registra en App Router.
+- ~~ACAO default `*`~~ → override a `https://agora.elenxos.com` en
+  `next.config.mjs`.
+- ~~Sin CSP / HSTS~~ → headers en `next.config.mjs`: CSP, HSTS,
+  X-Frame-Options DENY, Referrer-Policy, Permissions-Policy.
+- ~~KaTeX/Mermaid bloqueaban LCP~~ → lazy load en MosaicEditor. Lexical
+  plugins (table/image/codeblock/directive/frontmatter) con detección
+  regex content-aware. Sidebar Search/Outline/ToolsGallery dynamic.
+  Toolbar grupos con `useDeferredMount(600)`.
+  LinterOverlay/LinterPlugin/SnippetGallery dynamic.
+- ~~/api/diag cold-starts ~3s~~ → proxy cacheado in-memory 30s + edge
+  `max-age=30 s-maxage=60`.
+- ~~Chat IA solo localStorage~~ → migrado a `useAgentChatHistory`
+  (backend cross-device).
+- ~~Custom file format limitado a .md/.st~~ → NewFileModal permite
+  cualquier extensión (`.py`, `.yaml`, `.editorconfig`, etc.).
+- ~~Auth errors crudos en inglés~~ → 14 códigos `auth/*` traducidos.
+- ~~Password sin policy~~ → validator (min 8, letras+números, blacklist
+  15 comunes).
+- ~~Logout no purgaba caché~~ → whitelist de 13 prefijos de
+  `localStorage` se limpia en signOut.
+- ~~Toaster sin cap~~ → Sonner cap 3 visibles + 4s duration.
 
 ## Contratos de borde (`src/lib/contracts/`)
 

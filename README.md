@@ -16,8 +16,8 @@ pieza tenga su CI, sus permisos y su versionado independiente.
 |------|-----|--------|
 | **stevenvo780/EducacionCooperativa** (este) | Frontend Next.js 15 (UI, auth, Firestore, MinIO, Forgejo SDK) | Vercel auto-deploy desde master |
 | [stevenvo780/agora-backend](https://github.com/stevenvo780/agora-backend) | Streaming del agente IA (Express en Cloud Run, sin cap de tiempo) | `gcloud run deploy agora-backend --source .` |
-| [stevenvo780/agora-hub](https://github.com/stevenvo780/agora-hub) | TermiCoop Hub: socket.io que coordina workers y agente | systemd `edu-hub.service` en stev-server |
-| [stevenvo780/agora-worker](https://github.com/stevenvo780/agora-worker) | Worker Docker (terminal por workspace) + daemon `agora-host-sync` | `docker push stevenvo780/edu-worker:latest` + `edu-worker-manager update all` |
+| [stevenvo780/agora-hub](https://github.com/stevenvo780/agora-hub) | TermiCoop Hub: socket.io que coordina workers y agente | systemd `edu-hub.service` en VM GCP `agora-hub` (`hub.humanizar-dev.cloud`) |
+| [stevenvo780/agora-worker](https://github.com/stevenvo780/agora-worker) | Worker Docker (terminal por workspace) + daemon `agora-host-sync` | `docker push stevenvo780/edu-worker:latest` + `edu-worker-manager update all` (en humanizar2) |
 | [stevenvo780/agora-cli](https://github.com/stevenvo780/agora-cli) | CLI de terminal para Agora fuera de la web | npm publish (pendiente) |
 
 **Antes de tocar uno de los servicios** clona su repo correspondiente:
@@ -71,19 +71,24 @@ git clone git@github.com:stevenvo780/agora-cli.git
 
 | Servicio | Uso |
 |---|---|
-| **Firebase Firestore** | Documentos, workspaces, tableros, snippets, estados semánticos, suscripciones |
-| **Firebase Storage** | Archivos adjuntos (PDF, imágenes, hojas de cálculo, etc.) |
-| **Firebase Realtime Database** | Sincronización en tiempo real (worker ↔ hub) |
-| **Firebase Auth** | Autenticación de usuarios |
+| **Firebase Firestore** | Documentos, workspaces, tableros, snippets, estados semánticos, suscripciones, chats del agente IA, API keys cifradas, citaciones |
+| **MinIO (NAS)** | Archivos adjuntos / blobs (PDF, imágenes, hojas de cálculo, uploads multipart >50MB). Bucket `agora-blobs`. Reemplazó a Firebase Storage. |
+| **Forgejo (NAS)** | Git por workspace (1 repo Forgejo por workspace, org `agora`). |
+| **Firebase Realtime Database** | Sincronización en tiempo real (worker ↔ hub, sync events RTDB con `timestamp/type/source`) |
+| **Firebase Auth** | Autenticación de usuarios + custom claims por workspace (`syncWorkspaceClaims`) |
 
 ### Red de producción
 
 Toda la conectividad entre servicios corre sobre **NetBird mesh** (`100.98.0.0/16`). Las IPs de WireGuard (`10.8.0.x`) fueron retiradas el 2026-03-05.
 
-| Nodo | IP NetBird | Puerto |
+| Nodo | Endpoint | Puerto |
 |---|---|---|
-| Hub | 100.98.176.95 | 3010 |
-| Worker | 100.98.136.112 | — (host) |
+| Hub | `hub.humanizar-dev.cloud` (VM GCP `agora-hub`, IP pública `34.72.204.171`) | 443 (Caddy) → 3010 (interno) |
+| Worker host (`humanizar2`) | 100.98.5.11 (NetBird) | — (host) |
+
+> El hub salió de la mesh NetBird en 2026-05: ahora vive en una VM GCP
+> e2-micro (free tier) con TLS público via Caddy. Caddy expone solo
+> `h1` porque engine.io tiene problemas con HTTP/2 mid-stream.
 
 ---
 
@@ -165,10 +170,27 @@ Chat multi-proveedor de IA con inyección de contexto del workspace.
 - Contenido de los documentos de texto del workspace (hasta 10 docs, 1.200 chars c/u)
 - Conceptos semánticos del workspace (hasta 25)
 - Fragmentos de texto marcados (hasta 20)
+- Grafo de citaciones del workspace (tools `query_citation_graph`,
+  `find_related_via_graph`, `expand_context` para que el agente
+  navegue las relaciones entre documentos).
 
-Las API keys se guardan en `localStorage` del cliente y **nunca se persisten en el servidor**.
+Las API keys se guardan en un **vault cifrado en backend**
+(`users/{uid}/agentSecrets/{provider}`, AES-256-GCM/HKDF derivado de
+`WORKER_SECRET`). En UI solo se muestran los últimos 4 caracteres
+(`***ab12`). Endpoint: `/api/agora-ai/keys`.
 
-API: `POST /api/agora-ai`
+Las **conversaciones del agente** se persisten en Firestore
+(`users/{uid}/agentChats` + subcollection `messages`) y se sincronizan
+entre dispositivos vía el hook `useAgentChatHistory`. El stream
+auto-persiste en cada turno. CRUD: `/api/agora-ai/chats/*`.
+
+**Rate limit del agente IA**:
+- `AGORA_AI_DAILY_TOKEN_BUDGET=500000` tokens/día/user
+- `AGORA_AI_HOURLY_MESSAGE_CAP=100` msgs/hora/user
+- Abuse-block tras 5×429 en 10min
+- Tracking en `users/{uid}/agentUsage/daily-{YYYY-MM-DD}`.
+
+API: `POST /api/agora-ai/stream` (Cloud Run, AgoraBack)
 
 ---
 
@@ -361,8 +383,61 @@ Visualización in-app de múltiples formatos:
 Búsqueda de documentos dentro de workspaces.
 
 - Modal de búsqueda rápida (`QuickSearchModal`)
-- Búsqueda por título y contenido
+- Búsqueda por título y contenido (`searchableContent`, no solo metadata)
 - API: `GET /api/search`
+
+---
+
+### Grafo de citaciones (mesa semántica)
+
+Cada documento extrae citaciones automáticamente (wiki-links
+`[[concepto]]`, enlaces markdown, citas bibliográficas APA, conceptos
+del glosario) y las persiste en la subcollection
+`documents/{docId}/citations`. El backend expone tools al agente IA
+(`query_citation_graph`, `find_related_via_graph`, `expand_context`) y
+la mesa semántica del editor incluye una tab "Grafo" con visualización
+interactiva via `react-force-graph-2d` (foco ajustable, filtros por
+tipo de enlace).
+
+Backfill admin: `/api/admin/citations/backfill` + cron diario 04:00 UTC.
+
+---
+
+### Upload de archivos grandes (multipart)
+
+Para archivos >50MB se usa upload multipart contra MinIO:
+
+- `POST /api/upload/multipart/initiate` — inicia upload
+- `POST /api/upload/multipart/sign-part` — firma URL por parte
+- `POST /api/upload/multipart/complete` — completa el upload
+- `POST /api/upload/multipart/abort` — cancela
+
+El cliente sube en chunks y se reanuda automáticamente si se corta la
+red.
+
+---
+
+### Git providers externos
+
+Además del Git interno (Forgejo), los workspaces pueden vincular un
+repo externo (GitHub, GitLab, SSH). Las credenciales se guardan
+cifradas en un vault AES-256-GCM compartido con las API keys del
+agente. La sincronización usa `isomorphic-git` en el backend.
+
+---
+
+### Headers de seguridad
+
+Configurados en `next.config.mjs`:
+
+- **CSP** — Content-Security-Policy ajustado para Firebase / Cloud Run / MinIO.
+- **HSTS** — Strict-Transport-Security max-age=63072000 includeSubDomains preload.
+- **X-Frame-Options: DENY**.
+- **Referrer-Policy: strict-origin-when-cross-origin**.
+- **Permissions-Policy** — limita acceso a camera, microphone, geolocation, etc.
+- **CORS** — `Access-Control-Allow-Origin` override a `https://agora.elenxos.com`.
+
+AgoraBack también activa HSTS via `helmet`.
 
 ---
 
@@ -375,7 +450,8 @@ La aplicación funciona como **Progressive Web App** con soporte offline:
 - `offlineSync.ts`: cola de cambios pendientes con sync automático al reconectarse
 - `useOnlineStatus`: hook que detecta conectividad
 - `OfflineIndicator`: banner visual cuando no hay conexión
-- Configurado con `next-pwa`
+- Configurado con `@ducanh2912/next-pwa` (fork mantenido del antiguo
+  `next-pwa@5.6.0` EOL). El service worker auto-registra en App Router.
 
 ---
 
@@ -447,8 +523,8 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=   # opcional, Analytics
 
 # Hub Socket.IO
-NEXT_PUBLIC_HUB_URL=http://localhost:3010
-NEXT_PUBLIC_NEXUS_URL=                 # alias de HUB_URL usado por el worker
+NEXT_PUBLIC_HUB_URL=https://hub.humanizar-dev.cloud   # prod; dev: http://localhost:3010
+NEXT_PUBLIC_NEXUS_URL=                                # alias de HUB_URL usado por el worker
 
 # API Cloud Run
 NEXT_PUBLIC_API_BASE_URL=https://agora-backend-xxxx.a.run.app
@@ -477,9 +553,9 @@ ALLOW_LEGACY_WORKER_TOKENS=false
 ### Worker (`services/worker`) — `/etc/edu-worker/worker.env`
 
 ```bash
-NEXUS_URL=http://100.98.176.95:3010   # URL del Hub
-WORKER_SECRET=                         # debe coincidir con el del Hub
-FIREBASE_CONFIG=                       # JSON con projectId, storageBucket, databaseURL
+NEXUS_URL=https://hub.humanizar-dev.cloud   # URL del Hub (prod)
+WORKER_SECRET=                              # debe coincidir con el del Hub
+FIREBASE_CONFIG=                            # JSON con projectId, storageBucket, databaseURL
 ```
 
 ---
@@ -533,10 +609,10 @@ Documentación operativa completa en [desplieges-prod/README.md](desplieges-prod
 # 1. Frontend → Vercel
 vercel --prod
 
-# 2. Hub → .deb en stev-server
+# 2. Hub → VM GCP `agora-hub` (us-central1-a, e2-micro free tier)
 ./desplieges-prod/deploy_hub.sh
 
-# 3. Worker → Docker image en stev-server
+# 3. Worker → Docker image en humanizar2
 ./desplieges-prod/deploy_docker.sh
 
 # 4. Worker → .deb + Docker (completo)
@@ -563,20 +639,23 @@ docker push stevenvo780/edu-worker:latest
 ### Comandos operativos (producción)
 
 ```bash
-# Estado de workers
-ssh stev-server 'sudo edu-worker-manager status'
+# Estado de workers (humanizar2, vía jump host NAS)
+ssh nas ssh humanizar2 'docker ps --filter name=edu-worker --format "table {{.Names}}\t{{.Status}}"'
 
 # Actualizar todos los workers (pull + recreate)
-ssh stev-server 'sudo edu-worker-manager update all'
+ssh nas 'ssh humanizar2 "echo PASS | sudo -S edu-worker-manager update all"'
 
 # Logs de un worker específico
-ssh stev-server 'sudo edu-worker-manager logs WORKSPACE_ID -f'
+ssh nas ssh humanizar2 'docker logs -f edu-worker-WORKSPACE_ID'
 
-# Reiniciar Hub
-ssh stev-server 'systemctl --user restart edu-hub'
+# Reiniciar Hub (VM GCP `agora-hub`)
+gcloud compute ssh agora-hub --zone=us-central1-a --command='sudo systemctl restart edu-hub'
 
 # Logs del Hub en vivo
-ssh stev-server 'journalctl --user -u edu-hub -f'
+gcloud compute ssh agora-hub --zone=us-central1-a --command='journalctl -u edu-hub -f'
+
+# Health check público del Hub
+curl -s https://hub.humanizar-dev.cloud/health
 ```
 
 ---
