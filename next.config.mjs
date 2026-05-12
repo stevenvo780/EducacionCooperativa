@@ -34,6 +34,11 @@ const withPWA = withPWAInit({
       method: 'GET'
     },
     {
+      urlPattern: ({ url }) => url.origin === self.origin && url.pathname.includes('/stream'),
+      handler: 'NetworkOnly',
+      method: 'GET'
+    },
+    {
       urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/documents'),
       handler: 'NetworkFirst',
       method: 'GET',
