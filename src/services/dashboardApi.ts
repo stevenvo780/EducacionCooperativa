@@ -262,7 +262,6 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
         }
       } while (cursor);
 
-      // Cache docs in IDB for offline use
       try {
         const cached: CachedDoc[] = allDocs.map(d => ({
           id: d.id,
@@ -283,7 +282,6 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
 
       return allDocs;
     } catch (err) {
-      // Offline fallback: return cached docs from IDB
       if (!navigator.onLine) {
         try {
           const cached = await getCachedDocuments(params.workspaceId);
@@ -308,14 +306,12 @@ export const fetchDocumentRawApi = async (docId: string) => {
     assertOk(res, 'Failed to load content');
     const text = await res.text();
 
-    // Cache content in IDB
     try {
       await cacheDocContent(docId, text);
     } catch { /* IDB not available */ }
 
     return text;
   } catch (err) {
-    // Offline fallback
     if (!navigator.onLine) {
       try {
         const cached = await getCachedContent(docId);
@@ -400,7 +396,6 @@ export const fetchUserProfilesApi = async (params: { workspaceId: string; userId
 
 export const createDocumentApi = async (payload: Record<string, unknown>) => {
   if (!navigator.onLine) {
-    // Queue for later sync
     const tempId = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     await enqueueSync({
       operation: SyncOperation.Create,
@@ -410,7 +405,6 @@ export const createDocumentApi = async (payload: Record<string, unknown>) => {
       status: SyncQueueStatus.Pending,
       retries: 0
     });
-    // Return a temp doc so the UI can render it
     return { id: tempId, ...payload, _offline: true } as { id: string; [key: string]: unknown };
   }
 
@@ -503,7 +497,6 @@ export const uploadFileApi = async (formData: FormData) => {
   const file = fileEntry;
   const mimeType = (file.type && file.type.trim()) || 'application/octet-stream';
 
-  // Step 1: Get signed URL for direct upload
   const signedUrlRes = await authFetch('/api/upload/signed-url', {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -516,7 +509,6 @@ export const uploadFileApi = async (formData: FormData) => {
     })
   });
 
-  // Handle storage limit exceeded
   if (signedUrlRes.status === 413) {
     const errData = await signedUrlRes.json();
     throw withErrorCode(
@@ -567,7 +559,6 @@ export const uploadFileApi = async (formData: FormData) => {
     throw new Error(`Direct upload failed: ${uploadRes.status}${headerSuffix}${detail}`);
   }
 
-  // Step 3: Register the uploaded file in Firestore
   const registerRes = await authFetch('/api/upload/register', {
     method: 'POST',
     headers: JSON_HEADERS,

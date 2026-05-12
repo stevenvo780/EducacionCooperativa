@@ -50,14 +50,12 @@ const ensureBoardExists = async (boardId: string, workspaceId: string) => {
 
   if (!boardSnap.exists()) {
     const batch = writeBatch(db());
-    // Create board
     batch.set(boardRef, {
       workspaceId: boardId, // Use boardId as workspaceId for consistency in DB
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 
-    // Create default columns
     const columnsRef = collection(boardRef, 'columns');
     DEFAULT_COLUMNS.forEach((name, index) => {
       const colRef = doc(columnsRef);
@@ -81,10 +79,6 @@ export const fetchBoardApi = async (params: { workspaceId: string }): Promise<Bo
   }
 
   const boardId = resolveBoardId(params.workspaceId);
-  
-  // Ensure board exists (creates it if offline creation is allowed/compatible or if we are online)
-  // Note: offline creation of new boards might be tricky if rules depend on server-side checks not fully replicated, 
-  // but for personal boards it's fine.
   await ensureBoardExists(boardId, params.workspaceId);
 
   const boardRef = doc(db(), 'boards', boardId);
