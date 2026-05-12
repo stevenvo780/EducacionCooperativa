@@ -53,6 +53,7 @@
     "katex": "^0.16.28",
     "lucide-react": "^0.344.0",
     "mammoth": "^1.11.0",
+    "mermaid": "^11.15.0",
     "mobile-drag-drop": "^3.0.0-rc.0",
     "next": "^15.5.18",
     "nodemon": "^3.1.11",

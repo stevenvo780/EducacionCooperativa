@@ -3,8 +3,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
-const MERMAID_CDN = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-const LOAD_TIMEOUT = 15000;
 const RENDER_TIMEOUT = 10000;
 
 interface MermaidGlobal {
@@ -35,104 +33,81 @@ function ensureSandbox(): void {
 function loadMermaid(): Promise<MermaidGlobal> {
   if (loadPromise) return loadPromise;
 
-  loadPromise = new Promise<MermaidGlobal>((resolve, reject) => {
-    const win = window as unknown as Record<string, unknown>;
-    if (win.mermaid) {
-      resolve(win.mermaid as unknown as MermaidGlobal);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      reject(new Error('Timeout cargando mermaid desde CDN'));
-    }, LOAD_TIMEOUT);
-
-    const script = document.createElement('script');
-    script.src = MERMAID_CDN;
-    script.async = true;
-    script.onload = () => {
-      clearTimeout(timer);
-      const m = win.mermaid as unknown as MermaidGlobal;
-      if (!m) {
-        reject(new Error('mermaid no se inicializó correctamente'));
-        return;
-      }
-      m.initialize({
-        startOnLoad: false,
-        securityLevel: 'loose',
-        theme: 'base',
-        themeVariables: {
-          primaryColor: '#dbeafe',
-          primaryTextColor: '#0f172a',
-          primaryBorderColor: '#3b82f6',
-          lineColor: '#60a5fa',
-          secondaryColor: '#e0f2fe',
-          tertiaryColor: '#f0f9ff',
-          fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-          fontSize: '14px',
-          nodeBorder: '#3b82f6',
-          mainBkg: '#dbeafe',
-          nodeTextColor: '#0f172a',
-          clusterBkg: '#1e293b',
-          clusterBorder: '#475569',
-          edgeLabelBackground: '#1e293b',
-          background: '#0f172a',
-          titleColor: '#e2e8f0',
-          actorTextColor: '#0f172a',
-          actorBkg: '#dbeafe',
-          actorBorder: '#3b82f6',
-          signalColor: '#e2e8f0',
-          signalTextColor: '#0f172a',
-          labelBoxBkgColor: '#dbeafe',
-          labelBoxBorderColor: '#3b82f6',
-          labelTextColor: '#0f172a',
-          noteBkgColor: '#fef3c7',
-          noteBorderColor: '#f59e0b',
-          noteTextColor: '#0f172a',
-          sectionBkgColor: '#1e293b',
-          sectionBkgColor2: '#0f172a',
-          altSectionBkgColor: '#1e293b',
-          taskBkgColor: '#dbeafe',
-          taskTextColor: '#0f172a',
-          taskBorderColor: '#3b82f6',
-          activeTaskBkgColor: '#bfdbfe',
-          activeTaskBorderColor: '#2563eb',
-          gridColor: '#475569',
-          doneTaskBkgColor: '#bbf7d0',
-          doneTaskBorderColor: '#16a34a',
-          critBkgColor: '#fecaca',
-          critBorderColor: '#dc2626',
-          todayLineColor: '#f59e0b',
-          pie1: '#3b82f6',
-          pie2: '#f59e0b',
-          pie3: '#10b981',
-          pie4: '#ef4444',
-          pie5: '#8b5cf6',
-          pie6: '#ec4899',
-          pie7: '#06b6d4',
-          pie8: '#f97316',
-          pieTitleTextSize: '16px',
-          pieTitleTextColor: '#e2e8f0',
-          pieSectionTextSize: '14px',
-          pieSectionTextColor: '#0f172a',
-          pieLegendTextSize: '14px',
-          pieLegendTextColor: '#e2e8f0',
-          pieStrokeColor: '#0f172a',
-          labelColor: '#e2e8f0',
-          altBackground: '#1e293b'
-        },
-        flowchart: { curve: 'basis', padding: 16, htmlLabels: true, useMaxWidth: true },
-        sequence: { mirrorActors: false },
-        gantt: { axisFormat: '%Y-%m-%d' }
-      });
-      ensureSandbox();
-      resolve(m);
-    };
-    script.onerror = () => {
-      clearTimeout(timer);
-      loadPromise = null; // allow retry
-      reject(new Error('No se pudo cargar mermaid desde CDN'));
-    };
-    document.head.appendChild(script);
+  loadPromise = import('mermaid').then((mod) => {
+    const m = mod.default as unknown as MermaidGlobal;
+    m.initialize({
+      startOnLoad: false,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        primaryColor: '#dbeafe',
+        primaryTextColor: '#0f172a',
+        primaryBorderColor: '#3b82f6',
+        lineColor: '#60a5fa',
+        secondaryColor: '#e0f2fe',
+        tertiaryColor: '#f0f9ff',
+        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+        fontSize: '14px',
+        nodeBorder: '#3b82f6',
+        mainBkg: '#dbeafe',
+        nodeTextColor: '#0f172a',
+        clusterBkg: '#1e293b',
+        clusterBorder: '#475569',
+        edgeLabelBackground: '#1e293b',
+        background: '#0f172a',
+        titleColor: '#e2e8f0',
+        actorTextColor: '#0f172a',
+        actorBkg: '#dbeafe',
+        actorBorder: '#3b82f6',
+        signalColor: '#e2e8f0',
+        signalTextColor: '#0f172a',
+        labelBoxBkgColor: '#dbeafe',
+        labelBoxBorderColor: '#3b82f6',
+        labelTextColor: '#0f172a',
+        noteBkgColor: '#fef3c7',
+        noteBorderColor: '#f59e0b',
+        noteTextColor: '#0f172a',
+        sectionBkgColor: '#1e293b',
+        sectionBkgColor2: '#0f172a',
+        altSectionBkgColor: '#1e293b',
+        taskBkgColor: '#dbeafe',
+        taskTextColor: '#0f172a',
+        taskBorderColor: '#3b82f6',
+        activeTaskBkgColor: '#bfdbfe',
+        activeTaskBorderColor: '#2563eb',
+        gridColor: '#475569',
+        doneTaskBkgColor: '#bbf7d0',
+        doneTaskBorderColor: '#16a34a',
+        critBkgColor: '#fecaca',
+        critBorderColor: '#dc2626',
+        todayLineColor: '#f59e0b',
+        pie1: '#3b82f6',
+        pie2: '#f59e0b',
+        pie3: '#10b981',
+        pie4: '#ef4444',
+        pie5: '#8b5cf6',
+        pie6: '#ec4899',
+        pie7: '#06b6d4',
+        pie8: '#f97316',
+        pieTitleTextSize: '16px',
+        pieTitleTextColor: '#e2e8f0',
+        pieSectionTextSize: '14px',
+        pieSectionTextColor: '#0f172a',
+        pieLegendTextSize: '14px',
+        pieLegendTextColor: '#e2e8f0',
+        pieStrokeColor: '#0f172a',
+        labelColor: '#e2e8f0',
+        altBackground: '#1e293b'
+      },
+      flowchart: { curve: 'basis', padding: 16, htmlLabels: true, useMaxWidth: true },
+      sequence: { mirrorActors: false },
+      gantt: { axisFormat: '%Y-%m-%d' }
+    });
+    ensureSandbox();
+    return m;
+  }).catch((err) => {
+    loadPromise = null;
+    throw err;
   });
 
   return loadPromise;

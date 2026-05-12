@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { AlertTriangle } from 'lucide-react';
 import type { PluggableList } from 'unified';
 import dynamic from 'next/dynamic';
+import 'katex/dist/katex.min.css';
 import {
   convertWikiLinksToMarkdown,
   hasKatexContent,
@@ -46,38 +47,6 @@ const loadMathPlugins = async (): Promise<{ remarkMath: RemarkMathModule['defaul
     });
   }
   return mathPluginsPromise;
-};
-
-let katexCssInjected = false;
-let katexCssPromise: Promise<void> | null = null;
-
-const loadKatexCss = (): Promise<void> => {
-  if (katexCssInjected) return Promise.resolve();
-  if (typeof document === 'undefined') return Promise.resolve();
-  if (katexCssPromise) return katexCssPromise;
-  katexCssPromise = new Promise<void>((resolve) => {
-    const id = 'katex-css';
-    if (document.getElementById(id)) {
-      katexCssInjected = true;
-      resolve();
-      return;
-    }
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.css';
-    link.crossOrigin = 'anonymous';
-    link.onload = () => {
-      katexCssInjected = true;
-      resolve();
-    };
-    link.onerror = () => {
-      katexCssPromise = null;
-      resolve();
-    };
-    document.head.appendChild(link);
-  });
-  return katexCssPromise;
 };
 
 class DiagramErrorBoundary extends React.Component<
@@ -154,7 +123,6 @@ export const MarkdownPreview = React.memo(function MarkdownPreview({
 
   useEffect(() => {
     if (!needsMath) return;
-    void loadKatexCss();
     if (mathPlugins) return;
     let cancelled = false;
     void loadMathPlugins().then((plugins) => {
