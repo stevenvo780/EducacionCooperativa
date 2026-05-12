@@ -1,6 +1,7 @@
 'use client';
 
-import { Eye, EyeOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Eye, EyeOff, Maximize2, Minimize2 } from 'lucide-react';
 import { SIDEBAR_VIEWS, type ActivityView } from './sidebar-views';
 
 export type { ActivityView } from './sidebar-views';
@@ -31,6 +32,25 @@ export default function ActivityBar({
   userMenuButtonRef,
   className = ''
 }: ActivityBarProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onChange);
+    onChange();
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (typeof document === 'undefined') return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  };
+
   return (
     <nav
       aria-label="Barra de actividad"
@@ -67,6 +87,21 @@ export default function ActivityBar({
       </div>
 
       <div className="flex flex-col items-center gap-0.5">
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? 'Salir de pantalla completa (F11)' : 'Pantalla completa (F11)'}
+          aria-label="Alternar pantalla completa"
+          aria-pressed={isFullscreen}
+          className={`flex h-11 w-11 items-center justify-center rounded-md transition ${
+            isFullscreen
+              ? 'text-mandy-300 bg-mandy-500/10'
+              : 'text-surface-400 hover:bg-surface-800/60 hover:text-surface-100'
+          }`}
+        >
+          {isFullscreen ? <Minimize2 className="h-6 w-6" strokeWidth={1.7} /> : <Maximize2 className="h-6 w-6" strokeWidth={1.7} />}
+        </button>
+
         <button
           type="button"
           onClick={onToggleZenMode}
