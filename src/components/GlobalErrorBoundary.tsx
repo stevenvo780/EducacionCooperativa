@@ -18,14 +18,12 @@ export default class GlobalErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    // Update state so the next render will show the fallback UI.
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
 
-    // Mostramos el Toast reportando el crash inesperado en la UI
     toast.error('Error del sistema', {
       description: 'Ha ocurrido un problema al renderizar la interfaz.'
     });

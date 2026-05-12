@@ -48,7 +48,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
   const { onDocChangeCallback } = useTerminal();
   const isPageVisible = usePageVisibility();
 
-  // Keep refs in sync
   useEffect(() => {
     latestContent.current = content;
   }, [content]);
@@ -153,15 +152,12 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
       if (event.docId !== docId) return;
       if (event.action !== 'updated' && event.action !== 'created') return;
 
-      // Skip if we have unsaved local edits or a save is in-flight
       if (dirtyRef.current || savingRef.current) {
         return;
       }
 
-      // Re-fetch content from API
       fetchContent().then((text) => {
         if (text === null) return;
-        // Only update if content actually differs from what we have
         if (text !== latestContent.current) {
           setContent(text);
           lastSyncedRef.current = text;
@@ -178,7 +174,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
       const matchesId = detail?.docId === docId;
       const matchesName = !!docName && !!detail?.docName && detail.docName === docName;
       if (!matchesId && !matchesName) return;
-      // Skip if we have unsaved local edits or a save is in-flight
       if (dirtyRef.current || savingRef.current) return;
       fetchContent().then((text) => {
         if (text === null) return;
@@ -193,7 +188,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
 
   useEffect(() => {
     if (!isPageVisible || !docId || loading) return;
-    // Only refresh if there are no local edits
     if (dirtyRef.current || savingRef.current) return;
 
     fetchContent().then((text) => {
@@ -246,7 +240,6 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
   const scheduleAutoSaveRef = useRef(scheduleAutoSave);
   scheduleAutoSaveRef.current = scheduleAutoSave;
 
-  // Refs para flush en cleanup
   const performSaveNowRef = useRef(performSaveNow);
   performSaveNowRef.current = performSaveNow;
   const dirtyForCleanupRef = useRef(false);

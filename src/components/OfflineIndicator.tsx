@@ -39,7 +39,6 @@ export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow,
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastSyncLabel, setLastSyncLabel] = useState<string>('');
 
-  // Update "time ago" label
   useEffect(() => {
     if (!lastSyncAt) return;
     const update = () => setLastSyncLabel(timeAgo(lastSyncAt));
@@ -48,7 +47,6 @@ export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow,
     return () => clearInterval(interval);
   }, [lastSyncAt]);
 
-  // Flash success when syncing completes
   useEffect(() => {
     if (!isSyncing && lastSyncAt && pendingCount === 0 && failedCount === 0) {
       setShowSuccess(true);
@@ -57,7 +55,6 @@ export default function OfflineIndicator({ syncStatus, onRetryFailed, onSyncNow,
     }
   }, [isSyncing, lastSyncAt, pendingCount, failedCount]);
 
-  // Nothing to show — all is well and online
   const hasActivity = !isOnline || isSyncing || pendingCount > 0 || failedCount > 0 || conflictCount > 0 || showSuccess;
   if (!hasActivity) return null;
 
