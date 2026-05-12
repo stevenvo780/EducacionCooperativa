@@ -1,16 +1,22 @@
-import withPWAInit from 'next-pwa';
+import withPWAInit from '@ducanh2912/next-pwa';
 
 const ONE_HOUR = 60 * 60;
 const ONE_DAY = 24 * ONE_HOUR;
 const ONE_YEAR = 365 * ONE_DAY;
 
+// @ducanh2912/next-pwa reemplaza al next-pwa@5.6 (EOL 2022). El original
+// inyecta el registro del SW en `main.js`, que en App Router de Next 15 no
+// existe (queda como `main-app.js`), de modo que el SW nunca se registraba
+// en producción. En esta versión `runtimeCaching` y `skipWaiting` viven
+// dentro de `workboxOptions`.
 const withPWA = withPWAInit({
   dest: 'public',
   disable: process.env.NODE_ENV === 'development' || process.env.DISABLE_PWA === 'true',
   register: true,
-  skipWaiting: true,
   cacheOnFrontEndNav: true,
-  runtimeCaching: [
+  workboxOptions: {
+    skipWaiting: true,
+    runtimeCaching: [
     {
       urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/auth/'),
       handler: 'NetworkOnly',
@@ -223,7 +229,8 @@ const withPWA = withPWAInit({
         }
       }
     }
-  ]
+    ]
+  }
 });
 
 /** @type {import('next').NextConfig} */
