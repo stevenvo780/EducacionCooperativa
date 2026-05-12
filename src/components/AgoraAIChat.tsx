@@ -563,6 +563,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   // al final independientemente de si el user estaba leyendo arriba. El flag
   // lo activa sendMessage y lo consume el effect de scroll.
   const scrollToBottomRef = useRef(false);
+  // Bug #3 (parte 2): trackea si el user está cerca del fondo durante el
+  // streaming. Si scrolleó manualmente hacia arriba (isAtBottom=false), no
+  // forzamos scroll al completar. Virtuoso lo actualiza vía atBottomStateChange.
+  const isAtBottomRef = useRef(true);
 
   const meta = PROVIDER_META[config.provider];
   const resolvedWorkspaceId = workspaceId || PERSONAL_WORKSPACE_ID;
@@ -1768,6 +1772,19 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
   }, [messages]);
 
+  // Bug #3 (parte 2): al completar el streaming (loading: true → false),
+  // scroll al fondo si el user estaba cerca del fondo durante el stream.
+  // Si scrolleó manualmente hacia arriba (isAtBottomRef.current = false),
+  // no forzamos — está leyendo y no queremos interrumpirle.
+  const prevLoadingRef = useRef(false);
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = loading;
+    if (wasLoading && !loading && isAtBottomRef.current) {
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
+    }
+  }, [loading]);
+
   // Auto-confirm en god mode: si llega un pendingConfirmation y el perfil
   // activo lo permite, se aprueba sin pedir input al usuario.
   useEffect(() => {
@@ -2003,6 +2020,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             data={messages}
             className="scrollbar-agora h-full"
             followOutput={(isAtBottom) => (isAtBottom ? 'auto' : false)}
+            atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
+            atBottomThreshold={150}
             increaseViewportBy={{ top: 600, bottom: 600 }}
             computeItemKey={(_, msg) => msg.id}
             itemContent={(_index, msg) => (
