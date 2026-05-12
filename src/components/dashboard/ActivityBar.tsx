@@ -44,10 +44,16 @@ export default function ActivityBar({
 
   const toggleFullscreen = () => {
     if (typeof document === 'undefined') return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      document.documentElement.requestFullscreen().catch(() => {});
+    try {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+        return;
+      }
+      const target = document.documentElement;
+      if (!target || !target.isConnected) return;
+      target.requestFullscreen().catch(() => {});
+    } catch {
+      /* algunos browsers tiran TypeError sync si el elemento no es fullscreen-capable */
     }
   };
 
