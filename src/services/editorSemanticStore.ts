@@ -693,8 +693,6 @@ export const setSemanticWorkspacePreferences = (
 
 export const deleteConcept = (context: SemanticStoreContext, conceptId: string) => updateState(context, (state) => {
   state.concepts = state.concepts.filter(c => c.id !== conceptId);
-  // Antes: relatedRelationFragmentIds se computaba como array y se usaba con
-  // `Array.includes()` dentro de `.filter()` → O(F·R). Con Set es O(F+R).
   const relatedRelationFragmentIds = new Set<string>();
   for (const r of state.relations) {
     if (r.conceptId === conceptId) relatedRelationFragmentIds.add(r.fragmentId);

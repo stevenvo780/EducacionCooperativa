@@ -1,11 +1,6 @@
 import { removeSemanticDocumentBlock } from '@/lib/semanticDocumentBlocks';
 import { fetchDocumentRawApi, updateDocumentApi } from '@/services/dashboardApi';
 
-// Cache de raw content por docId. Antes cada delete consecutivo de bloques
-// del mismo doc disparaba un fetch independiente. En bursts (ej. eliminar
-// varios fragments seguidos) eso era N round-trips innecesarios. Vida 5s:
-// suficiente para coalescer bursts sin riesgo de quedarse con copia stale
-// frente a edits remotos.
 const RAW_CACHE_TTL_MS = 5000;
 const RAW_CACHE_MAX_ENTRIES = 64;
 const rawDocCache = new Map<string, { content: string; ts: number }>();
@@ -45,8 +40,6 @@ export const removeSemanticBlockFromDocument = async (docId: string, docBlockId:
   }
 
   await updateDocumentApi(docId, { content: `${nextContent}\n` });
-  // Tras mutar invalidamos: la próxima lectura debe ver la versión nueva
-  // si la cache TTL aún no expiró.
   invalidateRawCache(docId);
   return true;
 };
