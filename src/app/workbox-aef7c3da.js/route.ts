@@ -29,7 +29,7 @@ export async function GET() {
     status: 200,
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': 'public, max-age=300, must-revalidate',
-    },
+      'Cache-Control': 'public, max-age=300, must-revalidate'
+    }
   });
 }
