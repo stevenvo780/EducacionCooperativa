@@ -16,6 +16,7 @@ const withPWA = withPWAInit({
   cacheOnFrontEndNav: true,
   workboxOptions: {
     skipWaiting: true,
+    cleanupOutdatedCaches: true,
     runtimeCaching: [
     {
       urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/auth/'),
