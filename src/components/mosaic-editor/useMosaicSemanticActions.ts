@@ -213,7 +213,7 @@ export function useMosaicSemanticActions({
           sourceDocId: roomId || undefined
         });
       } else {
-        // Here you would append. The original used updateBoardCardApi but let's assume it was omitted for brevity since MosaicEditor doesn't seem to implement full workbench append properly yet or does it somewhere else. We keep it as is.
+        // TODO: append fragment to existing workbench card via updateBoardCardApi
       }
       await loadLinkedTasks();
       setSemanticNotice(`Fragmento depositado en el Workbench (${workbench.title.slice(0, 15)}...).`);

@@ -4,9 +4,6 @@ import React, { useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { CodeMirrorEditor, type CodeBlockEditorDescriptor, type CodeBlockEditorProps } from '@mdxeditor/editor';
 
-// Bug 8: el bundle de MermaidDiagram + el script CDN sólo se piden cuando el
-// editor monta un bloque mermaid real. Antes era import eager y mermaid se
-// descargaba siempre que el editor cargaba, aun sin diagramas en el doc.
 const MermaidDiagram = dynamic(() => import('@/components/MermaidDiagram'), {
   ssr: false,
   loading: () => (

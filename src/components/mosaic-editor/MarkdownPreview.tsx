@@ -15,9 +15,6 @@ import {
   unescapeLatex
 } from './utils';
 
-// Bug 8: MermaidDiagram trae el script CDN de mermaid (>700KB) y su lógica de
-// render. Se monta sólo cuando el doc contiene ```mermaid. Aislarlo en un
-// chunk dynamic asegura que las rutas sin mermaid no descarguen su código.
 const MermaidDiagram = dynamic(() => import('@/components/MermaidDiagram'), {
   ssr: false,
   loading: () => (
@@ -51,10 +48,6 @@ const loadMathPlugins = async (): Promise<{ remarkMath: RemarkMathModule['defaul
   return mathPluginsPromise;
 };
 
-// Bug 9: inyecta el CSS de KaTeX una sola vez, sólo cuando el doc tiene
-// matemáticas. Esto evita preloads de KaTeX_Main-Regular.woff2 /
-// KaTeX_Math-Italic.woff2 en rutas que no usan math (p.ej. /login). El CSS
-// viene del CDN para que el bundle no arrastre las fuentes en su tree.
 let katexCssInjected = false;
 let katexCssPromise: Promise<void> | null = null;
 

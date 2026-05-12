@@ -25,11 +25,8 @@ export const hasMermaidContent = (md: string): boolean => {
   return /```\s*mermaid\b/.test(md);
 };
 
-// Detectores de sintaxis para gating de plugins pesados del MDXEditor.
-// Mantenidos baratos: una sola regex y short-circuit en strings vacíos.
 export const hasTableContent = (md: string): boolean => {
   if (!md) return false;
-  // Tabla pipe markdown: línea con `|...|` seguida por separador `|---|`.
   return /^\s*\|.+\|\s*\n\s*\|[\s:-]*-+[\s:-]*\|/m.test(md);
 };
 
@@ -45,7 +42,6 @@ export const hasCodeBlockContent = (md: string): boolean => {
 
 export const hasDirectiveContent = (md: string): boolean => {
   if (!md) return false;
-  // Admonitions y directivas: ::: o ::label
   return /(^|\n):::/.test(md);
 };
 
@@ -64,8 +60,6 @@ export const isPdfMime = (mime?: string) => (mime ?? '').toLowerCase() === 'appl
  * inline code (` … `).
  */
 export function unescapeLatex(md: string): string {
-  // Split the document into safe (outside code) and protected (inside code) segments.
-  // We process ONLY safe segments so code blocks are never mangled.
   const segments: { text: string; isCode: boolean }[] = [];
   const fenceOrInlineCode = /(```[\s\S]*?```|`[^`\n]+`)/g;
   let lastIndex = 0;
@@ -84,11 +78,8 @@ export function unescapeLatex(md: string): string {
 
   return segments.map(({ text, isCode }) => {
     if (isCode) return text;
-    // 1. Escaped block math: \$\$…\$\$ → $$…$$
     let result = text.replace(/\\\$\\\$([\s\S]*?)\\\$\\\$/g, '$$$$$$1$$$$');
-    // 2. Escaped inline math: \$…\$ → $…$
     result = result.replace(/\\\$((?!\$)[^\n]*?)\\\$/g, '$$$1$$');
-    // 3. Other escaped markdown specials
     result = result.replace(/\\([=*_{}[\]()#+\-.!|~<>^`])/g, '$1');
     return result;
   }).join('');
