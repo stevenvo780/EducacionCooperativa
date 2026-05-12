@@ -10,7 +10,7 @@ import {
   Bot, Send, Settings, ChevronDown,
   Loader2, Trash2, Copy, Check, AlertCircle, Undo2,
   History, MessageSquarePlus, Shield, Square,
-  ListTree, ChevronsDownUp, ChevronsUpDown
+  ListTree, ChevronsDownUp, ChevronsUpDown, FileText, RotateCcw
 } from 'lucide-react';
 import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
 import { fetchZod } from '@/lib/fetch-zod';
@@ -26,6 +26,12 @@ import { AgentThinkingBlock } from '@/components/chat/AgentThinkingBlock';
 import { ToolCallBlock } from '@/components/chat/ToolCallBlock';
 import { InlineConfirmation } from '@/components/chat/InlineConfirmation';
 import { buildAgoraSystemPrompt, extractThinkingSegments } from '@/lib/agora-ai/systemPrompt';
+import {
+  detectCapabilityBlock,
+  extractReferencedDocuments,
+  serializeMessageForHistory,
+  stripPreviousTurnContext
+} from '@/lib/agora-ai/chatHelpers';
 import { toOllamaTools } from '@/lib/agora-ai/toolDefinitions';
 import { collectAgentWorkspaceEffects } from '@/lib/agora-ai/uiEvents';
 import { AGORA_EVENTS, dispatchAgoraEvent } from '@/lib/agora-events';
@@ -55,6 +61,7 @@ import type {
   AgentAccessPolicy,
   AgentAccessProfileId,
   AgentChatSession,
+  AgentDocumentTarget,
   AgentDocumentsMutatedEventDetail,
   AgentMode,
   AgentPendingConfirmation,
@@ -136,31 +143,9 @@ function createStep(step: Omit<AgentTraceStep, 'startedAt'>): AgentTraceStep {
   };
 }
 
-/**
- * Serializa un mensaje del historial al formato que esperamos enviar al
- * modelo. Para mensajes del assistant en modo agente enriquecemos el
- * content con un resumen breve de los tool calls ya ejecutados, así el
- * modelo conserva contexto de qué información recabó en turnos previos
- * (sin tener que re-ejecutar las mismas tools).
- */
-function serializeMessageForHistory(message: { role: string; content: string; agentRun?: AgentRun | undefined }) {
-  if (message.role !== 'assistant' || !message.agentRun) {
-    return { role: message.role, content: message.content };
-  }
-  const toolSteps = message.agentRun.steps.filter(step => step.type === 'tool_result' && step.result);
-  if (toolSteps.length === 0) {
-    return { role: message.role, content: message.content };
-  }
-  const toolDigest = toolSteps
-    .map(step => {
-      const name = step.call?.name || step.title || 'tool';
-      const summary = step.result?.summary?.trim();
-      return summary ? `- ${name}: ${summary}` : `- ${name}`;
-    })
-    .join('\n');
-  const enriched = `${message.content}\n\n[contexto del turno previo — tools ejecutadas]\n${toolDigest}`;
-  return { role: message.role, content: enriched };
-}
+// Bug 1/2/3: helpers extraídos a `chatHelpers.ts` para que sean
+// importables desde tests sin tener que parsear JSX. La separación también
+// deja el componente más enfocado en el render.
 
 function truncateDebug(value: string | undefined, max = 3000) {
   if (!value) return undefined;
@@ -323,10 +308,15 @@ interface ChatMessageProps {
   copiedId: string | null;
   onConfirm: (messageId: string, approve: boolean) => void;
   onCopy: (id: string, content: string) => void;
+  onOpenDocument: (doc: AgentDocumentTarget) => void;
 }
 
-function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm, onCopy }: ChatMessageProps) {
+function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm, onCopy, onOpenDocument }: ChatMessageProps) {
   const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
+  const displayContent = msg.role === 'assistant' ? stripPreviousTurnContext(msg.content) : msg.content;
+  const referencedDocuments = msg.role === 'assistant'
+    ? extractReferencedDocuments(msg.agentRun)
+    : [];
   return (
     <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
       <div className={`group relative max-w-[88%] min-w-0 overflow-hidden rounded-lg px-3 py-1.5 text-sm leading-normal [overflow-wrap:anywhere] ${
@@ -343,8 +333,27 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
           </div>
         )}
         <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
-          <MarkdownContent content={msg.content} />
+          <MarkdownContent content={displayContent} />
         </div>
+        {referencedDocuments.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-surface-500">
+              <FileText className="w-3 h-3" /> Documentos referenciados
+            </span>
+            {referencedDocuments.map((doc) => (
+              <button
+                key={doc.id}
+                type="button"
+                onClick={() => onOpenDocument(doc)}
+                className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 transition max-w-[18rem] truncate"
+                title={doc.folder ? `${doc.folder}/${doc.name}` : doc.name}
+              >
+                <FileText className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">{doc.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {msg.agentRun?.mode === 'agent' && msg.role === 'assistant' && (
           <div className="mt-2">
@@ -427,6 +436,7 @@ const ChatMessage = memo(ChatMessageImpl, (prev, next) => {
   if (prev.msg.error !== next.msg.error) return false;
   if (prev.msg.pendingConfirmation !== next.msg.pendingConfirmation) return false;
   if (prev.traceExpanded !== next.traceExpanded) return false;
+  if (prev.onOpenDocument !== next.onOpenDocument) return false;
   const prevConfirming = prev.confirmingId === prev.msg.id;
   const nextConfirming = next.confirmingId === next.msg.id;
   if (prevConfirming !== nextConfirming) return false;
@@ -520,6 +530,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   });
   const [nextTurnHints, setNextTurnHints] = useState<Set<'plan' | 'think'>>(new Set());
   const [showSlashHelp, setShowSlashHelp] = useState<SlashCommandHelp[] | null>(null);
+  // Bug 2: cuando un turno falla por capability del perfil (p.ej. el agente
+  // intentó run_worker_command con perfil Workspace), guardamos el texto del
+  // user para ofrecer reenvío automático al cambiar a un perfil más permisivo.
+  const [lastFailedSend, setLastFailedSend] = useState<{ text: string; profile: AgentAccessProfileId; reason: string } | null>(null);
+  const lastFailedProfileRef = useRef<AgentAccessProfileId>(accessPolicy.profile);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const historyHydratedRef = useRef(false);
@@ -603,6 +618,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const updateAccessProfile = useCallback((profile: Exclude<AgentAccessProfileId, 'custom'>) => {
     saveAgentAccessProfile(profile);
     setAccessPolicy(loadAgentAccessPolicy());
+    // Bug 4: tras cambiar de perfil devolvemos foco al textarea para evitar la
+    // sensación de "Enviar disabled brevemente" mientras el select pierde el
+    // focus y el componente re-renderiza por el `AI_SETTINGS_CHANGED_EVENT`.
+    if (typeof window !== 'undefined') {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
   }, []);
 
   const fetchContext = useCallback(async (signal: AbortSignal): Promise<string> => {
@@ -1232,10 +1253,16 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     // Sólo mostramos roles user/assistant en la UI. Los mensajes 'tool'
     // viven embebidos en `agentRun.toolResults` del assistant correspondiente.
     if (message.role !== 'user' && message.role !== 'assistant') return null;
+    // Bug 1: si el backend persistió el `content` enriquecido con la sección
+    // "[contexto del turno previo — tools ejecutadas]", la quitamos para no
+    // renderizar el bloque duplicado al rehidratar el chat.
+    const content = message.role === 'assistant'
+      ? stripPreviousTurnContext(message.content)
+      : message.content;
     return {
       id: message.id,
       role: message.role,
-      content: message.content
+      content
     };
   }, []);
 
@@ -1550,6 +1577,16 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       if (config.provider === 'ollama') {
         setMessages(prev => [...prev, toAssistantMessage(reply, agentRun)]);
       }
+      // Bug 2: si el turno terminó con una tool bloqueada por capability,
+      // guardamos el texto del usuario para ofrecer reintento al cambiar de
+      // perfil. Si pasó sin bloqueo, limpiamos cualquier failure previo.
+      const capabilityReason = detectCapabilityBlock(agentRun);
+      if (capabilityReason) {
+        lastFailedProfileRef.current = accessPolicy.profile;
+        setLastFailedSend({ text, profile: accessPolicy.profile, reason: capabilityReason });
+      } else {
+        setLastFailedSend(null);
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Error de red';
@@ -1579,7 +1616,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setStreamStatus('');
       textareaRef.current?.focus();
     }
-  }, [input, loading, canSend, messages, mode, runRollback, config.provider, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints]);
+  }, [input, loading, canSend, messages, mode, runRollback, config.provider, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints, accessPolicy.profile]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1658,6 +1695,32 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const handleCopyStable = useCallback((id: string, content: string) => {
     void copyMessage(id, content);
   }, [copyMessage]);
+
+  const handleOpenDocumentStable = useCallback((doc: AgentDocumentTarget) => {
+    if (typeof window === 'undefined') return;
+    dispatchAgoraEvent(AGORA_EVENTS.openDocuments, {
+      workspaceId: resolvedWorkspaceId,
+      documents: [doc],
+      focusFolder: doc.folder,
+      source: 'agora-ai'
+    });
+  }, [resolvedWorkspaceId]);
+
+  // Bug 2: reenvía el último mensaje que falló por capability del perfil
+  // anterior. Sólo prellena el textarea y le da foco — el envío lo dispara el
+  // user con Enter. Hacerlo automático arriesga reenviar con perfil incorrecto
+  // si el cambio de perfil aún no se persistió en el orchestrator del backend.
+  const retryFailedSend = useCallback(() => {
+    if (!lastFailedSend) return;
+    const { text } = lastFailedSend;
+    setLastFailedSend(null);
+    setInput(text);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [lastFailedSend]);
+
+  const dismissFailedSend = useCallback(() => {
+    setLastFailedSend(null);
+  }, []);
 
   // Auto-confirm en god mode: si llega un pendingConfirmation y el perfil
   // activo lo permite, se aprueba sin pedir input al usuario.
@@ -1905,6 +1968,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                   copiedId={copiedId}
                   onConfirm={handleConfirmStable}
                   onCopy={handleCopyStable}
+                  onOpenDocument={handleOpenDocumentStable}
                 />
               </div>
             )}
@@ -1927,6 +1991,41 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       </div>
 
       <div className="flex-shrink-0 border-t border-surface-700 p-2 bg-surface-900 min-w-0">
+        {/* Bug 2: banner de reintento cuando el último turno falló por
+            capability del perfil. Sólo se muestra si el user ya cambió a un
+            perfil distinto desde el fallo — así no parece "cri-cri" si sigue
+            en el mismo perfil bloqueado. */}
+        {lastFailedSend && lastFailedSend.profile !== accessPolicy.profile && (
+          <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200 flex items-start gap-2">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium">El turno previo falló por permisos del perfil <code className="font-mono">{lastFailedSend.profile}</code>.</div>
+              <div className="text-amber-300/80 mt-0.5 truncate" title={lastFailedSend.text}>
+                Cambiaste a <code className="font-mono">{accessPolicy.profile}</code>. ¿Reintentar el mismo prompt?
+              </div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={retryFailedSend}
+                className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-500/20 px-2 py-0.5 text-amber-100 hover:bg-amber-500/30 transition"
+                title="Cargar el último prompt fallido en el textarea para reenviarlo"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reintentar
+              </button>
+              <button
+                type="button"
+                onClick={dismissFailedSend}
+                className="rounded-md px-1 text-amber-300 hover:text-amber-100"
+                aria-label="Descartar"
+                title="Descartar"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
         {(dryRun || nextTurnHints.size > 0 || showSlashHelp) && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[10px]">
             {dryRun && (
