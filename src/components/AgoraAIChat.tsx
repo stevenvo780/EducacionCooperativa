@@ -313,7 +313,16 @@ interface ChatMessageProps {
 
 function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm, onCopy, onOpenDocument }: ChatMessageProps) {
   const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
-  const displayContent = msg.role === 'assistant' ? stripPreviousTurnContext(msg.content) : msg.content;
+  const rawDisplayContent = msg.role === 'assistant' ? stripPreviousTurnContext(msg.content) : msg.content;
+  // Bug #8: evita renderizar displayContent duplicado cuando un plan step ya
+  // muestra exactamente el mismo texto. Ocurre cuando el agentRun terminó y
+  // msg.content == finalReply == el content del step plan intermedio.
+  const planStepContents = msg.agentRun
+    ? new Set(visibleSteps.filter(s => s.type === 'plan').map(s => (s.content ?? '').trim()))
+    : null;
+  const displayContent = (planStepContents && planStepContents.has(rawDisplayContent.trim()))
+    ? ''
+    : rawDisplayContent;
   const referencedDocuments = msg.role === 'assistant'
     ? extractReferencedDocuments(msg.agentRun)
     : [];
@@ -332,9 +341,11 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
             Error
           </div>
         )}
-        <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
-          <MarkdownContent content={displayContent} />
-        </div>
+        {displayContent ? (
+          <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
+            <MarkdownContent content={displayContent} />
+          </div>
+        ) : null}
         {referencedDocuments.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-surface-500">
@@ -530,6 +541,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   });
   const [nextTurnHints, setNextTurnHints] = useState<Set<'plan' | 'think'>>(new Set());
   const [showSlashHelp, setShowSlashHelp] = useState<SlashCommandHelp[] | null>(null);
+  // Bug #4: detectamos cuando Ollama local no responde para mostrar UX claro.
+  const [ollamaOffline, setOllamaOffline] = useState(false);
   // Bug 2: cuando un turno falla por capability del perfil (p.ej. el agente
   // intentó run_worker_command con perfil Workspace), guardamos el texto del
   // user para ofrecer reenvío automático al cambiar a un perfil más permisivo.
@@ -546,6 +559,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   // sesiones largas — el Set crecía sin tope.
   const autoConfirmedRef = useRef<Set<string>>(new Set());
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  // Bug #3: cuando se envía un nuevo mensaje desde el textarea forzamos scroll
+  // al final independientemente de si el user estaba leyendo arriba. El flag
+  // lo activa sendMessage y lo consume el effect de scroll.
+  const scrollToBottomRef = useRef(false);
 
   const meta = PROVIDER_META[config.provider];
   const resolvedWorkspaceId = workspaceId || PERSONAL_WORKSPACE_ID;
@@ -1467,6 +1484,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     const shouldStreamServerAgent = !isUndoRequest && mode === 'agent' && config.provider !== 'ollama';
     const assistantMessageId = shouldStreamServerAgent ? uid() : null;
 
+    // Bug #3: forzar scroll al fondo en el siguiente render tras añadir los mensajes.
+    scrollToBottomRef.current = true;
     setMessages(shouldStreamServerAgent
       ? [...history, {
         id: assistantMessageId as string,
@@ -1575,6 +1594,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         setRollbackQueue(agentRun.rollback);
       }
       if (config.provider === 'ollama') {
+        setOllamaOffline(false);
         setMessages(prev => [...prev, toAssistantMessage(reply, agentRun)]);
       }
       // Bug 2: si el turno terminó con una tool bloqueada por capability,
@@ -1589,23 +1609,40 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      const msg = err instanceof Error ? err.message : 'Error de red';
-      publishAgentProblem({
-        severity: 'error',
-        message: 'Error enviando mensaje a Agora AI',
-        detail: msg,
-        code: 'agora-ai-send'
-      });
-      if (assistantMessageId) {
-        updateMessageById(assistantMessageId, current => ({
-          ...current,
-          content: msg,
-          error: true,
-          agentRun: undefined,
-          pendingConfirmation: undefined
-        }));
+      const errMsg = err instanceof Error ? err.message : 'Error de red';
+      // Bug #4: si el proveedor es Ollama y el error es de conexión,
+      // mostramos banner específico en lugar del mensaje genérico.
+      const isOllamaFetch = config.provider === 'ollama' && /failed to fetch|network|ECONNREFUSED/i.test(errMsg);
+      if (isOllamaFetch) {
+        setOllamaOffline(true);
+        if (assistantMessageId) {
+          updateMessageById(assistantMessageId, current => ({
+            ...current,
+            content: 'El servidor Ollama local no responde.',
+            error: true,
+            agentRun: undefined,
+            pendingConfirmation: undefined
+          }));
+        }
       } else {
-        setMessages(prev => [...prev, toAssistantMessage(msg, undefined, true)]);
+        setOllamaOffline(false);
+        publishAgentProblem({
+          severity: 'error',
+          message: 'Error enviando mensaje a Agora AI',
+          detail: errMsg,
+          code: 'agora-ai-send'
+        });
+        if (assistantMessageId) {
+          updateMessageById(assistantMessageId, current => ({
+            ...current,
+            content: errMsg,
+            error: true,
+            agentRun: undefined,
+            pendingConfirmation: undefined
+          }));
+        } else {
+          setMessages(prev => [...prev, toAssistantMessage(errMsg, undefined, true)]);
+        }
       }
     } finally {
       sendingRef.current = false;
@@ -1721,6 +1758,15 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   const dismissFailedSend = useCallback(() => {
     setLastFailedSend(null);
   }, []);
+
+  // Bug #3: cuando se envía un nuevo turno forzamos scroll al fondo.
+  // Lo consumimos en un useEffect separado para que corra después del commit
+  // del render que añadió el nuevo mensaje de user + placeholder assistant.
+  useEffect(() => {
+    if (!scrollToBottomRef.current) return;
+    scrollToBottomRef.current = false;
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
+  }, [messages]);
 
   // Auto-confirm en god mode: si llega un pendingConfirmation y el perfil
   // activo lo permite, se aprueba sin pedir input al usuario.
@@ -1991,6 +2037,32 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       </div>
 
       <div className="flex-shrink-0 border-t border-surface-700 p-2 bg-surface-900 min-w-0">
+        {/* Bug #4: Ollama local no responde — banner con acción clara. */}
+        {ollamaOffline && config.provider === 'ollama' && (
+          <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200 flex items-start gap-2">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium">El servidor Ollama local no responde.</div>
+              <div className="text-amber-300/80 mt-0.5">
+                Verificá que Ollama esté corriendo en{' '}
+                <code className="font-mono">{(config.endpoint?.trim() || 'http://localhost:11434')}</code>.
+                También podés cambiar a otro proveedor.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setOllamaOffline(false);
+                dispatchAgoraEvent(AGORA_EVENTS.openAiConfig);
+              }}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-500/20 px-2 py-0.5 text-amber-100 hover:bg-amber-500/30 transition flex-shrink-0"
+              title="Abrir configuración del proveedor"
+            >
+              <Settings className="w-3 h-3" />
+              Configurar
+            </button>
+          </div>
+        )}
         {/* Bug 2: banner de reintento cuando el último turno falló por
             capability del perfil. Sólo se muestra si el user ya cambió a un
             perfil distinto desde el fallo — así no parece "cri-cri" si sigue
