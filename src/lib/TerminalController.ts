@@ -1,26 +1,40 @@
-import type { FitAddon } from '@xterm/addon-fit';
-import type { WebLinksAddon } from '@xterm/addon-web-links';
+import type { FitAddon as FitAddonType } from '@xterm/addon-fit';
+import type { WebLinksAddon as WebLinksAddonType } from '@xterm/addon-web-links';
 import type { ITerminalOptions, Terminal as XTermTerminal } from '@xterm/xterm';
 import { io, Socket } from 'socket.io-client';
 import { TerminalConnectionStatus, WorkerStatusValue, type TerminalConnectionStatusId, type TerminalSessionCreationPayload, type TerminalSessionPayload, type WorkerStatus } from '@/types/terminal';
 import type { WorkspaceTypeId } from '@/types/workspace';
 
-type XTermConstructor = new (options?: ITerminalOptions) => XTermTerminal;
-type FitAddonConstructor = new () => FitAddon;
-type WebLinksAddonConstructor = new () => WebLinksAddon;
 type SocketStatus = TerminalConnectionStatusId | 'hub-online' | 'hub-offline';
 
-declare global {
-  interface Window {
-    Terminal?: XTermConstructor;
-    FitAddon?: { FitAddon: FitAddonConstructor };
-    WebLinksAddon?: { WebLinksAddon: WebLinksAddonConstructor };
-  }
+type XTermModules = {
+  Terminal: new (options?: ITerminalOptions) => XTermTerminal;
+  FitAddon: new () => FitAddonType;
+  WebLinksAddon: new () => WebLinksAddonType;
+};
+
+let xtermModulesPromise: Promise<XTermModules> | null = null;
+
+function loadXTermModules(): Promise<XTermModules> {
+  if (xtermModulesPromise) return xtermModulesPromise;
+  xtermModulesPromise = Promise.all([
+    import('@xterm/xterm'),
+    import('@xterm/addon-fit'),
+    import('@xterm/addon-web-links')
+  ]).then(([xterm, fitMod, linksMod]) => ({
+    Terminal: xterm.Terminal,
+    FitAddon: fitMod.FitAddon,
+    WebLinksAddon: linksMod.WebLinksAddon
+  })).catch((err) => {
+    xtermModulesPromise = null;
+    throw err;
+  });
+  return xtermModulesPromise;
 }
 
 export interface TerminalInstance {
   term: XTermTerminal;
-  fitAddon: FitAddon;
+  fitAddon: FitAddonType;
   container: HTMLElement | null;
   resizeObserver: ResizeObserver | null;
   fitTimeout: ReturnType<typeof setTimeout> | null;
@@ -56,6 +70,7 @@ export class TerminalController {
   public socket: Socket | null = null;
   private nexusUrl: string;
   private initialized = false;
+  private xtermModules: XTermModules | null = null;
   private activeSessionId: string | null = null;
   private debugEnabled = process.env.NODE_ENV !== 'production';
 
@@ -85,28 +100,6 @@ export class TerminalController {
     }
   }
 
-  private loadScript(src: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) {
-        resolve();
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error(`Failed to load ${src}`));
-      document.head.appendChild(script);
-    });
-  }
-
-  private loadCSS(href: string): void {
-    if (document.querySelector(`link[href="${href}"]`)) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    document.head.appendChild(link);
-  }
-
   public async initialize(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
     if (this.initialized) return true;
@@ -115,26 +108,7 @@ export class TerminalController {
     this.debugLog('[TerminalController] Starting initialization...');
 
     try {
-      this.loadCSS('https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css');
-
-      const xtermStart = performance.now();
-      await this.loadScript('https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js');
-      this.debugLog(`[TerminalController] xterm.js loaded in ${(performance.now() - xtermStart).toFixed(0)}ms`);
-
-      const fitStart = performance.now();
-      await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js');
-      this.debugLog(`[TerminalController] fit addon loaded in ${(performance.now() - fitStart).toFixed(0)}ms`);
-
-      const linksStart = performance.now();
-      await this.loadScript('https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js');
-      this.debugLog(`[TerminalController] links addon loaded in ${(performance.now() - linksStart).toFixed(0)}ms`);
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      if (!window.Terminal || !window.FitAddon?.FitAddon) {
-        throw new Error('xterm globals not found');
-      }
-
+      this.xtermModules = await loadXTermModules();
       this.initialized = true;
       this.debugLog(`[TerminalController] Total initialization: ${(performance.now() - startTime).toFixed(0)}ms`);
       return true;
@@ -145,13 +119,10 @@ export class TerminalController {
   }
 
   private createTerminalInstance(sessionId: string): TerminalInstance {
-    const Terminal = window.Terminal;
-    const FitAddon = window.FitAddon?.FitAddon;
-    const WebLinksAddon = window.WebLinksAddon?.WebLinksAddon;
-
-    if (!Terminal || !FitAddon) {
+    if (!this.xtermModules) {
       throw new Error('xterm globals not initialized');
     }
+    const { Terminal, FitAddon, WebLinksAddon } = this.xtermModules;
 
     const term = new Terminal({
       cursorBlink: true,

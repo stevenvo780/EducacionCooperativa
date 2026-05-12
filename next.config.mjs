@@ -239,10 +239,10 @@ const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
 
 const CSP_DIRECTIVES = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
-  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://www.gstatic.com https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com https://lh3.googleusercontent.com https://www.gravatar.com",
-  "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "connect-src 'self' https://hub.humanizar-dev.cloud wss://hub.humanizar-dev.cloud https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://s3.proxy.humanizar-dev.cloud https://git.proxy.humanizar-dev.cloud https://api.deepseek.com https://api.openai.com https://api.anthropic.com",
   "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com",
   "worker-src 'self' blob: https://cdnjs.cloudflare.com",

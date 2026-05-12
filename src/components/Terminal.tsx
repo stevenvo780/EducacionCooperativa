@@ -1,5 +1,6 @@
 'use client';
 
+import '@xterm/xterm/css/xterm.css';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useTerminal } from '@/context/TerminalContext';
