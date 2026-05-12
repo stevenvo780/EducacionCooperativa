@@ -103,7 +103,6 @@ export default function DocsPage() {
 
   return (
     <div className="min-h-[100dvh] bg-surface-900 text-surface-200 selection:bg-mandy-500/30">
-      {/* Header */}
       <header className="sticky top-0 z-50 bg-surface-900/90 backdrop-blur border-b border-surface-700/50">
         <div className="max-w-6xl mx-auto flex items-center gap-4 px-6 py-3">
           <Link href="/dashboard" aria-label="Volver al dashboard" title="Volver al dashboard" className="p-2 rounded-lg hover:bg-surface-700/50 transition text-surface-400 hover:text-white">
@@ -124,7 +123,6 @@ export default function DocsPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-10 flex gap-10">
-        {/* Sidebar nav */}
         <nav className="hidden lg:block w-56 shrink-0 sticky top-24 self-start space-y-1">
           <p className="text-[10px] uppercase tracking-[0.2em] text-surface-500 font-bold mb-4 px-2">Tabla de Contenidos</p>
           {sections.map(s => (
@@ -135,9 +133,7 @@ export default function DocsPage() {
           ))}
         </nav>
 
-        {/* Main content */}
         <div className="flex-1 space-y-6 min-w-0">
-          {/* Hero */}
           <div className="bg-gradient-to-br from-mandy-600/20 via-surface-800/50 to-surface-900 border border-mandy-500/30 rounded-3xl p-10 mb-10 relative overflow-hidden">
             <div className="relative z-10">
               <h2 className="text-4xl font-extrabold text-white mb-4 tracking-tight">Bienvenido al Futuro del Aprendizaje Colaborativo</h2>
@@ -164,12 +160,10 @@ export default function DocsPage() {
                 <span className="text-[11px] font-bold bg-surface-700/80 px-4 py-2 rounded-xl text-surface-200 border border-surface-600/50 flex items-center gap-2"><Lock className="w-3.5 h-3.5 text-mandy-400" /> E2E Sincronizado</span>
               </div>
             </div>
-            {/* Visual fluff */}
             <div className="absolute -right-20 -top-20 w-64 h-64 bg-mandy-500/10 blur-[100px] rounded-full" />
             <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-violet-500/10 blur-[100px] rounded-full" />
           </div>
 
-          {/* Sections */}
           <Section id="overview" icon={Server} title="Arquitectura Distribuida" defaultOpen={true}>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5 hover:bg-surface-800/80 transition group">
@@ -769,7 +763,6 @@ export default function DocsPage() {
             </div>
           </Section>
 
-          {/* Footer */}
           <div className="mt-16 pt-8 border-t border-surface-700/40 text-center space-y-4">
             <div className="flex justify-center gap-6">
               <a href={ELENXOS_BRAND.supportUrl} className="text-surface-500 hover:text-white transition text-xs font-medium uppercase tracking-widest">Soporte</a>
