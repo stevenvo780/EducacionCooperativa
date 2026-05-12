@@ -169,9 +169,6 @@ const buildConceptProjection = (
 };
 
 const buildHeader = (docName: string, state: SemanticWorkspaceState) => {
-  // Antes: este header llamaba buildTheoryGraphFromSemanticState SOLO para
-  // imprimir 3 contadores. En workspaces grandes esto duplicaba el costo
-  // O(n²)·ST_eval del verifyTheoryGraph. Ahora usamos counters baratos.
   const conceptCount = state.concepts.length;
   const fragmentCount = state.fragments.length;
   const relationCount = state.relations.length;
