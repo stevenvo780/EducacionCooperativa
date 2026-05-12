@@ -153,8 +153,9 @@ function truncateDebug(value: string | undefined, max = 3000) {
 }
 
 type ChatCreatedSideEvent = { type: 'chat-created'; chatId: string };
+type ContextTruncatedSideEvent = { type: 'context-truncated'; removedCount: number; summary: string };
 
-function parseAgentStreamEvent(raw: string): AgentStreamEvent | ChatCreatedSideEvent | null {
+function parseAgentStreamEvent(raw: string): AgentStreamEvent | ChatCreatedSideEvent | ContextTruncatedSideEvent | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -182,6 +183,13 @@ function parseAgentStreamEvent(raw: string): AgentStreamEvent | ChatCreatedSideE
   // contrato compartido). El consumidor lo trata como side-channel.
   if (type === 'chat-created' && typeof obj.chatId === 'string') {
     return { type: 'chat-created', chatId: obj.chatId };
+  }
+  if (
+    type === 'context-truncated' &&
+    typeof obj.removedCount === 'number' &&
+    typeof obj.summary === 'string'
+  ) {
+    return { type: 'context-truncated', removedCount: obj.removedCount, summary: obj.summary };
   }
   return null;
 }
@@ -931,14 +939,19 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           continue;
         }
         if (event.type === 'chat-created') {
-          // Backend creó (o resolvió) el chat persistido. Guardamos el id
-          // para que el siguiente turno haga append en lugar de crear otro,
-          // y refrescamos el listado de chats recientes.
           if (currentChatIdRef.current !== event.chatId) {
             currentChatIdRef.current = event.chatId;
             setCurrentChatId(event.chatId);
             void remoteHistory.refresh();
           }
+          continue;
+        }
+        if (event.type === 'context-truncated') {
+          publishAgentProblem({
+            severity: 'info',
+            message: `Compactamos ${event.removedCount} mensajes viejos del contexto para liberar tokens.`,
+            detail: event.summary
+          });
           continue;
         }
         if (event.type === 'status') {
