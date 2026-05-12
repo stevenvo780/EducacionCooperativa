@@ -28,7 +28,6 @@ export interface SidebarViewContext {
   currentWorkspace: Workspace | null;
   userUid?: string;
 
-  // search
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   searchResults: SearchResultItem[];
@@ -42,7 +41,6 @@ export interface SidebarViewContext {
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   searchInputRef: React.Ref<HTMLInputElement>;
 
-  // tools shortcuts
   onOpenBoard: () => void;
   onOpenStRunner: () => void;
   onOpenSemanticBrowser: () => void;
@@ -52,7 +50,6 @@ export interface SidebarViewContext {
   isSemanticBrowserOpen?: boolean;
   isFormalizerOpen?: boolean;
 
-  // outline
   selectedDoc?: DocItem | null;
   onJumpToLine?: (line: number) => void;
 }

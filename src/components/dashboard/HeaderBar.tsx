@@ -189,7 +189,6 @@ const HeaderBar = ({
   const toolsMenuRef = useRef<HTMLDivElement>(null);
   const toolsMenuButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Load storage usage when user menu opens
   useEffect(() => {
     if (showUserMenu && !storageUsage) {
       fetchStorageUsage().then(setStorageUsage).catch(() => {});
@@ -233,7 +232,6 @@ const HeaderBar = ({
       ? 'bg-amber-400 animate-pulse'
       : 'bg-red-400';
 
-  // Close menus on outside click
   useEffect(() => {
     if (!menuOpenId) return;
     const handler = (e: MouseEvent) => {

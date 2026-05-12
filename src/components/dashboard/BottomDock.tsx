@@ -53,11 +53,9 @@ export default function BottomDock(props: BottomDockProps) {
     resolveDocName, onOpenDocument, onRunDiagnosticAction
   } = props;
 
-  // Canales dinámicos del registro (ej: st-output, st-symbols, etc.).
   const [extraChannels, setExtraChannels] = useState<OutputChannel[]>([]);
   useEffect(() => subscribeChannels(setExtraChannels), []);
 
-  // Diagnostics counts para el badge de "Problemas".
   const [diagCount, setDiagCount] = useState({ error: 0, warning: 0 });
   useEffect(() => subscribeDiagnostics((items) => {
     let error = 0, warning = 0;
@@ -68,7 +66,6 @@ export default function BottomDock(props: BottomDockProps) {
     setDiagCount((prev) => prev.error === error && prev.warning === warning ? prev : { error, warning });
   }), []);
 
-  // Compone la lista total de tabs: [Terminal, Problemas, ...registrados].
   const allTabs = useMemo(() => {
     const builtin: OutputChannel[] = [
       {

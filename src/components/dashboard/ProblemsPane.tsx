@@ -79,7 +79,6 @@ export default function ProblemsPane({ resolveDocName, onOpenDocument, onRunActi
       list.push(it);
       map.set(it.uri, list);
     }
-    // ordenar items dentro de cada grupo por severidad y línea
     for (const list of map.values()) {
       list.sort((a, b) => {
         const r = severityRank(a.severity) - severityRank(b.severity);
@@ -87,7 +86,6 @@ export default function ProblemsPane({ resolveDocName, onOpenDocument, onRunActi
         return (a.range?.startLine ?? 0) - (b.range?.startLine ?? 0);
       });
     }
-    // ordenar grupos: global al final
     return Array.from(map.entries()).sort(([a], [b]) => {
       if (a === 'global' && b !== 'global') return 1;
       if (b === 'global' && a !== 'global') return -1;
