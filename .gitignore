@@ -98,7 +98,6 @@ out/
 public/sw.js
 public/workbox-*.js
 public/worker-*.js
-!public/workbox-aef7c3da.js
 
 # Solo ignoramos tarballs locales de prepare-deploy; los scripts de build
 # (prepare-next-build, generate-st-runtime-manifest, etc.) deben ir al repo
