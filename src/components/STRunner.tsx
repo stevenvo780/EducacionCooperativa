@@ -280,7 +280,6 @@ export default function STRunner({
   const [mode, setMode] = useState<STRunnerMode>(initialMode);
   const [internalCode, setInternalCode] = useState(initialCode || DEFAULT_SCRIPT);
 
-  // Use fileMode content if available, otherwise internal
   const code = fileMode ? initialCode || '' : internalCode;
   const setCode = useCallback((val: string) => {
     if (fileMode) {
@@ -584,7 +583,6 @@ export default function STRunner({
         e.preventDefault();
         fileMode.onSave();
       }
-      // Tab → 2 espacios
       if (e.key === 'Tab') {
         e.preventDefault();
         const ta = e.currentTarget;

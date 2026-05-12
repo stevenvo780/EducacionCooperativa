@@ -70,13 +70,11 @@ export function HoverTooltip({
         return;
       }
 
-      // Clear any pending hide
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
         hideTimerRef.current = null;
       }
 
-      // Position tooltip above the token
       const tooltipX = token.start * charWidth + paddingLeft - scrollLeft;
       const tooltipY = (line - 1) * lineHeight + paddingTop - scrollTop - 4;
 

@@ -36,7 +36,6 @@ function loadMermaid(): Promise<MermaidGlobal> {
   if (loadPromise) return loadPromise;
 
   loadPromise = new Promise<MermaidGlobal>((resolve, reject) => {
-    // Already loaded?
     const win = window as unknown as Record<string, unknown>;
     if (win.mermaid) {
       resolve(win.mermaid as unknown as MermaidGlobal);
@@ -62,7 +61,6 @@ function loadMermaid(): Promise<MermaidGlobal> {
         securityLevel: 'loose',
         theme: 'base',
         themeVariables: {
-          // Light node backgrounds — ensures dark text is readable
           primaryColor: '#dbeafe',
           primaryTextColor: '#0f172a',
           primaryBorderColor: '#3b82f6',
@@ -74,12 +72,9 @@ function loadMermaid(): Promise<MermaidGlobal> {
           nodeBorder: '#3b82f6',
           mainBkg: '#dbeafe',
           nodeTextColor: '#0f172a',
-          // Clusters/subgraphs — dark to contrast with light nodes
           clusterBkg: '#1e293b',
           clusterBorder: '#475569',
-          // Edge labels — on dark container bg
           edgeLabelBackground: '#1e293b',
-          // Extra
           background: '#0f172a',
           titleColor: '#e2e8f0',
           actorTextColor: '#0f172a',
@@ -107,7 +102,6 @@ function loadMermaid(): Promise<MermaidGlobal> {
           critBkgColor: '#fecaca',
           critBorderColor: '#dc2626',
           todayLineColor: '#f59e0b',
-          // Pie chart
           pie1: '#3b82f6',
           pie2: '#f59e0b',
           pie3: '#10b981',
@@ -123,7 +117,6 @@ function loadMermaid(): Promise<MermaidGlobal> {
           pieLegendTextSize: '14px',
           pieLegendTextColor: '#e2e8f0',
           pieStrokeColor: '#0f172a',
-          // State diagram
           labelColor: '#e2e8f0',
           altBackground: '#1e293b'
         },
@@ -181,7 +174,6 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
         throw new Error('Mermaid no generó SVG válido');
       }
 
-      // Store SVG in React state so it survives re-renders
       setSvgHtml(svg);
       setState('ok');
     } catch (err) {

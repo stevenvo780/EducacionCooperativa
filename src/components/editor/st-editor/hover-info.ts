@@ -204,15 +204,10 @@ const modalAliasInfo: Record<string, HoverData> = {
 export function getHoverInfo(text: string, category: string): HoverData | null {
   const lower = text.toLowerCase();
 
-  // Keyword / alias
   if (category === 'keyword') return keywordInfo[lower] ?? null;
-  // Builtin
   if (category === 'builtin') return builtinInfo[lower] ?? null;
-  // Profile
   if (category === 'profile') return profileInfo[text] ?? profileInfo[lower] ?? null;
-  // Operator
   if (category === 'operator') return operatorInfo[text] ?? null;
 
-  // Fallback: buscar en todos (incluido aliases modales)
   return keywordInfo[lower] ?? builtinInfo[lower] ?? operatorInfo[text] ?? profileInfo[text] ?? modalAliasInfo[text] ?? null;
 }

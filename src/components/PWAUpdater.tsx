@@ -24,8 +24,6 @@ export default function PWAUpdater() {
   const [show, setShow] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // 1. Efecto inicial para marcar el componente como montado en el cliente.
-  //    Esto previene errores de hidratación y fallos de Server Side Rendering.
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -34,20 +32,15 @@ export default function PWAUpdater() {
     setShow(true);
   }, []);
 
-  // 2. Efecto para registrar y escuchar eventos del Service Worker.
   useEffect(() => {
-    // Si no estamos montados en el cliente, salimos prematuramente.
     if (!mounted || typeof window === 'undefined') return;
 
-    // Solo actuamos si el Service Worker y Workbox están disponibles.
     if ('serviceWorker' in navigator && window.workbox !== undefined) {
       const wb = window.workbox;
 
       wb.addEventListener('waiting', onWaiting);
       wb.addEventListener('externalwaiting', onWaiting);
 
-      // Comprobamos si ya hay un service worker esperando.
-      // wb.register() devuelve una promesa con el registro.
       wb.register().then((registration) => {
         if (registration && registration.waiting) {
           setShow(true);
@@ -72,8 +65,6 @@ export default function PWAUpdater() {
     }
   };
 
-  // 3. Renderizado Condicional:
-  //    Si el componente no está montado o no hay actualización disponible, no renderizamos nada.
   if (!mounted || !show) return null;
 
   return (
