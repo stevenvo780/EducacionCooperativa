@@ -351,7 +351,6 @@ export const useDashboardUploads = ({
               setUploadStatus(prev => prev ? { ...prev, progress } : prev);
             });
 
-            // Create the markdown document
             const mdDoc = await createDocumentApi({
               name: conversion.suggestedName,
               content: conversion.markdown,

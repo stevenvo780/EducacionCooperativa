@@ -63,7 +63,6 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
   const [lastDiagnostics, setLastDiagnostics] = useState<Diagnostic[]>([]);
   const idCounter = useRef(0);
 
-  // Sesión REPL persistente
   const interpreterRef = useRef<STInterpreter | null>(null);
   const getInterpreter = useCallback(() => {
     if (!interpreterRef.current) {
@@ -151,7 +150,6 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     }
   }, []);
 
-  // Ejecución completa sin estado (cada llamada es independiente)
   const run = useCallback((code: string): STEvalResult => {
     setIsRunning(true);
     try {
@@ -163,7 +161,6 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     }
   }, [addToHistory]);
 
-  // Ejecución en sesión REPL (mantiene estado entre llamadas)
   const execLine = useCallback((line: string): STEvalResult => {
     setIsRunning(true);
     try {
@@ -189,7 +186,6 @@ export function useSTInterpreter(): UseSTInterpreterReturn {
     }
   }, [addToHistory]);
 
-  // Reset
   const reset = useCallback(() => {
     if (interpreterRef.current) {
       interpreterRef.current.reset();

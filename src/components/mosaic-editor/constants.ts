@@ -84,7 +84,6 @@ export const QUICK_INSERTS: QuickInsert[] = [
 export const TABLE_MAX_ROWS = 8;
 export const TABLE_MAX_COLS = 8;
 
-// Timing constants
 // 2500ms balances responsiveness vs Firestore write costs (~3.5x fewer writes)
 export const SAVE_DEBOUNCE_MS = 2500;
 export const ST_DEBOUNCE_MS = 500;

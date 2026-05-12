@@ -64,7 +64,6 @@ export function useSTLinterRules() {
     return () => { offDefs(); offReg(); };
   }, []);
 
-  // Conjunto de nombres definidos (para lookup O(1))
   const definedNamesSet = useMemo(() => {
     const s = new Set<string>();
     for (const def of definitions) s.add(def.name);

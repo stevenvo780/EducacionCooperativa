@@ -20,7 +20,6 @@ export function useSemanticStateSyncer({
   const fnRef = useRef(loadSemanticStateFromWorkspace);
   useEffect(() => { fnRef.current = loadSemanticStateFromWorkspace; });
 
-  // Initial load when authenticated
   useEffect(() => {
     if (!userId) {
       setSemanticState(EMPTY_SEMANTIC_WORKSPACE_STATE);
@@ -29,7 +28,6 @@ export function useSemanticStateSyncer({
     void fnRef.current({ seedFromLocal: true, persistMerged: true });
   }, [userId, setSemanticState]);
 
-  // Periodic polling when the tab is visible
   useEffect(() => {
     if (!userId || !isPageVisible) return;
     void fnRef.current({ seedFromLocal: false, persistMerged: false });
