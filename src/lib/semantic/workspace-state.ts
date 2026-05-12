@@ -554,10 +554,6 @@ export const filterSemanticWorkspaceStateByDocument = (
   state: SemanticWorkspaceState,
   target: SemanticDocumentRef
 ): SemanticWorkspaceState => {
-  // Antes: normalizaba el state COMPLETO (sorts + validación campo a campo)
-  // antes de filtrar, aunque el caller solo necesita un subconjunto. En cada
-  // poll se re-normalizaba todo. Asumimos que el state que llega ya está
-  // normalizado por el store; si no, el caller debe normalizar antes.
   if (!target.docId && !target.docName) {
     return state;
   }
@@ -603,10 +599,6 @@ export const removeSemanticWorkspaceSlice = (
 };
 
 export const hasSemanticWorkspaceStateChanged = (left: SemanticWorkspaceState, right: SemanticWorkspaceState) => {
-  // Antes: 2× JSON.stringify del state completo (~130KB cada uno) por cada
-  // comparación. Ahora chequeo estructural barato: si conteos, updatedAt
-  // global y updatedAt agregado por id matchean, son equivalentes. Para casos
-  // edge donde solo cambia un campo no-tracked, hace fallback al stringify.
   if (left === right) return false;
   if (
     left.concepts.length !== right.concepts.length ||
