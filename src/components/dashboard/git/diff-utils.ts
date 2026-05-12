@@ -42,7 +42,6 @@ export const parsePatchToHunks = (patch: string): DiffHunk[] => {
     if (raw.startsWith('+++') || raw.startsWith('---') || raw.startsWith('diff ') || raw.startsWith('index ')
       || raw.startsWith('new file') || raw.startsWith('deleted file') || raw.startsWith('rename ')
       || raw.startsWith('similarity ') || raw.startsWith('Binary files ')) {
-      // headers fuera de un hunk: ignorables para el render línea-a-línea
       continue;
     }
     if (raw.startsWith('+')) {

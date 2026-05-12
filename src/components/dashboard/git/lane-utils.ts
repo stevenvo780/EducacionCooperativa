@@ -103,14 +103,14 @@ export const computeLanes = (commits: readonly LaneCommit[]): LaneAssignment => 
 /** Color determinístico por lane. Usa un hash trivial para variar. */
 export const laneColor = (lane: number): string => {
   const palette = [
-    '#10b981', // emerald
-    '#3b82f6', // blue
-    '#a855f7', // purple
-    '#f59e0b', // amber
-    '#ec4899', // pink
-    '#06b6d4', // cyan
-    '#84cc16', // lime
-    '#ef4444' // red
+    '#10b981',
+    '#3b82f6',
+    '#a855f7',
+    '#f59e0b',
+    '#ec4899',
+    '#06b6d4',
+    '#84cc16',
+    '#ef4444'
   ];
   const i = ((lane % palette.length) + palette.length) % palette.length;
   return palette[i] ?? palette[0]!;

@@ -228,7 +228,6 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
         setProgress({ phase: 'commit', current: 0, total: 1, label: 'Preparando…' });
 
         try {
-            // 1) Token Forgejo del user (cache en localStorage para no regenerar).
             const TOKEN_KEY = `agora_forgejo_token_${user.uid}`;
             let forgejoToken = localStorage.getItem(TOKEN_KEY) ?? '';
             if (!forgejoToken) {
@@ -241,18 +240,15 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                 localStorage.setItem(TOKEN_KEY, forgejoToken);
             }
 
-            // 2) Resolver info de cada doc: signed URL MinIO + repoPath + sha existente.
             const stagedItems = items.filter(i => staged.has(i.docId));
             if (stagedItems.length === 0) throw new Error('No hay archivos válidos en el stage.');
 
-            // Resolver datos del repo (URL Forgejo + commits previos para mostrar info).
             const infoRes = await authFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/git-info`);
             if (!infoRes.ok) throw new Error(`git-info HTTP ${infoRes.status}`);
             const info = parseGitInfo(await infoRes.json());
             const repoApiBase = info.cloneUrl?.replace(/^https:\/\/([^/]+)\/(.+)\.git$/, 'https://$1/api/v1/repos/$2');
             if (!repoApiBase) throw new Error('No se pudo derivar la URL API del repo.');
 
-            // 3) Sub-función: descargar blob de MinIO via signed URL.
             const fetchBlob = async (docId: string): Promise<{ buf: ArrayBuffer; size: number; contentHash: string } | null> => {
                 const r = await authFetch(`/api/sync/signed-url`, {
                     method: 'POST',
@@ -302,7 +298,6 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
 
             setProgress({ phase: 'commit', current: 0, total: chunks.length, label: `Subiendo ${stagedItems.length} archivo(s) en ${chunks.length} parte(s)…` });
 
-            // 5) Procesar cada chunk: descargar blobs, armar payload, POST a Forgejo, persist.
             const persistEntries: Array<{ docId: string; repoPath: string; contentHash: string; lastSha?: string; size: number; commitSha?: string; message: string }> = [];
             const errors: Array<{ path: string; status: number; raw: string }> = [];
 
@@ -311,7 +306,6 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
                 const partMessage = chunks.length === 1 ? message.trim() : `${message.trim()} (parte ${ci + 1}/${chunks.length})`;
                 setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: descargando…` });
 
-                // Descargar blobs en paralelo (max 4 simultáneos para no saturar al cliente).
                 const blobs: Array<{ p: Plan; buf: ArrayBuffer; size: number; contentHash: string } | null> = [];
                 const PAR = 4;
                 for (let i = 0; i < chunk.length; i += PAR) {
