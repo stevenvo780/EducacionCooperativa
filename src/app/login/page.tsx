@@ -3,7 +3,8 @@
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { getErrorMessage } from '@/lib/error-utils';
+import { translateAuthError } from '@/lib/auth-errors';
+import { validatePasswordPolicy, PASSWORD_HELP_TEXT } from '@/lib/password-policy';
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion';
 import { Mail, Lock, AlertCircle, Chrome, ArrowLeft, Check, ExternalLink, Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -26,6 +27,13 @@ function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!isLogin) {
+      const policy = validatePasswordPolicy(password);
+      if (!policy.ok) {
+        setError(policy.error ?? 'Contraseña inválida.');
+        return;
+      }
+    }
     setLoading(true);
     try {
       if (isLogin) {
@@ -34,7 +42,7 @@ function LoginPage() {
         await registerWithEmail(email, password);
       }
     } catch (error: unknown) {
-      setError(getErrorMessage(error, 'Ocurrió un error'));
+      setError(translateAuthError(error, 'Ocurrió un error. Intentalo de nuevo.'));
     } finally {
       setLoading(false);
     }
@@ -48,7 +56,7 @@ function LoginPage() {
     try {
         await signInWithGoogle();
     } catch (error: unknown) {
-        setError(getErrorMessage(error, 'Error al iniciar sesión con Google'));
+        setError(translateAuthError(error, 'Error al iniciar sesión con Google'));
     } finally {
         setLoading(false);
     }
@@ -62,7 +70,7 @@ function LoginPage() {
       await resetPassword(resetEmail);
       setResetSuccess(true);
     } catch (error: unknown) {
-      setResetError(getErrorMessage(error, 'Error al enviar el correo'));
+      setResetError(translateAuthError(error, 'Error al enviar el correo'));
     } finally {
       setResetLoading(false);
     }
@@ -277,6 +285,9 @@ function LoginPage() {
                                 ¿Olvidaste tu contraseña?
                             </button>
                         )}
+                        {!isLogin && (
+                            <p className="text-[11px] text-surface-500 mt-1">{PASSWORD_HELP_TEXT}</p>
+                        )}
                     </div>
 
                     <AnimatePresence>
@@ -313,10 +324,10 @@ function LoginPage() {
                     type="button"
                     onClick={handleGoogle}
                     disabled={loading}
-                    className="w-full max-w-full bg-surface-700 border border-surface-600 text-surface-200 font-medium py-2.5 rounded-lg hover:bg-surface-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full max-w-full min-w-0 bg-surface-700 border border-surface-600 text-surface-200 font-medium py-2.5 px-3 rounded-lg hover:bg-surface-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden"
                 >
-                    <Chrome className="w-5 h-5 text-surface-400" />
-                    Continuar con Google
+                    <Chrome className="w-5 h-5 shrink-0 text-surface-400" />
+                    <span className="truncate min-w-0">Continuar con Google</span>
                 </button>
             </div>
         </div>

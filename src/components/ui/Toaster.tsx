@@ -8,7 +8,10 @@ export function Toaster({ ...props }: ToasterProps) {
   return (
     <Sonner
       className="toaster group"
+      expand={false}
+      visibleToasts={3}
       toastOptions={{
+        duration: 4000,
         classNames: {
           toast:
             'group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border shadow-lg',

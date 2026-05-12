@@ -372,8 +372,7 @@ const Sidebar = ({
   const iconButtonClass = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-surface-400 transition hover:bg-surface-700/70 hover:text-surface-100 active:bg-surface-700';
 
   // Al cambiar de workspace expandimos todos los folders top-level con contenido
-  // para que el user vea la jerarquía inmediatamente (antes el alias mágico
-  // 'No estructurado' jugaba ese papel; ahora la raíz no se materializa).
+  // para que el user vea la jerarquía inmediatamente.
   useEffect(() => {
     setCollapsedByUser(new Set());
   }, [currentWorkspace?.id]);
