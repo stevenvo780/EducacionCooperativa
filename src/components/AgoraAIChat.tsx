@@ -363,7 +363,11 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
         )}
         {displayContent ? (
           <div className="max-w-full overflow-hidden [overflow-wrap:anywhere]">
-            <MarkdownContent content={displayContent} />
+            {msg.role === 'user' ? (
+              <span style={{ whiteSpace: 'pre-wrap' }}>{displayContent}</span>
+            ) : (
+              <MarkdownContent content={displayContent} />
+            )}
           </div>
         ) : null}
         {referencedDocuments.length > 0 && (
