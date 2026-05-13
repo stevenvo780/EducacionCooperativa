@@ -109,6 +109,10 @@
     "underscore": "^1.13.8",
     "workbox-build": "^7.4.0",
     "workbox-webpack-plugin": "^7.4.0",
-    "serialize-javascript": "^7.0.4"
+    "serialize-javascript": "^7.0.4",
+    "@babel/plugin-transform-modules-systemjs": "^7.29.4",
+    "epubjs": {
+      "@xmldom/xmldom": "^0.9.10"
+    }
   }
 }
