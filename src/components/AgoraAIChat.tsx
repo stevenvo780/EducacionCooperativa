@@ -615,6 +615,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     if (typeof window === 'undefined') return;
     setUserInstructions(loadAgentUserInstructions(resolvedWorkspaceId));
   }, [resolvedWorkspaceId]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
   const hasKeyForProvider = !meta.needsKey || serverKeyProviders.has(config.provider as AgentKeyProvider);
   const canSend = !loading && hasKeyForProvider;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
@@ -2343,10 +2347,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             </span>
           </div>
           <div className="text-surface-400 hidden sm:flex items-center gap-1 shrink-0">
-            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px] text-surface-300">Enter</kbd>
+            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[10px] text-surface-300">Enter</kbd>
             <span>enviar</span>
             <span className="opacity-60">·</span>
-            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[9px] text-surface-300">⇧Enter</kbd>
+            <kbd className="rounded border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-[10px] text-surface-300">⇧Enter</kbd>
             <span>salto</span>
           </div>
         </div>

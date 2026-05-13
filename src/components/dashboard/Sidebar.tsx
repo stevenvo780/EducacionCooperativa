@@ -121,6 +121,8 @@ const SidebarRow = memo(function SidebarRow({
       <div
         style={{ ...style, paddingLeft: 12, paddingRight: 12 } as React.CSSProperties}
         {...ariaAttributes}
+        role="treeitem"
+        aria-selected={isSelected}
       >
         <div
           onClick={(e) => handleDocClick(e, index, item.doc)}
@@ -138,7 +140,7 @@ const SidebarRow = memo(function SidebarRow({
             {getIcon(item.doc)}
           </div>
           <span className="truncate flex-1">{item.doc.name}</span>
-          <span className="text-[9px] text-surface-600 truncate max-w-[60px]">{item.doc.folder?.split('/').pop()}</span>
+          <span className="text-[10px] text-surface-400 truncate max-w-[60px]">{item.doc.folder?.split('/').pop()}</span>
           {isFavorite && (
             <Star className="w-3 h-3 text-amber-300 fill-current shrink-0" />
           )}
@@ -198,7 +200,7 @@ const SidebarRow = memo(function SidebarRow({
             <Folder className="w-3.5 h-3.5 text-amber-400" />
           )}
           <span className="truncate flex-1 text-left">{item.folder.name}</span>
-          {count > 0 && <span className="text-[9px] text-surface-500">{count}</span>}
+          {count > 0 && <span className="text-[10px] text-surface-400">{count}</span>}
         </button>
       </div>
     );

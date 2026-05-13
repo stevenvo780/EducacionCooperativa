@@ -228,7 +228,7 @@ function Field({ label, value, mono, small, onCopy, copied, rightSlot }: FieldPr
                         <Copy className="h-3 w-3" />
                     </button>
                 )}
-                {!isEmpty && copied && <span className="text-[9px] text-emerald-700 dark:text-emerald-400">copiado</span>}
+                {!isEmpty && copied && <span className="text-[10px] text-emerald-600 dark:text-emerald-400">copiado</span>}
                 {rightSlot}
             </div>
         </div>
