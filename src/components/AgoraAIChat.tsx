@@ -10,7 +10,7 @@ import {
   Bot, Send, Settings, ChevronDown,
   Loader2, Trash2, Copy, Check, AlertCircle, Undo2,
   History, MessageSquarePlus, Shield, Square,
-  ListTree, ChevronsDownUp, ChevronsUpDown, FileText, RotateCcw
+  ListTree, ChevronsDownUp, ChevronsUpDown, FileText, RotateCcw, Clock
 } from 'lucide-react';
 import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
 import { fetchZod } from '@/lib/fetch-zod';
@@ -76,7 +76,13 @@ import type {
 } from '@/lib/agora-ai/types';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 
-type UIChatMessage = AgentStoredChatMessage;
+/**
+ * `AgentStoredChatMessage` extendido con metadata de UI local.
+ * `hasHiddenTools` se setea cuando el mensaje viene del backend con
+ * toolCalls/toolResults pero sin un `agentRun` reconstruido (chats
+ * previos a la migración de persistencia de eventos del agente).
+ */
+type UIChatMessage = AgentStoredChatMessage & { hasHiddenTools?: boolean };
 
 interface AgoraAIChatProps {
   workspaceId?: string;
@@ -347,6 +353,12 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
           <div className="flex items-center gap-1 mb-1 text-xs text-mandy-400">
             <AlertCircle className="w-3 h-3" />
             Error
+          </div>
+        )}
+        {msg.role === 'assistant' && msg.hasHiddenTools && !msg.agentRun && (
+          <div className="flex items-center gap-1 mb-1.5 text-[10px] text-surface-500 border border-surface-700 bg-surface-900/60 rounded px-1.5 py-0.5 w-fit" title="Este mensaje se guardó antes de la migración al sistema de historial persistente. El detalle de tools y thinking no está disponible.">
+            <Clock className="w-3 h-3 flex-shrink-0" />
+            Chat antiguo · sin detalle de tools
           </div>
         )}
         {displayContent ? (
@@ -1293,10 +1305,20 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     const content = message.role === 'assistant'
       ? stripPreviousTurnContext(message.content)
       : message.content;
+    // Detectar mensajes con tools persistidas pero sin agentRun reconstruido.
+    // Los chats guardados antes de la migración de eventos del agente sólo
+    // tienen toolCalls/toolResults como blobs opacos — no los suficiente para
+    // reconstruir un AgentRun tipado (Opción A: badge informativo en lugar de
+    // intentar una reconstrucción frágil).
+    const hasHiddenTools = message.role === 'assistant' && (
+      (Array.isArray(message.toolCalls) && message.toolCalls.length > 0) ||
+      (Array.isArray(message.toolResults) && message.toolResults.length > 0)
+    );
     return {
       id: message.id,
       role: message.role,
-      content
+      content,
+      ...(hasHiddenTools ? { hasHiddenTools: true } : {})
     };
   }, []);
 
