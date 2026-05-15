@@ -517,7 +517,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     if (!repoFullName) return;
     const folder = doc.folder ? `${doc.folder}/` : '';
     const repoPath = encodeURI(`${folder}${doc.name ?? ''}`).replace(/'/g, '%27');
-    const apiBase = process.env.NEXT_PUBLIC_FORGEJO_WEB_URL ?? 'https://git.proxy.humanizar-dev.cloud';
+    const apiBase = process.env.NEXT_PUBLIC_FORGEJO_WEB_URL ?? 'https://git.elenxos.com';
     window.open(`${apiBase}/${repoFullName}/src/branch/main/${repoPath}`, '_blank', 'noopener,noreferrer');
   };
 
