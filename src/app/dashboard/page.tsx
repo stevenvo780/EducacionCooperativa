@@ -273,7 +273,7 @@ function DashboardContent() {
         const nexusUrl = process.env.NEXT_PUBLIC_NEXUS_URL ||
             (typeof window !== 'undefined' && window.location.hostname === 'localhost'
                 ? 'http://localhost:3010'
-                : 'https://hub.humanizar-dev.cloud');
+                : 'https://hub.elenxos.com');
         initialize(nexusUrl);
     }, [initialize, user]);
 
