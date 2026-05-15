@@ -104,7 +104,7 @@ const WorkerInstallModal = ({
       '  --security-opt label=disable \\',
       `  -e WORKER_TOKEN=${wsId} \\`,
       '  -e WORKER_SECRET=<pedile-al-admin> \\',
-      '  -e NEXUS_URL=https://hub.humanizar-dev.cloud \\',
+      '  -e NEXUS_URL=https://hub.elenxos.com \\',
       `  -v $HOME/edu-worker/${wsId}:/workspace \\`,
       '  docker.io/stevenvo780/edu-worker:latest'
     ].join('\n');
@@ -122,7 +122,7 @@ const WorkerInstallModal = ({
       '  --network=host \\',
       `  -e WORKER_TOKEN=${wsId} \\`,
       '  -e WORKER_SECRET=<pedile-al-admin> \\',
-      '  -e NEXUS_URL=https://hub.humanizar-dev.cloud \\',
+      '  -e NEXUS_URL=https://hub.elenxos.com \\',
       `  -v $HOME/edu-worker/${wsId}:/workspace \\`,
       '  stevenvo780/edu-worker:latest'
     ].join('\n');
@@ -310,7 +310,7 @@ const WorkerInstallModal = ({
                 <details className="rounded border border-surface-700/40 bg-surface-900/40 p-2">
                   <summary className="cursor-pointer text-surface-200">Worker aparece como desconectado</summary>
                   <p className="mt-1 leading-relaxed text-surface-400">
-                    Verificá que <code className="rounded bg-surface-950 px-1 font-mono text-surface-200">NEXUS_URL=https://hub.humanizar-dev.cloud</code>
+                    Verificá que <code className="rounded bg-surface-950 px-1 font-mono text-surface-200">NEXUS_URL=https://hub.elenxos.com</code>
                     sea accesible (<code className="rounded bg-surface-950 px-1 font-mono text-surface-200">curl -I $NEXUS_URL</code>) y
                     que el firewall no bloquee egreso por 443. Revisá logs con
                     <code className="mx-1 rounded bg-surface-950 px-1 font-mono text-surface-200">docker logs edu-worker-{wsId}</code>.

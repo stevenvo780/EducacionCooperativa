@@ -248,7 +248,7 @@ const CSP_DIRECTIVES = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com https://lh3.googleusercontent.com https://www.gravatar.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://hub.humanizar-dev.cloud wss://hub.humanizar-dev.cloud https://hub.elenxos.com wss://hub.elenxos.com https://s3.elenxos.com https://git.elenxos.com https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://s3.proxy.humanizar-dev.cloud https://git.proxy.humanizar-dev.cloud https://api.deepseek.com https://api.openai.com https://api.anthropic.com http://localhost:11434 http://127.0.0.1:11434",
+  "connect-src 'self' https://hub.elenxos.com wss://hub.elenxos.com https://s3.elenxos.com https://git.elenxos.com https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://api.deepseek.com https://api.openai.com https://api.anthropic.com http://localhost:11434 http://127.0.0.1:11434",
   "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com",
   "worker-src 'self' blob: https://cdnjs.cloudflare.com",
   "object-src 'none'",
