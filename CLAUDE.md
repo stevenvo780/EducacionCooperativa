@@ -19,19 +19,20 @@ Stack:
   `syncEventsOutbox`).
 - **Eventos en tiempo real**: Firebase RTDB (canales `sync-events/<wsId>` y
   `sync-events/personal_<uid>`).
-- **Storage de blobs**: MinIO en NAS (S3-compatible) reemplaza a Firebase
-  Storage. Bucket `agora-blobs`. Path canónico:
+- **Storage de blobs**: MinIO en Hostinger VPS `agora-storage`
+  (`s3.elenxos.com`, S3-compatible). Bucket `agora-blobs`. Path canónico:
   `workspaces/<wsId>/<folder>/<file>` o `users/<uid>/<folder>/<file>`.
-- **Git por workspace**: Forgejo en NAS. Cada workspace = repo en la org
-  `agora`. El user/CLI puede clonar via HTTPS + token.
+- **Git por workspace**: Forgejo en Hostinger VPS (`git.elenxos.com`).
+  Cada workspace = repo en la org `agora`. El user/CLI puede clonar via
+  HTTPS + token.
 - **Workers**: ~35 contenedores Docker `edu-worker-<wsId>` corriendo en
   `humanizar2` (host activo; reemplazó al viejo `stev-server`). Cada uno
   expone una terminal y monta `/workspace`. Apuntan al hub vía
-  `NEXUS_URL=https://hub.humanizar-dev.cloud`.
-- **Hub**: VM dedicada GCP Compute Engine e2-micro free tier
-  (`agora-hub`, IP `34.72.204.171`, dominio `hub.humanizar-dev.cloud`,
-  Caddy `protocols h1` only por engine.io). Reemplazó al viejo hub en
-  `humanizar2`.
+  `NEXUS_URL=https://hub.elenxos.com`.
+- **Hub**: Hostinger VPS `agora-storage` (IP `76.13.118.239`, dominio
+  `hub.elenxos.com`, systemd `edu-hub`, user no-root `edu-hub`, Caddy
+  `protocols h1` only por engine.io). MinIO, Forgejo y Hub conviven en
+  `/opt/agora-stack/`.
 - **Daemon de sync**: `agora-host-sync` corre en `humanizar2` como systemd
   unit; mantiene el `/workspace` de cada worker espejado contra MinIO+Firestore
   bidireccionalmente y revive contenedores caídos. Ignora `.scratch/`,
@@ -113,34 +114,36 @@ gcloud run deploy agora-backend --source . --region us-central1
 Acceso a hosts y servicios: **`.claude/secrets.md`** (gitignored).
 
 Hosts principales:
-- **NAS** — `nas@100.98.67.189` (NetBird). Hostea MinIO, Forgejo, Postgres,
-  filebrowser. `docker exec agora-{minio,forgejo,...}` para acción directa.
+- **agora-storage** — `root@76.13.118.239` (Hostinger VPS, SSH key). Hostea
+  MinIO (`s3.elenxos.com`), Forgejo (`git.elenxos.com`), AgoraHub
+  (`hub.elenxos.com`) y Postgres 17. Docker Compose en `/opt/agora-stack/`.
+  `docker compose -f /opt/agora-stack/docker-compose.yml exec agora-minio ...`
+  para acción directa. Acceso: `ssh root@76.13.118.239`.
 - **humanizar2** — `humanizar@100.98.5.11` (NetBird, alias SSH
   `humanizar2`). Hostea todos los workers `edu-worker-*` y el daemon
-  `agora-host-sync`. Acceso por jump host (NAS): `ssh nas ssh humanizar2
-  '...'`. Reemplazó a `stev-server` (`stev@100.98.8.227`) como host de
-  workers.
-- **agora-hub** — VM GCP Compute Engine e2-micro free tier en us-central1,
-  IP `34.72.204.171`, dominio `hub.humanizar-dev.cloud`. Hostea AgoraHub
-  como systemd unit (no `--user`) con usuario no-root `edu-hub`.
-  Hardening: ProtectSystem, apt cron weekly, firewall raw 3010 cerrado
-  (solo 443 via Caddy). Acceso: `gcloud compute ssh agora-hub
-  --zone=us-central1-a`.
+  `agora-host-sync`. Acceso directo: `ssh humanizar2 '...'`. Reemplazó a
+  `stev-server` (`stev@100.98.8.227`) como host de workers.
+- **NAS** (`nas@100.98.67.189`) y **agora-hub** (GCP `34.72.204.171`) —
+  RETIRADOS de producción. Mantener apagados.
 
 Comandos diagnóstico que uso seguido (sin secretos en este file):
 
 ```bash
-# Estado del daemon de sync (ejecutar dentro de humanizar2)
-systemctl status agora-host-sync
-tail -50 /home/humanizar/logs/agora-host-sync.log
+# Estado del daemon de sync
+ssh humanizar2 'systemctl status agora-host-sync'
+ssh humanizar2 'tail -50 /home/humanizar/logs/agora-host-sync.log'
 
-# Workers
-docker ps --filter name=edu-worker --format 'table {{.Names}}\t{{.Status}}'
+# Workers (en humanizar2)
+ssh humanizar2 'docker ps --filter name=edu-worker --format "table {{.Names}}\t{{.Status}}"'
 
-# Bucket MinIO (con creds de adm en .claude/secrets.md):
-docker exec agora-minio mc ls --recursive adm/agora-blobs/ | head
+# Hub (Hostinger VPS)
+ssh root@76.13.118.239 'systemctl status edu-hub'
+curl -s https://hub.elenxos.com/health
 
-# Health check del Hub
+# Bucket MinIO (creds en .claude/secrets.md):
+ssh root@76.13.118.239 'docker compose -f /opt/agora-stack/docker-compose.yml exec agora-minio mc ls --recursive adm/agora-blobs/ | head'
+
+# Health check del Front
 curl -s https://agora.elenxos.com/api/diag | python3 -m json.tool
 ```
 
