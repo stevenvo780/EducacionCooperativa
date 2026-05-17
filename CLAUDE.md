@@ -242,6 +242,12 @@ Revisar y comunicar al user si reaparecen:
 - ~~Logout no purgaba caché~~ → whitelist de 13 prefijos de
   `localStorage` se limpia en signOut.
 - ~~Toaster sin cap~~ → Sonner cap 3 visibles + 4s duration.
+- ~~ST V4 features pendientes~~ → V4.5.0 publicado con 52+ módulos. 4 rutas live en prod:
+  - `/st-playground` — editor ST + evaluator client-side
+  - `/lattice-viewer` — Belnap bilattice + modal frames SVG
+  - `/proof-debugger` — replay paso a paso (estilo DevTools)
+  - `/proof-cards` — grid de proof obligations con filtros
+  4 deploys Vercel sucesivos (4.1.0 → 4.5.0).
 
 ## Contratos de borde (`src/lib/contracts/`)
 
