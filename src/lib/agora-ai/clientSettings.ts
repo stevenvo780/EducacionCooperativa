@@ -64,8 +64,12 @@ export const AGENT_TRACE_EXPANDED_KEY = 'agoraAITraceExpanded';
 const AGENT_USER_INSTRUCTIONS_KEY_PREFIX = 'agoraAIUserInstructions:';
 export const AGENT_USER_INSTRUCTIONS_MAX_LENGTH = 4000;
 
+// Default = deepseek (server-side, sin requerir Ollama local). Antes era
+// 'ollama': si el user no tenía Ollama en localhost:11434 el panel quedaba
+// "Ejecutando agente…" indefinidamente. Deepseek funciona out-of-the-box
+// con la API key en server-side; el user puede cambiar a Ollama desde Ajustes.
 export const DEFAULT_CONFIG: AIProviderConfig = {
-  provider: 'ollama',
+  provider: 'deepseek',
   model: '',
   endpoint: ''
 };

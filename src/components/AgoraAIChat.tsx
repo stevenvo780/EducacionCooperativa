@@ -637,6 +637,40 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     };
   }, []);
 
+  // Detección temprana de Ollama: si el provider activo es 'ollama', hacemos
+  // un ping rápido (2s) a /api/tags. Si falla, marcamos ollamaOffline=true
+  // antes de que el user envíe un mensaje — así el banner aparece de entrada
+  // y el textarea queda enviable pero con guía visible para cambiar provider.
+  useEffect(() => {
+    if (config.provider !== 'ollama') {
+      setOllamaOffline(false);
+      return;
+    }
+    const raw = config.endpoint.trim() || 'http://localhost:11434';
+    const base = raw.replace(/\/+$/, '').replace(/\/api\/chat$/, '');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    let cancelled = false;
+    fetch(`${base}/api/tags`, { method: 'GET', signal: controller.signal })
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.ok) setOllamaOffline(true);
+        else setOllamaOffline(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOllamaOffline(true);
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+      });
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [config.provider, config.endpoint]);
+
   useEffect(() => {
     // Cargamos los chats legados de localStorage SOLO para preview read-only
     // en el historial. No los reactivamos como sesión viva — eso correría
@@ -1089,14 +1123,34 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         payload.think = false;
       }
     }
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal,
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
-    return await res.json() as OllamaChatResponse;
+    // Timeout 8s sobre el fetch a Ollama local. Sin esto, si el server no
+    // corre (ERR_FAILED en navegadores algunos toman >40s antes de fallar),
+    // el panel queda "Ejecutando agente…" colgado. El signal externo
+    // (controller del turno) sigue funcionando como cancelación del user.
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), 8000);
+    const onExternalAbort = () => timeoutController.abort();
+    signal.addEventListener('abort', onExternalAbort, { once: true });
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: timeoutController.signal,
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
+      return await res.json() as OllamaChatResponse;
+    } catch (err) {
+      // Distinguimos abort externo (user pulsó stop) de timeout interno.
+      if (signal.aborted) throw err;
+      if (timeoutController.signal.aborted) {
+        throw new Error(`Ollama timeout: el servidor en ${url} no respondió en 8s. Verificá que esté corriendo o cambiá de proveedor.`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onExternalAbort);
+    }
   }, [ollamaToolsForPolicy, config.endpoint, config.model, meta.defaultModel]);
 
   const runOllamaLoop = useCallback(async (
@@ -1659,7 +1713,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       const errMsg = err instanceof Error ? err.message : 'Error de red';
       // Bug #4: si el proveedor es Ollama y el error es de conexión,
       // mostramos banner específico en lugar del mensaje genérico.
-      const isOllamaFetch = config.provider === 'ollama' && /failed to fetch|network|ECONNREFUSED/i.test(errMsg);
+      const isOllamaFetch = config.provider === 'ollama' && /failed to fetch|network|ECONNREFUSED|ollama timeout|err_failed|err_connection|load failed/i.test(errMsg);
       if (isOllamaFetch) {
         setOllamaOffline(true);
         if (assistantMessageId) {
