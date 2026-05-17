@@ -83,7 +83,7 @@ export default function PWAUpdater() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-[9999] flex items-center gap-3 rounded-lg border border-sky-500/30 bg-slate-900/95 p-4 text-white shadow-2xl backdrop-blur-sm animate-in slide-in-from-bottom-5"
+      className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-sky-500/30 bg-slate-900/95 p-4 text-white shadow-2xl backdrop-blur-sm animate-in slide-in-from-bottom-5"
     >
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/20 text-sky-400">

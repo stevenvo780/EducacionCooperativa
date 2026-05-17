@@ -1746,6 +1746,7 @@ function DashboardContent() {
             }
 
             if (matchesShortcut('KeyI', 'i') && e.altKey) {
+                if (e.repeat) return;
                 e.preventDefault();
                 clearShortcutChord();
                 setRightPanelOpen(e.shiftKey ? true : (current) => !current);
@@ -1753,6 +1754,7 @@ function DashboardContent() {
             }
 
             if (matchesShortcut('KeyI', 'i') && e.shiftKey && !e.altKey) {
+                if (e.repeat) return;
                 e.preventDefault();
                 clearShortcutChord();
                 setRightPanelOpen((v) => !v);
