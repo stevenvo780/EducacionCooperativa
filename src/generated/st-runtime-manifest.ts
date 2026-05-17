@@ -5,10 +5,10 @@
  */
 
 export const ST_RUNTIME_MANIFEST = {
-  "generatedAt": "2026-05-17T04:42:12.315Z",
-  "canonicalVersion": "4.2.0",
-  "packageVersion": "4.2.0",
-  "cliVersion": "4.2.0",
+  "generatedAt": "2026-05-17T16:32:20.348Z",
+  "canonicalVersion": "4.8.0",
+  "packageVersion": "4.8.0",
+  "cliVersion": "4.8.0",
   "versionMismatch": false,
   "profiles": [
     {
