@@ -112,6 +112,9 @@ package-lock.json.deploy-bak
 .claude/secrets.md
 .claude/scheduled_tasks.lock
 
+# Auto-generado por build script (generate-st-runtime-manifest)
+src/generated/st-runtime-manifest.ts
+
 # AgoraBackend
 AgoraBackend/node_modules/
 AgoraBackend/dist/
