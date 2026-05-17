@@ -118,7 +118,7 @@ export default function ModalFrame({ worlds, accessibility }: ModalFrameProps) {
   });
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-4 w-full">
       <style>{`
         .modal-node:hover circle {
           fill: #334155;
@@ -127,8 +127,8 @@ export default function ModalFrame({ worlds, accessibility }: ModalFrameProps) {
       `}</style>
       <svg
         viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}
-        width={SVG_SIZE}
-        height={SVG_SIZE}
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-auto max-w-[400px]"
         aria-label="Modal frame diagram"
         role="img"
       >
@@ -178,7 +178,7 @@ export default function ModalFrame({ worlds, accessibility }: ModalFrameProps) {
         })}
       </svg>
 
-      <div className="flex gap-6 text-sm">
+      <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
         <span className="flex items-center gap-2">
           <span
             style={{

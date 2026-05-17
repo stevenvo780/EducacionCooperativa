@@ -247,12 +247,9 @@ export default function STPlaygroundV2() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-3 px-4 py-4">
-        <div
-          className="grid min-h-[55vh] gap-3"
-          style={{ gridTemplateColumns: 'minmax(0, 1fr) 320px' }}
-        >
-          <section className="flex min-h-[55vh] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-3 px-2 py-4 sm:px-4">
+        <div className="grid min-h-[55vh] gap-3 grid-cols-1 lg:[grid-template-columns:minmax(0,1fr)_320px]">
+          <section className="flex min-w-0 min-h-[55vh] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40">
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/60 px-3 py-2 text-xs uppercase tracking-wide text-slate-400">
               <span>Editor ST</span>
               <span className="font-mono text-[11px] text-slate-500">
@@ -260,7 +257,7 @@ export default function STPlaygroundV2() {
               </span>
             </div>
             <div
-              className="relative flex-1 min-h-[50vh]"
+              className="relative flex-1 min-h-[50vh] min-w-0 w-full"
               style={{
                 resize: 'vertical',
                 overflow: 'auto'
@@ -803,13 +800,13 @@ function ExamplesMenu({ onPick }: { onPick: (ex: StV2Example) => void }) {
       {open && (
         <>
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-[999]"
             onClick={() => setOpen(false)}
             aria-hidden
           />
           <ul
             role="menu"
-            className="absolute right-0 z-20 mt-2 w-80 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-xl"
+            className="absolute right-0 z-[1000] mt-2 w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-xl pointer-events-auto"
           >
             {ST_PLAYGROUND_V2_EXAMPLES.map((ex) => (
               <li key={ex.id}>
