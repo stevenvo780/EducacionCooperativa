@@ -708,8 +708,15 @@ export function useDocumentActions({
     };
 
     const createStDoc = async (folderName?: string) => {
-        const baseName = newDocName.trim() || 'Sin título';
-        const name = baseName.endsWith('.md.st') ? baseName : `${baseName}.md.st`;
+        const rawName = newDocName.trim() || 'Sin título';
+        // Limpiar extensiones legacy y duplicadas: si el user (o un default
+        // viejo) trae ".md", ".md.st" o ya ".st", quedarse con un solo .st.
+        const stripped = rawName
+            .replace(/\.md\.st$/i, '')
+            .replace(/\.st$/i, '')
+            .replace(/\.md$/i, '');
+        const baseName = stripped.trim() || 'Sin título';
+        const name = `${baseName}.st`;
         if (!user) return;
         const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;

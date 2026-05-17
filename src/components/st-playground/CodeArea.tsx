@@ -15,13 +15,21 @@ const baseTheme = EditorView.theme(
     '&': {
       backgroundColor: 'transparent',
       color: '#e2e8f0',
-      height: '100%'
+      height: '100%',
+      width: '100%',
+      minWidth: '0'
+    },
+    '.cm-scroller': {
+      width: '100%',
+      minWidth: '0',
+      overflowX: 'auto'
     },
     '.cm-content': {
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Monaco, "Cascadia Code", "Source Code Pro", monospace',
       fontSize: '13px',
-      caretColor: '#a78bfa'
+      caretColor: '#a78bfa',
+      minWidth: '0'
     },
     '.cm-gutters': {
       backgroundColor: 'rgba(15, 23, 42, 0.6)',
@@ -45,7 +53,7 @@ export default function CodeArea({ value, onChange, ariaLabel }: CodeAreaProps) 
   );
 
   return (
-    <div className="h-full w-full overflow-hidden" aria-label={ariaLabel}>
+    <div className="h-full w-full min-w-0 overflow-hidden" aria-label={ariaLabel}>
       <CodeMirror
         value={value}
         onChange={handleChange}
@@ -62,7 +70,8 @@ export default function CodeArea({ value, onChange, ariaLabel }: CodeAreaProps) 
           indentOnInput: false
         }}
         height="100%"
-        style={{ height: '100%' }}
+        width="100%"
+        style={{ height: '100%', width: '100%', minWidth: '0' }}
       />
     </div>
   );

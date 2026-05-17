@@ -337,7 +337,7 @@ function ExamplesMenu({ onPick }: { onPick: (ex: StPlaygroundExample) => void })
       {open && (
         <div
           role="menu"
-          className="absolute right-0 mt-1 w-80 rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-20 overflow-hidden"
+          className="absolute right-0 mt-1 w-80 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-[1000] overflow-hidden pointer-events-auto"
         >
           {ST_PLAYGROUND_EXAMPLES.map(ex => (
             <button

@@ -117,7 +117,7 @@ function NodeCircle({ label, x, y }: NodeCircleProps) {
 
 export default function BelnapLattice() {
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-4 w-full">
       <style>{`
         .lattice-node:hover circle {
           fill: #334155;
@@ -126,8 +126,8 @@ export default function BelnapLattice() {
       `}</style>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        width={WIDTH}
-        height={HEIGHT}
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-auto max-w-[400px]"
         aria-label="Belnap bilattice diagram"
         role="img"
       >
@@ -183,7 +183,7 @@ export default function BelnapLattice() {
         ))}
       </svg>
 
-      <div className="flex gap-6 text-sm">
+      <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
         <span className="flex items-center gap-2">
           <span
             style={{
