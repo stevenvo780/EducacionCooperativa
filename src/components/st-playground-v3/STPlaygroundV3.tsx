@@ -145,6 +145,7 @@ export default function STPlaygroundV3() {
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userText }
           ],
+          provider: 'anthropic',
           mode: 'chat',
           accessPolicy: 'no-tools',
           userInstructions: '',
