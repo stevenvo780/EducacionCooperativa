@@ -38,6 +38,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // ST Notebooks subcollection (Ciclo 4 A4-C)
+    match /users/{uid}/notebooks/{notebookId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == uid;
+    }
+
     // User emails index (used by registration)
     match /userEmails/{emailId} {
       allow read: if false; // server-only via Admin SDK
