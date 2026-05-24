@@ -15,6 +15,14 @@
         ".read": "auth != null && ($wsId.beginsWith('personal_') ? $wsId === ('personal_' + auth.uid) : (auth.token.workspaces != null && auth.token.workspaces[$wsId] === true))",
         ".write": "auth != null && ($wsId.beginsWith('personal_') ? $wsId === ('personal_' + auth.uid) : (auth.token.workspaces != null && auth.token.workspaces[$wsId] === true))"
       }
+    },
+    "collab": {
+      "$workspaceId": {
+        "$docId": {
+          ".read": "auth != null && ($workspaceId.beginsWith('personal_') ? $workspaceId === ('personal_' + auth.uid) : (auth.token.workspaces != null && auth.token.workspaces[$workspaceId] === true))",
+          ".write": "auth != null && ($workspaceId.beginsWith('personal_') ? $workspaceId === ('personal_' + auth.uid) : (auth.token.workspaces != null && auth.token.workspaces[$workspaceId] === true))"
+        }
+      }
     }
   }
 }
