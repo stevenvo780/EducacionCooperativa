@@ -1,0 +1,184 @@
+/* Estilo del preview markdown de cells en ST Notebook.
+ *
+ * Por qué este archivo existe:
+ * - El repo no tiene @tailwindcss/typography instalado, así que las clases
+ *   `prose prose-sm prose-slate dark:prose-invert` aplicadas en CellEditor
+ *   eran inertes (font-size 16px, H1 sin escala, font-weight 400).
+ * - El body global tiene `color: rgb(255,255,255)` vía --foreground-rgb,
+ *   lo que pintaba el texto del preview en blanco sobre fondo blanco.
+ *
+ * La solución: un container con clase `.notebook-cell-markdown` que reproduce
+ * lo mínimo del look-and-feel de prose-slate (slate-700 body, headings bold
+ * con escala, code/blockquote estilizados) sin agregar deps.
+ */
+
+.notebook-cell-markdown {
+  color: #334155; /* slate-700 — equivalente a --tw-prose-body de prose-slate */
+  font-size: 0.875rem; /* prose-sm base */
+  line-height: 1.7142857;
+}
+
+.notebook-cell-markdown > :first-child {
+  margin-top: 0;
+}
+
+.notebook-cell-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.notebook-cell-markdown h1,
+.notebook-cell-markdown h2,
+.notebook-cell-markdown h3,
+.notebook-cell-markdown h4,
+.notebook-cell-markdown h5,
+.notebook-cell-markdown h6 {
+  color: #0f172a; /* slate-900 */
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 1.25em;
+  margin-bottom: 0.6em;
+}
+
+.notebook-cell-markdown h1 {
+  font-size: 1.857em; /* ~26px sobre base 14px (prose-sm) */
+  font-weight: 800;
+  margin-top: 0;
+  margin-bottom: 0.8em;
+}
+
+.notebook-cell-markdown h2 {
+  font-size: 1.4286em; /* ~20px */
+  margin-top: 1.6em;
+  margin-bottom: 0.7em;
+}
+
+.notebook-cell-markdown h3 {
+  font-size: 1.2857em; /* ~18px */
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.notebook-cell-markdown h4 {
+  font-size: 1em;
+  margin-top: 1.4em;
+  margin-bottom: 0.5em;
+}
+
+.notebook-cell-markdown p {
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+.notebook-cell-markdown a {
+  color: #4f46e5; /* indigo-600 */
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.notebook-cell-markdown strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.notebook-cell-markdown em {
+  font-style: italic;
+}
+
+.notebook-cell-markdown ul,
+.notebook-cell-markdown ol {
+  margin-top: 1em;
+  margin-bottom: 1em;
+  padding-left: 1.5em;
+}
+
+.notebook-cell-markdown ul {
+  list-style-type: disc;
+}
+
+.notebook-cell-markdown ol {
+  list-style-type: decimal;
+}
+
+.notebook-cell-markdown li {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+
+.notebook-cell-markdown li > p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.notebook-cell-markdown blockquote {
+  border-left: 4px solid #e2e8f0; /* slate-200 */
+  padding-left: 1em;
+  margin: 1.25em 0;
+  font-style: italic;
+  color: #475569; /* slate-600 */
+}
+
+.notebook-cell-markdown code {
+  background: #f1f5f9; /* slate-100 */
+  color: #0f172a;
+  padding: 0.15em 0.35em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.notebook-cell-markdown pre {
+  background: #0f172a; /* slate-900 */
+  color: #e2e8f0;
+  padding: 0.85em 1em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 1.25em 0;
+  font-size: 0.8125em;
+  line-height: 1.6;
+}
+
+.notebook-cell-markdown pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.notebook-cell-markdown hr {
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+  margin: 2em 0;
+}
+
+.notebook-cell-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25em 0;
+  font-size: 0.875em;
+}
+
+.notebook-cell-markdown th,
+.notebook-cell-markdown td {
+  border: 1px solid #e2e8f0;
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.notebook-cell-markdown th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* Bloques math display ($$...$$) centrados con margen vertical. */
+.notebook-cell-markdown .math-display {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
+/* Placeholder cuando la cell está vacía. */
+.notebook-cell-markdown em:only-child {
+  color: #94a3b8; /* slate-400 */
+}

@@ -6,6 +6,7 @@ import type { Cell, CodeCell, MarkdownCell, CellOutput } from '@/types/stnb';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import './notebook-markdown.css';
 
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false });
 
@@ -81,12 +82,14 @@ function MarkdownCellView({
         <span className="text-xs font-mono text-gray-400">markdown</span>
         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => setEditing(v => !v)}
             className="text-xs text-indigo-500 hover:text-indigo-700"
           >
             {editing ? 'Preview' : 'Editar'}
           </button>
           <button
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onRemove(cell.id)}
             className="text-xs text-red-400 hover:text-red-600"
           >
@@ -104,7 +107,7 @@ function MarkdownCellView({
         />
       ) : (
         <div
-          className="prose prose-sm prose-slate dark:prose-invert max-w-none cursor-text min-h-6 [&_.math-display]:block [&_.math-display]:text-center [&_.math-display]:my-4"
+          className="notebook-cell-markdown max-w-none cursor-text min-h-6"
           onClick={() => setEditing(true)}
         >
           <React.Suspense fallback={<span className="text-xs text-gray-400">Cargando…</span>}>
