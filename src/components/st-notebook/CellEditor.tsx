@@ -3,6 +3,9 @@
 import React, { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { Cell, CodeCell, MarkdownCell, CellOutput } from '@/types/stnb';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false });
 
@@ -105,7 +108,10 @@ function MarkdownCellView({
           onClick={() => setEditing(true)}
         >
           <React.Suspense fallback={<span className="text-xs text-gray-400">Cargando…</span>}>
-            <ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+            >
               {cell.source || '_Haz clic para editar_'}
             </ReactMarkdown>
           </React.Suspense>
