@@ -10,6 +10,7 @@ import {
   orderBy,
   query
 } from 'firebase/firestore';
+import { parseNotebook } from '@stevenvo780/st-lang/format/stnb';
 import { db } from '@/lib/firebase';
 import type { Notebook } from '@/types/stnb';
 
@@ -44,7 +45,11 @@ export async function loadNotebook(uid: string, id: string): Promise<Notebook> {
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error(`Notebook ${id} no encontrado`);
   const data = snap.data();
-  return data['notebook'] as Notebook;
+  const raw = data['notebook'];
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`Notebook ${id}: documento Firestore mal formado (campo 'notebook' ausente o inválido)`);
+  }
+  return parseNotebook(JSON.stringify(raw));
 }
 
 export async function saveNotebook(uid: string, id: string, nb: Notebook): Promise<void> {
