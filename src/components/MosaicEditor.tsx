@@ -629,12 +629,7 @@ export default function MosaicEditor({
           pendingLocalChangeRef.current = false;
           setStatsContent(incoming);
           mdxEditorRef.current.setMarkdown(incoming);
-          // Mantener `initialMarkdown` sincronizado con el contenido vivo.
-          // Si NO lo actualizamos, un remount futuro del MDXEditor (p.ej.
-          // el bump de editorKey que activa los plugins pesados tras el
-          // useDeferredMount) repinta el editor con `markdown={initialMarkdown}`
-          // — que sería el valor viejo, dejando el DOM vacío aunque el
-          // state interno (statsContent/contentRef) tenga el doc real.
+          // Necesario: si editorKey causa remount (lazy-plugins bump), MDXEditor lee `markdown={initialMarkdown}` y quedaría vacío sin esto.
           setInitialMarkdown(incoming);
         } else {
           setEditorContent(incoming);
