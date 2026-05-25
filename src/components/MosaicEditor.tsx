@@ -57,7 +57,7 @@ import {
   BookMarked, Check, Cloud, Search, ArrowUp, ArrowDown, X, Sparkles,
   Monitor, PenLine, FileCode2,
   KanbanSquare, Loader2, Ruler,
-  ZoomIn, ZoomOut, ChevronLeft
+  ZoomIn, ZoomOut, ChevronLeft, Lock, Users
 } from 'lucide-react';
 import { useMosaicSemanticActions } from '@/components/mosaic-editor/useMosaicSemanticActions';
 import { MosaicToolbarContents, type ToolbarGroupKey } from '@/components/mosaic-editor/MosaicToolbarContents';
@@ -84,7 +84,8 @@ import { buildSTFromSemantic, companionSTName, formalizeText } from '@/lib/build
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
 import { DocumentType, type DocumentTypeId } from '@/types/documents';
-import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
+import { PERSONAL_WORKSPACE_ID, isPersonalWorkspaceId } from '@/types/workspace';
+import useYjsDoc from '@/hooks/useYjsDoc';
 import { EditorSelectionMenu } from '@/components/editor/EditorSelectionMenu';
 import { EditorUtilityMenu } from '@/components/editor/EditorUtilityMenu';
 import type { LinterActionRequest } from '@/components/mosaic-editor/LinterConfirmModal';
@@ -182,6 +183,12 @@ export default function MosaicEditor({
   const [companionStDocId, setCompanionStDocId] = useState<string | null>(null);
   const [editorUtilityMenu, setEditorUtilityMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [linterAction, setLinterAction] = useState<LinterActionRequest | null>(null);
+  // El server rechaza writes de quien no es miembro/owner del workspace (403).
+  // En ese caso el editor pasa a solo-lectura: bloqueamos la edición, mostramos
+  // un banner y dejamos de prometer "Guardado" (no hay nada que persistir).
+  const [readOnly, setReadOnly] = useState(false);
+  const readOnlyRef = useRef(false);
+  useEffect(() => { readOnlyRef.current = readOnly; }, [readOnly]);
 
   const renderToolbarContentsRef = useRef<(() => React.ReactNode) | null>(null);
   const semanticStateRef = useRef<SemanticWorkspaceState>(EMPTY_SEMANTIC_WORKSPACE_STATE);
@@ -325,6 +332,33 @@ export default function MosaicEditor({
     workspaceId: effectiveWorkspaceId,
     userId: user?.uid ?? null
   }), [effectiveWorkspaceId, user?.uid]);
+
+  // Edición colaborativa en vivo (Yjs sobre RTDB /collab/<wsId>/<docId>).
+  // Solo en workspaces compartidos (en personal hay un único usuario), sobre
+  // docs de texto markdown (no archivos binarios ni texto-plano CodeMirror).
+  // MDXEditor es uncontrolled y no expone el CollaborationPlugin de Lexical,
+  // así que sincronizamos a nivel de texto: el Y.Text es la fuente de verdad
+  // compartida, y propagamos cambios remotos vía setMarkdown cuando el usuario
+  // local no tiene ediciones sin guardar. Esto da propagación en vivo sin
+  // recrear el modelo Lexical interno (que rompería KaTeX/Mermaid/plugins).
+  const collabEligible = !!(
+    roomId
+    && user?.uid
+    && !isPersonalWorkspaceId(currentWorkspaceId)
+    && docType === DocumentType.Text
+    && !isPlainText
+    && !readOnly
+  );
+  const { ydoc: collabYdoc, status: collabStatus, provider: collabProvider } = useYjsDoc({
+    workspaceId: collabEligible ? currentWorkspaceId : null,
+    docId: collabEligible ? (roomId ?? null) : null,
+    userId: user?.uid ?? null,
+    displayName: user?.displayName ?? user?.email ?? null,
+    enabled: collabEligible
+  });
+  const collabSeedDoneRef = useRef(false);
+  const collabApplyingRemoteRef = useRef(false);
+  useEffect(() => { collabSeedDoneRef.current = false; }, [roomId]);
 
   const semanticItemCount = useMemo(() => (
     semanticState.concepts.length + semanticState.fragments.length + semanticState.relations.length
@@ -762,6 +796,7 @@ export default function MosaicEditor({
     hasLocalEditsThisSessionRef.current = false;
     lastRawKeyRef.current = null;
     setDocUnavailable(false);
+    setReadOnly(false);
     loadDoc();
   }, [roomId, loadDoc]);
 
@@ -852,6 +887,10 @@ export default function MosaicEditor({
     }
     if (!roomId || docType === DocumentType.File) return;
     if (!hasLoadedRef.current) return;
+    // Solo-lectura: no agendamos autosave (el server lo rechazaría). El
+    // editor ya está bloqueado a nivel UI; esto cubre rutas indirectas
+    // (snippets, fixes del linter) que también pasan por aquí.
+    if (readOnlyRef.current) return;
 
     const hasUnsavedChanges = val !== lastSyncedContentRef.current;
     if (hasUnsavedChanges) {
@@ -897,6 +936,11 @@ export default function MosaicEditor({
           try { body = await res.json(); } catch { /* not json */ }
           if (res.status === 409 && body?.error === 'refused-empty-overwrite') {
             lastSyncedContentRef.current = val;
+            pendingLocalChangeRef.current = false;
+          } else if (res.status === 401 || res.status === 403) {
+            // Sin permiso de escritura: el server descarta el write. Pasamos a
+            // solo-lectura para no mostrar "Guardado" falso ni perder ediciones.
+            setReadOnly(true);
             pendingLocalChangeRef.current = false;
           } else {
             saveError = new Error(`Save failed (${res.status}): ${body?.message ?? body?.error ?? res.statusText}`);
@@ -954,17 +998,17 @@ export default function MosaicEditor({
     });
     registerStatusSegment({
       id: 'editor-save',
-      label: saving ? 'Guardando…' : 'Guardado',
-      icon: saving ? Cloud : Check,
+      label: readOnly ? 'Solo lectura' : saving ? 'Guardando…' : 'Guardado',
+      icon: readOnly ? Lock : saving ? Cloud : Check,
       slot: 'right',
       priority: 20,
-      tone: saving ? 'info' : 'success'
+      tone: readOnly ? 'warning' : saving ? 'info' : 'success'
     });
     return () => {
       forceUnregisterStatusSegment('editor-stats');
       forceUnregisterStatusSegment('editor-save');
     };
-  }, [hideInlineStatus, stats.words, stats.chars, stats.lines, saving]);
+  }, [hideInlineStatus, stats.words, stats.chars, stats.lines, saving, readOnly]);
 
   const setViewModeWithSync = useCallback((nextMode: ViewMode) => {
     const editor = mdxEditorRef.current;
@@ -981,6 +1025,29 @@ export default function MosaicEditor({
 
     setViewMode(nextMode);
   }, []);
+
+  // Export a PDF vía el diálogo de impresión del navegador. Forzamos la vista
+  // previa renderizada (KaTeX/Mermaid ya pintados) y aislamos el preview con
+  // una clase en <body> que el CSS de @media print respeta. Sin libs extra.
+  const handleExportPdf = useCallback(() => {
+    setViewModeWithSync('preview');
+    // Esperamos a que el preview monte y termine de pintar KaTeX/Mermaid antes
+    // de abrir el diálogo. El render es async (dynamic import + mermaid).
+    window.setTimeout(() => {
+      document.body.classList.add('mosaic-printing');
+      const cleanup = () => {
+        document.body.classList.remove('mosaic-printing');
+        window.removeEventListener('afterprint', cleanup);
+      };
+      window.addEventListener('afterprint', cleanup);
+      try {
+        window.print();
+      } finally {
+        // Fallback si afterprint no dispara (algunos navegadores móviles).
+        window.setTimeout(cleanup, 1000);
+      }
+    }, 600);
+  }, [setViewModeWithSync]);
 
   const openInternalMarkdownLink = useCallback(async (href: string) => {
     const cleanedHref = decodeURIComponent(stripQueryAndHash(href)).trim();
@@ -1621,9 +1688,10 @@ export default function MosaicEditor({
         setViewModeWithSync={setViewModeWithSync}
         createTaskFromSelection={createTaskFromSelection}
         scanPendings={scanPendings}
+        onExportPdf={handleExportPdf}
       />
     );
-  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName, menuBtnRef]);
+  }, [applyToolbarVisibility, toolbarVisibility, showCompactMenu, menuPos, isFullscreen, viewMode, insertSnippet, toggleCompactMenu, toggleFullscreen, setShowCompactMenu, setShowSnippetGallery, setViewModeWithSync, createTaskFromSelection, isCreatingTask, scanPendings, docName, menuBtnRef, handleExportPdf]);
 
   // Keep ref in sync so the toolbar callback always calls the latest version
   // without recreating the plugins array (which would cause MDXEditor remount)
@@ -1769,7 +1837,90 @@ export default function MosaicEditor({
     // Skip if this is MDXEditor's initial markdown normalization
     if (isNormalizingRef.current) return;
     handleContentChange(md);
-  }, [handleContentChange]);
+    // Empuja el cambio local al Y.Text compartido (si hay colab activo y el
+    // cambio no proviene de aplicar un update remoto, para no rebotar).
+    if (!collabApplyingRemoteRef.current && collabYdoc && collabSeedDoneRef.current) {
+      const ytext = collabYdoc.getText('content');
+      if (ytext.toString() !== md) {
+        collabYdoc.transact(() => {
+          ytext.delete(0, ytext.length);
+          ytext.insert(0, md);
+        });
+      }
+    }
+  }, [handleContentChange, collabYdoc]);
+
+  // Seed inicial del Y.Text compartido: igual patrón que STFileEditor. Solo el
+  // ganador del seedLock siembra cuando el doc remoto está vacío; los demás
+  // aceptan el estado remoto. Requiere que el contenido local ya esté cargado.
+  useEffect(() => {
+    if (!collabEligible || !collabYdoc || !collabProvider) return;
+    if (collabStatus !== 'connected') return;
+    if (collabSeedDoneRef.current) return;
+    if (!hasLoadedRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ytext = collabYdoc.getText('content');
+        if (ytext.length > 0) {
+          // El doc remoto ya tiene contenido: lo adoptamos como fuente de verdad.
+          const remote = ytext.toString();
+          if (!cancelled && remote !== contentRef.current && !hasUnsavedLocalChanges()) {
+            collabApplyingRemoteRef.current = true;
+            contentRef.current = remote;
+            setStatsContent(remote);
+            mdxEditorRef.current?.setMarkdown(remote);
+            setInitialMarkdown(remote);
+            collabApplyingRemoteRef.current = false;
+          }
+          collabSeedDoneRef.current = true;
+          return;
+        }
+        const won = await collabProvider.claimSeedLock();
+        if (cancelled) return;
+        if (won && contentRef.current) {
+          collabYdoc.transact(() => {
+            ytext.insert(0, contentRef.current);
+          });
+        }
+        collabSeedDoneRef.current = true;
+      } catch (err) {
+        console.warn('[MosaicEditor] collab seed failed', err);
+        if (!cancelled) collabSeedDoneRef.current = true;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [collabEligible, collabYdoc, collabProvider, collabStatus, hasUnsavedLocalChanges]);
+
+  // Observa updates remotas del Y.Text y las refleja en el editor. Solo aplica
+  // cuando el usuario local NO tiene ediciones sin guardar — así no pisamos lo
+  // que está escribiendo. Cuando está idle, ve los cambios del otro en vivo.
+  useEffect(() => {
+    if (!collabEligible || !collabYdoc) return;
+    const ytext = collabYdoc.getText('content');
+    const handler = () => {
+      if (collabApplyingRemoteRef.current) return;
+      if (!collabSeedDoneRef.current) return;
+      const remote = ytext.toString();
+      if (remote === contentRef.current) return;
+      if (hasUnsavedLocalChanges()) return;
+      collabApplyingRemoteRef.current = true;
+      try {
+        contentRef.current = remote;
+        lastSyncedContentRef.current = remote;
+        pendingLocalChangeRef.current = false;
+        startTransition(() => setStatsContent(remote));
+        if (viewMode === 'edit') {
+          mdxEditorRef.current?.setMarkdown(remote);
+        }
+        setInitialMarkdown(remote);
+      } finally {
+        collabApplyingRemoteRef.current = false;
+      }
+    };
+    ytext.observe(handler);
+    return () => ytext.unobserve(handler);
+  }, [collabEligible, collabYdoc, hasUnsavedLocalChanges, viewMode]);
 
   if (docType === 'file') {
     return (
@@ -1858,10 +2009,15 @@ export default function MosaicEditor({
                 <span>·</span>
                 <span>{stats.chars} car.</span>
                 <span className="w-px h-3 bg-slate-700 mx-1" />
-                {saving ? (
+                {readOnly ? (
+                  <span className="text-amber-400 flex items-center gap-1"><Lock className="w-3 h-3" /> Solo lectura</span>
+                ) : saving ? (
                   <span className="text-blue-400 flex items-center gap-1"><Cloud className="w-3 h-3" /> Guardando</span>
                 ) : (
                   <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3" /> Guardado</span>
+                )}
+                {collabEligible && collabStatus === 'connected' && (
+                  <span className="text-blue-300 flex items-center gap-1" title="Edición colaborativa en vivo"><Users className="w-3 h-3" /> En vivo</span>
                 )}
               </>
             )}
@@ -1872,6 +2028,16 @@ export default function MosaicEditor({
       {semanticNotice && (
         <div className="shrink-0 border-b border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-100">
           {semanticNotice}
+        </div>
+      )}
+
+      {readOnly && (
+        <div
+          role="status"
+          className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200 flex items-center gap-2"
+        >
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          <span>Modo solo lectura — no tenés permiso de edición en este documento.</span>
         </div>
       )}
 
@@ -1982,6 +2148,7 @@ export default function MosaicEditor({
                 <textarea
                   value={statsContent}
                   onChange={(event) => handleContentChange(event.target.value)}
+                  readOnly={readOnly}
                   onScroll={(e) => {
                     const target = e.currentTarget;
                     setRawScrollPos({ top: target.scrollTop, left: target.scrollLeft });
@@ -2010,6 +2177,7 @@ export default function MosaicEditor({
                   key={editorKey}
                   value={initialMarkdown}
                   onChange={handleMdxChange}
+                  readOnly={readOnly}
                   height="100%"
                   basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
                   className="h-full"
@@ -2020,6 +2188,7 @@ export default function MosaicEditor({
                 ref={mdxEditorRef}
                 markdown={initialMarkdown}
                 onChange={handleMdxChange}
+                readOnly={readOnly}
                 plugins={editorPlugins}
                 contentEditableClassName="mdx-content-editable"
                 className="mdx-editor-root h-full"
