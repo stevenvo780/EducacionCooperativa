@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useDeferredValue, useTransition, memo } from 'react';
 import { List as VirtualizedList } from 'react-window';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, ListCollapse, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, FolderUp, GripVertical, Info, Link, ListCollapse, Loader2, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import type { DocItem, FolderItem, Workspace } from '@/components/dashboard/types';
 import { normalizeFolderPath } from '@/lib/folder-utils';
 import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
@@ -303,6 +303,7 @@ interface SidebarProps {
   onShowCurrentLocationProperties?: () => void;
   onRenameFolder?: (folder: FolderItem) => void;
   onDeleteFolder?: (folder: FolderItem) => void;
+  onShareLink?: (doc: DocItem) => void;
 
 }
 
@@ -352,7 +353,8 @@ const Sidebar = ({
   onShowFolderProperties,
   onShowCurrentLocationProperties,
   onRenameFolder,
-  onDeleteFolder
+  onDeleteFolder,
+  onShareLink
 }: SidebarProps) => {
   const isTouchDevice = useIsTouchDeviceProfile();
   const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(new Set());
@@ -940,6 +942,11 @@ const Sidebar = ({
                   label: 'Propiedades',
                   icon: <Info className="w-4 h-4" />,
                   onClick: () => onShowDocProperties(contextMenu.data.doc!)
+                }] : []),
+                ...(onShareLink && contextMenu.data.doc ? [{
+                  label: 'Compartir enlace público',
+                  icon: <Link className="w-4 h-4" />,
+                  onClick: () => onShareLink!(contextMenu.data.doc!)
                 }] : [])
               ]
             },
