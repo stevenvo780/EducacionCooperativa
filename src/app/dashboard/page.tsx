@@ -1541,16 +1541,22 @@ function DashboardContent() {
             const normalizedKey = e.key.toLowerCase();
             const matchesShortcut = (code: string, key: string) => e.code === code || normalizedKey === key;
             const target = e.target instanceof HTMLElement ? e.target : null;
-            const targetIsTerminal = Boolean(target?.closest('.xterm, .xterm-screen, .xterm-helper-textarea'));
-            const targetIsEditable = Boolean(
-                target && (
-                    target.tagName === 'INPUT'
-                    || target.tagName === 'TEXTAREA'
-                    || target.tagName === 'SELECT'
-                    || target.isContentEditable
-                    || target.closest('[contenteditable="true"]')
+            const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            const targetIsTerminal = Boolean(
+                target?.closest('.xterm, .xterm-screen, .xterm-helper-textarea')
+                || active?.closest('.xterm, .xterm-screen, .xterm-helper-textarea')
+            );
+            const isEditableElement = (el: HTMLElement | null) => Boolean(
+                el && (
+                    el.tagName === 'INPUT'
+                    || el.tagName === 'TEXTAREA'
+                    || el.tagName === 'SELECT'
+                    || el.isContentEditable
+                    || el.closest('[contenteditable="true"]')
+                    || el.closest('.cm-editor')
                 )
             );
+            const targetIsEditable = isEditableElement(target) || isEditableElement(active);
             const hasBlockingOverlay = Boolean(
                 dialogConfig
                 || showNewFileModal
