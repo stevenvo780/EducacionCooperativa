@@ -14,6 +14,7 @@ import useYjsDoc from '@/hooks/useYjsDoc';
 import useRemoteDocUpdates from '@/hooks/useRemoteDocUpdates';
 import RemoteUpdateBanner from '@/components/dashboard/RemoteUpdateBanner';
 import { AGORA_EVENTS, dispatchAgoraEvent, subscribeAgoraEvent } from '@/lib/agora-events';
+import { isPersonalWorkspaceId } from '@/types/workspace';
 
 interface STFileEditorProps {
   docId: string;
@@ -34,9 +35,9 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
   const savingRef = useRef(false);
   const lastSyncedRef = useRef('');
 
-  // Modo colaborativo: requiere docId, workspaceId y user identificado.
-  // El Y.Doc vive solo durante esta sesión del editor; al desmontar se libera.
-  const collabEnabled = !!(docId && workspaceId && user?.uid);
+  // Modo colaborativo: requiere docId, workspaceId compartido y user identificado.
+  // Personal workspace no usa collab (un único usuario, sin canal /collab/personal_*).
+  const collabEnabled = !!(docId && workspaceId && user?.uid && !isPersonalWorkspaceId(workspaceId));
   const { ydoc, awareness, status: collabStatus, provider } = useYjsDoc({
     workspaceId: workspaceId ?? null,
     docId,
