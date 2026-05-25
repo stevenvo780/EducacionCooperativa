@@ -708,7 +708,23 @@ export function useDocumentActions({
     };
 
     const createStDoc = async (folderName?: string) => {
-        const rawName = newDocName.trim() || 'Sin título';
+        if (!user) return;
+        let rawName = newDocName.trim();
+        if (!rawName) {
+            const result = await showDialog({
+                type: DialogKind.Input,
+                title: 'Nombre del archivo ST',
+                message: 'Escribe un nombre para el archivo de lógica formal.',
+                placeholder: 'mi-logica.st',
+                defaultValue: '',
+                confirmLabel: 'Crear',
+                cancelLabel: 'Cancelar',
+                required: true
+            });
+            if (!result.confirmed) return;
+            rawName = (result.value ?? '').trim();
+            if (!rawName) return;
+        }
         // Limpiar extensiones legacy y duplicadas: si el user (o un default
         // viejo) trae ".md", ".md.st" o ya ".st", quedarse con un solo .st.
         const stripped = rawName
@@ -717,7 +733,6 @@ export function useDocumentActions({
             .replace(/\.md$/i, '');
         const baseName = stripped.trim() || 'Sin título';
         const name = `${baseName}.st`;
-        if (!user) return;
         const targetFolder = normalizeFolderPath(folderName ?? activeFolder);
         const workspaceId = currentWorkspace?.id ?? PERSONAL_WORKSPACE_ID;
         const docWorkspaceId = workspaceId === PERSONAL_WORKSPACE_ID ? PERSONAL_WORKSPACE_ID : workspaceId;

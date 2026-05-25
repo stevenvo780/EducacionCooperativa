@@ -541,6 +541,14 @@ function DashboardContent() {
         setSettingsInitialSection(section);
         setSettingsOpen(true);
     }, []);
+
+    useEffect(() => {
+        if (searchParams?.get('openSettings') === '1') {
+            openSettings();
+            router.replace('/dashboard', { scroll: false });
+        }
+    }, [searchParams, openSettings, router]);
+
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
     // En mobile el sidebar se reajusta para que el conjunto activity+sidebar

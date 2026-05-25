@@ -79,6 +79,16 @@ const formatDate = (s: string | null | undefined): string => {
     try { return new Date(s).toLocaleString(); } catch { return s; }
 };
 
+const docUpdatedAtToIso = (v: unknown): string | null => {
+    if (!v) return null;
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number') return new Date(v).toISOString();
+    const ts = v as { seconds?: number; toDate?: () => Date };
+    if (typeof ts.toDate === 'function') return ts.toDate().toISOString();
+    if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000).toISOString();
+    return null;
+};
+
 export default function FilePropertiesModal({ doc, onClose }: FilePropertiesModalProps) {
     const [manifest, setManifest] = useState<ManifestResponse | null>(null);
     const [git, setGit] = useState<GitInfoResponse | null>(null);
@@ -157,7 +167,7 @@ export default function FilePropertiesModal({ doc, onClose }: FilePropertiesModa
                         <Field label="Carpeta" value={(doc.folder || manifest?.folder) ?? '(raíz)'} />
                         <Field label="MIME" value={manifest?.mimeType ?? null} />
                         <Field label="Tamaño" value={formatBytes(manifest?.size ?? null)} />
-                        <Field label="Modificado" value={formatDate(manifest?.updatedAt)} />
+                        <Field label="Modificado" value={formatDate(manifest?.updatedAt ?? docUpdatedAtToIso(doc.updatedAt))} />
                     </Section>
 
                     <Section title="Almacenamiento (NAS / MinIO)">
