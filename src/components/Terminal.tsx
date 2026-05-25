@@ -55,6 +55,9 @@ const Terminal: React.FC<TerminalProps> = ({
     createSession,
     joinSession,
     selectSession,
+    lostSessions,
+    reconnectLostSession,
+    dismissLostSession,
     getWorkerStatusForWorkspace
   } = useTerminal();
 
@@ -90,6 +93,39 @@ const Terminal: React.FC<TerminalProps> = ({
   });
 
   const workspaceWorkerStatus = getWorkerStatusForWorkspace?.(workerToken) || status;
+
+  const lostSession = workerToken
+      ? lostSessions.find(l => l.workspaceId === workerToken)
+      : undefined;
+
+  const lostSessionBanner = lostSession ? (
+      <div className="absolute top-0 inset-x-0 z-20 px-4 py-3 bg-amber-950/95 backdrop-blur-md border-b border-amber-500/40 shadow-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+              <p className="text-amber-100 text-sm font-semibold">
+                  Sesión perdida (el worker se reinició)
+              </p>
+              <p className="text-amber-300/80 text-xs mt-0.5">
+                  Tus archivos en <code className="text-amber-200">/workspace</code> están a salvo. La terminal se reinició y perdió su estado.
+              </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+              <button
+                  onClick={() => reconnectLostSession(lostSession.sessionId)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-lg text-xs font-bold transition-colors"
+              >
+                  Reconectar
+              </button>
+              <button
+                  onClick={() => dismissLostSession(lostSession.sessionId)}
+                  aria-label="Descartar aviso"
+                  className="p-1.5 text-amber-400/70 hover:text-amber-200 transition-colors"
+              >
+                  <X className="w-4 h-4" />
+              </button>
+          </div>
+      </div>
+  ) : null;
 
   useEffect(() => {
     if (!controller || !workerToken) return;
@@ -177,6 +213,7 @@ const Terminal: React.FC<TerminalProps> = ({
   if (effectiveSessionId && sessionActive) {
       return (
         <div className="h-full w-full flex flex-col bg-black relative overflow-hidden group">
+            {lostSessionBanner}
             <div className="absolute top-4 right-4 z-10 flex gap-2 pointer-events-none opacity-40 group-hover:opacity-100 transition-opacity">
                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase backdrop-blur-md border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -198,6 +235,7 @@ const Terminal: React.FC<TerminalProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.15),rgba(2,6,23,1))] text-slate-200 overflow-y-auto relative">
+        {lostSessionBanner}
         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none" />
         <div className="max-w-2xl w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] p-8 text-center space-y-6 relative z-10 transition-all">
             <div className="flex justify-center">
