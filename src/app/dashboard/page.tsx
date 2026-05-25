@@ -692,6 +692,11 @@ function DashboardContent() {
         }
         try {
             await acceptInviteApi({ workspaceId: ws.id, userId: user.uid, email: userEmail });
+            // El backend acaba de agregar el custom claim `workspaces[ws.id]`.
+            // Forzar refresh del JWT antes de activar los listeners RTDB del
+            // nuevo workspace para evitar permission_denied en sync-events/
+            // y presence/ mientras el token está stale (~1h sin refresh).
+            await user.getIdToken(true).catch(() => { /* ignorar si falla, el listener reintentará */ });
             await fetchWorkspaces();
             await showDialog({
                 type: DialogKind.Info,

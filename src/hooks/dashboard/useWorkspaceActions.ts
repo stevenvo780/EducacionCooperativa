@@ -84,6 +84,11 @@ export function useWorkspaceActions({
             const data = await createWorkspaceApi({ name: newWorkspaceName, ownerId: user.uid });
             setNewWorkspaceName('');
             setShowNewWorkspaceModal(false);
+            // El backend acaba de agregar el custom claim `workspaces[newId]`.
+            // Forzar refresh del JWT para que RTDB rules dejen pasar los
+            // listeners de sync-events/<newId> y presence/<newId> desde el
+            // primer intento, sin esperar el refresh automático de ~1h.
+            await user.getIdToken(true).catch(() => { /* ignorar si falla, el listener reintentará */ });
             await fetchWorkspaces();
             selectWorkspace({
                 id: String(data.id),
