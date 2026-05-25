@@ -18,9 +18,14 @@ import {
   directivesPlugin,
   frontmatterPlugin,
   toolbarPlugin,
+  realmPlugin,
+  createRootEditorSubscription$,
+  $isCodeBlockNode,
+  CodeBlockNode,
   type MDXEditorMethods,
   type RealmPlugin
 } from '@mdxeditor/editor';
+import { $nodesOfType, $getNodeByKey, HISTORIC_TAG, type LexicalEditor } from 'lexical';
 import dynamic from 'next/dynamic';
 import { DynamicMDXEditor } from '@/components/editor/DynamicMDXEditor';
 import '@mdxeditor/editor/style.css';
@@ -141,6 +146,48 @@ function parseWorkspacesForEditor(raw: unknown): { workspaces: Array<{ id: strin
     invites: Array.isArray(r['invites']) ? (r['invites'] as Array<{ id: string; name?: string }>) : []
   };
 }
+
+// Insertar un code block es 1 paso de history y cada keystroke dentro del
+// CodeMirror anidado es otro; al deshacer, el texto se vacía pero el nodo
+// (insertado en un paso anterior) queda como bloque fantasma porque el editor
+// anidado se come el último undo. Cuando un undo deja un CodeBlockNode con
+// código vacío, lo removemos en el mismo flujo historic (sin crear un nuevo
+// paso de history). Solo removemos un bloque que el undo *acaba de vaciar*
+// (vacío ahora, con código antes): así un bloque vacío recién creado mientras
+// el usuario tipea, o uno que el usuario dejó vacío a propósito, nunca se borra.
+// No usamos el dirty-set porque el nodo decorador no siempre figura en él al
+// cambiar su __code; comparar contra prevEditorState es lo fiable.
+const removeEmptyCodeBlockOnUndoPlugin = realmPlugin({
+  init(realm) {
+    realm.pub(createRootEditorSubscription$, (rootEditor: LexicalEditor) =>
+      rootEditor.registerUpdateListener(({ tags, prevEditorState, editorState }) => {
+        if (!tags.has(HISTORIC_TAG)) return;
+        const wasNonEmpty = (key: string) =>
+          prevEditorState.read(() => {
+            const prev = $getNodeByKey(key);
+            return $isCodeBlockNode(prev) && prev.getCode() !== '';
+          });
+        const orphanKeys = editorState.read(() =>
+          $nodesOfType(CodeBlockNode)
+            .filter((node) => node.getCode() === '' && wasNonEmpty(node.getKey()))
+            .map((node) => node.getKey())
+        );
+        if (orphanKeys.length === 0) return;
+        queueMicrotask(() => {
+          rootEditor.update(
+            () => {
+              for (const key of orphanKeys) {
+                const node = $getNodeByKey(key);
+                if ($isCodeBlockNode(node) && node.getCode() === '') node.remove();
+              }
+            },
+            { tag: HISTORIC_TAG }
+          );
+        });
+      })
+    );
+  }
+});
 
 export default function MosaicEditor({
   initialContent = '',
@@ -1792,7 +1839,8 @@ export default function MosaicEditor({
             c: 'C',
             '': 'Texto plano'
           }
-        })
+        }),
+        removeEmptyCodeBlockOnUndoPlugin()
       );
     }
     if (needsHeavyPlugins.directives || pluginsDeferredReady) {
