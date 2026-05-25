@@ -55,6 +55,7 @@ import { areDocsEquivalent, areFoldersEquivalent, getUpdatedAtValue } from '@/se
 import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
 import { getDocBadge, isMarkdownDocItem } from '@/services/dashboardDocUtils';
 import { loadFavoriteDocIds, MAX_FAVORITE_DOCS, saveFavoriteDocIds } from '@/services/dashboardPersistence';
+import { createShareLink } from '@/lib/sharing';
 import { useDashboardUploads } from '@/hooks/dashboard/useDashboardUploads';
 import { useDashboardPersistence } from '@/hooks/dashboard/useDashboardPersistence';
 import StatusToasts from '@/components/dashboard/StatusToasts';
@@ -1304,6 +1305,18 @@ function DashboardContent() {
         setIsCreating,
         renameSession
     });
+
+    const handleShareLink = async (doc: DocItem) => {
+        try {
+            const result = await createShareLink(doc.id);
+            await navigator.clipboard.writeText(result.url).catch(() => undefined);
+            const expiry = new Date(result.expiresAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+            window.alert(`Enlace copiado al portapapeles:\n${result.url}\n\nVálido hasta: ${expiry}`);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Error desconocido';
+            window.alert(`No se pudo generar el enlace: ${msg}`);
+        }
+    };
 
     const { createWorkspace, renameWorkspace, duplicateWorkspace, mergeWorkspaceIntoCurrent, deleteWorkspace, inviteMember, removeMember, changeRole } = useWorkspaceActions({
         user,
@@ -2927,6 +2940,7 @@ function DashboardContent() {
                         onRenameFolder={handleSidebarRenameFolder}
                         onDeleteFolder={handleSidebarDeleteFolder}
                         docById={docById}
+                        onShareLink={handleShareLink}
                       />
                     ) : (
                       !isSidebarCollapsed && (
