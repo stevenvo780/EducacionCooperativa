@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import {
-    onAuthStateChanged,
+    onIdTokenChanged,
     User,
     signInWithPopup,
     signOut,
@@ -13,7 +13,7 @@ import { apiUrl, parseApiResponse } from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { purgeUserScopedStorage } from '@/lib/auth-storage-purge';
-import { recoverPersistedSession } from '@/lib/auth-session-recovery';
+import { recoverPersistedSession, refreshPersistedTokenProactively } from '@/lib/auth-session-recovery';
 
 interface AuthContextType {
     user: User | null;
@@ -70,6 +70,43 @@ function safeParseStoredUser(raw: string | null): StoredLocalUser | null {
     }
 }
 
+// Anti-loop por timestamps para la recuperación de sesión en boot. Permite
+// recuperar tantas veces como haga falta (reloads consecutivos con token
+// stale), pero si recupera+recarga RECOVERY_LOOP_MAX veces dentro de una
+// ventana corta es un loop genuino (algo roto, no un token vencido) → cortar.
+const RECOVERY_STAMPS_KEY = 'agora_auth_recovery_stamps';
+const RECOVERY_LOOP_WINDOW_MS = 10_000;
+const RECOVERY_LOOP_MAX = 3;
+
+function readRecoveryStamps(): number[] {
+    try {
+        const raw = sessionStorage.getItem(RECOVERY_STAMPS_KEY);
+        if (!raw) return [];
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        const now = Date.now();
+        return parsed.filter((n): n is number =>
+            typeof n === 'number' && now - n < RECOVERY_LOOP_WINDOW_MS);
+    } catch {
+        return [];
+    }
+}
+
+function isRecoveryLooping(stamps: number[]): boolean {
+    return stamps.length >= RECOVERY_LOOP_MAX;
+}
+
+function pushRecoveryStamp(stamps: number[]): void {
+    try {
+        const next = [...stamps, Date.now()];
+        sessionStorage.setItem(RECOVERY_STAMPS_KEY, JSON.stringify(next));
+    } catch { /* noop */ }
+}
+
+function clearRecoveryStamps(): void {
+    try { sessionStorage.removeItem(RECOVERY_STAMPS_KEY); } catch { /* noop */ }
+}
+
 const createLocalDevUser = (userData: StoredLocalUser, token: string) => ({
     uid: userData.uid,
     email: userData.email ?? null,
@@ -123,82 +160,105 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         let cancelled = false;
         let pendingNullCheck: ReturnType<typeof setTimeout> | null = null;
-        // El primer null en boot puede ser una sesión vencida purgada por el
-        // SDK (clock skew → TOKEN_EXPIRED en accounts:lookup). Solo intentamos
-        // recuperar en boot y una sola vez por reload, nunca tras un logout
-        // legítimo (ahí ya observamos al user o el guard de sesión lo bloquea).
         let hasObservedUser = false;
+        let unsubscribe: (() => void) | null = null;
+
         try {
             const firebaseAuth = getAuth();
-            const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
+
+            // (1) Prevención proactiva: refrescar el idToken cacheado ANTES de
+            // suscribirnos. El SDK valida la sesión persistida con
+            // `accounts:lookup` usando el idToken cacheado; si venció (clock
+            // skew o token en el borde del buffer) responde TOKEN_EXPIRED y
+            // purga IndexedDB → logout fantasma en TODA navegación full-page.
+            // Reparar el registro con tokens frescos antes evita que eso pase.
+            void refreshPersistedTokenProactively().finally(() => {
                 if (cancelled) return;
-                if (pendingNullCheck) { clearTimeout(pendingNullCheck); pendingNullCheck = null; }
 
-                if (authUser) {
-                    hasObservedUser = true;
-                    sessionStorage.removeItem('agora_auth_recovery_attempted');
-                    setUser(authUser);
-                    if (authUser.email) {
-                        setUserEmail(authUser.email);
-                        localStorage.setItem('agora_user_email', authUser.email);
-                    }
-                    localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
-                    localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
-                    localStorage.removeItem('agora_user');
-                    setLoading(false);
-                    return;
-                }
-
-                // null callback: confirmar antes de cerrar sesión. Evita el
-                // "phantom logout" cuando Firebase Auth dispara null brevemente
-                // durante reconnects transitorios. Si tras 1.5s `currentUser`
-                // sigue null, intentamos recuperar la sesión vencida antes de
-                // aceptar el logout.
-                pendingNullCheck = setTimeout(() => {
+                unsubscribe = onIdTokenChanged(firebaseAuth, (authUser: User | null) => {
                     if (cancelled) return;
-                    if (firebaseAuth.currentUser) {
-                        setUser(firebaseAuth.currentUser);
-                        setLoading(false);
-                        return;
-                    }
+                    if (pendingNullCheck) { clearTimeout(pendingNullCheck); pendingNullCheck = null; }
 
-                    const RECOVERY_FLAG = 'agora_auth_recovery_attempted';
-                    const alreadyTried = sessionStorage.getItem(RECOVERY_FLAG) === '1';
-                    if (hasObservedUser || alreadyTried) {
-                        // Logout legítimo o ya reintentamos este reload: aceptar null.
-                        setUser(null);
-                        setLoading(false);
-                        return;
-                    }
-
-                    void recoverPersistedSession().then((result) => {
-                        if (cancelled) return;
-                        if (result === 'recovered') {
-                            // Registro de IndexedDB reparado con tokens frescos;
-                            // un reload deja que el SDK levante la sesión válida.
-                            // Marcamos antes de recargar para no entrar en loop.
-                            sessionStorage.setItem(RECOVERY_FLAG, '1');
-                            window.location.reload();
-                            return;
+                    if (authUser) {
+                        hasObservedUser = true;
+                        clearRecoveryStamps();
+                        setUser(authUser);
+                        if (authUser.email) {
+                            setUserEmail(authUser.email);
+                            localStorage.setItem('agora_user_email', authUser.email);
                         }
-                        if (result === 'transient') {
-                            // Red caída / 5xx: no deslogueamos, dejamos el estado
-                            // como estaba (sin user pero sin forzar /login extra;
-                            // el guard decidirá y un próximo reconnect resuelve).
+                        localStorage.removeItem(LOCAL_DEV_TOKEN_STORAGE_KEY);
+                        localStorage.removeItem(LOCAL_DEV_USER_STORAGE_KEY);
+                        localStorage.removeItem('agora_user');
+                        setLoading(false);
+                        return;
+                    }
+
+                    // null callback: confirmar antes de cerrar sesión. Evita el
+                    // "phantom logout" cuando Firebase dispara null brevemente
+                    // durante reconnects. Si tras 1.5s `currentUser` sigue null,
+                    // intentamos recuperar la sesión como red de seguridad.
+                    pendingNullCheck = setTimeout(() => {
+                        if (cancelled) return;
+                        if (firebaseAuth.currentUser) {
+                            setUser(firebaseAuth.currentUser);
                             setLoading(false);
                             return;
                         }
-                        // 'genuine-logout' o 'no-session': sesión realmente cerrada.
-                        setUser(null);
-                        setLoading(false);
-                    }).catch(() => {
-                        if (cancelled) return;
-                        setUser(null);
-                        setLoading(false);
-                    });
-                }, 1500);
+
+                        // Logout legítimo: ya observamos al user en esta sesión
+                        // (el SDK lo emitió y luego null = signOut real).
+                        if (hasObservedUser) {
+                            setUser(null);
+                            setLoading(false);
+                            return;
+                        }
+
+                        // (2) Recuperación con anti-loop por timestamps. En vez
+                        // de permitir 1 sola recuperación por sesión (que rompía
+                        // el reload #2), permitimos recuperar SIEMPRE que haya
+                        // refreshToken válido, pero detectamos un loop GENUINO:
+                        // si recuperamos+recargamos RECOVERY_LOOP_MAX veces en
+                        // RECOVERY_LOOP_WINDOW_MS, dejamos de intentar y aceptamos
+                        // el null (algo está realmente roto, no un token stale).
+                        const stamps = readRecoveryStamps();
+                        if (isRecoveryLooping(stamps)) {
+                            clearRecoveryStamps();
+                            setUser(null);
+                            setLoading(false);
+                            return;
+                        }
+
+                        void recoverPersistedSession().then((result) => {
+                            if (cancelled) return;
+                            if (result === 'recovered') {
+                                pushRecoveryStamp(stamps);
+                                window.location.reload();
+                                return;
+                            }
+                            if (result === 'transient') {
+                                // Red caída / 5xx: no deslogueamos.
+                                setLoading(false);
+                                return;
+                            }
+                            // 'genuine-logout' o 'no-session': sesión cerrada.
+                            clearRecoveryStamps();
+                            setUser(null);
+                            setLoading(false);
+                        }).catch(() => {
+                            if (cancelled) return;
+                            setUser(null);
+                            setLoading(false);
+                        });
+                    }, 1500);
+                });
             });
-            return () => { cancelled = true; if (pendingNullCheck) clearTimeout(pendingNullCheck); unsubscribe(); };
+
+            return () => {
+                cancelled = true;
+                if (pendingNullCheck) clearTimeout(pendingNullCheck);
+                if (unsubscribe) unsubscribe();
+            };
         } catch {
             setLoading(false);
         }
