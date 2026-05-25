@@ -34,6 +34,7 @@ import {
   Code
 } from 'lucide-react';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath } from '@/lib/folder-utils';
+import { createShareLink } from '@/lib/sharing';
 import { buildWorkspaceTreeModel } from '@/lib/workspace-tree-model';
 import { MAX_FAVORITE_DOCS } from '@/services/dashboardPersistence';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -519,6 +520,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     const repoPath = encodeURI(`${folder}${doc.name ?? ''}`).replace(/'/g, '%27');
     const apiBase = process.env.NEXT_PUBLIC_FORGEJO_WEB_URL ?? 'https://git.elenxos.com';
     window.open(`${apiBase}/${repoFullName}/src/branch/main/${repoPath}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleShareLink = async (doc: DocItem) => {
+    try {
+      const result = await createShareLink(doc.id);
+      await navigator.clipboard.writeText(result.url).catch(() => undefined);
+      const expiry = new Date(result.expiresAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+      window.alert(`Enlace copiado al portapapeles:\n${result.url}\n\nVálido hasta: ${expiry}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      window.alert(`No se pudo generar el enlace: ${msg}`);
+    }
   };
 
   const handleMoveDoc = (doc: DocItem) => {
@@ -1430,6 +1443,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           onShowProperties={handleShowProperties}
           onCopyPath={handleCopyPath}
           onOpenInForgejo={handleOpenInForgejo}
+          onShareLink={handleShareLink}
         />
       )}
       {propertiesDoc && (

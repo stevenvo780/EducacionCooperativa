@@ -1,6 +1,6 @@
 import React from 'react';
 import { ContextMenu } from '@/components/ui/ContextMenu';
-import { Copy, Download, FolderOpen, Star, Pencil, FolderInput, Trash2, Info, GitBranch } from 'lucide-react';
+import { Copy, Download, FolderOpen, Star, Pencil, FolderInput, Trash2, Info, GitBranch, Link } from 'lucide-react';
 import type { DocItem, FolderItem } from '../FileExplorer';
 
 export interface FileExplorerContextMenuProps {
@@ -28,6 +28,7 @@ export interface FileExplorerContextMenuProps {
   onShowProperties?: (doc: DocItem) => void;
   onCopyPath?: (doc: DocItem) => void;
   onOpenInForgejo?: (doc: DocItem) => void;
+  onShareLink?: (doc: DocItem) => void;
 }
 
 export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({
@@ -48,7 +49,8 @@ export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = (
   onDeleteFolder,
   onShowProperties,
   onCopyPath,
-  onOpenInForgejo
+  onOpenInForgejo,
+  onShareLink
 }) => {
   return (
     <ContextMenu
@@ -101,6 +103,11 @@ export const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = (
               label: 'Ver en Forgejo',
               icon: <GitBranch className="w-4 h-4" />,
               onClick: () => { const doc = data.doc || (data.id ? docMap.get(data.id) : null); if (doc) onOpenInForgejo(doc); }
+            }] : []),
+            ...(onShareLink ? [{
+              label: 'Compartir enlace público',
+              icon: <Link className="w-4 h-4" />,
+              onClick: () => { const doc = data.doc || (data.id ? docMap.get(data.id) : null); if (doc) onShareLink(doc); }
             }] : []),
             ...(onShowProperties ? [{
               label: 'Propiedades',
