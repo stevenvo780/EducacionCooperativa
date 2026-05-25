@@ -223,3 +223,66 @@ export async function recoverPersistedSession(): Promise<SessionRecoveryResult> 
     try { db.close(); } catch { /* noop */ }
   }
 }
+
+/**
+ * Repara proactivamente el registro de IndexedDB ANTES de que el SDK valide
+ * la sesión persistida con `accounts:lookup`. Lee el idToken cacheado; si está
+ * vencido o a punto de vencer (buffer de 5 min), canjea el refreshToken y
+ * reescribe el registro con tokens frescos. Así, cuando el SDK levanta la
+ * sesión en boot, encuentra un idToken válido y no dispara el `accounts:lookup`
+ * con token stale que provoca TOKEN_EXPIRED → purga → logout fantasma.
+ *
+ * Idempotente y barato: si el token todavía es válido devuelve 'fresh' sin
+ * tocar la red. Debe llamarse lo antes posible, antes de `onIdTokenChanged`.
+ */
+export type ProactiveRefreshResult = 'refreshed' | 'fresh' | 'no-session' | 'genuine-logout' | 'transient';
+
+const PROACTIVE_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+
+export async function refreshPersistedTokenProactively(): Promise<ProactiveRefreshResult> {
+  if (typeof window === 'undefined') return 'no-session';
+  const key = persistenceKey();
+  if (!key) return 'no-session';
+
+  const db = await openDb();
+  if (!db) return 'no-session';
+
+  try {
+    const record = await readRecord(db, key);
+    const sts = record?.value?.stsTokenManager;
+    const refreshToken = sts?.refreshToken;
+    if (!record || typeof refreshToken !== 'string' || refreshToken.length === 0) {
+      return 'no-session';
+    }
+
+    const expirationTime = typeof sts?.expirationTime === 'number' ? sts.expirationTime : 0;
+    // Si el idToken vence en >5 min, la validación del SDK lo aceptará sin
+    // problemas: no gastamos una llamada de red.
+    if (expirationTime - Date.now() > PROACTIVE_EXPIRY_BUFFER_MS) {
+      return 'fresh';
+    }
+
+    const exchanged = await exchangeRefreshToken(refreshToken);
+    if (!exchanged.ok) {
+      return exchanged.reason;
+    }
+
+    const repaired: PersistedRecord = {
+      ...record,
+      value: {
+        ...record.value,
+        stsTokenManager: {
+          ...record.value.stsTokenManager,
+          accessToken: exchanged.accessToken,
+          refreshToken: exchanged.refreshToken,
+          expirationTime: Date.now() + exchanged.expiresInSec * 1000
+        }
+      }
+    };
+
+    const wrote = await writeRecord(db, repaired);
+    return wrote ? 'refreshed' : 'transient';
+  } finally {
+    try { db.close(); } catch { /* noop */ }
+  }
+}
