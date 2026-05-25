@@ -34,7 +34,8 @@ import {
   Maximize2,
   Settings2,
   BookMarked,
-  Sparkles
+  Sparkles,
+  FileDown
 } from 'lucide-react';
 import { ToolbarShortcutButton, TableGridPicker } from '@/components/mosaic-editor/ToolbarControls';
 import { semanticBrowserBus } from '@/lib/semantic-browser-bus';
@@ -64,6 +65,7 @@ export interface MosaicToolbarContentsProps {
   setViewModeWithSync: (mode: 'edit' | 'preview' | 'raw') => void;
   createTaskFromSelection: () => Promise<void>;
   scanPendings: () => Promise<void>;
+  onExportPdf: () => void;
 }
 
 export function MosaicToolbarContents({
@@ -86,7 +88,8 @@ export function MosaicToolbarContents({
   setShowSnippetGallery,
   setViewModeWithSync,
   createTaskFromSelection,
-  scanPendings
+  scanPendings,
+  onExportPdf
 }: MosaicToolbarContentsProps) {
   // Grupos pesados de la toolbar (DOM con icons + popovers internos del
   // MDXEditor) cuya creación cuesta varios MB de native + code. Difiriendo
@@ -278,6 +281,9 @@ export function MosaicToolbarContents({
               {isFullscreen ? 'Salir pantalla completa' : 'Pantalla completa'}
             </button>
             <div className="my-2 h-px bg-slate-700" />
+            <button type="button" title="Exportar el documento renderizado a PDF (diálogo de impresión)" aria-label="Exportar a PDF" onClick={() => { onExportPdf(); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
+              <FileDown className="h-5 w-5 shrink-0 text-emerald-400" />Exportar a PDF
+            </button>
             <button type="button" title="Abrir galería de snippets" aria-label="Abrir galería de snippets" onClick={() => { setShowSnippetGallery(s => !s); setShowCompactMenu(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-100 hover:bg-slate-800">
               <Library className="h-5 w-5 shrink-0 text-blue-400" />Galería de snippets
             </button>

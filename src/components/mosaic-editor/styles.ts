@@ -1145,4 +1145,47 @@ export const mosaicEditorStyles = `
           padding: 2px 6px;
           background: rgba(239, 68, 68, 0.08);
         }
+
+        /* ─── Export PDF (window.print) ─── */
+        /* Al imprimir aislamos el preview renderizado: ocultamos toda la app y
+           dejamos visible solo .markdown-preview-container, reseteando su
+           layout (era overflow:auto con alto fijo dentro del shell). Fondo
+           claro + texto oscuro para que el PDF salga legible en papel. */
+        @media print {
+          body.mosaic-printing * {
+            visibility: hidden;
+          }
+          body.mosaic-printing .markdown-preview-container,
+          body.mosaic-printing .markdown-preview-container * {
+            visibility: visible;
+          }
+          body.mosaic-printing .markdown-preview-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: auto;
+            overflow: visible;
+            background: #ffffff;
+            color: #111827;
+            padding: 24px;
+          }
+          body.mosaic-printing .markdown-preview-container * {
+            color: #111827 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+          }
+          body.mosaic-printing .markdown-preview-container a {
+            color: #1d4ed8 !important;
+          }
+          body.mosaic-printing .markdown-preview-container pre,
+          body.mosaic-printing .markdown-preview-container code {
+            background: #f3f4f6 !important;
+            border: 1px solid #e5e7eb;
+          }
+          /* El HUD flotante de zoom no debe aparecer en el PDF. */
+          body.mosaic-printing .group\\/preview > div:last-child {
+            display: none !important;
+          }
+        }
 `;
