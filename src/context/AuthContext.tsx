@@ -78,6 +78,11 @@ const RECOVERY_STAMPS_KEY = 'agora_auth_recovery_stamps';
 const RECOVERY_LOOP_WINDOW_MS = 10_000;
 const RECOVERY_LOOP_MAX = 3;
 
+// Cadencia del refresh proactivo durante la sesión activa. 10 min deja amplio
+// margen frente al borde de expiración del idToken (~1h) y al buffer de 5 min
+// que usa refreshPersistedTokenProactively para decidir si canjea o no.
+const PROACTIVE_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+
 function readRecoveryStamps(): number[] {
     try {
         const raw = sessionStorage.getItem(RECOVERY_STAMPS_KEY);
@@ -162,6 +167,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let pendingNullCheck: ReturnType<typeof setTimeout> | null = null;
         let hasObservedUser = false;
         let unsubscribe: (() => void) | null = null;
+        // Refresh proactivo DURANTE la sesión activa (no solo en boot). El
+        // idToken custom dura ~1h; el SDK lo refresca solo, pero ese refresh
+        // rota el refreshToken y, si pega contra el registro stale de IndexedDB,
+        // dispara TOKEN_EXPIRED → null en onIdTokenChanged → como ya observamos
+        // al user, antes deslogueábamos en seco (redirect a /login en pleno uso).
+        // Reparamos el registro cada PROACTIVE_REFRESH_INTERVAL_MS y al volver el
+        // foco, manteniendo el idToken vigente para que el SDK nunca refresque
+        // con token vencido. Idempotente y barato: si el token sigue fresco no
+        // toca la red.
+        let proactiveTimer: ReturnType<typeof setInterval> | null = null;
+        const runProactiveRefresh = () => {
+            void refreshPersistedTokenProactively().catch(() => { /* transitorio */ });
+        };
+        const onWindowFocus = () => {
+            if (!cancelled && hasObservedUser) runProactiveRefresh();
+        };
 
         try {
             // (1) Prevención proactiva: reparar el registro de IndexedDB con
@@ -184,6 +205,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     if (pendingNullCheck) { clearTimeout(pendingNullCheck); pendingNullCheck = null; }
 
                     if (authUser) {
+                        if (!hasObservedUser && !proactiveTimer) {
+                            proactiveTimer = setInterval(runProactiveRefresh, PROACTIVE_REFRESH_INTERVAL_MS);
+                            window.addEventListener('focus', onWindowFocus);
+                        }
                         hasObservedUser = true;
                         clearRecoveryStamps();
                         setUser(authUser);
@@ -261,6 +286,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return () => {
                 cancelled = true;
                 if (pendingNullCheck) clearTimeout(pendingNullCheck);
+                if (proactiveTimer) clearInterval(proactiveTimer);
+                window.removeEventListener('focus', onWindowFocus);
                 if (unsubscribe) unsubscribe();
             };
         } catch {

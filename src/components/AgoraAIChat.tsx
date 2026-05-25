@@ -158,6 +158,31 @@ function truncateDebug(value: string | undefined, max = 3000) {
   return value.length > max ? `${value.slice(0, max)}\n\n[...truncado por Agora AI...]` : value;
 }
 
+// Convierte un cuerpo 429 del backend en un mensaje amigable. El backend manda
+// `{ error, reason, retryAfter }` (retryAfter en segundos). NUNCA mostramos el
+// JSON crudo y SIEMPRE usamos `retryAfter` real para el tiempo de espera (el
+// texto `error` del backend a veces dice "1s" aunque retryAfter sea ~14 min).
+function formatRateLimitMessage(rawBody: string): string {
+  let retryAfterSec: number | null = null;
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+    if (parsed && typeof parsed === 'object') {
+      const value = (parsed as Record<string, unknown>).retryAfter;
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        retryAfterSec = Math.ceil(value);
+      }
+    }
+  } catch { /* cuerpo no-JSON: caemos al mensaje sin tiempo concreto */ }
+
+  if (retryAfterSec === null) {
+    return 'Demasiadas solicitudes a Agora AI. Esperá un momento antes de intentar de nuevo.';
+  }
+  const wait = retryAfterSec >= 60
+    ? `~${Math.ceil(retryAfterSec / 60)} min`
+    : `~${retryAfterSec} s`;
+  return `Demasiadas solicitudes a Agora AI. Intentá de nuevo en ${wait}.`;
+}
+
 type ChatCreatedSideEvent = { type: 'chat-created'; chatId: string };
 type ContextTruncatedSideEvent = { type: 'context-truncated'; removedCount: number; summary: string };
 
@@ -760,9 +785,10 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       };
     }
     if (!res.ok || !result.ok) {
+      const isRateLimited = res.status === 429;
       publishAgentProblem({
-        severity: res.status === 429 ? 'warning' : 'error',
-        message: `Tool ${action} falló`,
+        severity: isRateLimited ? 'warning' : 'error',
+        message: isRateLimited ? formatRateLimitMessage(raw) : `Tool ${action} falló`,
         detail: result.error || result.summary,
         code: action
       });
@@ -878,8 +904,18 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
     if (!res.ok) {
       const text = await res.text();
+      if (res.status === 429) {
+        const friendly = formatRateLimitMessage(text);
+        publishAgentProblem({
+          severity: 'warning',
+          message: friendly,
+          detail: text,
+          code: 'agora-ai-stream'
+        });
+        throw new Error(friendly);
+      }
       publishAgentProblem({
-        severity: res.status === 429 ? 'warning' : 'error',
+        severity: 'error',
         message: `No se pudo iniciar Agora AI (${res.status})`,
         detail: text,
         code: 'agora-ai-stream'
