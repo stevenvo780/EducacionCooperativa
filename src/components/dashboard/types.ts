@@ -10,6 +10,7 @@ export interface Workspace {
   ownerId: string;
   members: string[];
   pendingInvites?: string[];
+  memberRoles?: Record<string, 'member' | 'viewer'>;
   type: WorkspaceTypeId;
 }
 

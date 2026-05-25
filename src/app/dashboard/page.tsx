@@ -646,6 +646,7 @@ function DashboardContent() {
     const [newDocName, setNewDocName] = useState('');
     const [newWorkspaceName, setNewWorkspaceName] = useState('');
     const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState<'member' | 'viewer'>('member');
     const [_isCreating, setIsCreating] = useState(false);
     const [loadingDocs, setLoadingDocs] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1304,7 +1305,7 @@ function DashboardContent() {
         renameSession
     });
 
-    const { createWorkspace, renameWorkspace, duplicateWorkspace, mergeWorkspaceIntoCurrent, deleteWorkspace, inviteMember, removeMember } = useWorkspaceActions({
+    const { createWorkspace, renameWorkspace, duplicateWorkspace, mergeWorkspaceIntoCurrent, deleteWorkspace, inviteMember, removeMember, changeRole } = useWorkspaceActions({
         user,
         currentWorkspace,
         isAdmin,
@@ -1326,7 +1327,9 @@ function DashboardContent() {
         requestDocsRefresh,
         showDialog,
         inviteEmail,
-        setInviteEmail
+        setInviteEmail,
+        inviteRole,
+        setInviteRole
     });
 
     const toggleFavoriteDoc = useCallback(async (doc: DocItem) => {
@@ -3221,8 +3224,11 @@ function DashboardContent() {
                         memberProfiles={memberProfiles}
                         inviteEmail={inviteEmail}
                         setInviteEmail={setInviteEmail}
+                        inviteRole={inviteRole}
+                        setInviteRole={setInviteRole}
                         inviteMember={inviteMember}
                         removeMember={removeMember}
+                        changeRole={changeRole}
                         modalFade={modalFade}
                     />
                 )}

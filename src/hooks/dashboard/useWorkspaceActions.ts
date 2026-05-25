@@ -8,6 +8,7 @@ import {
     deleteWorkspaceApi,
     duplicateWorkspaceApi,
     inviteMemberApi,
+    changeRoleMemberApi,
     mergeWorkspaceApi,
     renameWorkspaceApi,
     removeMemberApi
@@ -41,6 +42,8 @@ interface UseWorkspaceActionsOptions {
     showDialog: (config: DialogConfig) => Promise<DialogResult>;
     inviteEmail: string;
     setInviteEmail: (email: string) => void;
+    inviteRole: 'member' | 'viewer';
+    setInviteRole: (role: 'member' | 'viewer') => void;
 }
 
 interface UseWorkspaceActionsResult {
@@ -51,6 +54,7 @@ interface UseWorkspaceActionsResult {
     deleteWorkspace: (workspace: Workspace) => Promise<void>;
     inviteMember: () => Promise<void>;
     removeMember: (userId: string) => Promise<void>;
+    changeRole: (userId: string, role: 'member' | 'viewer') => Promise<void>;
 }
 
 export function useWorkspaceActions({
@@ -75,7 +79,9 @@ export function useWorkspaceActions({
     requestDocsRefresh,
     showDialog,
     inviteEmail,
-    setInviteEmail
+    setInviteEmail,
+    inviteRole,
+    setInviteRole
 }: UseWorkspaceActionsOptions): UseWorkspaceActionsResult {
 
     const createWorkspace = async () => {
@@ -312,8 +318,9 @@ export function useWorkspaceActions({
         const emailToInvite = inviteEmail.trim();
         if (!emailToInvite) return;
         try {
-            await inviteMemberApi({ workspaceId: currentWorkspace.id, email: emailToInvite });
+            await inviteMemberApi({ workspaceId: currentWorkspace.id, email: emailToInvite, role: inviteRole });
             setInviteEmail('');
+            setInviteRole('member');
             setShowMembersModal(false);
             await showDialog({
                 type: DialogKind.Info,
@@ -323,6 +330,18 @@ export function useWorkspaceActions({
         } catch (e) {
             console.error('Error inviting', e);
             await showDialog({ type: DialogKind.Error, title: 'Error al invitar', message: 'No se pudo enviar la invitación. Intenta de nuevo.' });
+        }
+    };
+
+    const changeRole = async (userId: string, role: 'member' | 'viewer') => {
+        if (!currentWorkspace || currentWorkspace.type === WorkspaceType.Personal) return;
+        try {
+            await changeRoleMemberApi({ workspaceId: currentWorkspace.id, userId, role });
+            const updatedRoles = { ...(currentWorkspace.memberRoles ?? {}), [userId]: role };
+            selectWorkspace({ ...currentWorkspace, memberRoles: updatedRoles });
+        } catch (e) {
+            console.error('Error changing role', e);
+            await showDialog({ type: DialogKind.Error, title: 'Error al cambiar rol', message: 'No se pudo actualizar el rol del miembro.' });
         }
     };
 
@@ -359,6 +378,7 @@ export function useWorkspaceActions({
         mergeWorkspaceIntoCurrent,
         deleteWorkspace,
         inviteMember,
-        removeMember
+        removeMember,
+        changeRole
     };
 }

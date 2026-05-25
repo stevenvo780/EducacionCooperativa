@@ -133,16 +133,30 @@ export const acceptInviteApi = async (params: { workspaceId: string; userId: str
   assertOk(res, 'Failed to accept invite');
 };
 
-export const inviteMemberApi = async (params: { workspaceId: string; email: string }) => {
+export const inviteMemberApi = async (params: { workspaceId: string; email: string; role?: 'member' | 'viewer' }) => {
   const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({
       action: 'invite',
-      email: params.email
+      email: params.email,
+      ...(params.role ? { role: params.role } : {})
     })
   });
   assertOk(res, 'Failed to invite member');
+};
+
+export const changeRoleMemberApi = async (params: { workspaceId: string; userId: string; role: 'member' | 'viewer' }) => {
+  const res = await authFetch(`/api/workspaces/${params.workspaceId}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      action: 'change_role',
+      userId: params.userId,
+      role: params.role
+    })
+  });
+  assertOk(res, 'Failed to change member role');
 };
 
 export const removeMemberApi = async (params: { workspaceId: string; userId: string }) => {
