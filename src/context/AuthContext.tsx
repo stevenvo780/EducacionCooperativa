@@ -13,6 +13,7 @@ import { apiUrl, parseApiResponse } from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
 import { STDefinitionsRegistry } from '@/lib/st-definitions-registry';
 import { purgeUserScopedStorage } from '@/lib/auth-storage-purge';
+import { recoverPersistedSession } from '@/lib/auth-session-recovery';
 
 interface AuthContextType {
     user: User | null;
@@ -122,6 +123,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         let cancelled = false;
         let pendingNullCheck: ReturnType<typeof setTimeout> | null = null;
+        // El primer null en boot puede ser una sesión vencida purgada por el
+        // SDK (clock skew → TOKEN_EXPIRED en accounts:lookup). Solo intentamos
+        // recuperar en boot y una sola vez por reload, nunca tras un logout
+        // legítimo (ahí ya observamos al user o el guard de sesión lo bloquea).
+        let hasObservedUser = false;
         try {
             const firebaseAuth = getAuth();
             const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser: User | null) => {
@@ -129,6 +135,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (pendingNullCheck) { clearTimeout(pendingNullCheck); pendingNullCheck = null; }
 
                 if (authUser) {
+                    hasObservedUser = true;
+                    sessionStorage.removeItem('agora_auth_recovery_attempted');
                     setUser(authUser);
                     if (authUser.email) {
                         setUserEmail(authUser.email);
@@ -144,15 +152,50 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 // null callback: confirmar antes de cerrar sesión. Evita el
                 // "phantom logout" cuando Firebase Auth dispara null brevemente
                 // durante reconnects transitorios. Si tras 1.5s `currentUser`
-                // sigue null, sí cerramos.
+                // sigue null, intentamos recuperar la sesión vencida antes de
+                // aceptar el logout.
                 pendingNullCheck = setTimeout(() => {
                     if (cancelled) return;
                     if (firebaseAuth.currentUser) {
                         setUser(firebaseAuth.currentUser);
-                    } else {
-                        setUser(null);
+                        setLoading(false);
+                        return;
                     }
-                    setLoading(false);
+
+                    const RECOVERY_FLAG = 'agora_auth_recovery_attempted';
+                    const alreadyTried = sessionStorage.getItem(RECOVERY_FLAG) === '1';
+                    if (hasObservedUser || alreadyTried) {
+                        // Logout legítimo o ya reintentamos este reload: aceptar null.
+                        setUser(null);
+                        setLoading(false);
+                        return;
+                    }
+
+                    void recoverPersistedSession().then((result) => {
+                        if (cancelled) return;
+                        if (result === 'recovered') {
+                            // Registro de IndexedDB reparado con tokens frescos;
+                            // un reload deja que el SDK levante la sesión válida.
+                            // Marcamos antes de recargar para no entrar en loop.
+                            sessionStorage.setItem(RECOVERY_FLAG, '1');
+                            window.location.reload();
+                            return;
+                        }
+                        if (result === 'transient') {
+                            // Red caída / 5xx: no deslogueamos, dejamos el estado
+                            // como estaba (sin user pero sin forzar /login extra;
+                            // el guard decidirá y un próximo reconnect resuelve).
+                            setLoading(false);
+                            return;
+                        }
+                        // 'genuine-logout' o 'no-session': sesión realmente cerrada.
+                        setUser(null);
+                        setLoading(false);
+                    }).catch(() => {
+                        if (cancelled) return;
+                        setUser(null);
+                        setLoading(false);
+                    });
                 }, 1500);
             });
             return () => { cancelled = true; if (pendingNullCheck) clearTimeout(pendingNullCheck); unsubscribe(); };
