@@ -164,16 +164,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let unsubscribe: (() => void) | null = null;
 
         try {
-            const firebaseAuth = getAuth();
-
-            // (1) Prevención proactiva: refrescar el idToken cacheado ANTES de
-            // suscribirnos. El SDK valida la sesión persistida con
-            // `accounts:lookup` usando el idToken cacheado; si venció (clock
-            // skew o token en el borde del buffer) responde TOKEN_EXPIRED y
-            // purga IndexedDB → logout fantasma en TODA navegación full-page.
-            // Reparar el registro con tokens frescos antes evita que eso pase.
+            // (1) Prevención proactiva: reparar el registro de IndexedDB con
+            // tokens frescos ANTES de inicializar el SDK de Auth. El SDK, al
+            // construirse con `getAuth()`, arranca su propia validación de la
+            // sesión persistida: si el idToken cacheado venció, hace un refresh
+            // contra Secure Token API. Si NUESTRO refresh corre en paralelo,
+            // ambos canjean el mismo refreshToken; el primero lo rota y el
+            // segundo recibe 400 user-token-expired → el SDK purga IndexedDB →
+            // logout fantasma. Por eso esperamos a reparar el registro PRIMERO
+            // y solo entonces llamamos a getAuth(): el SDK levanta un idToken ya
+            // vigente y no necesita refrescar en boot. Esto previene el logout
+            // en hard-reload / crear workspace / goto a otro workspaceId.
             void refreshPersistedTokenProactively().finally(() => {
                 if (cancelled) return;
+                const firebaseAuth = getAuth();
 
                 unsubscribe = onIdTokenChanged(firebaseAuth, (authUser: User | null) => {
                     if (cancelled) return;
