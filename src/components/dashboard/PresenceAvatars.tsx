@@ -64,6 +64,8 @@ export default function PresenceAvatars({
 
 function Avatar({ peer, isViewingHighlighted }: { peer: PresenceEntry; isViewingHighlighted: boolean }) {
   const initial = peer.displayName.trim().charAt(0).toUpperCase() || '?';
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const showPhoto = !!peer.photoURL && !photoFailed;
   return (
     <button
       type="button"
@@ -73,11 +75,13 @@ function Avatar({ peer, isViewingHighlighted }: { peer: PresenceEntry; isViewing
       }`}
       style={{ backgroundColor: peer.color }}
     >
-      {peer.photoURL ? (
+      {showPhoto ? (
         // eslint-disable-next-line @next/next/no-img-element -- avatar remoto arbitrario, optimizado por el provider
         <img
-          src={peer.photoURL}
+          src={peer.photoURL ?? undefined}
           alt=""
+          referrerPolicy="no-referrer"
+          onError={() => setPhotoFailed(true)}
           className="h-full w-full rounded-full object-cover"
         />
       ) : (
