@@ -29,6 +29,17 @@ export interface TerminalSession {
     workspaceName?: string;
 }
 
+export interface LostSession {
+    sessionId: string;
+    name?: string;
+    workspaceId: string;
+    workspaceType: WorkspaceTypeId;
+    workspaceName?: string;
+    reason?: string;
+}
+
+const INTENTIONAL_END_REASONS = new Set(['user-terminated']);
+
 interface TerminalContextType {
     controller: TerminalController | null;
     sessions: TerminalSession[];
@@ -42,6 +53,9 @@ interface TerminalContextType {
     selectSession: (sessionId: string) => void;
     destroySession: (sessionId: string) => void;
     renameSession: (sessionId: string, name: string) => void;
+    lostSessions: LostSession[];
+    reconnectLostSession: (sessionId: string) => void;
+    dismissLostSession: (sessionId: string) => void;
     errorMessage: string | null;
     workspaceWorkerStatuses: Map<string, WorkerStatus>;
     getWorkerStatusForWorkspace: (workspaceId: string) => WorkerStatus;
@@ -177,6 +191,8 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
 
     const [sessions, setSessions] = useState<TerminalSession[]>([]);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+    const [lostSessions, setLostSessions] = useState<LostSession[]>([]);
+    const intentionallyKilledRef = useRef<Set<string>>(new Set());
     const [status, setStatus] = useState<TerminalConnectionStatusId>(TerminalConnectionStatus.Checking);
     const [hubConnected, setHubConnected] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -233,6 +249,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         restoringSessionIdsRef.current = new Set();
         savedActiveSessionIdRef.current = null;
 
+        setLostSessions([]);
+        intentionallyKilledRef.current = new Set();
+
         if (!user?.uid) {
             setSessions([]);
             setActiveSessionId(null);
@@ -268,6 +287,36 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         persistedSessionsRef.current = new Map(sessions.map(session => [session.id, session]));
         savePersistedSessions(user.uid, sessions);
     }, [sessions, user?.uid]);
+
+    const recordLostSession = useCallback((session: TerminalSession, reason?: string) => {
+        setLostSessions(prev => {
+            const filtered = prev.filter(l => l.sessionId !== session.id);
+            return [...filtered, {
+                sessionId: session.id,
+                name: session.name,
+                workspaceId: session.workspaceId,
+                workspaceType: session.workspaceType,
+                workspaceName: session.workspaceName,
+                reason
+            }];
+        });
+    }, []);
+
+    const dismissLostSession = useCallback((sessionId: string) => {
+        setLostSessions(prev => prev.filter(l => l.sessionId !== sessionId));
+    }, []);
+
+    const reconnectLostSession = useCallback((sessionId: string) => {
+        const lost = lostSessions.find(l => l.sessionId === sessionId);
+        if (!lost) return;
+        setLostSessions(prev => prev.filter(l => l.sessionId !== sessionId));
+        setIsCreatingSession(true);
+        controllerRef.current?.startSession({
+            workspaceId: lost.workspaceId,
+            workspaceName: lost.workspaceName,
+            workspaceType: lost.workspaceType
+        });
+    }, [lostSessions]);
 
     const initialize = useCallback(async (nexusUrl: string) => {
         debugLog('[TerminalContext] initialize called with nexusUrl:', nexusUrl);
@@ -320,6 +369,11 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 }
                 restoringSessionIdsRef.current.delete(data.id);
 
+                const createdWorkspaceId = data.workspaceId || pendingSessionMeta?.workspaceId;
+                if (createdWorkspaceId) {
+                    setLostSessions(prev => prev.filter(l => l.workspaceId !== createdWorkspaceId));
+                }
+
                 setSessions(prev => {
                     const existing = prev.find(s => s.id === data.id);
                     const workspaceId = data.workspaceId || pendingSessionMeta?.workspaceId || 'unknown';
@@ -371,8 +425,18 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 }
             };
 
-            const handleSessionEnded = (data: { sessionId: string }) => {
-                setSessions(prev => prev.filter(s => s.id !== data.sessionId));
+            const handleSessionEnded = (data: { sessionId: string; reason?: string }) => {
+                const wasIntentional = intentionallyKilledRef.current.has(data.sessionId)
+                    || (data.reason ? INTENTIONAL_END_REASONS.has(data.reason) : false);
+                intentionallyKilledRef.current.delete(data.sessionId);
+
+                setSessions(prev => {
+                    const ended = prev.find(s => s.id === data.sessionId);
+                    if (ended && !wasIntentional) {
+                        recordLostSession(ended, data.reason);
+                    }
+                    return prev.filter(s => s.id !== data.sessionId);
+                });
                 setActiveSessionId(prev => {
                     if (prev === data.sessionId) {
                         clearPersistedActiveSession(currentUser.uid);
@@ -415,7 +479,15 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
                 if (reason === 'session-not-found') {
                     // Hub was restarted or session expired — remove from local state
                     // but only after a grace period (the session truly doesn't exist anymore)
-                    setSessions(prev => prev.filter(s => s.id !== sessionId));
+                    const wasIntentional = intentionallyKilledRef.current.has(sessionId);
+                    intentionallyKilledRef.current.delete(sessionId);
+                    setSessions(prev => {
+                        const lost = prev.find(s => s.id === sessionId);
+                        if (lost && !wasIntentional) {
+                            recordLostSession(lost, 'worker-restarted');
+                        }
+                        return prev.filter(s => s.id !== sessionId);
+                    });
                     setActiveSessionId(prev => {
                         if (prev === sessionId) {
                             clearPersistedActiveSession(currentUser.uid);
@@ -547,7 +619,7 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
             setStatus(TerminalConnectionStatus.Error);
             setErrorMessage(getErrorMessage(e, 'Unknown error'));
         }
-    }, [debugLog, restorePersistedSessions]);
+    }, [debugLog, restorePersistedSessions, recordLostSession]);
 
     const createSession = useCallback((workspaceId: string, workspaceType: WorkspaceTypeId, workspaceName?: string) => {
         setIsCreatingSession(true);
@@ -571,6 +643,8 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
     }, [user?.uid]);
 
     const destroySession = useCallback((sessionId: string) => {
+        intentionallyKilledRef.current.add(sessionId);
+        setLostSessions(prev => prev.filter(l => l.sessionId !== sessionId));
         controllerRef.current?.killSession(sessionId);
     }, []);
 
@@ -623,6 +697,9 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         selectSession,
         destroySession,
         renameSession,
+        lostSessions,
+        reconnectLostSession,
+        dismissLostSession,
         errorMessage,
         workspaceWorkerStatuses,
         getWorkerStatusForWorkspace,
@@ -633,7 +710,8 @@ export const TerminalProvider = ({ children }: { children: ReactNode }) => {
         onDocChangeCallback
     }), [sessions, activeSessionId, status, hubConnected, isCreatingSession, errorMessage,
         workspaceWorkerStatuses, initialize, createSession, joinSession,
-        selectSession, destroySession, renameSession, getWorkerStatusForWorkspace,
+        selectSession, destroySession, renameSession, lostSessions, reconnectLostSession,
+        dismissLostSession, getWorkerStatusForWorkspace,
         getSessionsForWorkspace, subscribeToWorkspace, unsubscribeFromWorkspace, clearActiveSession, onDocChangeCallback]);
 
     return (
