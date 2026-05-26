@@ -3,6 +3,7 @@ import { fetchZod } from '@/lib/fetch-zod';
 import { dashboardApiItemSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { withErrorCode } from '@/lib/error-utils';
+import { beginContentLoading, endContentLoading } from '@/lib/content-loading-bus';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import {
   cacheDocuments,
@@ -254,6 +255,7 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
   const existing = fetchDocsInFlight.get(key);
   if (existing) return existing;
 
+  beginContentLoading();
   const promise = (async () => {
     try {
       const allDocs: DocItem[] = [];
@@ -310,11 +312,15 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
   })();
 
   fetchDocsInFlight.set(key, promise);
-  void promise.finally(() => fetchDocsInFlight.delete(key));
+  void promise.finally(() => {
+    fetchDocsInFlight.delete(key);
+    endContentLoading();
+  });
   return promise;
 };
 
 export const fetchDocumentRawApi = async (docId: string) => {
+  beginContentLoading();
   try {
     const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
     assertOk(res, 'Failed to load content');
@@ -336,15 +342,22 @@ export const fetchDocumentRawApi = async (docId: string) => {
       } catch { /* IDB not available */ }
     }
     throw err;
+  } finally {
+    endContentLoading();
   }
 };
 
 export const downloadDocumentBlobApi = async (docId: string): Promise<{ blob: Blob; mimeType: string }> => {
-  const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
-  assertOk(res, 'Failed to download document');
-  const mimeType = res.headers.get('Content-Type')?.split(';')[0]?.trim() || 'application/octet-stream';
-  const blob = await res.blob();
-  return { blob, mimeType };
+  beginContentLoading();
+  try {
+    const res = await authFetch(`/api/documents/${docId}/raw`, { cache: 'no-store' });
+    assertOk(res, 'Failed to download document');
+    const mimeType = res.headers.get('Content-Type')?.split(';')[0]?.trim() || 'application/octet-stream';
+    const blob = await res.blob();
+    return { blob, mimeType };
+  } finally {
+    endContentLoading();
+  }
 };
 
 export const replaceDocumentFileApi = async (params: {

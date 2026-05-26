@@ -6,10 +6,12 @@ import {
   Wifi,
   WifiOff,
   AlertTriangle,
-  PanelLeft
+  PanelLeft,
+  Loader2
 } from 'lucide-react';
 import { subscribeDiagnostics } from '@/lib/diagnostics-bus';
 import { subscribeStatus, type StatusSegment, type StatusTone } from '@/lib/status-bus';
+import { subscribeContentLoading } from '@/lib/content-loading-bus';
 import LintersStatusButton from './LintersStatusButton';
 
 interface StatusBarProps {
@@ -53,6 +55,7 @@ export default function StatusBar({
 }: StatusBarProps) {
   const [counts, setCounts] = useState({ errors: 0, warns: 0 });
   const [segments, setSegments] = useState<StatusSegment[]>([]);
+  const [contentLoading, setContentLoading] = useState(false);
 
   useEffect(() => subscribeDiagnostics((items) => {
     let errors = 0, warns = 0;
@@ -64,6 +67,8 @@ export default function StatusBar({
   }), []);
 
   useEffect(() => subscribeStatus(setSegments), []);
+
+  useEffect(() => subscribeContentLoading(setContentLoading), []);
 
   const left = segments.filter((s) => (s.slot ?? 'left') === 'left');
   const right = segments.filter((s) => s.slot === 'right');
@@ -92,6 +97,7 @@ export default function StatusBar({
         <span className="truncate text-surface-400">{workspaceLabel}</span>
         <WorkerDot status={workerStatus} />
         <ConnectivityDot online={isOnline} />
+        {contentLoading && <ContentLoadingPill />}
         {left.length > 0 && <Divider />}
         {left.map((s) => <SegmentPill key={s.id} segment={s} />)}
       </div>
@@ -113,6 +119,18 @@ export default function StatusBar({
 
 function Divider() {
   return <span className="h-3 w-px bg-surface-700/60 mx-0.5" aria-hidden />;
+}
+
+function ContentLoadingPill() {
+  return (
+    <span
+      className="flex h-5 items-center gap-1 rounded px-1.5 text-sky-300"
+      title="Cargando contenido"
+    >
+      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+      <span className="hidden sm:inline">Cargando…</span>
+    </span>
+  );
 }
 
 function SegmentPill({ segment }: { segment: StatusSegment }) {
