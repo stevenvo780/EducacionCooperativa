@@ -7,6 +7,7 @@ import { loadNotebook, saveNotebook } from '@/lib/notebooks';
 import type { Cell, CodeCell, Notebook } from '@/types/stnb';
 import NotebookToolbar from './NotebookToolbar';
 import CellEditor from './CellEditor';
+import { runCellInWorker } from './st-eval-worker-client';
 
 interface Props {
   notebookId: string;
@@ -106,11 +107,10 @@ export default function NotebookEditor({ notebookId }: Props) {
 
   const runCell = useCallback(
     async (cellId: string, nb: Notebook): Promise<Notebook> => {
-      const { executeCell } = await import('@stevenvo780/st-lang/format/stnb');
       const cell = nb.cells.find(c => c.id === cellId);
       if (!cell || cell.type !== 'code') return nb;
       const profile = (cell as CodeCell).profile ?? nb.metadata.profile;
-      const outputs = executeCell(cell as CodeCell, profile);
+      const outputs = await runCellInWorker(cell as CodeCell, profile);
       const updatedCell: CodeCell = {
         ...(cell as CodeCell),
         outputs

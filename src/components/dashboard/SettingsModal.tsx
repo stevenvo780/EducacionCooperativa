@@ -45,8 +45,16 @@ import {
   getModelCatalogSync,
   loadModelCatalog,
   modelsForProvider,
+  type CatalogModel,
   type ModelCatalog
 } from '@/lib/agora-ai/modelCatalog';
+import {
+  DEFAULT_AGENT_SETTINGS,
+  loadAgentSettings,
+  saveAgentSettings,
+  type AgentSettings
+} from '@/lib/agora-ai/agentSettingsApi';
+import { useAuth } from '@/context/AuthContext';
 import type { AgentAccessCapability, AgentAccessPolicy, AIProvider } from '@/lib/agora-ai/types';
 import AgentApiKeysPanel from '@/components/dashboard/AgentApiKeysPanel';
 import type { SettingsSectionId } from '@/lib/settings-events';
@@ -185,7 +193,7 @@ export default function SettingsModal({
               <SemanticSection activeWorkspaceId={activeWorkspaceId} activeUserId={activeUserId} />
             )}
             {section === 'ai' && (
-              <AISection activeWorkspaceId={activeWorkspaceId} />
+              <AISection activeWorkspaceId={activeWorkspaceId} activeUserId={activeUserId} />
             )}
             {section === 'linter' && <LintersSection />}
             {section === 'git-access' && <GitAccessSection />}
@@ -286,7 +294,144 @@ function compactToolDescription(description: string): string {
   return description.length > 180 ? `${description.slice(0, 177).trim()}...` : description;
 }
 
-function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
+/** Heurística: un modelo es "rápido/barato" (apto para el aux model de
+ *  clasificación) si su id sugiere una variante flash/mini/haiku/lite/small/nano
+ *  o si es deepseek-chat (el barato de deepseek). */
+function isFastCheapModel(model: CatalogModel): boolean {
+  const id = model.id.toLowerCase();
+  return /flash|mini|haiku|lite|small|nano|8b|7b|3b|1\.5b|deepseek-chat/.test(id);
+}
+
+function modelOptionLabel(model: CatalogModel): string {
+  const ctx = `${(model.contextWindow / 1000).toFixed(0)}K`;
+  return `${model.label} · ${model.family} · ${ctx}${model.verified === 'unverified' ? ' (no verificado)' : ''}`;
+}
+
+function AgentModelsSection({ uid }: { uid: string | null }) {
+  const [catalog, setCatalog] = useState<ModelCatalog>(getModelCatalogSync);
+  const [settings, setSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS);
+  const [loaded, setLoaded] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadModelCatalog().then((c) => { if (!cancelled) setCatalog(c); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!uid) { setLoaded(true); return; }
+    let cancelled = false;
+    setLoaded(false);
+    loadAgentSettings(uid)
+      .then((s) => { if (!cancelled) { setSettings(s); setError(null); } })
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  const allModels = useMemo(
+    () => [...catalog.models].sort((a, b) => a.family.localeCompare(b.family) || a.label.localeCompare(b.label)),
+    [catalog]
+  );
+  const fastModels = useMemo(() => allModels.filter(isFastCheapModel), [allModels]);
+
+  const persist = (partial: Partial<AgentSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...partial };
+      if (uid) {
+        setSavedAt(null);
+        saveAgentSettings(uid, next)
+          .then(() => setSavedAt(Date.now()))
+          .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      }
+      return next;
+    });
+  };
+
+  // Si el modelo guardado no está en el catálogo (modelo manual / antiguo) lo
+  // mantenemos como opción adicional para no perder la selección del user.
+  const mainOptions = useMemo(() => {
+    if (settings.mainModel && !allModels.some((m) => m.id === settings.mainModel)) {
+      return [{ id: settings.mainModel, label: `${settings.mainModel} (manual)`, family: 'deepseek' as const, contextWindow: 0, maxOutputTokens: 0, verified: 'unverified' as const }, ...allModels];
+    }
+    return allModels;
+  }, [allModels, settings.mainModel]);
+  const auxOptions = useMemo(() => {
+    if (settings.auxModel && !fastModels.some((m) => m.id === settings.auxModel)) {
+      const fromAll = allModels.find((m) => m.id === settings.auxModel);
+      const extra: CatalogModel = fromAll ?? { id: settings.auxModel, label: `${settings.auxModel} (manual)`, family: 'deepseek', contextWindow: 0, maxOutputTokens: 0, verified: 'unverified' };
+      return [extra, ...fastModels];
+    }
+    return fastModels;
+  }, [fastModels, allModels, settings.auxModel]);
+
+  return (
+    <div className="border-t border-surface-700/40 pt-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="text-xs font-semibold text-surface-200">Modelos y autonomía del agente</h4>
+        {uid && savedAt && <span className="text-[10px] text-emerald-400">Guardado</span>}
+      </div>
+      <SectionHelper>
+        Estos ajustes se sincronizan con tu cuenta y los usa el backend del agente para enrutar las llamadas.
+        El modelo principal responde al usuario; el auxiliar hace clasificación barata en segundo plano.
+      </SectionHelper>
+
+      {!uid && (
+        <p className="mt-2 text-[11px] text-amber-300">Inicia sesión para configurar los modelos del agente.</p>
+      )}
+      {error && (
+        <p className="mt-2 text-[11px] text-red-400" role="alert">No se pudo sincronizar: {error}</p>
+      )}
+
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block text-xs">
+          <span className="mb-1 block text-surface-400">Modelo principal</span>
+          <select
+            value={settings.mainModel}
+            disabled={!uid || !loaded}
+            onChange={(e) => persist({ mainModel: e.target.value })}
+            className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
+          >
+            <option value="" className="bg-surface-900 text-surface-100">— Default del backend —</option>
+            {mainOptions.map((m) => (
+              <option key={m.id} value={m.id} className="bg-surface-900 text-surface-100">{modelOptionLabel(m)}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block text-xs">
+          <span className="mb-1 block text-surface-400">Modelo auxiliar (rápido / clasificación)</span>
+          <select
+            value={settings.auxModel}
+            disabled={!uid || !loaded}
+            onChange={(e) => persist({ auxModel: e.target.value })}
+            className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
+          >
+            <option value="" className="bg-surface-900 text-surface-100">— Default del backend —</option>
+            {auxOptions.map((m) => (
+              <option key={m.id} value={m.id} className="bg-surface-900 text-surface-100">{modelOptionLabel(m)}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="mt-3">
+        <ToggleRow
+          label="Modo autónomo (bypass)"
+          description="El agente auto-continúa tareas largas sin pedir confirmación en cada paso. Úsalo solo si confías en las acciones del perfil activo: salta los puntos de control que normalmente esperan tu visto bueno."
+          checked={settings.autonomousMode}
+          onChange={(v) => persist({ autonomousMode: v })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: string; activeUserId?: string }) {
+  const { user } = useAuth();
+  const uid = user?.uid ?? activeUserId ?? null;
   const [config, setConfig] = useState<AIProviderConfig>(() => loadAIProviderConfig());
   const [accessPolicy, setAccessPolicy] = useState<AgentAccessPolicy>(() => loadAgentAccessPolicy());
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(getModelCatalogSync);
@@ -482,6 +627,8 @@ function AISection({ activeWorkspaceId }: { activeWorkspaceId?: string }) {
       </div>
 
       <AgentApiKeysPanel />
+
+      <AgentModelsSection uid={uid} />
 
       <div className="border-t border-surface-700/40 pt-4">
         <div className="mb-2 flex items-center justify-between gap-2">
