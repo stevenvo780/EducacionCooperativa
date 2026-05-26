@@ -2,18 +2,18 @@
 
 import React from 'react';
 
-const PROFILES = [
-  'classical',
-  'intuitionistic',
-  'modal-k',
-  'modal-s4',
-  'modal-s5',
-  'paraconsistent',
-  'fuzzy',
-  'relevance',
-  'temporal',
-  'epistemic',
-  'deontic'
+const PROFILES: Array<{ id: string; label: string }> = [
+  { id: 'classical.propositional', label: 'Clásica proposicional' },
+  { id: 'classical.first_order', label: 'Clásica primer orden' },
+  { id: 'intuitionistic.propositional', label: 'Intuicionista' },
+  { id: 'modal.k', label: 'Modal K' },
+  { id: 'epistemic.s5', label: 'Epistémica S5' },
+  { id: 'deontic.standard', label: 'Deóntica' },
+  { id: 'temporal.ltl', label: 'Temporal LTL' },
+  { id: 'paraconsistent.belnap', label: 'Paraconsistente (Belnap)' },
+  { id: 'aristotelian.syllogistic', label: 'Aristotélica (silogística)' },
+  { id: 'probabilistic.basic', label: 'Probabilística' },
+  { id: 'arithmetic', label: 'Aritmética' }
 ];
 
 interface Props {
@@ -72,7 +72,7 @@ export default function NotebookToolbar({
         title="Perfil lógico"
       >
         {PROFILES.map(p => (
-          <option key={p} value={p}>{p}</option>
+          <option key={p.id} value={p.id}>{p.label}</option>
         ))}
       </select>
 

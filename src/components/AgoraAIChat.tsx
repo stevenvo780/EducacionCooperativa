@@ -602,6 +602,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   });
   const [nextTurnHints, setNextTurnHints] = useState<Set<'plan' | 'think'>>(new Set());
   const [showSlashHelp, setShowSlashHelp] = useState<SlashCommandHelp[] | null>(null);
+  // Feature: cola de mensajes (estilo Claude Code). Mientras el agente
+  // streamea, el user puede encolar mensajes; al terminar el turno se
+  // auto-despacha el siguiente. La cola es de sesión (en memoria) — no se
+  // persiste. `queuePaused` la detiene cuando un turno falla (p.ej. 429) sin
+  // perder los pendientes.
+  const [queue, setQueue] = useState<Array<{ id: string; text: string }>>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
   // Bug #4: detectamos cuando Ollama local no responde para mostrar UX claro.
   const [ollamaOffline, setOllamaOffline] = useState(false);
   // Bug 2: cuando un turno falla por capability del perfil (p.ej. el agente
@@ -1457,6 +1464,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       currentChatIdRef.current = chatId;
       setMessages(uiMessages);
       setRollbackQueue([]);
+      setQueue([]);
+      setQueuePaused(false);
       setInput('');
     } catch (error) {
       publishAgentProblem({
@@ -1481,6 +1490,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     currentChatIdRef.current = null;
     setMessages(target.messages);
     setRollbackQueue(target.rollbackQueue || []);
+    setQueue([]);
+    setQueuePaused(false);
     setInput('');
     if (target.mode !== mode) {
       updateMode(target.mode);
@@ -1496,12 +1507,16 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     currentChatIdRef.current = null;
     setMessages([]);
     setRollbackQueue([]);
+    setQueue([]);
+    setQueuePaused(false);
     setInput('');
     textareaRef.current?.focus();
   }, []);
 
   const deleteActiveChat = useCallback(() => {
     autoConfirmedRef.current.clear();
+    setQueue([]);
+    setQueuePaused(false);
     // Caso 1: chat persistido activo → DELETE al backend, refresh listado.
     if (currentChatId) {
       const targetId = currentChatId;
@@ -1637,8 +1652,12 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     return `Deshice ${applied.length} acción(es):\n- ${summaries.join('\n- ')}`;
   }, [executeAgoraTool, rollbackQueue]);
 
-  const sendMessage = useCallback(async () => {
-    const rawText = input.trim();
+  // Núcleo de envío: despacha `rawTextArg`. `sendMessage` (entrada del
+  // textarea) y el auto-dispatcher de la cola comparten este camino. No lee
+  // `input` directamente para poder ejecutarse con texto encolado sin tocar
+  // el textarea.
+  const dispatchMessage = useCallback(async (rawTextArg: string) => {
+    const rawText = rawTextArg.trim();
     const now = Date.now();
     if (!rawText || loading || !canSend) return;
 
@@ -1653,7 +1672,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     let text = rawText;
     if (slash.kind === 'handled') {
       slash.sideEffect?.();
-      setInput('');
       return;
     }
     if (slash.kind === 'flag') {
@@ -1680,7 +1698,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             : 'Razonamiento extendido activo para el próximo mensaje.'
         )]);
       }
-      setInput('');
       return;
     }
     if (slash.kind === 'inject-system') {
@@ -1722,7 +1739,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         }
       }]
       : history);
-    setInput('');
     setLoading(true);
     setStreamStatus('');
 
@@ -1730,12 +1746,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    let succeeded = true;
     try {
 
       if (isUndoRequest) {
         const undoReply = await runRollback(controller.signal);
         setMessages(prev => [...prev, toAssistantMessage(undoReply)]);
-        return;
+        return true;
       }
 
       let reply = '';
@@ -1829,7 +1846,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
         setLastFailedSend(null);
       }
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof DOMException && err.name === 'AbortError') return false;
+      succeeded = false;
       const errMsg = err instanceof Error ? err.message : 'Error de red';
       // Bug #4: si el proveedor es Ollama y el error es de conexión,
       // mostramos banner específico en lugar del mensaje genérico.
@@ -1874,7 +1892,38 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       setStreamStatus('');
       textareaRef.current?.focus();
     }
-  }, [input, loading, canSend, messages, mode, runRollback, config.provider, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints, accessPolicy.profile]);
+    return succeeded;
+  }, [loading, canSend, messages, mode, runRollback, config.provider, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints, accessPolicy.profile]);
+
+  // Entrada desde el textarea. Si el agente ya está respondiendo (`loading`),
+  // en vez de bloquear, ENCOLA el texto y limpia el input — el auto-dispatcher
+  // lo despachará al terminar el turno actual. Si está libre, despacha directo.
+  const sendMessage = useCallback(async () => {
+    const rawText = input.trim();
+    if (!rawText) return;
+    if (loading) {
+      setQueue((prev) => [...prev, { id: uid(), text: rawText }]);
+      setQueuePaused(false);
+      setInput('');
+      requestAnimationFrame(() => textareaRef.current?.focus());
+      return;
+    }
+    setInput('');
+    await dispatchMessage(rawText);
+  }, [input, loading, dispatchMessage]);
+
+  const removeFromQueue = useCallback((id: string) => {
+    setQueue((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const clearQueue = useCallback(() => {
+    setQueue([]);
+    setQueuePaused(false);
+  }, []);
+
+  const resumeQueue = useCallback(() => {
+    setQueuePaused(false);
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2001,6 +2050,36 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
     }
   }, [loading]);
+
+  // Auto-dispatcher de la cola de mensajes. Cuando el turno actual termina
+  // (`loading` true → false) y hay mensajes encolados y la cola no está en
+  // pausa, despacha el siguiente. Si ese mensaje falla (429, error de red),
+  // pausa la cola SIN perder los pendientes restantes. Usa refs para leer
+  // siempre el último `dispatchMessage`/cola y evitar closures rancios.
+  const dispatchMessageRef = useRef(dispatchMessage);
+  useEffect(() => { dispatchMessageRef.current = dispatchMessage; }, [dispatchMessage]);
+  const queueDrainingRef = useRef(false);
+  const prevLoadingForQueueRef = useRef(false);
+  useEffect(() => {
+    const wasLoading = prevLoadingForQueueRef.current;
+    prevLoadingForQueueRef.current = loading;
+    if (!(wasLoading && !loading)) return;
+    if (queuePaused || queue.length === 0 || queueDrainingRef.current) return;
+    const next = queue[0];
+    if (!next) return;
+    queueDrainingRef.current = true;
+    setQueue((prev) => prev.slice(1));
+    void (async () => {
+      try {
+        const ok = await dispatchMessageRef.current(next.text);
+        if (!ok) setQueuePaused(true);
+      } catch {
+        setQueuePaused(true);
+      } finally {
+        queueDrainingRef.current = false;
+      }
+    })();
+  }, [loading, queue, queuePaused]);
 
   // Auto-confirm en god mode: si llega un pendingConfirmation y el perfil
   // activo lo permite, se aprueba sin pedir input al usuario.
@@ -2388,6 +2467,60 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             )}
           </div>
         )}
+        {queue.length > 0 && (
+          <div className="mb-2 rounded-lg border border-surface-700 bg-surface-925/60 p-2">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-surface-400">
+                <Clock className="h-3 w-3" />
+                En cola ({queue.length})
+              </span>
+              <button
+                type="button"
+                onClick={clearQueue}
+                className="rounded px-1.5 py-0.5 text-[10px] text-surface-400 transition hover:bg-surface-800 hover:text-surface-100"
+                title="Vaciar la cola"
+              >
+                Vaciar
+              </button>
+            </div>
+            {queuePaused && (
+              <div className="mb-1.5 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium">Cola en pausa.</span> El último mensaje falló; los pendientes se conservan.
+                </div>
+                <button
+                  type="button"
+                  onClick={resumeQueue}
+                  className="flex-shrink-0 rounded border border-amber-400/40 bg-amber-500/20 px-2 py-0.5 text-amber-100 transition hover:bg-amber-500/30"
+                  title="Reanudar el envío de la cola"
+                >
+                  Reanudar
+                </button>
+              </div>
+            )}
+            <ul className="space-y-1">
+              {queue.map((item, index) => (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-2 rounded-md border border-surface-800 bg-surface-900/70 px-2 py-1 text-xs text-surface-300"
+                >
+                  <span className="flex-shrink-0 font-mono text-[10px] text-surface-500">{index + 1}.</span>
+                  <span className="min-w-0 flex-1 truncate" title={item.text}>{item.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFromQueue(item.id)}
+                    className="flex-shrink-0 rounded p-0.5 text-surface-500 transition hover:bg-surface-800 hover:text-mandy-300"
+                    aria-label="Quitar de la cola"
+                    title="Quitar de la cola"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="flex items-end gap-2 min-w-0">
           <textarea
             ref={textareaRef}
@@ -2406,8 +2539,8 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder={!hasKeyForProvider ? 'Configura tu API key en Ajustes…' : 'Pídele una acción al agente…'}
-            disabled={loading || !canSend}
+            placeholder={!hasKeyForProvider ? 'Configura tu API key en Ajustes…' : loading ? 'Escribe para encolar el siguiente mensaje…' : 'Pídele una acción al agente…'}
+            disabled={!canSend}
             rows={1}
             wrap="soft"
             className="scrollbar-agora flex-1 min-w-0 bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder:text-surface-400 focus:outline-none focus:border-sky-500 transition resize-none disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2419,14 +2552,26 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             }}
           />
           {loading ? (
-            <button
-              onClick={stopGeneration}
-              className="flex-shrink-0 p-2 rounded-lg bg-mandy-600 hover:bg-mandy-500 text-white transition"
-              title="Detener generación"
-              aria-label="Detener"
-            >
-              <Square className="w-4 h-4" fill="currentColor" />
-            </button>
+            <>
+              {input.trim() && canSend && (
+                <button
+                  onClick={() => void sendMessage()}
+                  className="flex-shrink-0 p-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition"
+                  title="Encolar mensaje (Enter) — se enviará al terminar el turno actual"
+                  aria-label="Encolar mensaje"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                onClick={stopGeneration}
+                className="flex-shrink-0 p-2 rounded-lg bg-mandy-600 hover:bg-mandy-500 text-white transition"
+                title="Detener generación"
+                aria-label="Detener"
+              >
+                <Square className="w-4 h-4" fill="currentColor" />
+              </button>
+            </>
           ) : (
             <button
               onClick={() => void sendMessage()}
