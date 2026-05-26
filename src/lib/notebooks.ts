@@ -25,6 +25,21 @@ export interface NotebookListItem {
 const notebooksCol = (uid: string) =>
   collection(doc(collection(db(), 'users'), uid), 'notebooks');
 
+export function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(item => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) continue;
+      out[k] = stripUndefinedDeep(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 export async function listNotebooks(uid: string): Promise<NotebookListItem[]> {
   const q = query(notebooksCol(uid), orderBy('updatedAt', 'desc'));
   const snap = await getDocs(q);
@@ -55,22 +70,24 @@ export async function loadNotebook(uid: string, id: string): Promise<Notebook> {
 export async function saveNotebook(uid: string, id: string, nb: Notebook): Promise<void> {
   const ref = doc(notebooksCol(uid), id);
   const now = Date.now();
-  await setDoc(ref, {
+  await setDoc(ref, stripUndefinedDeep({
     notebook: nb,
     title: nb.metadata.title,
     profile: nb.metadata.profile,
     updatedAt: now
-  }, { merge: true });
+  }), { merge: true });
 }
 
 export async function createNotebook(uid: string, nb: Notebook): Promise<string> {
   const now = Date.now();
   const ref = await addDoc(notebooksCol(uid), {
-    notebook: nb,
-    title: nb.metadata.title,
-    profile: nb.metadata.profile,
-    createdAt: now,
-    updatedAt: now,
+    ...stripUndefinedDeep({
+      notebook: nb,
+      title: nb.metadata.title,
+      profile: nb.metadata.profile,
+      createdAt: now,
+      updatedAt: now
+    }),
     _serverTs: serverTimestamp()
   });
   return ref.id;
