@@ -7,6 +7,7 @@ import {
   listRemoteAgentChatMessages,
   listRemoteAgentChats,
   patchRemoteAgentChat,
+  truncateRemoteAgentChatFromUserIndex,
   type RemoteAgentChat,
   type RemoteAgentChatMessage
 } from '@/lib/agora-ai/agentChatApi';
@@ -48,6 +49,10 @@ export interface UseAgentChatHistoryResult {
   renameChat: (id: string, title: string) => Promise<void>;
   removeChat: (id: string) => Promise<void>;
   loadMessages: (id: string) => Promise<RemoteAgentChatMessage[]>;
+  /** Trunca un chat persistido desde el N-ésimo turno del usuario (0-based) y
+   *  todos los posteriores (checkpoint "volver aquí"). Devuelve cuántos se
+   *  borraron. */
+  truncateFromUserIndex: (id: string, userIndex: number) => Promise<number>;
   /** Empuja un chat conocido (devuelto por el stream SSE `chat-created`)
    *  al cache local sin esperar al refresh. */
   upsertChat: (chat: RemoteAgentChat) => void;
@@ -131,5 +136,9 @@ export function useAgentChatHistory(enabled: boolean = true): UseAgentChatHistor
     return all;
   }, []);
 
-  return { chats, loading, error, refresh, createChat, renameChat, removeChat, loadMessages, upsertChat };
+  const truncateFromUserIndex = useCallback<UseAgentChatHistoryResult['truncateFromUserIndex']>(async (id, userIndex) => {
+    return truncateRemoteAgentChatFromUserIndex(id, userIndex);
+  }, []);
+
+  return { chats, loading, error, refresh, createChat, renameChat, removeChat, loadMessages, truncateFromUserIndex, upsertChat };
 }

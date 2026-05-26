@@ -348,9 +348,10 @@ interface ChatMessageProps {
   onConfirm: (messageId: string, approve: boolean) => void;
   onCopy: (id: string, content: string) => void;
   onOpenDocument: (doc: AgentDocumentTarget) => void;
+  onRevert: (messageId: string) => void;
 }
 
-function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm, onCopy, onOpenDocument }: ChatMessageProps) {
+function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm, onCopy, onOpenDocument, onRevert }: ChatMessageProps) {
   const visibleSteps = msg.agentRun?.steps.filter(step => step.type !== 'final') ?? [];
   const rawDisplayContent = msg.role === 'assistant' ? stripPreviousTurnContext(msg.content) : msg.content;
   // Bug #8: evita renderizar displayContent duplicado cuando un plan step ya
@@ -484,6 +485,16 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
               : <Copy className="w-3 h-3" />}
           </button>
         )}
+        {msg.role === 'user' && (
+          <button
+            onClick={() => onRevert(msg.id)}
+            className="absolute top-1/2 -translate-y-1/2 -left-7 p-1 rounded opacity-0 group-hover:opacity-100 text-surface-500 hover:text-sky-300 hover:bg-surface-700 transition"
+            title="Volver a este punto (descarta los mensajes posteriores)"
+            aria-label="Volver a este punto"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -497,6 +508,7 @@ const ChatMessage = memo(ChatMessageImpl, (prev, next) => {
   if (prev.msg.pendingConfirmation !== next.msg.pendingConfirmation) return false;
   if (prev.traceExpanded !== next.traceExpanded) return false;
   if (prev.onOpenDocument !== next.onOpenDocument) return false;
+  if (prev.onRevert !== next.onRevert) return false;
   const prevConfirming = prev.confirmingId === prev.msg.id;
   const nextConfirming = next.confirmingId === next.msg.id;
   if (prevConfirming !== nextConfirming) return false;
@@ -651,6 +663,18 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     ? (remoteHistory.chats.find((chat) => chat.id === currentChatId) ?? null)
     : null;
   const hasActiveChat = Boolean(currentChatId || activeSession || messages.length > 0);
+
+  // Bolita de estado del agente en el header. Reusa los flags ya existentes:
+  // `loading` (streaming en curso) y el `error` del último mensaje. No
+  // introduce estado nuevo.
+  const agentStatus = useMemo<{ tone: 'idle' | 'thinking' | 'error' | 'ok'; label: string }>(() => {
+    if (loading) return { tone: 'thinking', label: streamStatus || 'Pensando…' };
+    const last = messages[messages.length - 1];
+    if (last?.error) return { tone: 'error', label: 'Error en la última respuesta' };
+    const hasAssistantReply = messages.some((m) => m.role === 'assistant' && !m.error);
+    if (hasAssistantReply) return { tone: 'ok', label: 'Última respuesta completada' };
+    return { tone: 'idle', label: 'Inactivo' };
+  }, [loading, streamStatus, messages]);
 
   useEffect(() => {
     sessionDefaultsRef.current = { provider: config.provider, mode };
@@ -1530,6 +1554,66 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     }
   }, [currentChatId, messages, remoteHistory]);
 
+  // Feature "volver a este punto" (checkpoint estilo Copilot): descarta este
+  // turno y todos los posteriores, re-prellenando el input con el texto del
+  // user para re-preguntar desde ahí. Trunca (no fork) y persiste el descarte
+  // para que sobreviva recarga / cross-device.
+  const revertToMessage = useCallback(async (messageId: string) => {
+    if (loading) return;
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx < 0) return;
+    const target = messages[idx];
+    if (!target || target.role !== 'user') return;
+    if (messages.length - 1 === idx) {
+      // Nada posterior que descartar: solo re-prellenar el input.
+      setInput(target.content);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm('Esto descartará los mensajes posteriores. ¿Continuar?');
+      if (!ok) return;
+    }
+
+    const prefillText = target.content;
+    const kept = messages.slice(0, idx);
+    // Índice 0-based de este turno entre los mensajes de rol user. El stream
+    // persiste 1 doc user por turno en orden, así que mapea 1:1 con el backend
+    // aun para mensajes en vivo (cuyo id local no es el doc id de Firestore).
+    const userIndex = kept.filter((m) => m.role === 'user').length;
+
+    // Persistencia primero para no dejar UI/backend desincronizados.
+    if (currentChatId) {
+      try {
+        await remoteHistory.truncateFromUserIndex(currentChatId, userIndex);
+      } catch (error) {
+        publishAgentProblem({
+          severity: 'error',
+          message: 'No se pudo truncar la conversación persistida',
+          detail: error instanceof Error ? error.message : String(error),
+          code: 'agora-ai-chat-truncate'
+        });
+        return;
+      }
+      void remoteHistory.refresh();
+    } else if (activeSessionId) {
+      const updated = sessions.map((session) => (
+        session.id === activeSessionId ? { ...session, messages: kept, updatedAt: Date.now() } : session
+      ));
+      const saved = saveChatSessions(resolvedWorkspaceId, updated);
+      setSessions(saved);
+    }
+
+    autoConfirmedRef.current.clear();
+    setMessages(kept);
+    setInput(prefillText);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [loading, messages, currentChatId, remoteHistory, activeSessionId, sessions, resolvedWorkspaceId]);
+
+  const handleRevertStable = useCallback((messageId: string) => {
+    void revertToMessage(messageId);
+  }, [revertToMessage]);
+
   const clearPendingConfirmation = useCallback((messageId: string) => {
     setMessages(prev => prev.map(msg => (
       msg.id === messageId
@@ -2046,6 +2130,20 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           </button>
           <Bot className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <span className="text-sm font-medium text-surface-100 truncate">Agora AI</span>
+          <span
+            className={`flex-shrink-0 w-2 h-2 rounded-full ${
+              agentStatus.tone === 'thinking'
+                ? 'bg-amber-400 animate-pulse'
+                : agentStatus.tone === 'error'
+                  ? 'bg-mandy-500'
+                  : agentStatus.tone === 'ok'
+                    ? 'bg-emerald-500'
+                    : 'bg-surface-600'
+            }`}
+            title={agentStatus.label}
+            aria-label={`Estado del agente: ${agentStatus.label}`}
+            role="status"
+          />
         </div>
         <div className="flex items-center gap-1">
           {rollbackQueue.length > 0 && (
@@ -2167,6 +2265,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
                   onConfirm={handleConfirmStable}
                   onCopy={handleCopyStable}
                   onOpenDocument={handleOpenDocumentStable}
+                  onRevert={handleRevertStable}
                 />
               </div>
             )}
