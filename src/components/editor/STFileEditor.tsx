@@ -113,11 +113,38 @@ export default function STFileEditor({ docId, docName, workspaceId }: STFileEdit
           }
           return;
         }
-        // Doc vacío: pelea por el lock. Solo el ganador siembra.
+        // Doc vacío: pelea por el lock para evitar que dos clientes inserten en
+        // paralelo. Solo el ganador escribe de inmediato.
         const won = await provider.claimSeedLock();
         if (cancelled) return;
         if (won && latestContent.current) {
           ytext.insert(0, latestContent.current);
+          setSeedDone(true);
+          return;
+        }
+        // Perdimos el lock (o no había qué sembrar). Esperamos a que las updates
+        // remotas pueblen el ytext. PERO nunca exponemos el editor sobre un
+        // ytext vacío cuando el server SÍ tiene contenido: ese desfase hacía que
+        // la primera tecla pisara el archivo real con un texto truncado.
+        const expected = latestContent.current;
+        if (!expected) {
+          setSeedDone(true);
+          return;
+        }
+        const deadline = Date.now() + 4000;
+        while (!cancelled && ytext.length === 0 && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        if (cancelled) return;
+        if (ytext.length === 0) {
+          // El ganador nunca sembró (tab cerrada, lock huérfano dentro de TTL,
+          // historial RTDB compactado/expirado). Sembramos nosotros: Yjs fusiona
+          // inserciones idénticas concurrentes sin corromper, y perder el doc
+          // entero es mucho peor que un merge benigno.
+          ytext.insert(0, expected);
+        } else {
+          setContent(ytext.toString());
+          lastSyncedRef.current = ytext.toString();
         }
         setSeedDone(true);
       } catch (err) {
