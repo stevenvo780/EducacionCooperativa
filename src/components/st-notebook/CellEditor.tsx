@@ -3,12 +3,37 @@
 import React, { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { Cell, CodeCell, MarkdownCell, CellOutput } from '@/types/stnb';
+import type { STEvalResult } from '@stevenvo780/st-lang/api';
+import type { RunResult } from '@stevenvo780/st-lang/types';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import './notebook-markdown.css';
 
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false });
+const OutputViewer = dynamic(
+  () => import('@/components/editor/STOutputViewer').then((m) => m.OutputViewer),
+  { ssr: false, loading: () => <span className="text-xs text-gray-400">Cargando salida…</span> }
+);
+
+/**
+ * El executor de .stnb guarda `data = { valid, stdout, results }` para los
+ * outputs `result`. STOutputViewer espera un STEvalResult completo: lo
+ * reconstruimos validando los campos que consumimos en lugar de castear.
+ */
+function toEvalResult(data: Record<string, unknown>): STEvalResult | null {
+  if (!Array.isArray(data['results'])) return null;
+  const stdout = typeof data['stdout'] === 'string' ? data['stdout'] : '';
+  const valid = data['valid'] === true;
+  return {
+    ok: valid,
+    stdout,
+    stderr: '',
+    exitCode: valid ? 0 : 1,
+    results: data['results'] as RunResult[],
+    diagnostics: []
+  };
+}
 
 interface Props {
   cell: Cell;
@@ -39,10 +64,16 @@ function OutputView({ outputs }: { outputs: CellOutput[] }) {
           );
         }
         if (out.type === 'result') {
-          const valid = (out.data as Record<string, unknown>)['valid'];
-          const color = valid === true ? 'text-green-700 bg-green-50 border-green-200' : 'text-yellow-700 bg-yellow-50 border-yellow-200';
+          const evalResult = toEvalResult(out.data);
+          if (evalResult) {
+            return (
+              <div key={i} className="rounded-lg border border-slate-700/40 bg-slate-900 p-2">
+                <OutputViewer result={evalResult} mode="graphic" />
+              </div>
+            );
+          }
           return (
-            <pre key={i} className={`text-xs rounded border p-2 whitespace-pre-wrap ${color}`}>
+            <pre key={i} className="text-xs rounded border p-2 whitespace-pre-wrap text-yellow-700 bg-yellow-50 border-yellow-200">
               {JSON.stringify(out.data, null, 2)}
             </pre>
           );
