@@ -93,6 +93,25 @@ export const listRemoteAgentChatMessages = async (id: string, params: {
   return parseApiResponse<ListMessagesResponse>(res);
 };
 
+/**
+ * Trunca la conversación persistida desde el N-ésimo turno del usuario (0-based)
+ * y todos los posteriores. Usado por el checkpoint "volver aquí" para que el
+ * descarte sobreviva recarga / cross-device. Se usa el índice de turno user —
+ * no el doc id — porque los mensajes en vivo aún no conocen su id de Firestore.
+ * Devuelve cuántos mensajes se borraron.
+ */
+export const truncateRemoteAgentChatFromUserIndex = async (
+  id: string,
+  userIndex: number
+): Promise<number> => {
+  const res = await authFetch(
+    `/api/agora-ai/chats/${encodeURIComponent(id)}/messages?fromUserIndex=${encodeURIComponent(String(userIndex))}`,
+    { method: 'DELETE' }
+  );
+  const data = await parseApiResponse<{ deleted: number }>(res);
+  return data.deleted;
+};
+
 /** No usado por el flujo principal — el stream persiste los mensajes server-side. */
 export const appendRemoteAgentChatMessage = async (id: string, payload: {
   role: 'user' | 'assistant' | 'tool';
