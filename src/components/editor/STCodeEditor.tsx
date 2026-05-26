@@ -133,9 +133,14 @@ export default function STCodeEditor({
 
     prevConfigRef.current = resolvedConfig;
 
-    // En colab Yjs maneja el contenido inicial; pasamos doc vacío para que
-    // y-codemirror.next haga el bind.
-    const initialDoc = collab ? '' : value;
+    // En colab el Y.Text ('content') es la fuente de verdad. y-codemirror.next
+    // 0.3.5 NO inicializa el doc de CodeMirror desde el Y.Text al montar: su
+    // ySyncPlugin solo registra un observer y reacciona a deltas FUTUROS. En
+    // sesión single-user el Y.Text ya viene sembrado (el seed garantiza que
+    // seedDone solo se expone con el ytext poblado) pero no llega ningún delta
+    // remoto, así que el editor quedaba vacío y la primera tecla pisaba el
+    // archivo. Por eso arrancamos el doc con el contenido actual del Y.Text.
+    const initialDoc = collab ? collab.ydoc.getText('content').toString() : value;
     const collabExt = collab ? [buildCollabExtension(collab.ydoc, collab.awareness)] : [];
 
     const state = EditorState.create({
