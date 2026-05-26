@@ -307,57 +307,31 @@ function modelOptionLabel(model: CatalogModel): string {
   return `${model.label} · ${model.family} · ${ctx}${model.verified === 'unverified' ? ' (no verificado)' : ''}`;
 }
 
-function AgentModelsSection({ uid }: { uid: string | null }) {
-  const [catalog, setCatalog] = useState<ModelCatalog>(getModelCatalogSync);
-  const [settings, setSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS);
-  const [loaded, setLoaded] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadModelCatalog().then((c) => { if (!cancelled) setCatalog(c); });
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (!uid) { setLoaded(true); return; }
-    let cancelled = false;
-    setLoaded(false);
-    loadAgentSettings(uid)
-      .then((s) => { if (!cancelled) { setSettings(s); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
-      .finally(() => { if (!cancelled) setLoaded(true); });
-    return () => { cancelled = true; };
-  }, [uid]);
-
+function AgentModelsSection({
+  uid,
+  catalog,
+  settings,
+  loaded,
+  savedAt,
+  error,
+  persist
+}: {
+  uid: string | null;
+  catalog: ModelCatalog;
+  settings: AgentSettings;
+  loaded: boolean;
+  savedAt: number | null;
+  error: string | null;
+  persist: (partial: Partial<AgentSettings>) => void;
+}) {
   const allModels = useMemo(
     () => [...catalog.models].sort((a, b) => a.family.localeCompare(b.family) || a.label.localeCompare(b.label)),
     [catalog]
   );
   const fastModels = useMemo(() => allModels.filter(isFastCheapModel), [allModels]);
 
-  const persist = (partial: Partial<AgentSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...partial };
-      if (uid) {
-        setSavedAt(null);
-        saveAgentSettings(uid, next)
-          .then(() => setSavedAt(Date.now()))
-          .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-      }
-      return next;
-    });
-  };
-
   // Si el modelo guardado no está en el catálogo (modelo manual / antiguo) lo
   // mantenemos como opción adicional para no perder la selección del user.
-  const mainOptions = useMemo(() => {
-    if (settings.mainModel && !allModels.some((m) => m.id === settings.mainModel)) {
-      return [{ id: settings.mainModel, label: `${settings.mainModel} (manual)`, family: 'deepseek' as const, contextWindow: 0, maxOutputTokens: 0, verified: 'unverified' as const }, ...allModels];
-    }
-    return allModels;
-  }, [allModels, settings.mainModel]);
   const auxOptions = useMemo(() => {
     if (settings.auxModel && !fastModels.some((m) => m.id === settings.auxModel)) {
       const fromAll = allModels.find((m) => m.id === settings.auxModel);
@@ -370,37 +344,23 @@ function AgentModelsSection({ uid }: { uid: string | null }) {
   return (
     <div className="border-t border-surface-700/40 pt-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="text-xs font-semibold text-surface-200">Modelos y autonomía del agente</h4>
+        <h4 className="text-xs font-semibold text-surface-200">Autonomía del agente</h4>
         {uid && savedAt && <span className="text-[10px] text-emerald-400">Guardado</span>}
       </div>
       <SectionHelper>
-        Estos ajustes se sincronizan con tu cuenta y los usa el backend del agente para enrutar las llamadas.
-        El modelo principal responde al usuario; el auxiliar hace clasificación barata en segundo plano.
+        El modelo principal se elige arriba (campo «Modelo principal»). Aquí va el modelo auxiliar
+        —barato/rápido para la clasificación en segundo plano— y el modo autónomo. Todo se sincroniza
+        con tu cuenta y lo usa el backend del agente.
       </SectionHelper>
 
       {!uid && (
-        <p className="mt-2 text-[11px] text-amber-300">Inicia sesión para configurar los modelos del agente.</p>
+        <p className="mt-2 text-[11px] text-amber-300">Inicia sesión para configurar el agente.</p>
       )}
       {error && (
         <p className="mt-2 text-[11px] text-red-400" role="alert">No se pudo sincronizar: {error}</p>
       )}
 
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block text-xs">
-          <span className="mb-1 block text-surface-400">Modelo principal</span>
-          <select
-            value={settings.mainModel}
-            disabled={!uid || !loaded}
-            onChange={(e) => persist({ mainModel: e.target.value })}
-            className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
-          >
-            <option value="" className="bg-surface-900 text-surface-100">— Default del backend —</option>
-            {mainOptions.map((m) => (
-              <option key={m.id} value={m.id} className="bg-surface-900 text-surface-100">{modelOptionLabel(m)}</option>
-            ))}
-          </select>
-        </label>
-
+      <div className="mt-3">
         <label className="block text-xs">
           <span className="mb-1 block text-surface-400">Modelo auxiliar (rápido / clasificación)</span>
           <select
@@ -437,6 +397,10 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(getModelCatalogSync);
   const [userInstructionsDraft, setUserInstructionsDraft] = useState<string>('');
   const [userInstructionsSavedAt, setUserInstructionsSavedAt] = useState<number | null>(null);
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS);
+  const [agentSettingsLoaded, setAgentSettingsLoaded] = useState(false);
+  const [agentSettingsSavedAt, setAgentSettingsSavedAt] = useState<number | null>(null);
+  const [agentSettingsError, setAgentSettingsError] = useState<string | null>(null);
   const meta = PROVIDER_META[config.provider];
   const providerModels = modelsForProvider(modelCatalog, config.provider);
   const workspaceForInstructions = activeWorkspaceId || 'personal';
@@ -452,12 +416,48 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
     setUserInstructionsSavedAt(null);
   }, [workspaceForInstructions]);
 
+  // Fuente de verdad del modelo del agente: `agentSettings.mainModel` en
+  // `users/{uid}` (lo que lee el backend). El selector de modelo de esta
+  // sección y el de "Modelos y autonomía" escriben aquí — no a estados locales
+  // separados — para que elegir en cualquier lado quede coherente.
+  useEffect(() => {
+    if (!uid) { setAgentSettingsLoaded(true); return; }
+    let cancelled = false;
+    setAgentSettingsLoaded(false);
+    loadAgentSettings(uid)
+      .then((s) => { if (!cancelled) { setAgentSettings(s); setAgentSettingsError(null); } })
+      .catch((e) => { if (!cancelled) setAgentSettingsError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (!cancelled) setAgentSettingsLoaded(true); });
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  const persistAgentSettings = useCallback((partial: Partial<AgentSettings>) => {
+    setAgentSettings((prev) => {
+      const next = { ...prev, ...partial };
+      if (uid) {
+        setAgentSettingsSavedAt(null);
+        saveAgentSettings(uid, next)
+          .then(() => setAgentSettingsSavedAt(Date.now()))
+          .catch((e) => setAgentSettingsError(e instanceof Error ? e.message : String(e)));
+      }
+      return next;
+    });
+  }, [uid]);
+
   const updateConfig = (partial: Partial<AIProviderConfig>) => {
     setConfig((prev) => {
       const next = { ...prev, ...partial };
       saveAIProviderConfig(next);
       return next;
     });
+  };
+
+  // El selector "Modelo" escribe la fuente de verdad (`agentSettings.mainModel`)
+  // y espeja el valor en `config.model` para que el fallback que el stream manda
+  // en el body coincida con lo que el backend ya resuelve desde agentSettings.
+  const updateMainModel = (modelId: string) => {
+    persistAgentSettings({ mainModel: modelId });
+    updateConfig({ model: modelId });
   };
 
   const updatePolicy = (nextPolicy: AgentAccessPolicy) => {
@@ -584,16 +584,20 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
         )}
 
         <label className="block text-xs">
-          <span className="mb-1 block text-surface-400">Modelo</span>
+          <span className="mb-1 flex items-center justify-between gap-2 text-surface-400">
+            <span>Modelo principal</span>
+            {uid && agentSettingsSavedAt && <span className="text-[10px] text-emerald-400">Guardado</span>}
+          </span>
           {providerModels.length > 0 ? (
             <>
               <select
-                value={providerModels.some((m) => m.id === config.model) ? config.model : '__custom__'}
+                value={providerModels.some((m) => m.id === agentSettings.mainModel) ? agentSettings.mainModel : '__custom__'}
+                disabled={!uid || !agentSettingsLoaded}
                 onChange={(e) => {
                   if (e.target.value === '__custom__') return;
-                  updateConfig({ model: e.target.value });
+                  updateMainModel(e.target.value);
                 }}
-                className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
+                className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
               >
                 {providerModels.map((m) => (
                   <option key={m.id} value={m.id} className="bg-surface-900 text-surface-100">
@@ -604,31 +608,45 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
               </select>
               <input
                 type="text"
-                value={config.model}
-                onChange={(e) => updateConfig({ model: e.target.value })}
+                value={agentSettings.mainModel}
+                disabled={!uid || !agentSettingsLoaded}
+                onChange={(e) => updateMainModel(e.target.value)}
                 placeholder={meta.modelPlaceholder}
-                className="mt-1 w-full rounded-md border border-surface-700/50 bg-surface-900 px-2 py-1 font-mono text-[11px] text-surface-200 placeholder:text-surface-500 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
+                className="mt-1 w-full rounded-md border border-surface-700/50 bg-surface-900 px-2 py-1 font-mono text-[11px] text-surface-200 placeholder:text-surface-500 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
               />
             </>
           ) : (
             <input
               type="text"
-              value={config.model}
-              onChange={(e) => updateConfig({ model: e.target.value })}
+              value={agentSettings.mainModel}
+              disabled={!uid || !agentSettingsLoaded}
+              onChange={(e) => updateMainModel(e.target.value)}
               placeholder={meta.modelPlaceholder}
-              className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
+              className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 placeholder:text-surface-400 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
             />
           )}
           <span className="mt-1 block text-[10px] text-surface-500">
-            Por defecto: {meta.defaultModel}
-            {modelCatalog.lastUpdated !== 'fallback' ? ` · catálogo ${modelCatalog.lastUpdated}` : ''}
+            {!uid
+              ? 'Inicia sesión para elegir el modelo del agente.'
+              : <>Vacío usa el default del backend ({meta.defaultModel}){modelCatalog.lastUpdated !== 'fallback' ? ` · catálogo ${modelCatalog.lastUpdated}` : ''}</>}
           </span>
+          {agentSettingsError && (
+            <span className="mt-1 block text-[10px] text-red-400" role="alert">No se pudo sincronizar: {agentSettingsError}</span>
+          )}
         </label>
       </div>
 
       <AgentApiKeysPanel />
 
-      <AgentModelsSection uid={uid} />
+      <AgentModelsSection
+        uid={uid}
+        catalog={modelCatalog}
+        settings={agentSettings}
+        loaded={agentSettingsLoaded}
+        savedAt={agentSettingsSavedAt}
+        error={agentSettingsError}
+        persist={persistAgentSettings}
+      />
 
       <div className="border-t border-surface-700/40 pt-4">
         <div className="mb-2 flex items-center justify-between gap-2">
