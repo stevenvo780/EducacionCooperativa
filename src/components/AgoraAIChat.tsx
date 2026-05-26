@@ -665,6 +665,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
   }, []);
   const hasKeyForProvider = !meta.needsKey || serverKeyProviders.has(config.provider as AgentKeyProvider);
   const canSend = !loading && hasKeyForProvider;
+  // El textarea NO se bloquea durante el streaming: el user debe poder
+  // escribir para ENCOLAR el siguiente mensaje. Sólo se deshabilita por
+  // indisponibilidad real (sin API key del provider). `canSend` sigue
+  // gateando la acción de envío directo vs encolar.
+  const inputDisabled = !hasKeyForProvider;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const activeRemoteChat: RemoteAgentChat | null = currentChatId
     ? (remoteHistory.chats.find((chat) => chat.id === currentChatId) ?? null)
@@ -2540,7 +2545,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             }}
             onKeyDown={handleKeyDown}
             placeholder={!hasKeyForProvider ? 'Configura tu API key en Ajustes…' : loading ? 'Escribe para encolar el siguiente mensaje…' : 'Pídele una acción al agente…'}
-            disabled={!canSend}
+            disabled={inputDisabled}
             rows={1}
             wrap="soft"
             className="scrollbar-agora flex-1 min-w-0 bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder:text-surface-400 focus:outline-none focus:border-sky-500 transition resize-none disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2553,7 +2558,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
           />
           {loading ? (
             <>
-              {input.trim() && canSend && (
+              {input.trim() && hasKeyForProvider && (
                 <button
                   onClick={() => void sendMessage()}
                   className="flex-shrink-0 p-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition"
