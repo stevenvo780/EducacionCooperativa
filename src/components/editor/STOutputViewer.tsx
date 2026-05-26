@@ -12,7 +12,8 @@ import type {
   ProofStep,
   Model,
   Valuation,
-  World
+  World,
+  TableauTraceEntry
 } from '@stevenvo780/st-lang/types';
 
 export type OutputViewMode = 'steps' | 'json' | 'graphic';
@@ -681,7 +682,47 @@ function CrossSystemComparisonView({ comparison }: { comparison?: Record<string,
   );
 }
 
-function TableauTraceView({ trace }: { trace?: unknown[] }) {
+const TABLEAU_RULE_LABELS: Record<NonNullable<TableauTraceEntry['rule']>, string> = {
+  start: 'inicio',
+  literal: 'literal',
+  close: '✗ cierra',
+  open: '✓ abierta',
+  alpha: 'α',
+  beta: 'β',
+  gamma: 'γ (□)',
+  delta: 'δ (◇)',
+  frame: 'marco',
+  limit: 'límite',
+  info: 'info'
+};
+
+function tableauStatusMark(status?: TableauTraceEntry['status']): string {
+  switch (status) {
+    case 'closed': return '✗';
+    case 'open': return '✓';
+    case 'limit': return '⚠';
+    default: return '';
+  }
+}
+
+function formatTableauStep(step: TableauTraceEntry | string): string {
+  if (typeof step === 'string') return step;
+  if (!step || typeof step !== 'object') return JSON.stringify(step);
+
+  const indent = step.depth && step.depth > 0 ? '  '.repeat(step.depth) : '';
+  const ruleLabel = step.rule ? TABLEAU_RULE_LABELS[step.rule] ?? step.rule : '';
+  const mark = tableauStatusMark(step.status);
+  const world = step.world ? `@${step.world}` : '';
+
+  const head = [mark, ruleLabel ? `[${ruleLabel}]` : '', world].filter(Boolean).join(' ');
+  const body = step.message
+    || step.formula
+    || (Object.keys(step).length > 0 ? JSON.stringify(step) : '');
+
+  return `${indent}${[head, body].filter(Boolean).join(' ')}`.trimEnd() || JSON.stringify(step);
+}
+
+function TableauTraceView({ trace }: { trace?: TableauTraceEntry[] }) {
   if (!trace || trace.length === 0) return null;
 
   return (
@@ -692,7 +733,7 @@ function TableauTraceView({ trace }: { trace?: unknown[] }) {
       <div className="mt-2 space-y-1">
         {trace.map((step, index) => (
           <div key={index} className="font-mono text-[11px] text-slate-400 whitespace-pre-wrap">
-            {index + 1}. {typeof step === 'string' ? step : String(step)}
+            {index + 1}. {formatTableauStep(step)}
           </div>
         ))}
       </div>
