@@ -454,7 +454,9 @@ function ChatMessageImpl({ msg, traceExpanded, confirmingId, copiedId, onConfirm
             {msg.agentRun.truncated ? (
               <div className="mt-2 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/15 rounded-md px-2 py-1.5 inline-flex items-center gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5" />
-                Respuesta truncada por presupuesto de tiempo. Pídela en pasos más pequeños.
+                {msg.agentRun.truncationReason === 'output'
+                  ? 'Respuesta cortada por el límite de tokens del modelo tras varias continuaciones. Pídela en partes.'
+                  : 'Respuesta truncada por presupuesto de tiempo. Pídela en pasos más pequeños.'}
               </div>
             ) : null}
 
