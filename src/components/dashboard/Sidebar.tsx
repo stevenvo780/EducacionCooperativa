@@ -78,7 +78,8 @@ const SidebarDocDragHandle = memo(function SidebarDocDragHandle({
       }}
       onClick={(e) => e.stopPropagation()}
       className={`touch-none p-1 rounded-md text-surface-500 hover:text-surface-100 hover:bg-surface-700/70 transition ${touchHandleVisibilityClass} cursor-grab active:cursor-grabbing`}
-      title="Arrastrar archivo"
+      title={`Arrastrar ${doc.name}`}
+      aria-label={`Arrastrar ${doc.name}`}
     >
       <GripVertical className="w-3 h-3" />
     </button>
