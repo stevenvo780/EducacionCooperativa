@@ -1,5 +1,6 @@
 'use client';
 
+import { useId } from 'react';
 import { Play, Loader2, RotateCcw } from 'lucide-react';
 
 interface EditorPanelProps {
@@ -23,6 +24,8 @@ export default function EditorPanel({
   onValidate,
   onReset
 }: EditorPanelProps) {
+  const profileId = useId();
+  const editorId = useId();
   return (
     <section className="flex h-full min-h-0 flex-col rounded-xl border border-surface-700/80 bg-surface-800/60 backdrop-blur">
       <header className="flex flex-wrap items-center gap-2 border-b border-surface-700/80 px-4 py-3">
@@ -31,11 +34,11 @@ export default function EditorPanel({
           {formula.length} chars
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <label className="text-[11px] text-surface-400" htmlFor="v3-profile">
+          <label className="text-[11px] text-surface-400" htmlFor={profileId}>
             Perfil
           </label>
           <select
-            id="v3-profile"
+            id={profileId}
             value={profile}
             onChange={(e) => onProfileChange(e.target.value)}
             className="rounded-md border border-surface-600 bg-surface-900/80 px-2 py-1 text-xs text-surface-100 focus:border-mandy-500 focus:outline-none"
@@ -51,6 +54,8 @@ export default function EditorPanel({
 
       <div className="flex-1 min-h-0 p-3">
         <textarea
+          id={editorId}
+          name="st-formula"
           value={formula}
           onChange={(e) => onFormulaChange(e.target.value)}
           spellCheck={false}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, type FormEvent } from 'react';
+import { useState, useRef, useEffect, useId, type FormEvent } from 'react';
 import { Bot, Send, Loader2, User, Sparkles } from 'lucide-react';
 import type { ChatMessage } from './types';
 
@@ -13,6 +13,7 @@ interface ChatPanelProps {
 
 export default function ChatPanel({ messages, streaming, authReady, onSend }: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const inputId = useId();
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -101,6 +102,8 @@ export default function ChatPanel({ messages, streaming, authReady, onSend }: Ch
         )}
         <div className="flex gap-2">
           <textarea
+            id={inputId}
+            name="copilot-prompt"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Formaliza esto…"
