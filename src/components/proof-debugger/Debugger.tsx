@@ -103,6 +103,11 @@ export default function Debugger() {
   if (!current) return <div style={S.empty}>Sin pasos para mostrar.</div>;
 
   const badge = sourceBadge(current.source);
+  const assignments = current.assignments;
+  const hasAssignments = !!assignments && Object.keys(assignments).length > 0;
+  const exampleHasAnyAssignment = snapshots.some(
+    s => !!s.assignments && Object.keys(s.assignments).length > 0
+  );
 
   return (
     <div style={S.root}>
@@ -266,7 +271,7 @@ export default function Debugger() {
         {/* RIGHT — assignments */}
         <aside style={S.right}>
           <div style={S.panelHeader}>Asignaciones</div>
-          {current.assignments && Object.keys(current.assignments).length > 0 ? (
+          {hasAssignments && assignments ? (
             <table style={S.assignTable}>
               <thead>
                 <tr>
@@ -275,7 +280,7 @@ export default function Debugger() {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(current.assignments).map(([k, v]) => (
+                {Object.entries(assignments).map(([k, v]) => (
                   <tr key={k}>
                     <td style={S.td}><code style={S.code}>{k}</code></td>
                     <td style={S.td}>
@@ -288,7 +293,11 @@ export default function Debugger() {
               </tbody>
             </table>
           ) : (
-            <p style={S.emptyPanel}>Sin asignaciones en este paso.</p>
+            <p style={S.emptyPanel}>
+              {exampleHasAnyAssignment
+                ? 'Sin asignaciones en este paso.'
+                : 'Esta derivación no asigna valores de verdad a las variables. Las asignaciones aparecen en pruebas semánticas (p. ej. contramodelos).'}
+            </p>
           )}
 
           {currentExample && (
