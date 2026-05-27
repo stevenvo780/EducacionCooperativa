@@ -27,6 +27,14 @@ function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!email.trim()) {
+      setError('Ingresá tu correo electrónico.');
+      return;
+    }
+    if (!password) {
+      setError('Ingresá tu contraseña.');
+      return;
+    }
     if (!isLogin) {
       const policy = validatePasswordPolicy(password);
       if (!policy.ok) {
@@ -65,6 +73,10 @@ function LoginPage() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError(null);
+    if (!resetEmail.trim()) {
+      setResetError('Ingresá tu correo electrónico.');
+      return;
+    }
     setResetLoading(true);
     try {
       await resetPassword(resetEmail);
@@ -121,14 +133,13 @@ function LoginPage() {
                     </p>
                   </div>
 
-                  <form onSubmit={handleResetPassword} className="space-y-4">
+                  <form onSubmit={handleResetPassword} noValidate className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Correo Electrónico</label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-500" />
                         <input
                           type="email"
-                          required
                           autoComplete="email"
                           inputMode="email"
                           autoCapitalize="off"
@@ -238,14 +249,13 @@ function LoginPage() {
                     </div>
                 </div>
 
-                <form id="auth-form" onSubmit={handleSubmit} className="space-y-4">
+                <form id="auth-form" onSubmit={handleSubmit} noValidate className="space-y-4">
                     <div className="space-y-2">
                         <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Correo Electrónico</label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-500" />
                             <input
                                 type="email"
-                                required
                                 autoComplete="email"
                                 inputMode="email"
                                 autoCapitalize="off"
@@ -265,7 +275,6 @@ function LoginPage() {
                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-500" />
                             <input
                                 type="password"
-                                required
                                 autoComplete={isLogin ? 'current-password' : 'new-password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
