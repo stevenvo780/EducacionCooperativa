@@ -19,6 +19,8 @@ import { PERSONAL_WORKSPACE_ID, WorkspaceType } from '@/types/workspace';
 
 const ROOT_FOLDER_PATH = '';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 interface UseWorkspaceActionsOptions {
     user: User | null;
     currentWorkspace: Workspace | null;
@@ -317,6 +319,22 @@ export function useWorkspaceActions({
         if (!inviteEmail || !currentWorkspace || currentWorkspace.type === WorkspaceType.Personal) return;
         const emailToInvite = inviteEmail.trim();
         if (!emailToInvite) return;
+        if (!EMAIL_PATTERN.test(emailToInvite)) {
+            await showDialog({
+                type: DialogKind.Error,
+                title: 'Email inválido',
+                message: `"${emailToInvite}" no es una dirección de correo válida.`
+            });
+            return;
+        }
+        if (user?.email && emailToInvite.toLowerCase() === user.email.toLowerCase()) {
+            await showDialog({
+                type: DialogKind.Error,
+                title: 'No puedes invitarte a ti mismo',
+                message: 'Ya eres el propietario de este espacio de trabajo.'
+            });
+            return;
+        }
         try {
             await inviteMemberApi({ workspaceId: currentWorkspace.id, email: emailToInvite, role: inviteRole });
             setInviteEmail('');
