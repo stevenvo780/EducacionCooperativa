@@ -42,7 +42,8 @@ import {
   buildWorkspaceAwarePathCandidates, extractWorkspaceSegments, generateId,
   hasKatexContent,
   hasTableContent, hasImageContent, hasCodeBlockContent,
-  hasDirectiveContent, hasFrontmatterContent
+  hasDirectiveContent, hasFrontmatterContent,
+  unescapeLatex
 } from '@/components/mosaic-editor/utils';
 import { useDeferredMount } from '@/hooks/useDeferredMount';
 import { useEditorSearch } from '@/components/mosaic-editor/useEditorSearch';
@@ -1881,9 +1882,15 @@ export default function MosaicEditor({
     handleContentChange(newMd);
   }, [handleContentChange]);
 
-  const handleMdxChange = useCallback((md: string) => {
+  const handleMdxChange = useCallback((rawMd: string) => {
     // Skip if this is MDXEditor's initial markdown normalization
     if (isNormalizingRef.current) return;
+    // MDXEditor serializa vía mdast-util-to-markdown, que escapa `=` (y otros
+    // delimitadores) cuando aparecen al inicio de un run de texto — corrompiendo
+    // fórmulas inline tipo `$E=mc^2$` → `$E\=mc^2$` en el markdown guardado.
+    // El preview ya las des-escapa al render; hacemos lo mismo al guardar para
+    // que el source no quede corrupto.
+    const md = unescapeLatex(rawMd);
     handleContentChange(md);
     // Empuja el cambio local al Y.Text compartido (si hay colab activo y el
     // cambio no proviene de aplicar un update remoto, para no rebotar).
