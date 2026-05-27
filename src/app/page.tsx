@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -8,8 +9,8 @@ import { ELENXOS_BRAND, PRODUCT_BRAND } from '@/lib/branding';
 import {
   ArrowRight, BookOpen, Brain, Check, ChevronDown, Cloud,
   Code2, Edit3, ExternalLink, FileText, FlaskConical, FolderOpen, GraduationCap,
-  HardDrive, Kanban, Layers, Lock, MonitorSmartphone, Network,
-  Pencil, Scale, Shield, Sparkles, Terminal, Users, Zap
+  HardDrive, Kanban, Layers, Lock, Menu, MonitorSmartphone, Network,
+  Pencil, Scale, Shield, Sparkles, Terminal, Users, X, Zap
 } from 'lucide-react';
 
 const STRunner = dynamic(() => import('@/components/STRunner'), { ssr: false, loading: () => <div className="h-[420px] bg-surface-800/60 rounded-xl animate-pulse" /> });
@@ -75,6 +76,7 @@ graph LR
 function LandingPage() {
   const { user, loading } = useAuth();
   const reduceMotion = useReducedMotion();
+  const [menuOpen, setMenuOpen] = useState(false);
   const fast: Transition = { duration: reduceMotion ? 0.01 : 0.3, ease: 'easeOut' };
   const stagger = (i: number): Transition => ({
     delay: reduceMotion ? 0 : i * 0.08,
@@ -242,7 +244,7 @@ function LandingPage() {
             <BookOpen className="w-6 h-6 text-mandy-500" />
             <span className="text-gradient-mandy">Agora</span>
           </div>
-          <nav className="hidden md:flex items-center gap-6 text-sm text-surface-400">
+          <nav aria-label="Navegación principal" className="hidden md:flex items-center gap-6 text-sm text-surface-400">
             <a href="#vision" className="hover:text-mandy-400 transition">Visión</a>
             <a href="#pillars" className="hover:text-mandy-400 transition">Plataforma</a>
             <a href="#st" className="hover:text-mandy-400 transition">Lenguaje ST</a>
@@ -254,25 +256,58 @@ function LandingPage() {
               Elenxos
             </a>
           </nav>
-          <nav className="flex items-center gap-4">
-            {loading ? (
-              <span className="text-sm text-surface-400">Cargando…</span>
-            ) : user ? (
-              <Link href="/dashboard" className="text-sm font-medium bg-mandy-500 text-white px-4 py-2 rounded-full hover:bg-mandy-600 transition">
-                Dashboard
+          <div className="flex items-center gap-2">
+            <nav aria-label="Cuenta" className="flex items-center gap-4">
+              {loading ? (
+                <span className="text-sm text-surface-400">Cargando…</span>
+              ) : user ? (
+                <Link href="/dashboard" className="text-sm font-medium bg-mandy-500 text-white px-4 py-2 rounded-full hover:bg-mandy-600 transition">
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login" className="text-sm font-medium text-surface-300 hover:text-mandy-400 transition hidden sm:inline">
+                    Iniciar Sesión
+                  </Link>
+                  <Link href="/login" className="text-sm font-medium bg-gradient-mandy text-white px-4 py-2 rounded-full hover:opacity-90 transition">
+                    Empezar gratis
+                  </Link>
+                </>
+              )}
+            </nav>
+            <button
+              type="button"
+              aria-label="Abrir menú"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
+              onClick={() => setMenuOpen(o => !o)}
+              className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg text-surface-300 hover:text-white hover:bg-surface-700/60 transition"
+            >
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+        {menuOpen && (
+          <nav
+            id="mobile-nav"
+            aria-label="Menú móvil"
+            className="md:hidden border-t border-surface-700/50 bg-surface-900/95 px-4 py-4 flex flex-col gap-1"
+          >
+            <a href="#vision" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Visión</a>
+            <a href="#pillars" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Plataforma</a>
+            <a href="#st" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Lenguaje ST</a>
+            <a href="#formalizer" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Formalizador</a>
+            <a href="#pricing" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Planes</a>
+            <Link href="/docs" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Docs</Link>
+            <Link href="/docs/st" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Docs ST</Link>
+            <a href={ELENXOS_BRAND.homeUrl} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)} className="text-sm text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60">Elenxos</a>
+            {!loading && !user && (
+              <Link href="/login" onClick={() => setMenuOpen(false)} className="text-sm font-medium text-surface-300 hover:text-mandy-400 transition py-2 px-3 rounded-lg hover:bg-surface-800/60 sm:hidden">
+                Iniciar Sesión
               </Link>
-            ) : (
-              <>
-                <Link href="/login" className="text-sm font-medium text-surface-300 hover:text-mandy-400 transition hidden sm:inline">
-                  Iniciar Sesión
-                </Link>
-                <Link href="/login" className="text-sm font-medium bg-gradient-mandy text-white px-4 py-2 rounded-full hover:opacity-90 transition">
-                  Empezar gratis
-                </Link>
-              </>
             )}
           </nav>
-        </div>
+        )}
       </header>
 
       <main className="flex-1">
