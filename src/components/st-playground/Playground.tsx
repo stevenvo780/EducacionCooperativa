@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import {
   AlertTriangle,
@@ -20,6 +20,7 @@ import {
   type StPlaygroundEvalResult
 } from '@/lib/st-eval';
 import { ST_PLAYGROUND_EXAMPLES, type StPlaygroundExample } from './examples';
+import type { CodeAreaHandle } from './CodeArea';
 
 const CodeArea = dynamic(() => import('./CodeArea'), {
   ssr: false,
@@ -76,6 +77,7 @@ export default function Playground() {
   const [tab, setTab] = useState<Tab>('result');
   const [isPending, startTransition] = useTransition();
   const [hasMounted, setHasMounted] = useState(false);
+  const editorRef = useRef<CodeAreaHandle | null>(null);
 
   useEffect(() => {
     setHasMounted(true);
@@ -96,6 +98,7 @@ export default function Playground() {
 
   const handleReset = useCallback(() => {
     setSource(DEFAULT_SOURCE);
+    editorRef.current?.setValue(DEFAULT_SOURCE);
     setProfile(DEFAULT_PROFILE);
     setAutoProfile(true);
     setResult(null);
@@ -104,6 +107,7 @@ export default function Playground() {
 
   const handleLoadExample = useCallback((ex: StPlaygroundExample) => {
     setSource(ex.source);
+    editorRef.current?.setValue(ex.source);
     setProfile(ex.profile);
     setAutoProfile(true);
     setResult(null);
@@ -205,7 +209,12 @@ export default function Playground() {
           </div>
           <div className="flex-1 min-h-[55vh]">
             {hasMounted ? (
-              <CodeArea value={source} onChange={setSource} ariaLabel="Editor de código ST" />
+              <CodeArea
+                value={source}
+                onChange={setSource}
+                ariaLabel="Editor de código ST"
+                editorRef={editorRef}
+              />
             ) : (
               <textarea
                 aria-label="Editor de código ST (fallback)"

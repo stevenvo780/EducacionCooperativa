@@ -37,6 +37,8 @@ import {
 import { ST_PLAYGROUND_V2_EXAMPLES, type StV2Example } from './examples';
 import ProofTreeView from './ProofTreeView';
 
+import type { LspEditorHandle } from './LspEditor';
+
 const LspEditor = dynamic(() => import('./LspEditor'), {
   ssr: false,
   loading: () => (
@@ -74,11 +76,7 @@ export default function STPlaygroundV2() {
   const [sideTab, setSideTab] = useState<SideTab>('diagnostics');
   const [bottomTab, setBottomTab] = useState<BottomTab>('console');
   const [hasMounted, setHasMounted] = useState(false);
-  const editorRef = useRef<{
-    focus: () => void;
-    goto: (line: number, character: number) => void;
-    triggerCompletion: () => void;
-  } | null>(null);
+  const editorRef = useRef<LspEditorHandle | null>(null);
 
   useEffect(() => {
     setHasMounted(true);
@@ -123,6 +121,7 @@ export default function STPlaygroundV2() {
   const handleReset = useCallback(() => {
     setSource(DEFAULT_SOURCE);
     setVersion((v) => v + 1);
+    editorRef.current?.setValue(DEFAULT_SOURCE);
     setResult(null);
     setBottomTab('console');
   }, []);
@@ -130,6 +129,7 @@ export default function STPlaygroundV2() {
   const handleLoadExample = useCallback((ex: StV2Example) => {
     setSource(ex.source);
     setVersion((v) => v + 1);
+    editorRef.current?.setValue(ex.source);
     setResult(null);
     setBottomTab('console');
   }, []);
