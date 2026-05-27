@@ -34,6 +34,7 @@ export interface LspEditorHandle {
   focus: () => void;
   goto: (line: number, character: number) => void;
   triggerCompletion: () => void;
+  setValue: (next: string) => void;
 }
 
 interface LspEditorProps {
@@ -329,6 +330,15 @@ const LspEditor = forwardRef<LspEditorHandle, LspEditorProps>(function LspEditor
         if (!view) return;
         startCompletion(view);
         view.focus();
+      },
+      setValue: (next: string) => {
+        const view = cmRef.current?.view;
+        if (!view) return;
+        const current = view.state.doc.toString();
+        if (current === next) return;
+        view.dispatch({
+          changes: { from: 0, to: current.length, insert: next }
+        });
       }
     }),
     []

@@ -1,13 +1,23 @@
 'use client';
 
-import { useCallback } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type MutableRefObject
+} from 'react';
+import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
+
+export interface CodeAreaHandle {
+  setValue: (next: string) => void;
+}
 
 interface CodeAreaProps {
   value: string;
   onChange: (next: string) => void;
   ariaLabel?: string;
+  editorRef?: MutableRefObject<CodeAreaHandle | null>;
 }
 
 const baseTheme = EditorView.theme(
@@ -44,7 +54,14 @@ const baseTheme = EditorView.theme(
   { dark: true },
 );
 
-export default function CodeArea({ value, onChange, ariaLabel }: CodeAreaProps) {
+export default function CodeArea({
+  value,
+  onChange,
+  ariaLabel,
+  editorRef
+}: CodeAreaProps) {
+  const cmRef = useRef<ReactCodeMirrorRef | null>(null);
+
   const handleChange = useCallback(
     (next: string) => {
       onChange(next);
@@ -52,9 +69,28 @@ export default function CodeArea({ value, onChange, ariaLabel }: CodeAreaProps) 
     [onChange],
   );
 
+  useEffect(() => {
+    if (!editorRef) return;
+    editorRef.current = {
+      setValue: (next: string) => {
+        const view = cmRef.current?.view;
+        if (!view) return;
+        const current = view.state.doc.toString();
+        if (current === next) return;
+        view.dispatch({
+          changes: { from: 0, to: current.length, insert: next }
+        });
+      }
+    };
+    return () => {
+      editorRef.current = null;
+    };
+  }, [editorRef]);
+
   return (
     <div className="h-full w-full min-w-0 overflow-hidden" aria-label={ariaLabel}>
       <CodeMirror
+        ref={cmRef}
         value={value}
         onChange={handleChange}
         theme="dark"
