@@ -10,6 +10,8 @@ import { Mail, Lock, AlertCircle, Chrome, ArrowLeft, Check, ExternalLink, Loader
 import Link from 'next/link';
 import { ELENXOS_BRAND } from '@/lib/branding';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function LoginPage() {
   const { signInWithGoogle, loginWithEmail, registerWithEmail, resetPassword } = useAuth();
   const reduceMotion = useReducedMotion();
@@ -29,6 +31,10 @@ function LoginPage() {
     setError(null);
     if (!email.trim()) {
       setError('Ingresá tu correo electrónico.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setError('Ingresá un correo electrónico válido.');
       return;
     }
     if (!password) {
@@ -75,6 +81,10 @@ function LoginPage() {
     setResetError(null);
     if (!resetEmail.trim()) {
       setResetError('Ingresá tu correo electrónico.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(resetEmail.trim())) {
+      setResetError('Ingresá un correo electrónico válido.');
       return;
     }
     setResetLoading(true);
