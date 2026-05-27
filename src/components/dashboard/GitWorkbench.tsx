@@ -178,6 +178,28 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
 
     useEffect(() => { void refreshAll(); }, [refreshAll]);
 
+    // Tras un commit, la lista de commits de Forgejo puede tardar un instante en
+    // reflejar el nuevo SHA. Recargamos status + historial y, si el commit
+    // recién creado aún no aparece, reintentamos unas pocas veces con backoff
+    // corto para que el panel Historial no quede mostrando datos viejos.
+    const refreshAfterCommit = useCallback(async (newSha?: string) => {
+        if (!user || !workspaceId) return;
+        const MAX_ATTEMPTS = 5;
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            const [it, log, graph] = await Promise.all([loadStatus(), loadLog(), loadGraph()]);
+            setItems(it);
+            setCommits(log);
+            setGraphCommits(graph);
+            const list = graph.length > 0 ? graph : log;
+            setSelectedSha(newSha && list.some((c) => c.sha === newSha)
+                ? newSha
+                : (list[0]?.sha ?? null));
+            const indexed = !newSha || list.some((c) => c.sha === newSha);
+            if (indexed || attempt === MAX_ATTEMPTS - 1) return;
+            await new Promise((res) => setTimeout(res, 600));
+        }
+    }, [user, workspaceId, loadStatus, loadLog, loadGraph]);
+
     // Limpia `staged` Set cuando `items` cambia: si un docId staged ya no
     // aparece en items (ej. cambió a 'clean' tras un commit externo, o el doc
     // se borró), lo eliminamos del Set para no enviarlo al commit.
@@ -300,6 +322,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
 
             const persistEntries: Array<{ docId: string; repoPath: string; contentHash: string; lastSha?: string; size: number; commitSha?: string; message: string }> = [];
             const errors: Array<{ path: string; status: number; raw: string }> = [];
+            let lastCommitSha: string | undefined;
 
             for (let ci = 0; ci < chunks.length; ci++) {
                 const chunk = chunks[ci]!;
@@ -334,75 +357,90 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
 
                 setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: subiendo a Forgejo (${files.length} archivos)…` });
 
-                // POST por archivo individual a /contents/<path>. Permite que
-                // 1 colisión no aborte 39 commits exitosos. Auto-retry como
-                // update si Forgejo dice "already exists".
-                const successfulBlobs: typeof blobs = [];
-                let commitSha: string | undefined;
-                for (let fi = 0; fi < files.length; fi++) {
-                    const f = files[fi]!;
-                    const blob = blobs.filter((x): x is NonNullable<typeof x> => x !== null).find(b => b.p.repoPath === f.path);
-                    if (!blob) continue;
-                    setProgress({ phase: 'commit', current: ci, total: chunks.length, label: `Parte ${ci + 1}/${chunks.length}: archivo ${fi + 1}/${files.length}…` });
+                const okBlobs = blobs.filter((x): x is NonNullable<typeof x> => x !== null);
 
-                    const singleBody: Record<string, unknown> = {
+                // "Change Files" API: POST /contents con todos los archivos en
+                // UN body → Forgejo los escribe en un solo commit atómico. Antes
+                // se hacía un POST/PUT por archivo, y cada uno generaba su propio
+                // SHA (N archivos = N commits con el mismo mensaje).
+                const batchBody = {
+                    files: files.map(f => ({
+                        path: f.path,
+                        operation: f.operation,
                         content: f.content,
-                        branch: 'main',
-                        message: partMessage
-                    };
-                    if (f.sha) singleBody.sha = f.sha;
+                        ...(f.sha ? { sha: f.sha } : {})
+                    })),
+                    branch: 'main',
+                    message: partMessage
+                };
 
-                    const url = `${repoApiBase}/contents/${encodeURI(f.path)}`;
-                    let fr2 = await fetch(url, {
-                        method: f.operation === 'update' ? 'PUT' : 'POST',
-                        headers: { 'Authorization': `token ${forgejoToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify(singleBody)
-                    });
+                const batchUrl = `${repoApiBase}/contents`;
+                let batchRes = await fetch(batchUrl, {
+                    method: 'POST',
+                    headers: { 'Authorization': `token ${forgejoToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(batchBody)
+                });
 
-                    // Si "already exists" en create → resolver sha y reintentar como update.
-                    if (fr2.status === 422 && f.operation === 'create') {
-                        try {
-                            const meta = await fetch(`${url}?ref=main`, { headers: { 'Authorization': `token ${forgejoToken}` } });
-                            if (meta.ok) {
-                                const m = parseForgejoFileMeta(await meta.json());
-                                if (m.sha) {
-                                    fr2 = await fetch(url, {
-                                        method: 'PUT',
-                                        headers: { 'Authorization': `token ${forgejoToken}`, 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ ...singleBody, sha: m.sha })
-                                    });
-                                }
-                            }
-                        } catch { /* deja el 422 original */ }
+                // Colisión create/update: si algún `create` choca con un archivo
+                // ya existente, resolvemos su sha y reintentamos el batch entero
+                // como update para esos paths (sigue siendo 1 commit).
+                if (batchRes.status === 422) {
+                    const resolved = await Promise.all(files.map(async f => {
+                        if (f.sha) return f;
+                        const metaRes = await fetch(`${repoApiBase}/contents/${encodeURI(f.path)}?ref=main`, {
+                            headers: { 'Authorization': `token ${forgejoToken}` }
+                        }).catch(() => null);
+                        if (!metaRes || !metaRes.ok) return f;
+                        const m = parseForgejoFileMeta(await metaRes.json());
+                        return m.sha ? { ...f, operation: 'update' as const, sha: m.sha } : f;
+                    }));
+                    const retried = resolved.some((f, i) => f.sha && !files[i]!.sha);
+                    if (retried) {
+                        batchRes = await fetch(batchUrl, {
+                            method: 'POST',
+                            headers: { 'Authorization': `token ${forgejoToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                files: resolved.map(f => ({
+                                    path: f.path,
+                                    operation: f.operation,
+                                    content: f.content,
+                                    ...(f.sha ? { sha: f.sha } : {})
+                                })),
+                                branch: 'main',
+                                message: partMessage
+                            })
+                        });
                     }
-
-                    if (fr2.status === 401) {
-                        localStorage.removeItem(TOKEN_KEY);
-                        throw new Error('Token Forgejo inválido. Reintenta — se emitirá uno nuevo.');
-                    }
-
-                    if (!fr2.ok) {
-                        const txt = await fr2.text();
-                        console.warn('[git/commit] fail', f.path, 'status=', fr2.status, 'raw:', txt.slice(0, 300));
-                        errors.push({ path: f.path, status: fr2.status, raw: txt.slice(0, 200) });
-                        continue;
-                    }
-
-                    const result = parseForgejoCommitResult(await fr2.json());
-                    if (result.commit?.sha) commitSha = result.commit.sha;
-                    successfulBlobs.push(blob);
                 }
 
-                for (const b of successfulBlobs) {
-                    if (!b) continue;
-                    persistEntries.push({
-                        docId: b.p.docId,
-                        repoPath: b.p.repoPath,
-                        contentHash: b.contentHash,
-                        size: b.size,
-                        commitSha,
-                        message: partMessage
-                    });
+                if (batchRes.status === 401) {
+                    localStorage.removeItem(TOKEN_KEY);
+                    throw new Error('Token Forgejo inválido. Reintenta — se emitirá uno nuevo.');
+                }
+
+                let commitSha: string | undefined;
+                if (!batchRes.ok) {
+                    const txt = await batchRes.text();
+                    console.warn('[git/commit] batch fail status=', batchRes.status, 'raw:', txt.slice(0, 300));
+                    // All-or-nothing: si el batch falla, ningún archivo del chunk
+                    // quedó committeado. Marcamos todos como error.
+                    for (const f of files) {
+                        errors.push({ path: f.path, status: batchRes.status, raw: txt.slice(0, 200) });
+                    }
+                } else {
+                    const result = parseForgejoCommitResult(await batchRes.json());
+                    commitSha = result.commit?.sha;
+                    if (commitSha) lastCommitSha = commitSha;
+                    for (const b of okBlobs) {
+                        persistEntries.push({
+                            docId: b.p.docId,
+                            repoPath: b.p.repoPath,
+                            contentHash: b.contentHash,
+                            size: b.size,
+                            commitSha,
+                            message: partMessage
+                        });
+                    }
                 }
 
                 // Persist parcial cada chunk para no perder progreso si algo falla luego.
@@ -425,7 +463,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             setToast(`Commit terminado: ${okCount}/${stagedItems.length} archivos${errors.length > 0 ? ` (${errors.length} fallaron)` : ''}.${errsDetail}`);
             setMessage('');
             setStaged(new Set());
-            await refreshAll();
+            await refreshAfterCommit(lastCommitSha);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             setError(msg);
@@ -434,7 +472,7 @@ export default function GitWorkbench({ workspaceId, workspaceName }: GitWorkbenc
             setBusy(false);
             setProgress(null);
         }
-    }, [workspaceId, staged, message, items, user, refreshAll]);
+    }, [workspaceId, staged, message, items, user, refreshAll, refreshAfterCommit]);
 
     const dirty = useMemo(() => items.filter(i => i.status !== 'clean'), [items]);
     const stagedItems = useMemo(() => dirty.filter(i => staged.has(i.docId)), [dirty, staged]);
