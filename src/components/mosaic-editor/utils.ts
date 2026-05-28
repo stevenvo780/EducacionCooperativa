@@ -11,7 +11,8 @@ const KATEX_PATTERNS: readonly RegExp[] = [
   /\$\$[\s\S]+?\$\$/,
   /(?<!\$)\$[^$\n]+?\$(?!\$)/,
   /\\\$\\\$[\s\S]+?\\\$\\\$/,
-  /```math\b/,
+  /```\s*math\b/,
+  /```\s*latex\b/,
   /\\begin\s*\{[a-zA-Z*]+\}/
 ];
 
