@@ -182,10 +182,16 @@ export default function WorkspacePathResolverPage() {
           }
 
           const workspaceData = parseWorkspaceListResponse(await workspaceRes.json());
-          workspacePool = [
+          const combinedPool: WorkspaceRecord[] = [
             ...(Array.isArray(workspaceData.workspaces) ? workspaceData.workspaces : []),
             ...(Array.isArray(workspaceData.invites) ? workspaceData.invites : [])
           ];
+          const seenPoolIds = new Set<string>();
+          workspacePool = combinedPool.filter((workspace) => {
+            if (seenPoolIds.has(workspace.id)) return false;
+            seenPoolIds.add(workspace.id);
+            return true;
+          });
 
           const matchedWorkspace = workspacePool.find((workspace) => {
             const workspaceName = typeof workspace.name === 'string' ? workspace.name : '';
