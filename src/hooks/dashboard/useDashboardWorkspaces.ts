@@ -115,8 +115,10 @@ export const useDashboardWorkspaces = ({
     }
 
     const allWorkspaces = [personalSpace, ...fetched.filter(ws => ws.id !== personalWorkspaceId)];
+    const workspaceIds = new Set(allWorkspaces.map(ws => ws.id));
+    const dedupedInvites = fetchedInvites.filter(invite => !workspaceIds.has(invite.id));
     setWorkspaces(allWorkspaces);
-    setInvites(fetchedInvites);
+    setInvites(dedupedInvites);
 
     const previousWorkspace = currentWorkspaceRef.current;
     const requestedId = requestedWorkspaceIdRef.current;

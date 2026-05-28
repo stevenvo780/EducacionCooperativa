@@ -1167,10 +1167,16 @@ export default function MosaicEditor({
         const wsRes = await authFetch('/api/workspaces', { cache: 'no-store' });
         if (wsRes.ok) {
           const wsData = parseWorkspacesForEditor(await wsRes.json());
-          const allWorkspaces = [
+          const combinedWorkspaces = [
             ...(Array.isArray(wsData.workspaces) ? wsData.workspaces : []),
             ...(Array.isArray(wsData.invites) ? wsData.invites : [])
           ];
+          const seenWsIds = new Set<string>();
+          const allWorkspaces = combinedWorkspaces.filter((ws) => {
+            if (seenWsIds.has(ws.id)) return false;
+            seenWsIds.add(ws.id);
+            return true;
+          });
           const normalizedTargetWsName = wsSegments.workspaceName.toLowerCase();
 
           const matchedWs = allWorkspaces.find((ws) => {
