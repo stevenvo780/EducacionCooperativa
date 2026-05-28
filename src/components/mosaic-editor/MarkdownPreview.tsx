@@ -80,6 +80,18 @@ class DiagramErrorBoundary extends React.Component<
 }
 
 /**
+ * Renombra fences `latex` → `math` para que `rehype-katex` las renderice
+ * como bloque display. Sin esto, los usuarios que escriben ```` ```latex ````
+ * verían el código fuente crudo (rehype-katex solo procesa `language-math`).
+ * No toca fences anidados ni indentados con tab/4+ espacios (code blocks).
+ */
+const normalizeMathFences = (md: string): string => {
+  if (!md) return md;
+  if (!/```\s*latex\b/i.test(md)) return md;
+  return md.replace(/(^|\n)([ \t]{0,3})```\s*latex\b/gi, '$1$2```math');
+};
+
+/**
  * Heuristic: detect whether a plain-text code block looks like an ASCII-art
  * diagram (box-drawing characters, arrows, alignment pipes, etc.)
  */
@@ -114,7 +126,7 @@ export const MarkdownPreview = React.memo(function MarkdownPreview({
   onOpenInternalLink?: (href: string) => Promise<boolean>;
 }) {
   const processed = useMemo(
-    () => convertWikiLinksToMarkdown(unescapeLatex(content)),
+    () => normalizeMathFences(convertWikiLinksToMarkdown(unescapeLatex(content))),
     [content]
   );
 
