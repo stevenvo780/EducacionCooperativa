@@ -256,7 +256,7 @@ export const useDashboardDocsSync = ({
     // docs cuelga el frame. Subimos a 5min en touch (RTDB sigue siendo el
     // path principal de sync; este es solo fallback).
     const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
-    const pollMs = isTouch ? 300_000 : 60_000;
+    const pollMs = isTouch ? 300_000 : 300_000;
     const intervalId = setInterval(() => {
       if (document.hidden) return;
       const now = Date.now();

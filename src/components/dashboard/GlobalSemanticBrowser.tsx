@@ -132,7 +132,7 @@ export default function GlobalSemanticBrowser({
     // Tablets de 4GB con WS Lógica/Neuro: el polling de 30s + cascada de
     // memos+filtros+normalize cuelga la pestaña. Subimos a 3min en touch.
     const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
-    const intervalMs = isTouch ? 180_000 : 30_000;
+    const intervalMs = isTouch ? 180_000 : 180_000;
     const interval = setInterval(() => scheduleReload(), intervalMs);
     return () => clearInterval(interval);
   }, [workspaceId, isOnline, isPageVisible, scheduleReload]);

@@ -261,7 +261,7 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
       const allDocs: DocItem[] = [];
       let cursor: string | null = null;
       let safety = 0;
-      const PAGINATION_SAFETY_GUARD = 1000;
+      const PAGINATION_SAFETY_GUARD = 50;
       do {
         const url = cursor
           ? `/api/documents?${key}&cursor=${encodeURIComponent(cursor)}`
@@ -273,8 +273,7 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
         cursor = res.headers.get('X-Next-Cursor') || null;
         safety += 1;
         if (safety >= PAGINATION_SAFETY_GUARD) {
-          console.warn('[fetchDocsApi] Safety guard hit at', safety, 'pages,', allDocs.length, 'docs — server keeps returning cursors');
-          break;
+          throw new Error('pagination guard exceeded — possible backend regression');
         }
       } while (cursor);
 
