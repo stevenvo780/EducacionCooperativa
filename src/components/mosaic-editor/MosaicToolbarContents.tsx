@@ -186,7 +186,7 @@ export function MosaicToolbarContents({
       <ToolbarShortcutButton
         title="Bloque LaTeX"
         icon={<Braces className="h-4 w-4" />}
-        onClick={() => insertSnippet('\n$$\n\\int_{a}^{b} f(x) \\, dx = F(b) - F(a)\n$$\n')}
+        onClick={() => insertSnippet('\n$$\nE = mc^2\n$$\n')}
       />
       <ToolbarShortcutButton
         title="Galería de snippets"
