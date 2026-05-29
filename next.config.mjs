@@ -242,13 +242,21 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
 
+const isDevEnv = process.env.NODE_ENV !== 'production';
+// Dev-only: el stack local (back, hub, emuladores Firebase) corre en
+// localhost sobre http; sin estos orígenes el CSP de prod bloquea el login
+// y los listeners de Firestore/RTDB contra los emuladores.
+const DEV_CONNECT_ORIGINS = isDevEnv
+  ? ' http://localhost:8081 http://127.0.0.1:8081 http://localhost:3010 ws://localhost:3010 http://127.0.0.1:3010 http://localhost:9099 http://127.0.0.1:9099 http://localhost:8080 http://127.0.0.1:8080 http://localhost:9000 ws://localhost:9000 http://127.0.0.1:9000 http://localhost:9100 http://127.0.0.1:9100'
+  : '';
+
 const CSP_DIRECTIVES = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://www.gstatic.com https://cdnjs.cloudflare.com https://cdn.sheetjs.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com https://lh3.googleusercontent.com https://www.gravatar.com https://s3.elenxos.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://hub.elenxos.com wss://hub.elenxos.com https://s3.elenxos.com https://git.elenxos.com https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://api.deepseek.com https://api.openai.com https://api.anthropic.com https://cdnjs.cloudflare.com https://cdn.sheetjs.com https://raw.githubusercontent.com http://localhost:11434 http://127.0.0.1:11434",
+  "connect-src 'self' https://hub.elenxos.com wss://hub.elenxos.com https://s3.elenxos.com https://git.elenxos.com https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://api.deepseek.com https://api.openai.com https://api.anthropic.com https://cdnjs.cloudflare.com https://cdn.sheetjs.com https://raw.githubusercontent.com http://localhost:11434 http://127.0.0.1:11434" + DEV_CONNECT_ORIGINS,
   "frame-src 'self' https://accounts.google.com https://apis.google.com https://*.firebaseapp.com https://view.officeapps.live.com https://docs.google.com",
   "worker-src 'self' blob: https://cdnjs.cloudflare.com",
   "media-src 'self' blob: https://s3.elenxos.com",
@@ -256,7 +264,7 @@ const CSP_DIRECTIVES = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "upgrade-insecure-requests"
+  ...(isDevEnv ? [] : ["upgrade-insecure-requests"])
 ].join('; ');
 
 const SECURITY_HEADERS = [

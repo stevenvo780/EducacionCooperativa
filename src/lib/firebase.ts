@@ -1,12 +1,19 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
-import { initializeFirestore, getFirestore, Firestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
-import { getDatabase, Database } from 'firebase/database';
+import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence, connectAuthEmulator } from 'firebase/auth';
+import { initializeFirestore, getFirestore, Firestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from 'firebase/firestore';
+import { getDatabase, Database, connectDatabaseEmulator } from 'firebase/database';
 
 // Lectura literal: Next sólo inlinea process.env.NEXT_PUBLIC_* si el acceso
 // es por nombre exacto en el bundle del cliente. Cualquier indirección
 // (process.env[k]) deja la var como undefined en runtime del browser.
 const cleanEnv = (raw: string | undefined): string => (raw ?? '').replace(/\\n/g, '').trim();
+
+// Dev-only: con el stack local de emuladores Firebase el cliente debe apuntar
+// a ellos, no a producción. Se activa con NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true
+// (Next la inlinea en build). El host por defecto es localhost.
+const useEmulators = cleanEnv(process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS) === 'true';
+const emulatorHost = cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_HOST) || 'localhost';
+const emuConnected = { auth: false, db: false, rtdb: false };
 
 // Firebase Storage NO se usa en Agora — los blobs viven en MinIO (NAS).
 // Mantenemos sólo Auth + Firestore + RTDB de Firebase.
@@ -17,7 +24,11 @@ const firebaseConfig = {
   projectId,
   messagingSenderId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
   appId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
-  databaseURL: projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined
+  databaseURL: projectId
+    ? (useEmulators
+        ? `http://${emulatorHost}:9000/?ns=${projectId}-default-rtdb`
+        : `https://${projectId}-default-rtdb.firebaseio.com`)
+    : undefined
 };
 
 let app: FirebaseApp | null = null;
@@ -43,6 +54,10 @@ function getFirebaseAuth(): Auth {
   }
   if (!auth) {
     auth = getAuth(getFirebaseApp());
+    if (useEmulators && !emuConnected.auth) {
+      emuConnected.auth = true;
+      connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+    }
     setPersistence(auth, indexedDBLocalPersistence).catch(() => {
       setPersistence(auth!, browserLocalPersistence).catch(() => undefined);
     });
@@ -62,6 +77,10 @@ function getFirebaseDb(): Firestore {
     } catch {
       db = getFirestore(getFirebaseApp());
     }
+    if (useEmulators && !emuConnected.db) {
+      emuConnected.db = true;
+      connectFirestoreEmulator(db, emulatorHost, 8080);
+    }
   }
   return db;
 }
@@ -72,6 +91,10 @@ function getFirebaseRTDB(): Database {
   }
   if (!rtdb) {
     rtdb = getDatabase(getFirebaseApp());
+    if (useEmulators && !emuConnected.rtdb) {
+      emuConnected.rtdb = true;
+      connectDatabaseEmulator(rtdb, emulatorHost, 9000);
+    }
   }
   return rtdb;
 }
