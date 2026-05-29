@@ -75,6 +75,12 @@ import { fetchZod } from '@/lib/fetch-zod';
 import { documentListSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { fetchDocumentRawApi } from '@/services/dashboardApi';
+import {
+  cacheDocContent,
+  enqueueSync,
+  SyncOperation,
+  SyncQueueStatus
+} from '@/lib/offlineStorage';
 import { createBoardCardApi, fetchBoardApi } from '@/services/boardApi';
 import type { BoardCard } from '@/components/dashboard/types';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
@@ -705,14 +711,23 @@ export default function MosaicEditor({
       const isPlainTextNow = isPlainTextLike && !isMarkdown;
       if (!same || isPlainTextNow) {
         if (!isPlainTextNow && mdxEditorRef.current) {
-          // MDX rich: update sin remount.
+          // MDX rich: intentar update sin remount. Si setMarkdown falla
+          // (parser pesado en docs grandes, Lexical state inconsistente)
+          // cae al path de remount via editorKey para no dejar el editor
+          // en placeholder con statsContent ya poblado.
           contentRef.current = incoming;
           lastSyncedContentRef.current = incoming;
           pendingLocalChangeRef.current = false;
           setStatsContent(incoming);
-          mdxEditorRef.current.setMarkdown(incoming);
-          // Necesario: si editorKey causa remount (lazy-plugins bump), MDXEditor lee `markdown={initialMarkdown}` y quedaría vacío sin esto.
-          setInitialMarkdown(incoming);
+          try {
+            mdxEditorRef.current.setMarkdown(incoming);
+            // Necesario: si editorKey causa remount (lazy-plugins bump), MDXEditor lee `markdown={initialMarkdown}` y quedaría vacío sin esto.
+            setInitialMarkdown(incoming);
+          } catch (mdxErr) {
+            console.warn('[MosaicEditor] setMarkdown falló, forzando remount', mdxErr);
+            setInitialMarkdown(incoming);
+            setEditorKey(k => k + 1);
+          }
         } else {
           setEditorContent(incoming);
         }
@@ -1012,7 +1027,24 @@ export default function MosaicEditor({
           pendingLocalChangeRef.current = stillUnsaved;
           setSaving(stillUnsaved);
           if (saveError) {
-            console.warn('[autosave] continuing with local changes:', saveError.message);
+            // Persistimos el cambio local (a) en la cache de contenido (para que
+            // el re-pull al reconectar no pise la edición), (b) en la sync-queue
+            // para que useOfflineSync la replaye al volver online. Sin esto el
+            // catch silencioso causaba pérdida de datos en autosave offline.
+            try {
+              await cacheDocContent(roomId, val);
+              await enqueueSync({
+                operation: SyncOperation.Update,
+                docId: roomId,
+                payload: { docId: roomId, content: val, type: DocumentType.Text, lastUpdatedBy: user?.uid },
+                timestamp: Date.now(),
+                status: SyncQueueStatus.Pending,
+                retries: 0
+              });
+            } catch (queueErr) {
+              console.error('[autosave] failed to enqueue offline change', queueErr);
+            }
+            console.warn('[autosave] queued offline:', saveError.message);
           }
         }
       }
@@ -1885,6 +1917,10 @@ export default function MosaicEditor({
 
     const newMd = lines.join('\n');
     mdxEditorRef.current?.setMarkdown(newMd);
+    // Mantener initialMarkdown sincronizado por si el lazy-plugin remount
+    // dispara después (mismo motivo que applyDocData: MDXEditor lee
+    // markdown={initialMarkdown} sólo al mount).
+    setInitialMarkdown(newMd);
     handleContentChange(newMd);
   }, [handleContentChange]);
 

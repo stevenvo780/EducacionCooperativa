@@ -35,7 +35,7 @@ export const QUICK_INSERTS: QuickInsert[] = [
     id: 'latex-block',
     title: 'Bloque LaTeX',
     description: 'Inserta un bloque matemático multilínea.',
-    markdown: '$$\n\\int_{a}^{b} f(x) \\, dx = F(b) - F(a)\n$$\n'
+    markdown: '$$\nE = mc^2\n$$\n'
   },
   {
     id: 'mermaid',

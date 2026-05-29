@@ -257,7 +257,7 @@ const CSP_DIRECTIVES = [
   "img-src 'self' data: blob: https://*.googleusercontent.com https://lh3.googleusercontent.com https://www.gravatar.com https://s3.elenxos.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "connect-src 'self' https://hub.elenxos.com wss://hub.elenxos.com https://s3.elenxos.com https://git.elenxos.com https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://api.deepseek.com https://api.openai.com https://api.anthropic.com https://cdnjs.cloudflare.com https://cdn.sheetjs.com https://raw.githubusercontent.com http://localhost:11434 http://127.0.0.1:11434" + DEV_CONNECT_ORIGINS,
-  "frame-src 'self' https://accounts.google.com https://apis.google.com https://*.firebaseapp.com https://view.officeapps.live.com https://docs.google.com",
+  "frame-src 'self' https://accounts.google.com https://apis.google.com https://*.firebaseapp.com https://view.officeapps.live.com https://docs.google.com https://s3.elenxos.com",
   "worker-src 'self' blob: https://cdnjs.cloudflare.com",
   "media-src 'self' blob: https://s3.elenxos.com",
   "object-src 'none'",

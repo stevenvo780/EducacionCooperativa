@@ -187,7 +187,6 @@ const SortableCardInner = ({
     attributes,
     listeners,
     setNodeRef,
-    setActivatorNodeRef,
     transform,
     transition,
     isDragging
@@ -217,20 +216,19 @@ const SortableCardInner = ({
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-surface-700/70 border border-surface-600/40 rounded-lg p-2"
+      className="touch-none bg-surface-700/70 border border-surface-600/40 rounded-lg p-2 cursor-grab active:cursor-grabbing"
+      {...attributes}
+      {...listeners}
       {...getCardContextTriggerProps(card.id)}
     >
       <div className="flex items-start gap-2">
-        <button
-          ref={setActivatorNodeRef}
-          {...attributes}
-          {...listeners}
-          data-disable-context-menu-trigger="true"
-          className="touch-none mt-0.5 text-surface-500 hover:text-surface-300"
+        <span
+          aria-hidden="true"
+          className="mt-0.5 text-surface-500"
           title="Arrastrar tarjeta"
         >
           <GripVertical className="w-3 h-3" />
-        </button>
+        </span>
         <div className="flex-1 flex flex-col gap-1">
           {isEditing ? (
             <input
@@ -238,6 +236,7 @@ const SortableCardInner = ({
               aria-label={`Editar título: ${card.title}`}
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
+              onPointerDown={(e) => e.stopPropagation()}
               onBlur={() => {
                 if (editTitle.trim() && editTitle !== card.title) {
                   onUpdateCardTitle(card.id, editTitle.trim());
@@ -245,6 +244,7 @@ const SortableCardInner = ({
                 setIsEditing(false);
               }}
               onKeyDown={(e) => {
+                e.stopPropagation();
                 if (e.key === 'Enter') {
                   if (editTitle.trim() && editTitle !== card.title) {
                     onUpdateCardTitle(card.id, editTitle.trim());
@@ -257,11 +257,23 @@ const SortableCardInner = ({
               className="text-xs font-semibold text-surface-100 bg-surface-800 border border-surface-500 rounded px-1 py-0.5 outline-none focus:border-sky-500"
             />
           ) : (
-            <div className="text-xs font-semibold text-surface-100 break-words">{card.title}</div>
+            <div
+              className="text-xs font-semibold text-surface-100 break-words"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setEditTitle(card.title);
+                setIsEditing(true);
+              }}
+              title="Doble clic para editar"
+            >
+              {card.title}
+            </div>
           )}
           {card.sourceDocName && (
             <button
               onClick={handleOpenSource}
+              onPointerDown={(e) => e.stopPropagation()}
+              data-disable-context-menu-trigger="true"
               className="flex items-center gap-1 text-[10px] text-mandy-400 hover:text-mandy-300 transition text-left"
               title={`Origen: ${card.sourceDocName}`}
             >
@@ -274,6 +286,8 @@ const SortableCardInner = ({
       <div className="mt-2 flex items-center justify-end gap-2">
         <button
           onClick={() => onDeleteCard(card.id)}
+          onPointerDown={(e) => e.stopPropagation()}
+          data-disable-context-menu-trigger="true"
           className="text-surface-500 hover:text-mandy-400"
           title="Eliminar tarjeta"
         >
