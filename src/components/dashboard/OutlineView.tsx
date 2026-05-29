@@ -80,9 +80,10 @@ export default function OutlineView({ selectedDoc, onJumpTo }: OutlineViewProps)
 
     void fetchContent(false);
     pollTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (Date.now() - lastLiveUpdateAt.current < 60_000) return;
       void fetchContent(true);
-    }, 30_000);
+    }, 120_000);
 
     // Live: cuando el editor activo dispara cambios, actualizamos el outline
     // de inmediato sin esperar al save ni al poll.
