@@ -21,6 +21,20 @@ export const isMarkdownConvertibleFile = (file: File) => {
   return false;
 };
 
+// Para archivos de texto plano (.txt, .log, .text, text/plain) la
+// "conversión a markdown" es trivial (sólo agrega `# titulo`) y NO
+// aporta un doc nuevo. El blob original ya es el doc completo: crear
+// un .md autogenerado duplica el contenido en el workspace.
+// Excluye .md/.markdown (estos no llegan a la conversión: hay early
+// return en useDashboardUploads cuando `isMarkdownFile(file)` es true).
+export const isPlainTextNoConversionFile = (file: File) => {
+  const type = (file.type || '').toLowerCase();
+  const name = (file.name || '').toLowerCase();
+  if (type === 'text/plain') return true;
+  if (name.endsWith('.txt') || name.endsWith('.text') || name.endsWith('.log')) return true;
+  return false;
+};
+
 export const isMarkdownDocItem = (doc: DocItem) => {
   if (doc.mimeType && doc.mimeType.toLowerCase().includes('markdown')) return true;
   return isMarkdownName(doc.name);
