@@ -14,7 +14,7 @@ import { DialogKind, UploadPhase, type DocItem, type DialogConfig, type DialogRe
 import { getErrorCode, getErrorMessage } from '@/lib/error-utils';
 import { DEFAULT_FOLDER_NAME, normalizeFolderPath, normalizePath } from '@/lib/folder-utils';
 import { createDocumentApi, uploadFileApi } from '@/services/dashboardApi';
-import { isMarkdownConvertibleFile, isMarkdownDocItem, isMarkdownFile } from '@/services/dashboardDocUtils';
+import { isMarkdownConvertibleFile, isMarkdownDocItem, isMarkdownFile, isPlainTextNoConversionFile } from '@/services/dashboardDocUtils';
 import { convertToMarkdown, canConvertToMarkdown } from '@/lib/clientMarkdownConversion';
 import {
   MULTIPART_THRESHOLD_BYTES,
@@ -287,7 +287,13 @@ export const useDashboardUploads = ({
 
         const relativeDir = options?.preservePaths ? getRelativeDir(file) : '';
         const resolvedFolder = joinPaths(baseFolder, relativeDir) || DEFAULT_FOLDER_NAME;
-        const shouldConvert = isMarkdownConvertibleFile(file) && !isMarkdownFile(file);
+        // Para .txt/.log/.text/text-plain, la "conversión" sólo envuelve el
+        // contenido con `# titulo\n\n...` — no aporta un doc nuevo. El blob
+        // original ya es el doc completo: skip la 2da call que crea un .md
+        // duplicado en el workspace (Wave-3 fix: root cause de upload .txt).
+        const shouldConvert = isMarkdownConvertibleFile(file)
+          && !isMarkdownFile(file)
+          && !isPlainTextNoConversionFile(file);
 
         if (isMarkdownFile(file)) {
           const content = await file.text();
