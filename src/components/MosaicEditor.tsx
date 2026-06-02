@@ -231,6 +231,7 @@ export default function MosaicEditor({
   // Cuando el doc devuelve 401/403/404 dejamos de reintentar loadDoc y stream
   // hasta que cambie roomId. Evita bucles infinitos sobre docs sin permiso.
   const [docUnavailable, setDocUnavailable] = useState(false);
+  const docUnavailableRef = useRef(false);
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<BoardCard[]>([]);
@@ -262,6 +263,8 @@ export default function MosaicEditor({
   const hasLocalEditsThisSessionRef = useRef(false);
   const lastRawKeyRef = useRef<string | null>(null);
   const rawLoadInFlightRef = useRef(false);
+  // Sin esto, un doc vacío re-fetcheaba en cada applyDocData y reflasheaba el overlay.
+  const rawLoadDoneRef = useRef(false);
   const mdxEditorRef = useRef<MDXEditorMethods>(null);
   const isNormalizingRef = useRef(false);
   const saveRequestIdRef = useRef(0);
@@ -593,10 +596,8 @@ export default function MosaicEditor({
   const maybeLoadRawContent = useCallback(async (key: string | null) => {
     if (!roomId || !key) return;
     if (rawLoadInFlightRef.current) return;
-    // Skip solo si ya tenemos contenido cargado para este key. Si contentRef
-    // está vacío (remount, transición cerrar→abrir), forzamos re-fetch
-    // aunque lastRawKeyRef coincida — sino el editor queda en blanco.
-    if (key === lastRawKeyRef.current && contentRef.current !== '') return;
+    // rawLoadDoneRef habilita saltar docs vacíos ya cargados (evita el reflasheo del overlay).
+    if (key === lastRawKeyRef.current && (rawLoadDoneRef.current || contentRef.current !== '')) return;
     rawLoadInFlightRef.current = true;
     lastRawKeyRef.current = key;
     // Importante: mientras carga el raw, no consideremos el editor "cargado"
@@ -619,6 +620,7 @@ export default function MosaicEditor({
       console.error('Error loading raw content:', e);
     } finally {
       rawLoadInFlightRef.current = false;
+      rawLoadDoneRef.current = true;
       setIsDocLoading(false);
       hasLoadedRef.current = true;
     }
@@ -830,12 +832,13 @@ export default function MosaicEditor({
 
   const loadDoc = useCallback(async () => {
     if (!roomId) return;
-    if (docUnavailable) return;
+    if (docUnavailableRef.current) return;
     setIsDocLoading(true);
     try {
       const res = await authFetch(`/api/documents/${roomId}`, { cache: 'no-store' });
       if (!res.ok) {
         if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 410) {
+          docUnavailableRef.current = true;
           setDocUnavailable(true);
         }
         if (!hasUnsavedLocalChanges()) {
@@ -850,7 +853,7 @@ export default function MosaicEditor({
     } finally {
       setIsDocLoading(false);
     }
-  }, [roomId, docUnavailable, applyDocData, hasUnsavedLocalChanges, resetDocState]);
+  }, [roomId, applyDocData, hasUnsavedLocalChanges, resetDocState]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -858,6 +861,8 @@ export default function MosaicEditor({
     pendingLocalChangeRef.current = false;
     hasLocalEditsThisSessionRef.current = false;
     lastRawKeyRef.current = null;
+    rawLoadDoneRef.current = false;
+    docUnavailableRef.current = false;
     setDocUnavailable(false);
     setReadOnly(false);
     loadDoc();
@@ -885,6 +890,7 @@ export default function MosaicEditor({
 
   const handleStreamUnavailable = useCallback((status: number) => {
     console.warn(`[MosaicEditor] stream no disponible (HTTP ${status}); deteniendo retries para doc ${roomId}`);
+    docUnavailableRef.current = true;
     setDocUnavailable(true);
   }, [roomId]);
 

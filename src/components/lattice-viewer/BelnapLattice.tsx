@@ -21,10 +21,10 @@ const INFO_EDGES: Array<[NodeId, NodeId]> = [
 ];
 
 const TRUTH_EDGES: Array<[NodeId, NodeId]> = [
-  ['T', 'top'],
-  ['T', 'bot'],
-  ['top', 'F'],
-  ['bot', 'F']
+  ['bot', 'F'],
+  ['bot', 'T'],
+  ['F', 'top'],
+  ['T', 'top']
 ];
 
 function nodePos(id: NodeId): { x: number; y: number } {
