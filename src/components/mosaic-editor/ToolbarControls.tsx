@@ -19,6 +19,7 @@ export function ToolbarShortcutButton({
   return (
     <button
       type="button"
+      onMouseDown={(e) => e.preventDefault()}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       className={`inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded px-1.5 transition ${

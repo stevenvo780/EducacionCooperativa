@@ -12,7 +12,7 @@ import {
   History, MessageSquarePlus, Shield, Square,
   ListTree, ChevronsDownUp, ChevronsUpDown, FileText, RotateCcw, Clock
 } from 'lucide-react';
-import { apiUrl, authFetch, getAuthToken } from '@/services/apiClient';
+import { authFetch } from '@/services/apiClient';
 import { fetchZod } from '@/lib/fetch-zod';
 import { agentContextResponseSchema } from '@agora/contracts';
 import {
@@ -917,13 +917,9 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     streamUserInstructions: string,
     dryRunFlag: boolean
   ): Promise<AgentResponseBody> => {
-    const token = await getAuthToken();
-    const res = await fetch(apiUrl('/api/agora-ai/stream'), {
+    const res = await authFetch('/api/agora-ai/stream', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
+      headers: { 'Content-Type': 'application/json' },
       signal,
       body: JSON.stringify({
         messages: history.map(serializeMessageForHistory),
