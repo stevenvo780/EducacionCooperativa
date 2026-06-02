@@ -27,6 +27,12 @@ interface LLMClientConfig {
   model: string;
 }
 
+function uuidv4(): string {
+  return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+    (Number(c) ^ (crypto.getRandomValues(new Uint8Array(1))[0]! & (15 >> (Number(c) / 4)))).toString(16)
+  );
+}
+
 const LLM_CONFIG_KEY = 'formalizerLLMConfig';
 const DEFAULT_LLM_CONFIG: LLMClientConfig = {
   provider: 'ollama',
@@ -137,7 +143,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         } catch { /* ignore eval errors */ }
       }
       result = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         input: trimmed,
         profile: prof,
         payload: {
@@ -166,7 +172,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
       };
     } catch (err) {
       result = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         input: trimmed,
         profile: prof,
         payload: {
@@ -233,7 +239,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
         } catch { /* ignore eval errors */ }
       }
       result = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         input: trimmed,
         profile: prof,
         payload,
@@ -244,7 +250,7 @@ export default function FormalizerPlayground({ workspaceId = PERSONAL_WORKSPACE_
       };
     } catch (err) {
       result = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         input: trimmed,
         profile: prof,
         payload: {

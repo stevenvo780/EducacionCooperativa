@@ -154,11 +154,15 @@ export default function STPlaygroundV3() {
       });
 
       if (!res.ok || !res.body) {
-        const text = await res.text().catch(() => '');
+        let errorContent: string;
+        if (res.status === 412) {
+          errorContent = 'No hay una API key configurada para el co-pilot. Ve a Configuración → Agente IA → API Keys y añade tu key de Anthropic (u otro proveedor).';
+        } else {
+          const text = await res.text().catch(() => '');
+          errorContent = `Error ${res.status}: ${text.slice(0, 200) || 'sin cuerpo'}`;
+        }
         setMessages((prev) => prev.map((m) =>
-          m.id === assistantId
-            ? { ...m, content: `Error ${res.status}: ${text.slice(0, 200) || 'sin cuerpo'}` }
-            : m
+          m.id === assistantId ? { ...m, content: errorContent } : m
         ));
         return;
       }
@@ -205,12 +209,15 @@ export default function STPlaygroundV3() {
                 m.id === idForUpdate ? { ...m, content: status } : m
               ));
             }
-          } else if (event.type === 'final' || event.type === 'done') {
-            const reply = (event.data as { reply?: string }).reply
-              ?? (event.data as { content?: string }).content
-              ?? assistantText;
+          } else if (event.type === 'complete') {
+            const reply = (event.data as { reply?: string }).reply;
             if (typeof reply === 'string' && reply.length > 0) {
+              assistantText = reply;
               finalText = reply;
+              const idForUpdate = assistantId;
+              setMessages((prev) => prev.map((m) =>
+                m.id === idForUpdate ? { ...m, content: reply } : m
+              ));
             }
           }
         }

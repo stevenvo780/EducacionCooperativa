@@ -75,12 +75,6 @@ export function useOfflineSync() {
       }
     });
 
-    const goOnline = () => {
-      if (isMounted.current) {
-        setState(prev => ({ ...prev, isOnline: true }));
-      }
-    };
-
     const goOffline = () => {
       checkRealConnectivity().then((stillOnline) => {
         if (isMounted.current) {
@@ -89,12 +83,10 @@ export function useOfflineSync() {
       });
     };
 
-    window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
 
     return () => {
       isMounted.current = false;
-      window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
     };
   }, []);
@@ -124,9 +116,26 @@ export function useOfflineSync() {
   }, []);
 
   useEffect(() => {
+    const goOnline = () => {
+      if (isMounted.current) {
+        setState(prev => ({ ...prev, isOnline: true }));
+        void refreshCounts();
+      }
+    };
+    const onEnqueued = () => {
+      if (isMounted.current) void refreshCounts();
+    };
+    window.addEventListener('online', goOnline);
+    window.addEventListener('agora:sync-enqueued', onEnqueued);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('agora:sync-enqueued', onEnqueued);
+    };
+  }, [refreshCounts]);
+
+  useEffect(() => {
     refreshCounts();
     if (!isPageVisible) return;
-    // Reducido a 60 segundos para evitar sobrecarga de IndexedDB
     const interval = setInterval(refreshCounts, 60000);
     return () => clearInterval(interval);
   }, [refreshCounts, isPageVisible]);
