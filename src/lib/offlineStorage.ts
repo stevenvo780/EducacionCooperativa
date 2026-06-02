@@ -321,16 +321,22 @@ export async function getCachedContent(docId: string): Promise<string | null> {
 
 /**
  * Añade una operación a la cola de sincronización.
+ * Emite 'agora:sync-enqueued' para que useOfflineSync refresque
+ * los contadores sin esperar el intervalo de 60s.
  */
 export async function enqueueSync(item: Omit<SyncQueueItem, 'id'>): Promise<number> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  const id = await new Promise<number>((resolve, reject) => {
     const transaction = db.transaction(STORE_QUEUE, 'readwrite');
     const store = transaction.objectStore(STORE_QUEUE);
     const request = store.add(item);
     request.onsuccess = () => resolve(request.result as number);
     request.onerror = () => reject(request.error);
   });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('agora:sync-enqueued'));
+  }
+  return id;
 }
 
 /**

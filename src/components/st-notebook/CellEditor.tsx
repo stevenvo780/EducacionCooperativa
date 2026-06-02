@@ -194,7 +194,7 @@ function CodeCellView({
     <div className="border border-gray-200 rounded-lg p-3 bg-white group">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-mono text-gray-400">code{cell.profile ? ` · ${cell.profile}` : ''}</span>
-        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className={`flex gap-2 transition-opacity ${running ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           <button
             onClick={handleRun}
             disabled={running}

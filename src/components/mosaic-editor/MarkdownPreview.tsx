@@ -84,11 +84,26 @@ class DiagramErrorBoundary extends React.Component<
  * como bloque display. Sin esto, los usuarios que escriben ```` ```latex ````
  * verían el código fuente crudo (rehype-katex solo procesa `language-math`).
  * No toca fences anidados ni indentados con tab/4+ espacios (code blocks).
+ *
+ * También normaliza `$$...$$` en una sola línea al formato multilínea
+ * `$$\n...\n$$` para que remark-math lo identifique como bloque (type "math")
+ * y rehype-katex lo renderice con displayMode, produciendo .katex-display.
+ * Sin esto, remark-math v6 trata `$$...$$` en la misma línea como inlineMath
+ * dentro de un párrafo, y el resultado carece de centrado y tamaño display.
+ * Solo afecta `$$...$$` que ocupa toda la línea (no afecta `$$` en medio de prosa).
  */
 const normalizeMathFences = (md: string): string => {
   if (!md) return md;
-  if (!/```\s*latex\b/i.test(md)) return md;
-  return md.replace(/(^|\n)([ \t]{0,3})```\s*latex\b/gi, '$1$2```math');
+  let result = md;
+  if (/```\s*latex\b/i.test(result)) {
+    result = result.replace(/(^|\n)([ \t]{0,3})```\s*latex\b/gi, '$1$2```math');
+  }
+  if (/\$\$[^$\n][^\n]*?\$\$/.test(result)) {
+    result = result.replace(/((?:^|\n))\$\$([^$\n][^\n]*?)\$\$(?=\n|$)/g, (_, pre: string, content: string) => {
+      return `${pre}$$\n${content}\n$$`;
+    });
+  }
+  return result;
 };
 
 /**
