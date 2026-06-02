@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect, useId, type FormEvent } from 'react';
-import { Bot, Send, Loader2, User, Sparkles } from 'lucide-react';
+import { Bot, Send, Loader2, User, Sparkles, KeyRound } from 'lucide-react';
 import type { ChatMessage } from './types';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
   streaming: boolean;
   authReady: boolean;
+  noKeysConfigured: boolean;
   onSend: (text: string) => void | Promise<void>;
 }
 
-export default function ChatPanel({ messages, streaming, authReady, onSend }: ChatPanelProps) {
+export default function ChatPanel({ messages, streaming, authReady, noKeysConfigured, onSend }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const inputId = useId();
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -21,10 +22,12 @@ export default function ChatPanel({ messages, streaming, authReady, onSend }: Ch
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, streaming]);
 
+  const canSend = authReady && !noKeysConfigured;
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = input.trim();
-    if (!text || streaming) return;
+    if (!text || streaming || !canSend) return;
     setInput('');
     void onSend(text);
   };
@@ -100,6 +103,21 @@ export default function ChatPanel({ messages, streaming, authReady, onSend }: Ch
             Inicia sesión para usar el co-pilot IA.
           </p>
         )}
+        {authReady && noKeysConfigured && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
+            <p className="text-[11px] leading-relaxed text-amber-300">
+              No hay ninguna API key configurada.{' '}
+              <a
+                href="/settings?tab=agent"
+                className="underline underline-offset-2 hover:text-amber-200"
+              >
+                Configura una en Ajustes → Agente IA
+              </a>{' '}
+              para usar el co-pilot.
+            </p>
+          </div>
+        )}
         <div className="flex gap-2">
           <textarea
             id={inputId}
@@ -108,7 +126,7 @@ export default function ChatPanel({ messages, streaming, authReady, onSend }: Ch
             onChange={(e) => setInput(e.target.value)}
             placeholder="Formaliza esto…"
             rows={2}
-            disabled={streaming || !authReady}
+            disabled={streaming || !canSend}
             className="flex-1 resize-none rounded-lg border border-surface-600 bg-surface-900/80 px-3 py-2 text-xs text-surface-50 placeholder:text-surface-500 focus:border-mandy-500 focus:outline-none disabled:opacity-50"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -119,7 +137,7 @@ export default function ChatPanel({ messages, streaming, authReady, onSend }: Ch
           />
           <button
             type="submit"
-            disabled={streaming || !authReady || !input.trim()}
+            disabled={streaming || !canSend || !input.trim()}
             className="flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-lg bg-mandy-500 text-white hover:bg-mandy-600 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Enviar"
           >

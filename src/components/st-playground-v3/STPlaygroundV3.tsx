@@ -6,6 +6,7 @@ import { evalStInBrowser, type StPlaygroundEvalResult } from '@/lib/st-eval';
 import { listProfiles } from '@stevenvo780/st-lang';
 import { apiUrl, getAuthToken } from '@/services/apiClient';
 import { useAuth } from '@/context/AuthContext';
+import { listAgentSecrets, type AgentKeyProvider } from '@/lib/agora-ai/agentKeysApi';
 import ChatPanel from './ChatPanel';
 import EditorPanel from './EditorPanel';
 import ResultsPanel from './ResultsPanel';
@@ -79,6 +80,9 @@ export default function STPlaygroundV3() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
 
+  const [aiProvider, setAiProvider] = useState<AgentKeyProvider | null>(null);
+  const [keysReady, setKeysReady] = useState(false);
+
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
 
@@ -112,8 +116,26 @@ export default function STPlaygroundV3() {
     return () => window.removeEventListener('keydown', handler);
   }, [validate]);
 
-  const sendToAI = useCallback(async (userText: string) => {
+  useEffect(() => {
     if (!authReady) return;
+    let cancelled = false;
+    listAgentSecrets()
+      .then((items) => {
+        if (cancelled) return;
+        const first = items[0];
+        setAiProvider(first?.provider ?? null);
+        setKeysReady(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAiProvider(null);
+        setKeysReady(true);
+      });
+    return () => { cancelled = true; };
+  }, [authReady]);
+
+  const sendToAI = useCallback(async (userText: string) => {
+    if (!authReady || !aiProvider) return;
     const userId = `u-${Date.now()}`;
     const assistantId = `a-${Date.now()}`;
 
@@ -145,7 +167,7 @@ export default function STPlaygroundV3() {
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userText }
           ],
-          provider: 'anthropic',
+          provider: aiProvider,
           mode: 'chat',
           accessPolicy: 'no-tools',
           userInstructions: '',
@@ -264,7 +286,7 @@ export default function STPlaygroundV3() {
     } finally {
       setStreaming(false);
     }
-  }, [authReady, profiles]);
+  }, [authReady, aiProvider, profiles]);
 
   return (
     <div className="flex h-screen flex-col bg-surface-900 text-surface-50">
@@ -302,6 +324,7 @@ export default function STPlaygroundV3() {
               messages={messages}
               streaming={streaming}
               authReady={authReady}
+              noKeysConfigured={keysReady && aiProvider === null}
               onSend={sendToAI}
             />
           </div>
@@ -328,6 +351,7 @@ export default function STPlaygroundV3() {
               messages={messages}
               streaming={streaming}
               authReady={authReady}
+              noKeysConfigured={keysReady && aiProvider === null}
               onSend={sendToAI}
             />
           )}
