@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 const RENDER_TIMEOUT = 10000;
@@ -12,6 +12,10 @@ interface MermaidGlobal {
 }
 
 let loadPromise: Promise<MermaidGlobal> | null = null;
+
+// Contador module-level: con idRef por-instancia varios bloques que montan en el
+// mismo ms colisionaban el id y mermaid renderizaba en blanco. Global = id único.
+let renderSeq = 0;
 
 // Mutex: mermaid.render() is NOT safe for concurrent calls — serialize them
 let renderQueue: Promise<void> = Promise.resolve();
@@ -121,7 +125,6 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [svgHtml, setSvgHtml] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const idRef = useRef(0);
 
   const renderDiagram = useCallback(async () => {
     setState('loading');
@@ -131,9 +134,9 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
     try {
       const mermaid = await loadMermaid();
 
-      // Unique ID per render (mermaid requires unique IDs)
-      idRef.current += 1;
-      const id = `mmd-${Date.now()}-${idRef.current}`;
+      // Unique ID per render across ALL instances (mermaid requires unique IDs)
+      renderSeq += 1;
+      const id = `mmd-${renderSeq}`;
 
       // render() is NOT safe for concurrent calls — use mutex queue
       const { svg } = await queueRender(() =>
