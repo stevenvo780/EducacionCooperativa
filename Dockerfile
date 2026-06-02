@@ -1,5 +1,5 @@
 # Base on official Node.js Alpine image
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -13,6 +13,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
+# Self-host sobre HTTP plano: omite HSTS + upgrade-insecure-requests (se hornea en build)
+ARG AGORA_PLAIN_HTTP
+ENV AGORA_PLAIN_HTTP=${AGORA_PLAIN_HTTP}
 RUN npm run build
 
 # Production image, copy all the files and run next

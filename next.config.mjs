@@ -243,12 +243,39 @@ const withPWA = withPWAInit({
 const useStandaloneOutput = process.env.NEXT_DISABLE_STANDALONE !== 'true';
 
 const isDevEnv = process.env.NODE_ENV !== 'production';
-// Dev-only: el stack local (back, hub, emuladores Firebase) corre en
-// localhost sobre http; sin estos orígenes el CSP de prod bloquea el login
-// y los listeners de Firestore/RTDB contra los emuladores.
-const DEV_CONNECT_ORIGINS = isDevEnv
-  ? ' http://localhost:8081 http://127.0.0.1:8081 http://localhost:3010 ws://localhost:3010 http://127.0.0.1:3010 http://localhost:9099 http://127.0.0.1:9099 http://localhost:8080 http://127.0.0.1:8080 http://localhost:9000 ws://localhost:9000 http://127.0.0.1:9000 http://localhost:9100 http://127.0.0.1:9100'
-  : '';
+// Escape hatch para self-hosting detrás de HTTP plano (sin TLS): omite
+// upgrade-insecure-requests y HSTS, que en HTTP puro hacen que el browser
+// intente cargar _next/static por https → ERR_SSL_PROTOCOL_ERROR → sin hidratación.
+// En producción real (TLS) esta var debe estar ausente o ser distinto de '1'.
+const isPlainHttp = process.env.AGORA_PLAIN_HTTP === '1';
+// Dev-only: el stack local (back, hub, emuladores Firebase) corre fuera de
+// prod sobre http; sin estos orígenes el CSP de prod bloquea el login y los
+// listeners de Firestore/RTDB. Los orígenes se derivan de las NEXT_PUBLIC_*
+// para que el CSP siempre matchee a dónde el front realmente conecta (sea
+// localhost o una IP de lab), más localhost/127.0.0.1 por defecto.
+const buildDevConnectOrigins = () => {
+  const set = new Set([
+    'http://localhost:8081', 'http://127.0.0.1:8081',
+    'http://localhost:3010', 'ws://localhost:3010', 'http://127.0.0.1:3010', 'ws://127.0.0.1:3010',
+    'http://localhost:9099', 'http://127.0.0.1:9099',
+    'http://localhost:8080', 'http://127.0.0.1:8080',
+    'http://localhost:9000', 'ws://localhost:9000', 'http://127.0.0.1:9000', 'ws://127.0.0.1:9000',
+    'http://localhost:9100', 'http://127.0.0.1:9100',
+  ]);
+  const addUrl = (/** @type {string|undefined} */ u, /** @type {boolean} */ ws = false) => {
+    if (!u) return;
+    try { const x = new URL(u); set.add(x.origin); if (ws) set.add('ws://' + x.host); } catch { /* noop */ }
+  };
+  addUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
+  addUrl(process.env.NEXT_PUBLIC_NEXUS_URL, true);
+  const emu = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_HOST;
+  if (emu) {
+    set.add('http://' + emu + ':9099'); set.add('http://' + emu + ':8080');
+    set.add('http://' + emu + ':9100'); set.add('http://' + emu + ':9000'); set.add('ws://' + emu + ':9000');
+  }
+  return ' ' + [...set].join(' ');
+};
+const DEV_CONNECT_ORIGINS = (isDevEnv || isPlainHttp) ? buildDevConnectOrigins() : '';
 
 const CSP_DIRECTIVES = [
   "default-src 'self'",
@@ -264,7 +291,7 @@ const CSP_DIRECTIVES = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  ...(isDevEnv ? [] : ["upgrade-insecure-requests"])
+  ...(isDevEnv || isPlainHttp ? [] : ["upgrade-insecure-requests"])
 ].join('; ');
 
 const SECURITY_HEADERS = [
@@ -273,7 +300,7 @@ const SECURITY_HEADERS = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
-  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  ...(!isPlainHttp ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }] : []),
   // Sobrescribe el `Access-Control-Allow-Origin: *` default de Vercel CDN
   // sobre páginas HTML (login/dashboard). Restringimos al origin canónico
   // y a humanizar.cloud (alias activo). Vercel deja al CDN el de assets
