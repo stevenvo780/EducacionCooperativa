@@ -256,7 +256,11 @@ export const useDashboardDocsSync = ({
     // docs cuelga el frame. Subimos a 5min en touch (RTDB sigue siendo el
     // path principal de sync; este es solo fallback).
     const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
-    const pollMs = isTouch ? 300_000 : 300_000;
+    // Touch (tablet) a 5min: applyDocsSnapshot O(N·log N) sobre 100+ docs cuelga el
+    // frame en táctil. Desktop a 60s: red de seguridad si el evento RTDB en vivo se
+    // pierde (pestaña inactiva > ventana de 60s), para que un archivo nuevo aparezca
+    // en ≤60s sin recargar en vez de esperar 5min.
+    const pollMs = isTouch ? 300_000 : 60_000;
     const intervalId = setInterval(() => {
       if (document.hidden) return;
       const now = Date.now();
