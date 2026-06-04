@@ -207,6 +207,7 @@ export type AgentStreamEvent =
   | { type: 'connected' }
   | { type: 'status'; status: string }
   | { type: 'step'; step: AgentTraceStep }
+  | { type: 'assistant-message'; messageId: string; chatId: string }
   | { type: 'complete'; reply: string; agentRun: AgentRun }
   | { type: 'error'; error: string };
 
