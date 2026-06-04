@@ -21,7 +21,7 @@ import {
   saveChatSessions
 } from '@/lib/agora-ai/chatHistory';
 import { useAgentChatHistory } from '@/hooks/useAgentChatHistory';
-import type { RemoteAgentChat, RemoteAgentChatMessage } from '@/lib/agora-ai/agentChatApi';
+import { listRemoteAgentChatMessages, type RemoteAgentChat, type RemoteAgentChatMessage } from '@/lib/agora-ai/agentChatApi';
 import { AgentThinkingBlock } from '@/components/chat/AgentThinkingBlock';
 import { ToolCallBlock } from '@/components/chat/ToolCallBlock';
 import { InlineConfirmation } from '@/components/chat/InlineConfirmation';
@@ -186,6 +186,38 @@ function formatRateLimitMessage(rawBody: string): string {
 type ChatCreatedSideEvent = { type: 'chat-created'; chatId: string };
 type ContextTruncatedSideEvent = { type: 'context-truncated'; removedCount: number; summary: string };
 
+// Lanzado por runServerAgentStream cuando el transporte SSE se corta por red a
+// mitad de un run del que ya teníamos eventos. NO es un error de aplicación: el
+// run sigue corriendo en el servidor y se persiste en Firestore. El caller debe
+// recuperarlo por poll (Tier-2), no re-fetchear el stream.
+class StreamInterruptedError extends Error {
+  readonly persistedAssistantMsgId: string | null;
+  readonly persistedChatId: string | null;
+  constructor(persistedAssistantMsgId: string | null, persistedChatId: string | null, cause?: unknown) {
+    super('Stream de Agora AI interrumpido por red — recuperando por poll');
+    this.name = 'StreamInterruptedError';
+    this.persistedAssistantMsgId = persistedAssistantMsgId;
+    this.persistedChatId = persistedChatId;
+    if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+// Error de aplicación emitido por el backend vía evento SSE {type:'error'}: el run
+// YA terminó server-side (el doc assistant quedó finalizado con status:'error'), así
+// que NO debe reintentarse el stream (sería doble-run).
+class StreamServerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StreamServerError';
+  }
+}
+
+function isNetworkLikeError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return false;
+  const message = err instanceof Error ? err.message : String(err);
+  return /failed to fetch|network|networkerror|timeout|ECONNRESET|EAI_AGAIN|HTTP\/2|reset|connection|load failed|err_failed/i.test(message);
+}
+
 function parseAgentStreamEvent(raw: string): AgentStreamEvent | ChatCreatedSideEvent | ContextTruncatedSideEvent | null {
   let parsed: unknown;
   try {
@@ -202,6 +234,13 @@ function parseAgentStreamEvent(raw: string): AgentStreamEvent | ChatCreatedSideE
   }
   if (type === 'step' && obj.step && typeof obj.step === 'object') {
     return { type: 'step', step: obj.step as AgentTraceStep };
+  }
+  if (
+    type === 'assistant-message' &&
+    typeof obj.messageId === 'string' &&
+    typeof obj.chatId === 'string'
+  ) {
+    return { type: 'assistant-message', messageId: obj.messageId, chatId: obj.chatId };
   }
   if (type === 'complete' && typeof obj.reply === 'string' && obj.agentRun && typeof obj.agentRun === 'object') {
     return { type: 'complete', reply: obj.reply, agentRun: obj.agentRun as AgentRun };
@@ -323,6 +362,14 @@ const REHYPE_PLUGINS = [rehypeKatex];
 
 const STREAM_BUFFER_CAP_BYTES = 4 * 1024 * 1024;
 const MAX_LIVE_STEPS = 1000;
+
+// Tier-2 resume: si el stream SSE se corta por red a mitad de un run (tras
+// haber recibido eventos), NO re-fetcheamos el stream (re-correría el agente).
+// En su lugar polleamos el doc assistant persistido hasta que su status sea
+// terminal. Firestore es la fuente de verdad.
+const RESUME_POLL_INTERVAL_MS = 3000;
+const RESUME_POLL_MAX_MS = 5 * 60 * 1000;
+const TERMINAL_ASSISTANT_STATUSES = new Set(['complete', 'truncated', 'error']);
 
 interface MarkdownContentProps {
   content: string;
@@ -910,6 +957,33 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     )));
   }, []);
 
+  const remoteMessageToUi = useCallback((message: RemoteAgentChatMessage): UIChatMessage | null => {
+    // Sólo mostramos roles user/assistant en la UI. Los mensajes 'tool'
+    // viven embebidos en `agentRun.toolResults` del assistant correspondiente.
+    if (message.role !== 'user' && message.role !== 'assistant') return null;
+    // Bug 1: si el backend persistió el `content` enriquecido con la sección
+    // "[contexto del turno previo — tools ejecutadas]", la quitamos para no
+    // renderizar el bloque duplicado al rehidratar el chat.
+    const content = message.role === 'assistant'
+      ? stripPreviousTurnContext(message.content)
+      : message.content;
+    // Detectar mensajes con tools persistidas pero sin agentRun reconstruido.
+    // Los chats guardados antes de la migración de eventos del agente sólo
+    // tienen toolCalls/toolResults como blobs opacos — no los suficiente para
+    // reconstruir un AgentRun tipado (Opción A: badge informativo en lugar de
+    // intentar una reconstrucción frágil).
+    const hasHiddenTools = message.role === 'assistant' && (
+      (Array.isArray(message.toolCalls) && message.toolCalls.length > 0) ||
+      (Array.isArray(message.toolResults) && message.toolResults.length > 0)
+    );
+    return {
+      id: message.id,
+      role: message.role,
+      content,
+      ...(hasHiddenTools ? { hasHiddenTools: true } : {})
+    };
+  }, []);
+
   const runServerAgentStream = useCallback(async (
     history: UIChatMessage[],
     assistantMessageId: string,
@@ -972,6 +1046,11 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     let finalPayload: AgentResponseBody | null = null;
     const liveSteps: AgentTraceStep[] = [];
     let liveStepsCapWarned = false;
+    // Tier-2 resume: id del doc assistant persistido (evento `assistant-message`)
+    // y flag de si ya llegó algún evento. Si la red se corta DESPUÉS de recibir
+    // eventos, recuperamos por poll en lugar de re-fetchear el stream.
+    let persistedAssistantMsgId: string | null = null;
+    let receivedAnyEvent = false;
 
     // Throttle de syncPartialRun: el SSE puede emitir step events cada pocos
     // ms y antes hacíamos un setMessages por cada uno → re-render de TODOS los
@@ -1022,8 +1101,23 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
     let bufferOverflowed = false;
     while (true) {
-      const { value, done } = await reader.read();
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (readErr) {
+        // El user abortó: propagamos como AbortError (no es resume).
+        if (signal.aborted) throw readErr;
+        // Corte de red a mitad del read. Si ya recibimos eventos, el run sigue
+        // vivo en el servidor: señalizamos resume por poll en lugar de fallar.
+        if (receivedAnyEvent && isNetworkLikeError(readErr)) {
+          if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+          throw new StreamInterruptedError(persistedAssistantMsgId, currentChatIdRef.current, readErr);
+        }
+        throw readErr;
+      }
+      const { value, done } = chunk;
       if (done) break;
+      receivedAnyEvent = true;
       buffer += decoder.decode(value, { stream: true });
 
       if (buffer.length > STREAM_BUFFER_CAP_BYTES) {
@@ -1067,6 +1161,17 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             currentChatIdRef.current = event.chatId;
             setCurrentChatId(event.chatId);
             void remoteHistory.refresh();
+          }
+          continue;
+        }
+        if (event.type === 'assistant-message') {
+          // El backend ya creó el doc assistant persistido (status:"running").
+          // Guardamos su id para reconciliar al recuperar por poll si la red se
+          // corta — así evitamos duplicar el mensaje vivo con el persistido.
+          persistedAssistantMsgId = event.messageId;
+          if (currentChatIdRef.current !== event.chatId) {
+            currentChatIdRef.current = event.chatId;
+            setCurrentChatId(event.chatId);
           }
           continue;
         }
@@ -1146,7 +1251,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             detail: event.error,
             code: 'agora-ai-stream'
           });
-          throw new Error(event.error);
+          throw new StreamServerError(event.error);
         }
       }
     }
@@ -1155,6 +1260,13 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
     flushPartialRun();
 
     if (!finalPayload) {
+      // El stream cerró (done) sin `complete`. Si ya teníamos un doc assistant
+      // persistido, el run pudo terminar (o estar terminando) en el servidor:
+      // recuperamos por poll en lugar de declarar error. Si no hay doc, es un
+      // cierre prematuro real → error.
+      if (persistedAssistantMsgId) {
+        throw new StreamInterruptedError(persistedAssistantMsgId, currentChatIdRef.current, null);
+      }
       publishAgentProblem({
         severity: 'error',
         message: 'El stream de Agora AI terminó sin respuesta final',
@@ -1166,6 +1278,115 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
     return finalPayload;
   }, [accessPolicy, config.model, config.provider, meta.defaultModel, mode, remoteHistory, resolvedWorkspaceId, updateMessageById]);
+
+  // Tier-2 resume: tras un corte de red mid-run, polleamos el doc assistant
+  // persistido (GET .../messages) cada ~3s buscando `persistedMsgId` hasta que
+  // su status sea terminal. NO re-fetcheamos el stream (eso re-correría el
+  // agente = doble-run). Reconcilia reemplazando el mensaje vivo
+  // (`assistantMessageId`) con el contenido final persistido — mismo lugar en
+  // la lista, sin duplicar.
+  const resumeAssistantByPoll = useCallback(async (
+    chatId: string,
+    persistedMsgId: string | null,
+    assistantMessageId: string,
+    signal: AbortSignal
+  ): Promise<AgentResponseBody> => {
+    const deadline = Date.now() + RESUME_POLL_MAX_MS;
+    setStreamStatus('Reconectando… recuperando progreso del agente');
+
+    const findAssistant = (items: RemoteAgentChatMessage[]): RemoteAgentChatMessage | null => {
+      if (persistedMsgId) {
+        const byId = items.find((m) => m.id === persistedMsgId);
+        if (byId) return byId;
+      }
+      // Fallback: el último assistant del chat (no conocíamos el id persistido).
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        const m = items[i];
+        if (m && m.role === 'assistant') return m;
+      }
+      return null;
+    };
+
+    while (Date.now() < deadline) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      let found: RemoteAgentChatMessage | null = null;
+      try {
+        // El endpoint ordena por ts ASC → el assistant del turno en curso (el más
+        // nuevo) está en la ÚLTIMA página. Paginamos siguiendo nextCursor hasta
+        // encontrarlo por id (o agotar la lista), con cap defensivo de páginas.
+        let cursor: string | null = null;
+        for (let pages = 0; pages < 25; pages += 1) {
+          const page = await listRemoteAgentChatMessages(chatId, { limit: 200, cursor });
+          const hit = findAssistant(page.items);
+          if (hit) found = hit;
+          if (persistedMsgId && page.items.some((m) => m.id === persistedMsgId)) break;
+          cursor = page.nextCursor;
+          if (!cursor) break;
+        }
+      } catch (pollErr) {
+        // Error de red transitorio durante el poll: reintentamos en el próximo
+        // ciclo. Cualquier otra cosa (4xx/parse) la propagamos.
+        if (!isNetworkLikeError(pollErr)) throw pollErr;
+      }
+
+      const status = found?.status;
+      if (found && status && TERMINAL_ASSISTANT_STATUSES.has(status)) {
+        const ui = remoteMessageToUi(found);
+        const reply = ui ? ui.content : found.content;
+        const truncated = status === 'truncated';
+        const agentRun: AgentRun = {
+          mode,
+          provider: config.provider,
+          iterations: 0,
+          steps: [],
+          finalReply: reply,
+          rollback: [],
+          truncated
+        };
+        // Reconciliar: reemplazar el mensaje vivo con el resultado persistido,
+        // PRESERVANDO los steps que el usuario ya vio en vivo (no pisarlos con []).
+        // Mantenemos `assistantMessageId` (mismo nodo) para no agregar uno nuevo.
+        updateMessageById(assistantMessageId, (current) => {
+          const liveSteps = current.agentRun?.steps ?? [];
+          return {
+            ...current,
+            content: reply,
+            error: status === 'error',
+            agentRun: status === 'error' ? undefined : { ...agentRun, steps: liveSteps, iterations: liveSteps.length },
+            pendingConfirmation: undefined,
+            ...(ui && 'hasHiddenTools' in ui && ui.hasHiddenTools ? { hasHiddenTools: true } : {})
+          };
+        });
+        void remoteHistory.refresh();
+        if (status === 'error') {
+          publishAgentProblem({
+            severity: 'error',
+            message: 'El agente terminó con error tras un corte de conexión',
+            detail: reply,
+            code: 'agora-ai-resume'
+          });
+          throw new Error(reply || 'El agente terminó con error');
+        }
+        return { reply, agentRun };
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        }, RESUME_POLL_INTERVAL_MS);
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
+    }
+
+    // Timeout del poll (~5 min) sin status terminal. Ofrecemos retry manual.
+    throw new Error('No se pudo recuperar el progreso del agente tras el corte de conexión. Intentá de nuevo.');
+  }, [config.provider, mode, remoteHistory, remoteMessageToUi, updateMessageById]);
 
   // Memoizar el array de tools por accessPolicy: toOllamaTools recorre la
   // tabla de ~140 definitions y arma un payload pesado.
@@ -1425,33 +1646,6 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
 
   useEffect(() => () => {
     if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
-  }, []);
-
-  const remoteMessageToUi = useCallback((message: RemoteAgentChatMessage): UIChatMessage | null => {
-    // Sólo mostramos roles user/assistant en la UI. Los mensajes 'tool'
-    // viven embebidos en `agentRun.toolResults` del assistant correspondiente.
-    if (message.role !== 'user' && message.role !== 'assistant') return null;
-    // Bug 1: si el backend persistió el `content` enriquecido con la sección
-    // "[contexto del turno previo — tools ejecutadas]", la quitamos para no
-    // renderizar el bloque duplicado al rehidratar el chat.
-    const content = message.role === 'assistant'
-      ? stripPreviousTurnContext(message.content)
-      : message.content;
-    // Detectar mensajes con tools persistidas pero sin agentRun reconstruido.
-    // Los chats guardados antes de la migración de eventos del agente sólo
-    // tienen toolCalls/toolResults como blobs opacos — no los suficiente para
-    // reconstruir un AgentRun tipado (Opción A: badge informativo en lugar de
-    // intentar una reconstrucción frágil).
-    const hasHiddenTools = message.role === 'assistant' && (
-      (Array.isArray(message.toolCalls) && message.toolCalls.length > 0) ||
-      (Array.isArray(message.toolResults) && message.toolResults.length > 0)
-    );
-    return {
-      id: message.id,
-      role: message.role,
-      content,
-      ...(hasHiddenTools ? { hasHiddenTools: true } : {})
-    };
   }, []);
 
   const activateRemoteChat = useCallback(async (chatId: string) => {
@@ -1799,6 +1993,28 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
             if (controller.signal.aborted) throw streamErr;
             const isAbort = streamErr instanceof DOMException && streamErr.name === 'AbortError';
             if (isAbort) throw streamErr;
+            // Tier-2 resume: el transporte SSE se cortó por red DESPUÉS de que
+            // el run arrancó (ya hay doc assistant persistido). NO re-fetcheamos
+            // el stream (eso re-correría el agente = doble-run): recuperamos el
+            // resultado final por poll del endpoint de mensajes.
+            if (streamErr instanceof StreamInterruptedError) {
+              const resumeChatId = streamErr.persistedChatId || currentChatIdRef.current;
+              if (resumeChatId) {
+                streamed = await resumeAssistantByPoll(
+                  resumeChatId,
+                  streamErr.persistedAssistantMsgId,
+                  assistantMessageId,
+                  controller.signal
+                );
+                break;
+              }
+              // Sin chatId no podemos pollear: caemos al error genérico.
+              throw streamErr;
+            }
+            // Error de aplicación del backend (evento SSE 'error'): el run ya
+            // terminó server-side (doc finalizado status:'error') → NO reintentar
+            // el stream (sería doble-run).
+            if (streamErr instanceof StreamServerError) throw streamErr;
             const message = streamErr instanceof Error ? streamErr.message : String(streamErr);
             const isTransient = /failed to fetch|network|timeout|ECONNRESET|EAI_AGAIN|HTTP\/2|stream|reset/i.test(message)
               || /\b5\d\d\b/.test(message);
@@ -1896,7 +2112,7 @@ export default function AgoraAIChat({ workspaceId }: AgoraAIChatProps) {
       textareaRef.current?.focus();
     }
     return succeeded;
-  }, [loading, canSend, messages, mode, runRollback, config.provider, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, updateMessageById, userInstructions, dryRun, nextTurnHints, accessPolicy.profile]);
+  }, [loading, canSend, messages, mode, runRollback, config.provider, runOllamaLoop, emitAgentWorkspaceEvents, runServerAgentStream, resumeAssistantByPoll, updateMessageById, userInstructions, dryRun, nextTurnHints, accessPolicy.profile]);
 
   // Entrada desde el textarea. Si el agente ya está respondiendo (`loading`),
   // en vez de bloquear, ENCOLA el texto y limpia el input — el auto-dispatcher

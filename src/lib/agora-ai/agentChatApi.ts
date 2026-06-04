@@ -24,6 +24,9 @@ export interface RemoteAgentChatMessage {
   toolCalls?: unknown[];
   toolResults?: unknown[];
   citations?: unknown[];
+  /** Estado del run del agente para mensajes assistant persistidos por el
+   *  stream Tier-2. Ausente en chats viejos (se trata como 'complete'). */
+  status?: 'running' | 'complete' | 'truncated' | 'error';
 }
 
 export interface ListChatsResponse {
