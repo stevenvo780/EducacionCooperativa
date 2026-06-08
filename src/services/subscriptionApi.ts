@@ -56,3 +56,18 @@ export async function verifyPayment(): Promise<{
   });
   return res.json();
 }
+
+export async function cancelSubscription(): Promise<{
+  ok: boolean;
+  endDate?: string;
+  message?: string;
+}> {
+  const res = await authFetch('/api/payments/cancel', {
+    method: 'POST'
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Error al cancelar suscripción');
+  }
+  return data;
+}

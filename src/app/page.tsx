@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { LazyMotion, domAnimation, m, useReducedMotion, type Transition } from 'framer-motion';
 import { ELENXOS_BRAND, PRODUCT_BRAND } from '@/lib/branding';
+import { PLANS, Plan, formatStorageSize } from '@/types/subscription';
 import {
   ArrowRight, BookOpen, Brain, Check, ChevronDown, Cloud,
   Code2, Edit3, ExternalLink, FileText, FlaskConical, FolderOpen, GraduationCap,
@@ -201,32 +202,40 @@ function LandingPage() {
 
   const plans = [
     {
-      name: 'Gratuito',
+      name: PLANS[Plan.Free].name,
       price: 'Gratis',
       sub: 'Para siempre',
-      features: ['Editor Markdown + ST completo', 'Documentos ilimitados', 'Workspace personal', 'Formalización automática', '50 MB de almacenamiento'],
-      highlight: false
+      features: PLANS[Plan.Free].features,
+      highlight: false,
+      ctaHref: user ? '/dashboard' : '/login',
+      ctaLabel: user ? 'Ir al dashboard' : 'Comenzar'
     },
     {
-      name: 'Básico',
-      price: '$30.000',
+      name: PLANS[Plan.Basic].name,
+      price: `$${PLANS[Plan.Basic].price.toLocaleString('es-CO')}`,
       sub: 'COP / mes',
-      features: ['Todo lo del plan Gratuito', 'Workspaces colaborativos', 'Tableros Kanban', 'Soporte por email', '1 GB de almacenamiento'],
-      highlight: false
+      features: PLANS[Plan.Basic].features,
+      highlight: false,
+      ctaHref: user ? `/dashboard?upgrade=${Plan.Basic}` : '/login',
+      ctaLabel: user ? 'Actualizar plan' : 'Comenzar'
     },
     {
-      name: 'Pro',
-      price: '$80.000',
+      name: PLANS[Plan.Pro].name,
+      price: `$${PLANS[Plan.Pro].price.toLocaleString('es-CO')}`,
       sub: 'COP / mes',
-      features: ['Todo lo del plan Básico', 'Terminales ilimitadas', 'Workers compartidos', 'Agora AI completo', 'Soporte prioritario', '1 GB de almacenamiento'],
-      highlight: true
+      features: PLANS[Plan.Pro].features,
+      highlight: true,
+      ctaHref: user ? `/dashboard?upgrade=${Plan.Pro}` : '/login',
+      ctaLabel: user ? 'Actualizar plan' : 'Comenzar'
     },
     {
-      name: 'Enterprise',
-      price: '$240.000',
+      name: PLANS[Plan.Enterprise].name,
+      price: `$${PLANS[Plan.Enterprise].price.toLocaleString('es-CO')}`,
       sub: 'COP / mes',
-      features: ['Todo lo del plan Pro', 'Máquina y terminal dedicadas', 'Worker exclusivo', 'Soporte personalizado', '10 GB de almacenamiento'],
-      highlight: false
+      features: PLANS[Plan.Enterprise].features,
+      highlight: false,
+      ctaHref: ELENXOS_BRAND.salesUrl,
+      ctaLabel: 'Contactar ventas'
     }
   ];
 
@@ -1064,7 +1073,7 @@ function LandingPage() {
             <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
               {[
                 { icon: Lock, title: 'Cifrado completo', desc: 'Documentos cifrados en tránsito y en reposo. Autenticación segura. Tus datos nunca se exponen.' },
-                { icon: HardDrive, title: 'Almacenamiento escalable', desc: 'Desde 50 MB gratuitos hasta 10 GB Enterprise. Sube PDFs, imágenes, hojas de cálculo — cualquier formato.' },
+                { icon: HardDrive, title: 'Almacenamiento escalable', desc: `Desde ${formatStorageSize(PLANS[Plan.Free].storageLimitMB)} gratuitos hasta almacenamiento ilimitado en Enterprise. Sube PDFs, imágenes, hojas de cálculo — cualquier formato.` },
                 { icon: MonitorSmartphone, title: 'PWA Multiplataforma', desc: 'Se instala como app nativa. Funciona offline con sincronización automática al reconectar.' }
               ].map((item, i) => (
                 <m.div
@@ -1133,13 +1142,13 @@ function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link href={ctaHref}>
+                  <Link href={plan.ctaHref}>
                     <button className={`w-full py-3 rounded-xl font-medium text-sm transition ${
                       plan.highlight
                         ? 'bg-gradient-mandy text-white hover:opacity-90 shadow-lg shadow-mandy-500/20'
                         : 'bg-surface-700/50 text-surface-300 hover:bg-surface-600'
                     }`}>
-                      {user ? 'Ir al dashboard' : 'Comenzar'}
+                      {plan.ctaLabel}
                     </button>
                   </Link>
                 </m.div>
@@ -1272,8 +1281,17 @@ function LandingPage() {
             <div className="text-sm">
               &copy; {new Date().getFullYear()} {PRODUCT_BRAND.name} · Producto de {ELENXOS_BRAND.name}
             </div>
-            <div className="text-xs text-surface-600">
-              {ELENXOS_BRAND.footerDisclaimer}
+            <div className="flex flex-col items-center md:items-end gap-1">
+              <nav className="flex items-center gap-3 text-xs text-surface-500">
+                <Link href="/terminos" className="hover:text-mandy-400 transition">Términos</Link>
+                <span aria-hidden="true">·</span>
+                <Link href="/privacidad" className="hover:text-mandy-400 transition">Privacidad</Link>
+                <span aria-hidden="true">·</span>
+                <Link href="/cookies" className="hover:text-mandy-400 transition">Cookies</Link>
+              </nav>
+              <div className="text-xs text-surface-600">
+                {ELENXOS_BRAND.footerDisclaimer}
+              </div>
             </div>
           </div>
         </div>
