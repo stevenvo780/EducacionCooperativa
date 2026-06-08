@@ -1937,8 +1937,11 @@ export default function MosaicEditor({
     // delimitadores) cuando aparecen al inicio de un run de texto — corrompiendo
     // fórmulas inline tipo `$E=mc^2$` → `$E\=mc^2$` en el markdown guardado.
     // El preview ya las des-escapa al render; hacemos lo mismo al guardar para
-    // que el source no quede corrupto.
-    const md = unescapeLatex(rawMd);
+    // que el source no quede corrupto. PERO solo en markdown: en archivos
+    // plain-text (.py/.yaml/.json/dotfiles) un `\=` o `\$` es contenido literal
+    // del usuario y des-escaparlo lo corrompe — CodeMirrorPlain comparte este
+    // handler, así que respetamos el raw cuando isPlainText.
+    const md = isPlainText ? rawMd : unescapeLatex(rawMd);
     handleContentChange(md);
     // Empuja el cambio local al Y.Text compartido (si hay colab activo y el
     // cambio no proviene de aplicar un update remoto, para no rebotar).
@@ -1951,7 +1954,7 @@ export default function MosaicEditor({
         });
       }
     }
-  }, [handleContentChange, collabYdoc]);
+  }, [handleContentChange, collabYdoc, isPlainText]);
 
   // Seed inicial del Y.Text compartido: igual patrón que STFileEditor. Solo el
   // ganador del seedLock siembra cuando el doc remoto está vacío; los demás
