@@ -350,10 +350,17 @@ function LoginPage() {
                 </button>
             </div>
         </div>
-        <div className="text-center mt-6">
+        <div className="text-center mt-6 flex flex-col items-center gap-3">
             <Link href="/" className="text-sm text-surface-500 hover:text-mandy-400 transition">
                 &larr; Volver al inicio
             </Link>
+            <nav className="flex items-center gap-3 text-xs text-surface-600">
+              <Link href="/terminos" className="hover:text-mandy-400 transition">Términos</Link>
+              <span aria-hidden="true">·</span>
+              <Link href="/privacidad" className="hover:text-mandy-400 transition">Privacidad</Link>
+              <span aria-hidden="true">·</span>
+              <Link href="/cookies" className="hover:text-mandy-400 transition">Cookies</Link>
+            </nav>
           </div>
         </div>
       </div>
