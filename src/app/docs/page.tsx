@@ -438,7 +438,7 @@ export default function DocsPage() {
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-amber-400 text-xs uppercase mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Privacidad de las API keys</h5>
                 <p className="text-xs text-surface-400 leading-relaxed">
-                  Las claves de IA se guardan en el <code className="text-surface-300">localStorage</code> de tu navegador y se envían directamente desde el cliente. <strong className="text-white">Nunca se almacenan en los servidores de Agora.</strong>
+                  Las claves de IA se almacenan <strong className="text-white">cifradas en el servidor</strong> (vault AES-256-GCM por usuario en <code className="text-surface-300">users/&#123;uid&#125;/agentSecrets</code>). Nunca se exponen al cliente ni se guardan en <code className="text-surface-300">localStorage</code>.
                 </p>
               </div>
             </div>
@@ -737,7 +737,7 @@ export default function DocsPage() {
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">
                 <h5 className="font-bold text-white text-xs uppercase mb-3">Instalación del Gestor CLI</h5>
                 <p className="text-xs text-surface-400 mb-3">En un servidor Ubuntu/Debian, ejecuta el instalador automatizado:</p>
-                <CopyBlock code="curl -fsSL https://visormarkdown-virid.vercel.app/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb" />
+                <CopyBlock code="curl -fsSL https://agora.elenxos.com/downloads/edu-worker_1.0.10_amd64.deb -o /tmp/edu-worker.deb && sudo apt install -y /tmp/edu-worker.deb" />
               </div>
 
               <div className="bg-surface-800/60 border border-surface-700/40 rounded-xl p-5">

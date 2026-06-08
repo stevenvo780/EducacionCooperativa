@@ -16,8 +16,8 @@ pieza tenga su CI, sus permisos y su versionado independiente.
 |------|-----|--------|
 | **stevenvo780/EducacionCooperativa** (este) | Frontend Next.js 15 (UI, auth, Firestore, MinIO, Forgejo SDK) | Vercel auto-deploy desde master |
 | [stevenvo780/agora-backend](https://github.com/stevenvo780/agora-backend) | Streaming del agente IA (Express en Cloud Run, sin cap de tiempo) | `gcloud run deploy agora-backend --source .` |
-| [stevenvo780/agora-hub](https://github.com/stevenvo780/agora-hub) | TermiCoop Hub: socket.io que coordina workers y agente | systemd `edu-hub.service` en VM GCP `agora-hub` (`hub.humanizar-dev.cloud`) |
-| [stevenvo780/agora-worker](https://github.com/stevenvo780/agora-worker) | Worker Docker (terminal por workspace) + daemon `agora-host-sync` | `docker push stevenvo780/edu-worker:latest` + `edu-worker-manager update all` (en humanizar2) |
+| [stevenvo780/agora-hub](https://github.com/stevenvo780/agora-hub) | TermiCoop Hub: socket.io que coordina workers y agente | systemd `edu-hub.service` en Hostinger VPS `agora-storage` (`hub.elenxos.com`) |
+| [stevenvo780/agora-worker](https://github.com/stevenvo780/agora-worker) | Worker Docker (terminal por workspace) + daemon `agora-host-sync` | `docker push stevenvo780/edu-worker:latest` + `edu-worker-manager update all` (en ils-server) |
 | [stevenvo780/agora-cli](https://github.com/stevenvo780/agora-cli) | CLI de terminal para Agora fuera de la web | npm publish (pendiente) |
 
 **Antes de tocar uno de los servicios** clona su repo correspondiente:
@@ -57,7 +57,7 @@ git clone git@github.com:stevenvo780/agora-cli.git
 ┌────────────────▼────────────────────────────────┐
 │  hub  (Node + Express + Socket.IO)              │
 │  services/hub/src/index.ts                      │
-│  Puerto: 3010  │  prod: hub.humanizar-dev.cloud │
+│  Puerto: 3010  │  prod: hub.elenxos.com         │
 └────────────────┬────────────────────────────────┘
                  │ WebSocket (WORKER_SECRET)
 ┌────────────────▼────────────────────────────────┐
@@ -83,11 +83,10 @@ Toda la conectividad entre servicios corre sobre **NetBird mesh** (`100.98.0.0/1
 
 | Nodo | Endpoint | Puerto |
 |---|---|---|
-| Hub | `hub.humanizar-dev.cloud` (VM GCP `agora-hub`, IP pública `34.72.204.171`) | 443 (Caddy) → 3010 (interno) |
-| Worker host (`humanizar2`) | 100.98.5.11 (NetBird) | — (host) |
+| Hub | `hub.elenxos.com` (Hostinger VPS `agora-storage`, IP `76.13.118.239`) | 443 (Caddy) → 3010 (interno) |
+| Worker host (`ils-server`) | 100.98.245.50 (NetBird) | — (host) |
 
-> El hub salió de la mesh NetBird en 2026-05: ahora vive en una VM GCP
-> e2-micro (free tier) con TLS público via Caddy. Caddy expone solo
+> El hub corre en Hostinger VPS `agora-storage` con TLS público via Caddy. Caddy expone solo
 > `h1` porque engine.io tiene problemas con HTTP/2 mid-stream.
 
 ---
@@ -523,7 +522,7 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=   # opcional, Analytics
 
 # Hub Socket.IO
-NEXT_PUBLIC_HUB_URL=https://hub.humanizar-dev.cloud   # prod; dev: http://localhost:3010
+NEXT_PUBLIC_HUB_URL=https://hub.elenxos.com            # prod; dev: http://localhost:3010
 NEXT_PUBLIC_NEXUS_URL=                                # alias de HUB_URL usado por el worker
 
 # API Cloud Run
@@ -553,7 +552,7 @@ ALLOW_LEGACY_WORKER_TOKENS=false
 ### Worker (`services/worker`) — `/etc/edu-worker/worker.env`
 
 ```bash
-NEXUS_URL=https://hub.humanizar-dev.cloud   # URL del Hub (prod)
+NEXUS_URL=https://hub.elenxos.com           # URL del Hub (prod)
 WORKER_SECRET=                              # debe coincidir con el del Hub
 FIREBASE_CONFIG=                            # JSON con projectId, storageBucket, databaseURL
 ```
@@ -609,10 +608,10 @@ Documentación operativa completa en [desplieges-prod/README.md](desplieges-prod
 # 1. Frontend → Vercel
 vercel --prod
 
-# 2. Hub → VM GCP `agora-hub` (us-central1-a, e2-micro free tier)
+# 2. Hub → Hostinger VPS `agora-storage` (76.13.118.239)
 ./desplieges-prod/deploy_hub.sh
 
-# 3. Worker → Docker image en humanizar2
+# 3. Worker → Docker image en ils-server
 ./desplieges-prod/deploy_docker.sh
 
 # 4. Worker → .deb + Docker (completo)
@@ -639,23 +638,23 @@ docker push stevenvo780/edu-worker:latest
 ### Comandos operativos (producción)
 
 ```bash
-# Estado de workers (humanizar2, vía jump host NAS)
-ssh nas ssh humanizar2 'docker ps --filter name=edu-worker --format "table {{.Names}}\t{{.Status}}"'
+# Estado de workers (ils-server)
+ssh ils-server 'docker ps --filter name=edu-worker --format "table {{.Names}}\t{{.Status}}"'
 
 # Actualizar todos los workers (pull + recreate)
-ssh nas 'ssh humanizar2 "echo PASS | sudo -S edu-worker-manager update all"'
+ssh ils-server 'echo PASS | sudo -S edu-worker-manager update all'
 
 # Logs de un worker específico
-ssh nas ssh humanizar2 'docker logs -f edu-worker-WORKSPACE_ID'
+ssh ils-server 'docker logs -f edu-worker-WORKSPACE_ID'
 
-# Reiniciar Hub (VM GCP `agora-hub`)
-gcloud compute ssh agora-hub --zone=us-central1-a --command='sudo systemctl restart edu-hub'
+# Reiniciar Hub (Hostinger VPS agora-storage)
+ssh root@76.13.118.239 'systemctl restart edu-hub'
 
 # Logs del Hub en vivo
-gcloud compute ssh agora-hub --zone=us-central1-a --command='journalctl -u edu-hub -f'
+ssh root@76.13.118.239 'journalctl -u edu-hub -f'
 
 # Health check público del Hub
-curl -s https://hub.humanizar-dev.cloud/health
+curl -s https://hub.elenxos.com/health
 ```
 
 ---
@@ -713,5 +712,5 @@ cliente los resuelve con `NEXT_PUBLIC_API_BASE_URL`.
 
 | Paquete | Versión | Uso |
 |---|---|---|
-| `@stevenvo780/st-lang` | 3.2.1 | Parser/AST del lenguaje ST |
-| `@stevenvo780/autologic` | ^2.2.2 | Motor de formalización lógica con LLM |
+| `@stevenvo780/st-lang` | 4.15.1 | Parser/AST del lenguaje ST |
+| `@stevenvo780/autologic` | ^2.2.5 | Motor de formalización lógica con LLM |

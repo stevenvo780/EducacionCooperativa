@@ -25,15 +25,15 @@ Stack:
 - **Git por workspace**: Forgejo en Hostinger VPS (`git.elenxos.com`).
   Cada workspace = repo en la org `agora`. El user/CLI puede clonar via
   HTTPS + token.
-- **Workers**: ~35 contenedores Docker `edu-worker-<wsId>` corriendo en
-  `humanizar2` (host activo; reemplazó al viejo `stev-server`). Cada uno
-  expone una terminal y monta `/workspace`. Apuntan al hub vía
+- **Workers**: ~43 contenedores Docker `edu-worker-<wsId>` corriendo en
+  `ils-server` (`srv936994.hstgr.cloud`, NetBird `100.98.245.50`, Docker CE 29.5.2).
+  Cada uno expone una terminal y monta `/workspace`. Apuntan al hub vía
   `NEXUS_URL=https://hub.elenxos.com`.
 - **Hub**: Hostinger VPS `agora-storage` (IP `76.13.118.239`, dominio
   `hub.elenxos.com`, systemd `edu-hub`, user no-root `edu-hub`, Caddy
   `protocols h1` only por engine.io). MinIO, Forgejo y Hub conviven en
   `/opt/agora-stack/`.
-- **Daemon de sync**: `agora-host-sync` corre en `humanizar2` como systemd
+- **Daemon de sync**: `agora-host-sync` corre en `ils-server` como systemd
   unit; mantiene el `/workspace` de cada worker espejado contra MinIO+Firestore
   bidireccionalmente y revive contenedores caídos. Ignora `.scratch/`,
   `.agent-tmp/`, `tmp-*`, `*.tmp` (Bug I-2 Opción B).
@@ -45,7 +45,7 @@ Stack:
         ↕                                       ↕
         └─────────── RTDB pings ────────────────┘
                         ↕
-   humanizar2   ──  agora-host-sync.service  ──→  workers Docker (volumen
+   ils-server   ──  agora-host-sync.service  ──→  workers Docker (volumen
                                                   /home/humanizar/edu-worker/
                                                   workspaces/<wsId>/)
 ```
@@ -119,10 +119,12 @@ Hosts principales:
   (`hub.elenxos.com`) y Postgres 17. Docker Compose en `/opt/agora-stack/`.
   `docker compose -f /opt/agora-stack/docker-compose.yml exec agora-minio ...`
   para acción directa. Acceso: `ssh root@76.13.118.239`.
-- **humanizar2** — `humanizar@100.98.5.11` (NetBird, alias SSH
-  `humanizar2`). Hostea todos los workers `edu-worker-*` y el daemon
-  `agora-host-sync`. Acceso directo: `ssh humanizar2 '...'`. Reemplazó a
-  `stev-server` (`stev@100.98.8.227`) como host de workers.
+- **ils-server** — `humanizar@100.98.245.50` (NetBird, alias SSH
+  `ils-server`, host `srv936994.hstgr.cloud`). Hostea todos los workers
+  `edu-worker-*` (~43) y el daemon `agora-host-sync`. Docker CE 29.5.2.
+  Acceso directo: `ssh ils-server '...'`.
+- **humanizar2** (`100.98.5.11`) y **stev-server** (`100.98.8.227`) —
+  MUERTOS/RETIRADOS. Reemplazados por ils-server.
 - **NAS** (`nas@100.98.67.189`) y **agora-hub** (GCP `34.72.204.171`) —
   RETIRADOS de producción. Mantener apagados.
 
@@ -130,11 +132,11 @@ Comandos diagnóstico que uso seguido (sin secretos en este file):
 
 ```bash
 # Estado del daemon de sync
-ssh humanizar2 'systemctl status agora-host-sync'
-ssh humanizar2 'tail -50 /home/humanizar/logs/agora-host-sync.log'
+ssh ils-server 'sudo systemctl status agora-host-sync'
+ssh ils-server 'sudo tail -50 /home/humanizar/logs/agora-host-sync.log'
 
-# Workers (en humanizar2)
-ssh humanizar2 'docker ps --filter name=edu-worker --format "table {{.Names}}\t{{.Status}}"'
+# Workers (en ils-server)
+ssh ils-server 'sudo docker ps --filter name=edu-worker --format "table {{.Names}}\t{{.Status}}"'
 
 # Hub (Hostinger VPS)
 ssh root@76.13.118.239 'systemctl status edu-hub'
@@ -149,10 +151,9 @@ curl -s https://agora.elenxos.com/api/diag | python3 -m json.tool
 
 ## 6. Workers — comportamiento conocido
 
-- Docker 28.2.2 en humanizar2 crashea ocasionalmente con un bug HTTP/2
-  (`golang.org/x/net/http2.(*Framer).ReadFrame`). Cuando crashea, todos los
-  workers reciben SIGTERM→SIGKILL. `agora-host-sync` los revive en el siguiente
-  ciclo (cada 5s).
+- ils-server corre Docker CE 29.5.2 — sin el bug HTTP/2
+  (`golang.org/x/net/http2.(*Framer).ReadFrame`) que afectaba a Docker 28.2.2
+  en humanizar2 (retirado). Estabilidad de workers mejorada.
 - Para añadir un worker manualmente sin sudo: replica `docker run` con
   `--network=host`, `--user=estudiante`, mounts en `/home/humanizar/edu-worker/...`,
   env igual a otro worker pero con `WORKER_TOKEN=<wsId>`.
@@ -191,8 +192,8 @@ curl -s https://agora.elenxos.com/api/diag | python3 -m json.tool
 ## 9. Tareas pendientes recurrentes
 
 Revisar y comunicar al user si reaparecen:
-- **Docker daemon** crashes recurrentes en humanizar2 — recomendar `apt
-  upgrade docker-ce` cuando haya ventana de mantenimiento.
+- **Docker daemon** ils-server corre Docker CE 29.5.2 (estable). Si
+  aparecen crashes, revisar logs en ils-server antes de actuar.
 - **MinIO basura histórica** (~32 objetos en raíz: `21Vu.../.git/...`,
   `dev-user-123/`, `groups/`, `system/`) — no afecta nada pero ensucia.
 - **Vulnerabilidades npm** — Next.js 15.5.18 ya cubre 4 CVEs recientes;
