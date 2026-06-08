@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
-import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive, AlertTriangle } from 'lucide-react';
+import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive, AlertTriangle, XCircle } from 'lucide-react';
 import { PLAN_ORDER, PLANS, Plan, type PlanId, type PlanConfig, formatStorageSize } from '@/types/subscription';
 import { authFetch } from '@/services/apiClient';
-import { fetchStorageUsage, type StorageUsage } from '@/services/subscriptionApi';
+import { fetchStorageUsage, cancelSubscription, type StorageUsage } from '@/services/subscriptionApi';
 import { useEscapeClose } from '@/hooks/useModalA11y';
 
 interface PricingModalProps {
@@ -14,22 +15,43 @@ interface PricingModalProps {
   currentPlan: PlanId;
   userEmail?: string | null;
   endDate?: string | null;
+  cancelAtPeriodEnd?: boolean;
 }
 
 const WHATSAPP_ENTERPRISE_URL = 'https://wa.me/573246780067?text=Hola%2C%20me%20interesa%20el%20plan%20Enterprise%20de%20Agora';
 
-export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: _userEmail, endDate }: PricingModalProps) {
+export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: _userEmail, endDate, cancelAtPeriodEnd }: PricingModalProps) {
   const [loading, setLoading] = useState<PlanId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelled, setCancelled] = useState(cancelAtPeriodEnd ?? false);
 
   useEffect(() => {
     if (isOpen) {
+      setCancelled(cancelAtPeriodEnd ?? false);
       fetchStorageUsage()
         .then(setStorageUsage)
         .catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, cancelAtPeriodEnd]);
+
+  const handleCancel = async () => {
+    if (!confirm('¿Seguro que querés cancelar tu plan? Mantendrás el acceso hasta que venza el período actual.')) return;
+    setCancelling(true);
+    try {
+      const result = await cancelSubscription();
+      setCancelled(true);
+      const formattedDate = result.endDate
+        ? new Date(result.endDate).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
+      toast.success(formattedDate ? `Tu plan seguirá activo hasta el ${formattedDate}` : (result.message ?? 'Suscripción cancelada'));
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Error al cancelar suscripción'));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   useEscapeClose(isOpen, onClose);
   if (!isOpen) return null;
@@ -144,6 +166,9 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
                 isLoading={loading === planId}
                 onSelect={() => handleSelectPlan(planId)}
                 endDate={isCurrent ? endDate : undefined}
+                cancelAtPeriodEnd={isCurrent ? cancelled : undefined}
+                onCancel={isCurrent ? handleCancel : undefined}
+                cancelling={isCurrent ? cancelling : undefined}
               />
             );
           })}
@@ -167,7 +192,10 @@ function PlanCard({
   isPopular,
   isLoading,
   onSelect,
-  endDate
+  endDate,
+  cancelAtPeriodEnd,
+  onCancel,
+  cancelling
 }: {
   plan: PlanConfig;
   isCurrent: boolean;
@@ -175,6 +203,9 @@ function PlanCard({
   isLoading: boolean;
   onSelect: () => void;
   endDate?: string | null;
+  cancelAtPeriodEnd?: boolean;
+  onCancel?: () => void;
+  cancelling?: boolean;
 }) {
   const borderColor = isPopular
     ? 'border-blue-500/50 ring-1 ring-blue-500/20'
@@ -242,30 +273,59 @@ function PlanCard({
           <MessageCircle size={16} />
           Contactar por WhatsApp
         </a>
-      ) : isCurrent && plan.price > 0 ? (
+      ) : isCurrent && plan.price > 0 && !plan.contactRequired ? (
         <>
           {endDate && (
             <p className="text-xs text-gray-400 text-center mb-2">
-              Vence el {new Date(endDate).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}
+              {cancelAtPeriodEnd
+                ? <>Plan cancelado — activo hasta{' '}<span className="text-yellow-400">{new Date(endDate).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</span></>
+                : <>Vence el {new Date(endDate).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</>
+              }
             </p>
           )}
-          <button
-            onClick={onSelect}
-            disabled={isLoading}
-            className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Procesando...
-              </>
-            ) : (
-              <>
-                <ExternalLink size={16} />
-                Renovar plan
-              </>
-            )}
-          </button>
+          {!cancelAtPeriodEnd && (
+            <button
+              onClick={onSelect}
+              disabled={isLoading}
+              className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <ExternalLink size={16} />
+                  Renovar plan
+                </>
+              )}
+            </button>
+          )}
+          {cancelAtPeriodEnd ? (
+            <div className="flex items-center justify-center gap-1.5 w-full py-2 text-xs text-yellow-500">
+              <XCircle size={14} />
+              No se renovará
+            </div>
+          ) : (
+            <button
+              onClick={onCancel}
+              disabled={cancelling}
+              className="flex items-center justify-center gap-1.5 w-full py-1.5 px-4 rounded-lg bg-transparent border border-red-500/40 hover:border-red-500/70 text-red-400 hover:text-red-300 font-medium text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {cancelling ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  Cancelando...
+                </>
+              ) : (
+                <>
+                  <XCircle size={13} />
+                  Cancelar plan
+                </>
+              )}
+            </button>
+          )}
         </>
       ) : isCurrent ? (
         <button
