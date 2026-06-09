@@ -39,6 +39,7 @@
     "node_modules",
     "old",
     "services",
+    "functions",
     "tests",
     "coverage",
     "AgoraBackend"
