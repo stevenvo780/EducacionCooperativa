@@ -8,7 +8,7 @@ import { ELENXOS_BRAND, PRODUCT_BRAND } from '@/lib/branding';
 
 export const metadata = {
   title: `Términos y Condiciones | ${PRODUCT_BRAND.name}`,
-  description: `Términos y condiciones del servicio de ${PRODUCT_BRAND.name} por ${ELENXOS_BRAND.name}.`,
+  description: `Términos y condiciones del servicio de ${PRODUCT_BRAND.name} por ${ELENXOS_BRAND.name}.`
 };
 
 function Section({
@@ -16,7 +16,7 @@ function Section({
   icon: Icon,
   title,
   accent = 'text-mandy-400',
-  children,
+  children
 }: {
   id: string;
   icon: React.ElementType;
@@ -133,7 +133,7 @@ export default function TerminosPage() {
                 'Workspaces colaborativos con gestión de documentos y archivos.',
                 'Terminales Linux en la nube (workers Docker) disponibles en planes de pago.',
                 'Asistente de inteligencia artificial Agora AI integrado al workspace.',
-                'Herramientas de formalización semántica automática (NL Linter, Mesa Semántica, Text Layer).',
+                'Herramientas de formalización semántica automática (NL Linter, Mesa Semántica, Text Layer).'
               ]} />
               <p>
                 Elenxos se reserva el derecho de modificar, ampliar o reducir las
@@ -277,7 +277,7 @@ export default function TerminosPage() {
                 'Revender, sublicenciar o ceder el acceso al servicio a terceros.',
                 'Usar el agente IA (Agora AI) para generar contenido que promueva odio, desinformación, acoso o actividades ilícitas.',
                 'Sobrecargar deliberadamente la infraestructura o realizar pruebas de carga sin autorización previa de Elenxos.',
-                'Crear cuentas falsas o suplantar identidades de terceros.',
+                'Crear cuentas falsas o suplantar identidades de terceros.'
               ]} />
               <p>
                 El incumplimiento de estas prohibiciones puede acarrear la suspensión o
@@ -292,7 +292,7 @@ export default function TerminosPage() {
                 <p>
                   El usuario conserva todos los derechos de propiedad intelectual sobre los
                   documentos, archivos, código y cualquier otro contenido que cree o cargue
-                  en Agora (<em>"Contenido del Usuario"</em>). Elenxos no adquiere
+                  en Agora (<em>&ldquo;Contenido del Usuario&rdquo;</em>). Elenxos no adquiere
                   propiedad sobre dicho contenido.
                 </p>
               </Subsection>
@@ -401,7 +401,7 @@ export default function TerminosPage() {
                 'Daños indirectos, incidentales, especiales o consecuentes, incluyendo pérdida de beneficios o interrupción de actividades académicas o profesionales.',
                 'Inexactitudes en los resultados generados por el asistente IA o el motor de lógica ST, los cuales son herramientas de apoyo académico y no sustituyen la verificación humana.',
                 'Accesos no autorizados derivados de la divulgación de credenciales por parte del usuario.',
-                'Disponibilidad o contenido de sitios web de terceros enlazados desde la plataforma.',
+                'Disponibilidad o contenido de sitios web de terceros enlazados desde la plataforma.'
               ]} />
               <p>
                 La responsabilidad máxima total de Elenxos frente a un usuario, por

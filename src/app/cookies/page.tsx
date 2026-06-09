@@ -4,7 +4,7 @@ import { ELENXOS_BRAND, PRODUCT_BRAND } from '@/lib/branding';
 
 export const metadata = {
   title: `Política de Cookies | ${PRODUCT_BRAND.name}`,
-  description: 'Información sobre el uso de cookies y almacenamiento local en Agora por Elenxos.',
+  description: 'Información sobre el uso de cookies y almacenamiento local en Agora por Elenxos.'
 };
 
 function SectionCard({
@@ -13,7 +13,7 @@ function SectionCard({
   children,
   accent = 'text-mandy-400',
   bg = 'bg-mandy-500/10',
-  border = 'border-mandy-500/20',
+  border = 'border-mandy-500/20'
 }: {
   icon: React.ElementType;
   title: string;
@@ -69,20 +69,20 @@ export default function CookiesPage() {
       nombre: 'firebase:authUser:*',
       tipo: 'localStorage',
       finalidad: 'Persiste la sesión activa del usuario autenticado con Firebase Auth. Sin esta entrada el usuario debe volver a iniciar sesión en cada carga de página.',
-      duracion: 'Sesión / hasta cierre de sesión',
+      duracion: 'Sesión / hasta cierre de sesión'
     },
     {
       nombre: 'firebase:host:*',
       tipo: 'IndexedDB / localStorage',
       finalidad: 'Estado interno del SDK de Firebase (tokens de refresco, rutas RTDB, caché de Firestore offline). Necesario para el funcionamiento de Auth, Firestore y RTDB.',
-      duracion: 'Persistente mientras la sesión esté activa',
+      duracion: 'Persistente mientras la sesión esté activa'
     },
     {
       nombre: '__session',
       tipo: 'Cookie HTTP',
       finalidad: 'Cookie de sesión establecida por Firebase Auth al iniciar sesión con Google. Permite mantener la autenticación entre peticiones al servidor (Next.js App Router).',
-      duracion: 'Sesión de navegador',
-    },
+      duracion: 'Sesión de navegador'
+    }
   ];
 
   const preferencias = [
@@ -90,26 +90,26 @@ export default function CookiesPage() {
       nombre: 'agora:editor:*',
       tipo: 'localStorage',
       finalidad: 'Guarda preferencias del editor: tema (claro/oscuro), tamaño de fuente, disposición de paneles, estado de linters activos y snippets frecuentes. Persiste entre sesiones para no requerir reconfiguración.',
-      duracion: 'Persistente (sin expiración)',
+      duracion: 'Persistente (sin expiración)'
     },
     {
       nombre: 'agora:workspace:*',
       tipo: 'localStorage',
       finalidad: 'Estado de UI por workspace: documentos abiertos, tabs activos, posición del cursor, estado del panel de terminal y filtros de explorador de archivos.',
-      duracion: 'Persistente (sin expiración)',
+      duracion: 'Persistente (sin expiración)'
     },
     {
       nombre: 'agora:chat:*',
       tipo: 'localStorage',
       finalidad: 'Caché local del historial del agente IA para respuesta rápida antes de sincronizar con Firestore. Los chats completos viven en la nube; este almacenamiento es solo un búfer de rendimiento.',
-      duracion: 'Hasta cierre de sesión o limpieza manual',
+      duracion: 'Hasta cierre de sesión o limpieza manual'
     },
     {
       nombre: 'agora:pwa:*',
       tipo: 'Cache API / Service Worker',
       finalidad: 'Recursos estáticos cacheados por el Service Worker (PWA) para funcionamiento offline. Incluye bundles JS/CSS y fuentes. No contiene datos personales del usuario.',
-      duracion: 'Hasta desinstalación de la PWA o limpieza de caché',
-    },
+      duracion: 'Hasta desinstalación de la PWA o limpieza de caché'
+    }
   ];
 
   const analitica = [
@@ -117,8 +117,8 @@ export default function CookiesPage() {
       nombre: '(Google Analytics / Firebase Analytics)',
       tipo: 'Cookie / localStorage',
       finalidad: 'Si se activa analítica, se usaría Firebase Analytics (Google) para medir sesiones anónimas, páginas visitadas y errores de carga. A la fecha de esta política, la analítica no está activada en producción.',
-      duracion: 'N/A (no activo actualmente)',
-    },
+      duracion: 'N/A (no activo actualmente)'
+    }
   ];
 
   return (

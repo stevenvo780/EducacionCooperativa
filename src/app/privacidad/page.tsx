@@ -77,7 +77,7 @@ export default function PrivacidadPage() {
                 ['Plataforma', 'https://agora.elenxos.com'],
                 ['Correo de contacto legal', '[correo legal de Elenxos]'],
                 ['Correo de soporte', 'admin@elenxos.com'],
-                ['País de operación principal', 'Colombia'],
+                ['País de operación principal', 'Colombia']
               ]} />
               <p>
                 Para efectos de la Ley 1581 de 2012, Elenxos actúa como responsable del tratamiento y
@@ -211,7 +211,7 @@ export default function PrivacidadPage() {
                       ['Proveedores de IA configurados por el usuario (OpenAI, Anthropic, Google, etc.)', 'Procesamiento de solicitudes del agente IA, con la clave del propio usuario', 'Texto de las solicitudes del usuario (prompts) y contexto del workspace enviado por el usuario'],
                       ['Hostinger (UAB Interneto Vizija)', 'Infraestructura de almacenamiento (MinIO S3), control de versiones (Forgejo), entornos de trabajo Docker (workers)', 'Archivos y documentos del workspace cifrados en tránsito'],
                       ['Vercel Inc.', 'Hosting y CDN del frontend de la Plataforma', 'Logs de acceso HTTP, datos de telemetría de rendimiento'],
-                      ['Google Cloud Run / GCP (Google LLC)', 'Ejecución del backend de la Plataforma', 'Logs de las solicitudes de la API'],
+                      ['Google Cloud Run / GCP (Google LLC)', 'Ejecución del backend de la Plataforma', 'Logs de las solicitudes de la API']
                     ].map(([prov, rol, datos], i) => (
                       <tr key={i}>
                         <td className="py-3 pr-4 text-white align-top font-medium">{prov}</td>
@@ -369,7 +369,7 @@ export default function PrivacidadPage() {
                 ['Correo electrónico', 'admin@elenxos.com'],
                 ['Correo legal (responsable del tratamiento)', '[correo legal de Elenxos]'],
                 ['Sitio web', 'https://www.elenxos.com/'],
-                ['Autoridad de control en Colombia', 'Superintendencia de Industria y Comercio (SIC) — www.sic.gov.co'],
+                ['Autoridad de control en Colombia', 'Superintendencia de Industria y Comercio (SIC) — www.sic.gov.co']
               ]} />
             </Section>
 
@@ -430,7 +430,7 @@ export default function PrivacidadPage() {
 function Section({
   id,
   title,
-  children,
+  children
 }: {
   id: string;
   title: string;
@@ -453,7 +453,7 @@ function Section({
 
 function SubSection({
   title,
-  children,
+  children
 }: {
   title: string;
   children: React.ReactNode;
