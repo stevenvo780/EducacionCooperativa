@@ -360,6 +360,8 @@ function LoginPage() {
               <Link href="/privacidad" className="hover:text-mandy-400 transition">Privacidad</Link>
               <span aria-hidden="true">·</span>
               <Link href="/cookies" className="hover:text-mandy-400 transition">Cookies</Link>
+              <span aria-hidden="true">·</span>
+              <Link href="/ayuda" className="hover:text-mandy-400 transition">Ayuda</Link>
             </nav>
           </div>
         </div>

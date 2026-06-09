@@ -57,6 +57,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import type { AgentAccessCapability, AgentAccessPolicy, AIProvider } from '@/lib/agora-ai/types';
 import AgentApiKeysPanel from '@/components/dashboard/AgentApiKeysPanel';
+import CliTokensPanel from '@/components/dashboard/CliTokensPanel';
 import type { SettingsSectionId } from '@/lib/settings-events';
 import { PERSONAL_WORKSPACE_ID } from '@/types/workspace';
 import { EMPTY_SEMANTIC_WORKSPACE_STATE } from '@/lib/semantic/workspace-state';
@@ -84,6 +85,7 @@ const SECTIONS: Section[] = [
   { id: 'ai', label: 'Agora IA', icon: Sparkles, description: 'Proveedor, modelo, permisos' },
   { id: 'linter', label: 'Linter Markdown', icon: Shield, description: 'Reglas activas y diccionario personal' },
   { id: 'git-access', label: 'Acceso Git', icon: FolderGit2, description: 'Tokens y URLs de clone para Forgejo' },
+  { id: 'cli-tokens', label: 'Acceso CLI', icon: Terminal, description: 'Personal Access Tokens para el CLI' },
   { id: 'cuenta', label: 'Cuenta y permisos', icon: KeyRound, description: 'Contraseña y miembros del workspace' }
 ];
 
@@ -197,6 +199,7 @@ export default function SettingsModal({
             )}
             {section === 'linter' && <LintersSection />}
             {section === 'git-access' && <GitAccessSection />}
+            {section === 'cli-tokens' && <CliTokensPanel />}
             {section === 'cuenta' && (
               <CuentaSection
                 onOpenChangePassword={() => { onOpenChangePassword(); onClose(); }}
