@@ -255,12 +255,11 @@ export const useDashboardDocsSync = ({
     // En tablets el polling de 60s + applyDocsSnapshot O(N·log N) sobre 100+
     // docs cuelga el frame. Subimos a 5min en touch (RTDB sigue siendo el
     // path principal de sync; este es solo fallback).
-    const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || /Mobi|Tablet|iPad|Android/.test(navigator.userAgent));
-    // Touch (tablet) a 5min: applyDocsSnapshot O(N·log N) sobre 100+ docs cuelga el
-    // frame en táctil. Desktop a 60s: red de seguridad si el evento RTDB en vivo se
-    // pierde (pestaña inactiva > ventana de 60s), para que un archivo nuevo aparezca
-    // en ≤60s sin recargar en vez de esperar 5min.
-    const pollMs = isTouch ? 300_000 : 60_000;
+    // Fallback puro: RTDB es el path principal de sync. Un tab idle (sin eventos
+    // RTDB) re-lee todos los docs del workspace cada `pollMs` — a 60s eso costaba
+    // ~N·1440 lecturas Firestore/día por tab abierto. 5min lo recorta 5x sin
+    // afectar el caso real (un archivo nuevo llega por RTDB al instante).
+    const pollMs = 300_000;
     const intervalId = setInterval(() => {
       if (document.hidden) return;
       const now = Date.now();
