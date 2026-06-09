@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
-import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive, AlertTriangle, XCircle } from 'lucide-react';
+import { X, Check, Loader2, ExternalLink, MessageCircle, HardDrive, AlertTriangle, XCircle, Gift } from 'lucide-react';
 import { PLAN_ORDER, PLANS, Plan, type PlanId, type PlanConfig, formatStorageSize } from '@/types/subscription';
 import { authFetch } from '@/services/apiClient';
 import { fetchStorageUsage, cancelSubscription, type StorageUsage } from '@/services/subscriptionApi';
@@ -26,15 +26,44 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelled, setCancelled] = useState(cancelAtPeriodEnd ?? false);
+  const [giftCode, setGiftCode] = useState('');
+  const [redeemingGift, setRedeemingGift] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setCancelled(cancelAtPeriodEnd ?? false);
+      setGiftCode('');
       fetchStorageUsage()
         .then(setStorageUsage)
         .catch(() => {});
     }
   }, [isOpen, cancelAtPeriodEnd]);
+
+  const handleRedeemGift = async () => {
+    const trimmedCode = giftCode.trim();
+    if (!trimmedCode) return;
+    setRedeemingGift(true);
+    try {
+      const res = await authFetch('/api/gift-codes/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: trimmedCode })
+      });
+      const data = await res.json() as { ok?: boolean; planId?: string; durationMonths?: number; error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? 'Error al canjear el código');
+      } else {
+        const planName = data.planId ? (PLANS[data.planId as PlanId]?.name ?? data.planId) : 'desconocido';
+        toast.success(`Plan ${planName} activado por ${data.durationMonths} ${data.durationMonths === 1 ? 'mes' : 'meses'}`);
+        setGiftCode('');
+        onClose();
+      }
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Error al canjear el código'));
+    } finally {
+      setRedeemingGift(false);
+    }
+  };
 
   const handleCancel = async () => {
     if (!confirm('¿Seguro que querés cancelar tu plan? Mantendrás el acceso hasta que venza el período actual.')) return;
@@ -167,6 +196,36 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
               />
             );
           })}
+        </div>
+
+        {/* Gift Code */}
+        <div className="mx-6 mb-6 p-4 bg-[#252535] rounded-lg border border-gray-700/50">
+          <div className="flex items-center gap-2 mb-3 text-sm text-gray-300">
+            <Gift size={16} className="text-purple-400 shrink-0" />
+            <span className="font-medium">¿Tenés un código de regalo?</span>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={giftCode}
+              onChange={(e) => setGiftCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleRedeemGift(); }}
+              placeholder="AGORA-XXXXX-XXXXX"
+              maxLength={17}
+              className="flex-1 bg-[#1e1e2e] border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 font-mono tracking-wider"
+            />
+            <button
+              onClick={() => void handleRedeemGift()}
+              disabled={redeemingGift || giftCode.trim().length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {redeemingGift ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                'Canjear'
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Footer */}

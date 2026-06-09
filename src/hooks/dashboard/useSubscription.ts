@@ -11,6 +11,7 @@ import { PaymentRedirectStatus } from '@/types/payments';
 interface UseSubscriptionResult {
     currentPlan: PlanId;
     subscriptionEndDate: string | null;
+    cancelAtPeriodEnd: boolean;
     showPricingModal: boolean;
     setShowPricingModal: (value: boolean) => void;
 }
@@ -21,6 +22,7 @@ export function useSubscription(
 ): UseSubscriptionResult {
     const [currentPlan, setCurrentPlan] = useState<PlanId>(Plan.Free);
     const [subscriptionEndDate, setSubscriptionEndDate] = useState<string | null>(null);
+    const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
     const [showPricingModal, setShowPricingModal] = useState(false);
 
     useEffect(() => {
@@ -29,14 +31,17 @@ export function useSubscription(
         fetchSubscriptionStatus()
             .then((sub) => {
                 if (!cancelled && sub?.planId) {
-                    setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
-                    setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
+                    const isActive = sub.status === SubscriptionStatus.Active;
+                    setCurrentPlan(isActive ? sub.planId : Plan.Free);
+                    setSubscriptionEndDate(isActive && sub.endDate ? sub.endDate : null);
+                    setCancelAtPeriodEnd(isActive ? (sub.cancelAtPeriodEnd ?? false) : false);
                 }
             })
             .catch(() => {
                 if (!cancelled) {
                     setCurrentPlan(Plan.Free);
                     setSubscriptionEndDate(null);
+                    setCancelAtPeriodEnd(false);
                 }
             });
         return () => { cancelled = true; };
@@ -67,6 +72,7 @@ export function useSubscription(
             .then((result) => {
                 if (result.status === SubscriptionStatus.Active && result.planId) {
                     setCurrentPlan(result.planId);
+                    setCancelAtPeriodEnd(false);
                     if (paymentStatus === PaymentRedirectStatus.Success) {
                         toast.success('¡Suscripción activada! Tu plan ya está activo.');
                     }
@@ -76,16 +82,20 @@ export function useSubscription(
             })
             .then((sub) => {
                 if (sub && 'planId' in sub) {
-                    setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
-                    setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
+                    const isActive = sub.status === SubscriptionStatus.Active;
+                    setCurrentPlan(isActive ? sub.planId : Plan.Free);
+                    setSubscriptionEndDate(isActive && sub.endDate ? sub.endDate : null);
+                    setCancelAtPeriodEnd(isActive ? (sub.cancelAtPeriodEnd ?? false) : false);
                 }
             })
             .catch(() => {
                 fetchSubscriptionStatus()
                     .then((sub) => {
                         if (sub?.planId) {
-                            setCurrentPlan(sub.status === SubscriptionStatus.Active ? sub.planId : Plan.Free);
-                            setSubscriptionEndDate(sub.status === SubscriptionStatus.Active && sub.endDate ? sub.endDate : null);
+                            const isActive = sub.status === SubscriptionStatus.Active;
+                            setCurrentPlan(isActive ? sub.planId : Plan.Free);
+                            setSubscriptionEndDate(isActive && sub.endDate ? sub.endDate : null);
+                            setCancelAtPeriodEnd(isActive ? (sub.cancelAtPeriodEnd ?? false) : false);
                         }
                     })
                     .catch(() => {});
@@ -95,5 +105,5 @@ export function useSubscription(
             });
     }, [searchParams]);
 
-    return { currentPlan, subscriptionEndDate, showPricingModal, setShowPricingModal };
+    return { currentPlan, subscriptionEndDate, cancelAtPeriodEnd, showPricingModal, setShowPricingModal };
 }
