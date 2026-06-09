@@ -62,11 +62,6 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
     // Solo bloquear si es plan gratuito intentando "seleccionarse"
     // Planes de pago permiten renovación (re-compra del mismo plan)
 
-    if (planId === Plan.Enterprise) {
-      window.open(WHATSAPP_ENTERPRISE_URL, '_blank');
-      return;
-    }
-
     setLoading(planId);
     setError(null);
 
@@ -98,7 +93,7 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[#1e1e2e] rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-gray-700/50 shadow-2xl" role="dialog" aria-modal="true" aria-label="Planes y Precios" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#1e1e2e] rounded-2xl w-full max-w-7xl max-h-[92vh] overflow-y-auto border border-gray-700/50 shadow-2xl" role="dialog" aria-modal="true" aria-label="Planes y Precios" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
           <div>
@@ -151,7 +146,7 @@ export default function PricingModal({ isOpen, onClose, currentPlan, userEmail: 
         )}
 
         {/* Plans Grid */}
-        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {PLAN_ORDER.map((planId) => {
             const plan = PLANS[planId];
             const isCurrent = planId === currentPlan;

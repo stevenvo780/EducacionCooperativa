@@ -243,8 +243,8 @@ function LandingPage() {
       sub: 'COP / mes',
       features: PLANS[Plan.Enterprise].features,
       highlight: false,
-      ctaHref: ELENXOS_BRAND.salesUrl,
-      ctaLabel: 'Contactar ventas'
+      ctaHref: user ? `/dashboard?upgrade=${Plan.Enterprise}` : '/login',
+      ctaLabel: user ? 'Actualizar plan' : 'Comenzar'
     }
   ];
 
@@ -1297,6 +1297,8 @@ function LandingPage() {
                 <Link href="/privacidad" className="hover:text-mandy-400 transition">Privacidad</Link>
                 <span aria-hidden="true">·</span>
                 <Link href="/cookies" className="hover:text-mandy-400 transition">Cookies</Link>
+                <span aria-hidden="true">·</span>
+                <Link href="/ayuda" className="hover:text-mandy-400 transition">Ayuda</Link>
               </nav>
               <div className="text-xs text-surface-600">
                 {ELENXOS_BRAND.footerDisclaimer}
