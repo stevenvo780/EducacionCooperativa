@@ -1280,7 +1280,8 @@ function DashboardContent() {
         requestDocsRefresh,
         closeTabById,
         showDialog,
-        setDocs
+        setDocs,
+        workspaceId: currentWorkspaceId
     });
 
     const {

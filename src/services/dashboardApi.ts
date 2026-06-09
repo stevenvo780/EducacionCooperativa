@@ -520,6 +520,28 @@ export const deleteDocumentApi = async (docId: string) => {
 };
 
 /**
+ * Retira una carpeta completa de la nube (docs + blobs) CON respaldo: el
+ * backend mueve los blobs a un prefijo `recycle/` (recuperable) y borra los
+ * docs. Distinto del DELETE por-doc; pensado para retirar subárboles enteros
+ * sin riesgo de pérdida. Devuelve el resumen del backend.
+ */
+export const retireFolderApi = async (
+  workspaceId: string,
+  folderPath: string
+): Promise<{ ok: boolean; retiredDocs: number; recycledBlobs: number; backupId?: string }> => {
+  const res = await authFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/retire-folder`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folderPath })
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`retire-folder HTTP ${res.status}${txt ? `: ${txt.slice(0, 200)}` : ''}`);
+  }
+  return res.json();
+};
+
+/**
  * Uploads a file directly to Firebase Storage via signed URL, then registers it in Firestore.
  * This bypasses Vercel's 4.5MB limit by not routing the file through serverless functions.
  */
