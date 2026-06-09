@@ -149,6 +149,9 @@ export const authFetch = async (input: RequestInfo | URL, init: RequestInit = {}
     if (response.status === 401) {
       response = await doFetch(resolvedInput, init, true);
     }
+    // 304 Not Modified es la respuesta esperada de un GET condicional
+    // (If-None-Match) — no es un error, no mostrar toast.
+    if (response.status === 304) return response;
     if (!response.ok) {
       let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
       let errorPayload: { error?: string; message?: string; currentPlan?: string; feature?: string } | null = null;

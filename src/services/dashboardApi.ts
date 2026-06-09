@@ -245,6 +245,10 @@ export const mergeWorkspaceApi = async (params: { targetWorkspaceId: string; sou
   };
 };
 
+// ETag + última lista por query: si el backend responde 304 (If-None-Match),
+// devolvemos los docs cacheados sin re-leer toda la colección en Firestore.
+const docsEtagCache = new Map<string, { etag: string; docs: DocItem[] }>();
+
 export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; view?: string }): Promise<DocItem[]> => {
   const search = new URLSearchParams();
   search.set('workspaceId', params.workspaceId);
@@ -261,21 +265,31 @@ export const fetchDocsApi = (params: { workspaceId: string; ownerId?: string; vi
       const allDocs: DocItem[] = [];
       let cursor: string | null = null;
       let safety = 0;
+      let responseEtag: string | null = null;
       const PAGINATION_SAFETY_GUARD = 50;
       do {
         const url = cursor
           ? `/api/documents?${key}&cursor=${encodeURIComponent(cursor)}`
           : `/api/documents?${key}`;
-        const res = await authFetch(url, { cache: 'no-store' });
+        // If-None-Match sólo en la primera página (el ETag del backend cubre la
+        // lista completa de una sola página). Si nada cambió → 304 → docs cacheados.
+        const cachedEntry = !cursor ? docsEtagCache.get(key) : undefined;
+        const res = await authFetch(url, cachedEntry
+          ? { cache: 'no-store', headers: { 'If-None-Match': cachedEntry.etag } }
+          : { cache: 'no-store' });
+        if (res.status === 304 && cachedEntry) return cachedEntry.docs;
         assertOk(res, 'Failed to fetch docs via API');
         const page = (await res.json()) as DocItem[];
         allDocs.push(...page);
         cursor = res.headers.get('X-Next-Cursor') || null;
+        if (!cursor) responseEtag = res.headers.get('ETag');
         safety += 1;
         if (safety >= PAGINATION_SAFETY_GUARD) {
           throw new Error('pagination guard exceeded — possible backend regression');
         }
       } while (cursor);
+
+      if (responseEtag) docsEtagCache.set(key, { etag: responseEtag, docs: allDocs });
 
       try {
         const cached: CachedDoc[] = allDocs.map(d => ({
