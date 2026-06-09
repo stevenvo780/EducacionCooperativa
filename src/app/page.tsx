@@ -211,6 +211,15 @@ function LandingPage() {
       ctaLabel: user ? 'Ir al dashboard' : 'Comenzar'
     },
     {
+      name: PLANS[Plan.Student].name,
+      price: `$${PLANS[Plan.Student].price.toLocaleString('es-CO')}`,
+      sub: 'COP / mes',
+      features: PLANS[Plan.Student].features,
+      highlight: false,
+      ctaHref: user ? `/dashboard?upgrade=${Plan.Student}` : '/login',
+      ctaLabel: user ? 'Actualizar plan' : 'Comenzar'
+    },
+    {
       name: PLANS[Plan.Basic].name,
       price: `$${PLANS[Plan.Basic].price.toLocaleString('es-CO')}`,
       sub: 'COP / mes',
@@ -1073,7 +1082,7 @@ function LandingPage() {
             <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
               {[
                 { icon: Lock, title: 'Cifrado completo', desc: 'Documentos cifrados en tránsito y en reposo. Autenticación segura. Tus datos nunca se exponen.' },
-                { icon: HardDrive, title: 'Almacenamiento escalable', desc: `Desde ${formatStorageSize(PLANS[Plan.Free].storageLimitMB)} gratuitos hasta almacenamiento ilimitado en Enterprise. Sube PDFs, imágenes, hojas de cálculo — cualquier formato.` },
+                { icon: HardDrive, title: 'Almacenamiento escalable', desc: `Desde ${formatStorageSize(PLANS[Plan.Free].storageLimitMB)} gratuitos hasta ${formatStorageSize(PLANS[Plan.Enterprise].storageLimitMB)} en Enterprise. Sube PDFs, imágenes, hojas de cálculo — cualquier formato.` },
                 { icon: MonitorSmartphone, title: 'PWA Multiplataforma', desc: 'Se instala como app nativa. Funciona offline con sincronización automática al reconectar.' }
               ].map((item, i) => (
                 <m.div
