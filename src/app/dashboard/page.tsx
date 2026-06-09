@@ -76,7 +76,7 @@ import { useIsCompact } from '@/hooks/useMediaQuery';
 import WelcomeView from '@/components/dashboard/WelcomeView';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
-import { PLANS } from '@/types/subscription';
+import { isPlanId, PLANS } from '@/types/subscription';
 import { RightPanelSkeleton, LeftPanelSkeleton, BottomDockSkeleton } from '@/components/dashboard/PanelSkeletons';
 import { useDashboardWorkspaces } from '@/hooks/dashboard/useDashboardWorkspaces';
 import { useDashboardDocsSync } from '@/hooks/dashboard/useDashboardDocsSync';
@@ -148,7 +148,7 @@ function DashboardContent() {
     const [memberProfiles, setMemberProfiles] = useState<Record<string, { email?: string | null; displayName?: string | null }>>({});
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { currentPlan, subscriptionEndDate, showPricingModal, setShowPricingModal } = useSubscription(user, searchParams);
+    const { currentPlan, subscriptionEndDate, cancelAtPeriodEnd, showPricingModal, setShowPricingModal } = useSubscription(user, searchParams);
 
     useEffect(() => {
         return subscribeAgoraEvent(AGORA_EVENTS.planRequired, (detail) => {
@@ -549,6 +549,17 @@ function DashboardContent() {
             router.replace('/dashboard', { scroll: false });
         }
     }, [searchParams, openSettings, router]);
+
+    useEffect(() => {
+        const upgradePlan = searchParams?.get('upgrade');
+        if (!upgradePlan || !isPlanId(upgradePlan)) return;
+        setShowPricingModal(true);
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('upgrade');
+            window.history.replaceState(null, '', url.toString());
+        }
+    }, [searchParams, setShowPricingModal]);
 
     const userMenuButtonRef = useRef<HTMLButtonElement | null>(null);
     const isCompact = useIsCompact();
@@ -3278,6 +3289,7 @@ function DashboardContent() {
                         currentPlan={currentPlan}
                         userEmail={userEmail}
                         endDate={subscriptionEndDate}
+                        cancelAtPeriodEnd={cancelAtPeriodEnd}
                     />
                 )}
                 <style jsx global>{`
