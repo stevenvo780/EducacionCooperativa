@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { deleteDocumentApi } from '@/services/dashboardApi';
+import { deleteDocumentApi, retireFolderApi } from '@/services/dashboardApi';
 import { normalizePath, normalizeFolderPath, DEFAULT_FOLDER_NAME } from '@/lib/folder-utils';
 import { DeletePhase, DialogKind, type DeleteStatus, type DocItem, type FolderItem, type DialogConfig, type DialogResult } from '@/components/dashboard/types';
 
@@ -12,6 +12,7 @@ interface UseDeleteDocumentOptions {
     closeTabById: (docId: string) => Promise<void>;
     showDialog: (config: DialogConfig) => Promise<DialogResult>;
     setDocs: React.Dispatch<React.SetStateAction<DocItem[]>>;
+    workspaceId?: string;
 }
 
 interface UseDeleteDocumentResult {
@@ -28,7 +29,8 @@ export function useDeleteDocument({
     requestDocsRefresh,
     closeTabById,
     showDialog,
-    setDocs
+    setDocs,
+    workspaceId
 }: UseDeleteDocumentOptions): UseDeleteDocumentResult {
     const [deleteStatus, setDeleteStatus] = useState<DeleteStatus | null>(null);
     const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
@@ -169,8 +171,37 @@ export function useDeleteDocument({
             await showDialog({ type: DialogKind.Info, title: 'No se puede eliminar la carpeta raíz.' });
             return;
         }
-        await deleteItems({ docIds: [], folderPaths: [folder.path] });
-    }, [deleteItems, showDialog]);
+        // Sin workspaceId no podemos usar la ruta con respaldo; caemos al
+        // borrado por-doc (sigue limpiando docs+blobs, sin recycle).
+        if (!workspaceId) {
+            await deleteItems({ docIds: [], folderPaths: [folder.path] });
+            return;
+        }
+        // Retirar de la nube CON respaldo: el backend mueve los blobs del
+        // subárbol a recycle/ (recuperable) y borra los docs.
+        const folderLabel = folder.path.split('/').filter(Boolean).pop() || folder.path;
+        const confirmResult = await showDialog({
+            type: DialogKind.Confirm,
+            title: `Retirar "${folderLabel}" de la nube`,
+            message: 'Se quita la carpeta y todo su contenido del workspace. Los archivos quedan respaldados (recuperables) y dejan de ocupar espacio.',
+            confirmLabel: 'Retirar',
+            cancelLabel: 'Cancelar',
+            danger: true
+        });
+        if (!confirmResult.confirmed) return;
+        if (deleteStatusTimer.current) clearTimeout(deleteStatusTimer.current);
+        setDeleteStatus({ phase: DeletePhase.Deleting, name: folderLabel });
+        try {
+            const r = await retireFolderApi(workspaceId, folder.path);
+            await requestDocsRefresh({ force: true });
+            setDeleteStatus({ phase: DeletePhase.Done, name: `Retirada (${r.retiredDocs} ítems)` });
+        } catch (e) {
+            console.error('[retire-folder]', e);
+            setDeleteStatus({ phase: DeletePhase.Error, name: folderLabel, error: 'Error al retirar' });
+            await showDialog({ type: DialogKind.Error, title: 'Error al retirar la carpeta' });
+        }
+        scheduleDeleteStatusClear();
+    }, [workspaceId, deleteItems, showDialog, requestDocsRefresh, scheduleDeleteStatusClear]);
 
     return { deleteStatus, deletingIds, deleteDocRecords, deleteItems, deleteFolder };
 }
