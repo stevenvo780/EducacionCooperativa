@@ -147,6 +147,29 @@ export function modelsForProvider(catalog: ModelCatalog, provider: string): Cata
   return catalog.models.filter((m) => m.family === family);
 }
 
+const FAST_MODEL_PATTERN = /flash|mini|haiku|lite|small|nano|8b|7b|3b|1\.5b|deepseek-chat/;
+
+/**
+ * El modelo de continuidad usa la misma API key y el mismo adapter que el
+ * modelo principal. Por eso sólo ofrecemos modelos del provider activo; mezclar
+ * familias produciría una llamada firmada con la key/endpoint equivocados.
+ * Los modelos rápidos aparecen primero, pero no ocultamos los demás (MiniMax
+ * hoy sólo publica M3 en el catálogo).
+ */
+export function continuityModelsForProvider(catalog: ModelCatalog, provider: string): CatalogModel[] {
+  return [...modelsForProvider(catalog, provider)].sort((a, b) => {
+    const aFast = FAST_MODEL_PATTERN.test(a.id.toLowerCase());
+    const bFast = FAST_MODEL_PATTERN.test(b.id.toLowerCase());
+    if (aFast !== bFast) return aFast ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+export function isKnownModelForProvider(catalog: ModelCatalog, provider: string, modelId: string): boolean {
+  if (!modelId) return false;
+  return modelsForProvider(catalog, provider).some((model) => model.id === modelId);
+}
+
 export function contextWindowForModel(provider: string, model: string, catalog?: ModelCatalog): number {
   const cat = catalog ?? getModelCatalogSync();
   const found = findCatalogModel(cat, model);

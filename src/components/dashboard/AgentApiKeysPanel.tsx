@@ -10,6 +10,7 @@ import {
   type AgentKeyProvider,
   type RemoteAgentSecret
 } from '@/lib/agora-ai/agentKeysApi';
+import type { AIProvider } from '@/lib/agora-ai/types';
 
 const PROVIDER_LABELS: Record<AgentKeyProvider, string> = {
   openai: 'OpenAI',
@@ -22,7 +23,15 @@ const PROVIDER_LABELS: Record<AgentKeyProvider, string> = {
   custom: 'Custom'
 };
 
-export default function AgentApiKeysPanel() {
+const KEY_PROVIDER_BY_AI_PROVIDER: Partial<Record<AIProvider, AgentKeyProvider>> = {
+  openai: 'openai',
+  anthropic: 'anthropic',
+  deepseek: 'deepseek',
+  gemini: 'gemini',
+  minimax: 'minimax'
+};
+
+export default function AgentApiKeysPanel({ selectedProvider }: { selectedProvider?: AIProvider }) {
   const [secrets, setSecrets] = useState<RemoteAgentSecret[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +55,11 @@ export default function AgentApiKeysPanel() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const provider = selectedProvider ? KEY_PROVIDER_BY_AI_PROVIDER[selectedProvider] : undefined;
+    if (provider) setDraftProvider(provider);
+  }, [selectedProvider]);
 
   const handleSave = useCallback(async () => {
     const trimmed = draftKey.trim();

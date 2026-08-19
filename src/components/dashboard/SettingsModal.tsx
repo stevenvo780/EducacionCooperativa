@@ -42,7 +42,10 @@ import {
   type AIProviderConfig
 } from '@/lib/agora-ai/clientSettings';
 import {
+  continuityModelsForProvider,
+  findCatalogModel,
   getModelCatalogSync,
+  isKnownModelForProvider,
   loadModelCatalog,
   modelsForProvider,
   type CatalogModel,
@@ -297,14 +300,6 @@ function compactToolDescription(description: string): string {
   return description.length > 180 ? `${description.slice(0, 177).trim()}...` : description;
 }
 
-/** Heurística: un modelo es "rápido/barato" (apto para el aux model de
- *  clasificación) si su id sugiere una variante flash/mini/haiku/lite/small/nano
- *  o si es deepseek-chat (el barato de deepseek). */
-function isFastCheapModel(model: CatalogModel): boolean {
-  const id = model.id.toLowerCase();
-  return /flash|mini|haiku|lite|small|nano|8b|7b|3b|1\.5b|deepseek-chat/.test(id);
-}
-
 function modelOptionLabel(model: CatalogModel): string {
   const ctx = `${(model.contextWindow / 1000).toFixed(0)}K`;
   return `${model.label} · ${model.family} · ${ctx}${model.verified === 'unverified' ? ' (no verificado)' : ''}`;
@@ -312,6 +307,7 @@ function modelOptionLabel(model: CatalogModel): string {
 
 function AgentModelsSection({
   uid,
+  provider,
   catalog,
   settings,
   loaded,
@@ -320,6 +316,7 @@ function AgentModelsSection({
   persist
 }: {
   uid: string | null;
+  provider: AIProvider;
   catalog: ModelCatalog;
   settings: AgentSettings;
   loaded: boolean;
@@ -327,22 +324,13 @@ function AgentModelsSection({
   error: string | null;
   persist: (partial: Partial<AgentSettings>) => void;
 }) {
-  const allModels = useMemo(
-    () => [...catalog.models].sort((a, b) => a.family.localeCompare(b.family) || a.label.localeCompare(b.label)),
-    [catalog]
+  const auxOptions = useMemo(
+    () => continuityModelsForProvider(catalog, provider),
+    [catalog, provider]
   );
-  const fastModels = useMemo(() => allModels.filter(isFastCheapModel), [allModels]);
-
-  // Si el modelo guardado no está en el catálogo (modelo manual / antiguo) lo
-  // mantenemos como opción adicional para no perder la selección del user.
-  const auxOptions = useMemo(() => {
-    if (settings.auxModel && !fastModels.some((m) => m.id === settings.auxModel)) {
-      const fromAll = allModels.find((m) => m.id === settings.auxModel);
-      const extra: CatalogModel = fromAll ?? { id: settings.auxModel, label: `${settings.auxModel} (manual)`, family: 'deepseek', contextWindow: 0, maxOutputTokens: 0, verified: 'unverified' };
-      return [extra, ...fastModels];
-    }
-    return fastModels;
-  }, [fastModels, allModels, settings.auxModel]);
+  const selectedAuxModel = auxOptions.some((model) => model.id === settings.auxModel)
+    ? settings.auxModel
+    : '';
 
   return (
     <div className="border-t border-surface-700/40 pt-4">
@@ -352,7 +340,8 @@ function AgentModelsSection({
       </div>
       <SectionHelper>
         El modelo principal se elige arriba (campo «Modelo principal»). Aquí va el modelo auxiliar
-        —barato/rápido para la clasificación en segundo plano— y el modo autónomo. Todo se sincroniza
+        para decidir continuaciones automáticas. Usa el mismo proveedor y la misma clave que el
+        principal; los modelos rápidos aparecen primero sin ocultar los demás. Todo se sincroniza
         con tu cuenta y lo usa el backend del agente.
       </SectionHelper>
 
@@ -365,14 +354,16 @@ function AgentModelsSection({
 
       <div className="mt-3">
         <label className="block text-xs">
-          <span className="mb-1 block text-surface-400">Modelo auxiliar (rápido / clasificación)</span>
+          <span className="mb-1 block text-surface-400">Modelo de continuidad / clasificación</span>
           <select
-            value={settings.auxModel}
+            value={selectedAuxModel}
             disabled={!uid || !loaded}
             onChange={(e) => persist({ auxModel: e.target.value })}
             className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
           >
-            <option value="" className="bg-surface-900 text-surface-100">— Default del backend —</option>
+            <option value="" className="bg-surface-900 text-surface-100">
+              — Recomendado para {PROVIDER_META[provider].label.split('(')[0]?.trim() || provider}: {PROVIDER_META[provider].defaultModel} —
+            </option>
             {auxOptions.map((m) => (
               <option key={m.id} value={m.id} className="bg-surface-900 text-surface-100">{modelOptionLabel(m)}</option>
             ))}
@@ -404,8 +395,15 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
   const [agentSettingsLoaded, setAgentSettingsLoaded] = useState(false);
   const [agentSettingsSavedAt, setAgentSettingsSavedAt] = useState<number | null>(null);
   const [agentSettingsError, setAgentSettingsError] = useState<string | null>(null);
+  const [customMainModelEnabled, setCustomMainModelEnabled] = useState(false);
   const meta = PROVIDER_META[config.provider];
   const providerModels = modelsForProvider(modelCatalog, config.provider);
+  const preferredMainModel = providerModels.find((model) => model.id === meta.defaultModel)?.id
+    ?? providerModels[0]?.id
+    ?? meta.defaultModel;
+  const mainModelIsKnown = isKnownModelForProvider(modelCatalog, config.provider, agentSettings.mainModel);
+  const showCustomMainModel = customMainModelEnabled
+    || Boolean(agentSettings.mainModel && !mainModelIsKnown);
   const workspaceForInstructions = activeWorkspaceId || 'personal';
 
   useEffect(() => {
@@ -462,6 +460,43 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
     persistAgentSettings({ mainModel: modelId });
     updateConfig({ model: modelId });
   };
+
+  const selectProvider = (provider: AIProvider) => {
+    const nextMeta = PROVIDER_META[provider];
+    const nextModels = modelsForProvider(modelCatalog, provider);
+    const nextMainModel = nextModels.find((model) => model.id === nextMeta.defaultModel)?.id
+      ?? nextModels[0]?.id
+      ?? nextMeta.defaultModel;
+    setCustomMainModelEnabled(false);
+    updateConfig({ provider, model: nextMainModel });
+    persistAgentSettings({ mainModel: nextMainModel, auxModel: '' });
+  };
+
+  // Corrige configuraciones legacy donde se cambió de proveedor pero quedaron
+  // modelos conocidos de otra familia. Los ids manuales desconocidos se
+  // conservan; sólo migramos incompatibilidades que el catálogo puede probar.
+  useEffect(() => {
+    if (!agentSettingsLoaded) return;
+    const knownMain = findCatalogModel(modelCatalog, agentSettings.mainModel);
+    const knownAux = findCatalogModel(modelCatalog, agentSettings.auxModel);
+    const mainIsIncompatible = Boolean(
+      knownMain && !isKnownModelForProvider(modelCatalog, config.provider, agentSettings.mainModel)
+    );
+    const auxIsIncompatible = Boolean(
+      knownAux && !isKnownModelForProvider(modelCatalog, config.provider, agentSettings.auxModel)
+    );
+    if (!mainIsIncompatible && !auxIsIncompatible) return;
+
+    const nextMainModel = mainIsIncompatible ? preferredMainModel : agentSettings.mainModel;
+    persistAgentSettings({
+      mainModel: nextMainModel,
+      auxModel: auxIsIncompatible ? '' : agentSettings.auxModel
+    });
+    if (mainIsIncompatible) {
+      setCustomMainModelEnabled(false);
+      updateConfig({ model: nextMainModel });
+    }
+  }, [agentSettings.auxModel, agentSettings.mainModel, agentSettingsLoaded, config.provider, modelCatalog, persistAgentSettings, preferredMainModel]);
 
   const updatePolicy = (nextPolicy: AgentAccessPolicy) => {
     const normalized = normalizeAgentAccessPolicy(nextPolicy, DEFAULT_CLIENT_AGENT_ACCESS_POLICY);
@@ -551,25 +586,23 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
     <div className="space-y-5">
       <div>
         <SectionHelper>
-          Elige proveedor y modelo. Las API keys se gestionan en el panel de abajo (cifradas server-side); este navegador nunca conserva el plaintext.
+          Elige primero el proveedor: los selectores de modelo y clave se adaptan a esa elección.
+          Las API keys se cifran server-side; este navegador nunca conserva el plaintext.
         </SectionHelper>
-        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">
-          {(Object.keys(PROVIDER_META) as AIProvider[]).map((provider) => (
-            <button
-              key={provider}
-              type="button"
-              onClick={() => updateConfig({ provider })}
-              className={`rounded-md border px-2 py-1.5 text-left text-xs transition ${
-                config.provider === provider
-                  ? 'border-mandy-400/50 bg-mandy-500/10 text-mandy-100'
-                  : 'border-surface-700/50 bg-surface-925/50 text-surface-400 hover:border-surface-600 hover:text-surface-200'
-              }`}
-            >
-              <div className={`font-medium ${PROVIDER_META[provider].color}`}>{PROVIDER_META[provider].label.split('(')[0]?.trim() || provider}</div>
-              <div className="mt-0.5 truncate text-[10px] text-surface-500">{PROVIDER_META[provider].label.split('(')[1]?.replace(')', '') ?? ''}</div>
-            </button>
-          ))}
-        </div>
+        <label className="mt-3 block text-xs sm:max-w-sm">
+          <span className="mb-1 block text-surface-400">Proveedor</span>
+          <select
+            value={config.provider}
+            onChange={(event) => selectProvider(event.target.value as AIProvider)}
+            className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40"
+          >
+            {(Object.keys(PROVIDER_META) as AIProvider[]).map((provider) => (
+              <option key={provider} value={provider} className="bg-surface-900 text-surface-100">
+                {PROVIDER_META[provider].label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -594,10 +627,14 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
           {providerModels.length > 0 ? (
             <>
               <select
-                value={providerModels.some((m) => m.id === agentSettings.mainModel) ? agentSettings.mainModel : '__custom__'}
+                value={showCustomMainModel ? '__custom__' : (mainModelIsKnown ? agentSettings.mainModel : preferredMainModel)}
                 disabled={!uid || !agentSettingsLoaded}
                 onChange={(e) => {
-                  if (e.target.value === '__custom__') return;
+                  if (e.target.value === '__custom__') {
+                    setCustomMainModelEnabled(true);
+                    return;
+                  }
+                  setCustomMainModelEnabled(false);
                   updateMainModel(e.target.value);
                 }}
                 className="w-full rounded-md border border-surface-600 bg-surface-800 px-2 py-1.5 font-mono text-xs text-surface-50 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
@@ -609,14 +646,16 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
                 ))}
                 <option value="__custom__" className="bg-surface-900 text-surface-100">— Otro (escribir abajo) —</option>
               </select>
-              <input
-                type="text"
-                value={agentSettings.mainModel}
-                disabled={!uid || !agentSettingsLoaded}
-                onChange={(e) => updateMainModel(e.target.value)}
-                placeholder={meta.modelPlaceholder}
-                className="mt-1 w-full rounded-md border border-surface-700/50 bg-surface-900 px-2 py-1 font-mono text-[11px] text-surface-200 placeholder:text-surface-500 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
-              />
+              {showCustomMainModel && (
+                <input
+                  type="text"
+                  value={agentSettings.mainModel}
+                  disabled={!uid || !agentSettingsLoaded}
+                  onChange={(e) => updateMainModel(e.target.value)}
+                  placeholder={meta.modelPlaceholder}
+                  className="mt-1 w-full rounded-md border border-surface-700/50 bg-surface-900 px-2 py-1 font-mono text-[11px] text-surface-200 placeholder:text-surface-500 focus:border-mandy-400 focus:outline-none focus:ring-1 focus:ring-mandy-400/40 disabled:opacity-50"
+                />
+              )}
             </>
           ) : (
             <input
@@ -639,10 +678,11 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
         </label>
       </div>
 
-      <AgentApiKeysPanel />
+      <AgentApiKeysPanel selectedProvider={config.provider} />
 
       <AgentModelsSection
         uid={uid}
+        provider={config.provider}
         catalog={modelCatalog}
         settings={agentSettings}
         loaded={agentSettingsLoaded}
