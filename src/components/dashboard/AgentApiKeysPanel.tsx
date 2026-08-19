@@ -17,6 +17,7 @@ const PROVIDER_LABELS: Record<AgentKeyProvider, string> = {
   deepseek: 'DeepSeek',
   google: 'Google',
   gemini: 'Gemini',
+  minimax: 'MiniMax',
   'agora-gateway': 'Agora Gateway',
   custom: 'Custom'
 };

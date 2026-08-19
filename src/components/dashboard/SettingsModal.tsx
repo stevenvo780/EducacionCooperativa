@@ -553,7 +553,7 @@ function AISection({ activeWorkspaceId, activeUserId }: { activeWorkspaceId?: st
         <SectionHelper>
           Elige proveedor y modelo. Las API keys se gestionan en el panel de abajo (cifradas server-side); este navegador nunca conserva el plaintext.
         </SectionHelper>
-        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">
           {(Object.keys(PROVIDER_META) as AIProvider[]).map((provider) => (
             <button
               key={provider}
