@@ -75,6 +75,7 @@ import { fetchZod } from '@/lib/fetch-zod';
 import { documentListSchema } from '@agora/contracts';
 import { authFetch } from '@/services/apiClient';
 import { fetchDocumentRawApi } from '@/services/dashboardApi';
+import { buildDocumentBlobRevisionKey } from '@/lib/document-blob-revision';
 import {
   cacheDocContent,
   enqueueSync,
@@ -262,7 +263,7 @@ export default function MosaicEditor({
   const pendingLocalChangeRef = useRef(false);
   const hasLocalEditsThisSessionRef = useRef(false);
   const lastRawKeyRef = useRef<string | null>(null);
-  const rawLoadInFlightRef = useRef(false);
+  const rawLoadRequestIdRef = useRef(0);
   // Sin esto, un doc vacío re-fetcheaba en cada applyDocData y reflasheaba el overlay.
   const rawLoadDoneRef = useRef(false);
   const mdxEditorRef = useRef<MDXEditorMethods>(null);
@@ -595,10 +596,9 @@ export default function MosaicEditor({
 
   const maybeLoadRawContent = useCallback(async (key: string | null) => {
     if (!roomId || !key) return;
-    if (rawLoadInFlightRef.current) return;
     // rawLoadDoneRef habilita saltar docs vacíos ya cargados (evita el reflasheo del overlay).
     if (key === lastRawKeyRef.current && (rawLoadDoneRef.current || contentRef.current !== '')) return;
-    rawLoadInFlightRef.current = true;
+    const requestId = ++rawLoadRequestIdRef.current;
     lastRawKeyRef.current = key;
     // Importante: mientras carga el raw, no consideremos el editor "cargado"
     // — eso evita que handleContentChange dispare un autosave con texto
@@ -608,6 +608,9 @@ export default function MosaicEditor({
     try {
       // fetchDocumentRawApi: (a) cachea en IndexedDB, (b) sirve desde cache si offline.
       const text = await fetchDocumentRawApi(roomId);
+      // Si llegó una revisión más nueva mientras este fetch estaba en vuelo,
+      // ignorar la respuesta vieja. La petición nueva es la única que aplica.
+      if (requestId !== rawLoadRequestIdRef.current) return;
       // Cargar incluso si está vacío para sincronizar lastSyncedContentRef.
       if (text !== contentRef.current) {
         setEditorContent(text);
@@ -617,12 +620,15 @@ export default function MosaicEditor({
       pendingLocalChangeRef.current = false;
       setStatsContent(text);
     } catch (e) {
-      console.error('Error loading raw content:', e);
+      if (requestId === rawLoadRequestIdRef.current) {
+        console.error('Error loading raw content:', e);
+      }
     } finally {
-      rawLoadInFlightRef.current = false;
-      rawLoadDoneRef.current = true;
-      setIsDocLoading(false);
-      hasLoadedRef.current = true;
+      if (requestId === rawLoadRequestIdRef.current) {
+        rawLoadDoneRef.current = true;
+        setIsDocLoading(false);
+        hasLoadedRef.current = true;
+      }
     }
   }, [roomId, setEditorContent]);
 
@@ -636,6 +642,7 @@ export default function MosaicEditor({
     workspaceId?: string | null;
     content?: string;
     lastUpdatedBy?: string;
+    updatedAt?: unknown;
   } | null | undefined) => {
     if (!data) {
       if (!hasUnsavedLocalChanges()) {
@@ -740,7 +747,10 @@ export default function MosaicEditor({
       // termine — si lo marcáramos ahora, handleContentChange dispararía un
       // autosave con texto vacío antes de que llegue el contenido real,
       // causando 409 refused-empty-overwrite y spinner infinito.
-      const rawKey = storagePath || url;
+      // storagePath es estable entre versiones. Si se usa solo ese valor, un
+      // overwrite del agente queda invisible porque parece el mismo blob ya
+      // cargado. updatedAt convierte cada commit en una revisión distinta.
+      const rawKey = buildDocumentBlobRevisionKey({ storagePath, url, updatedAt: data.updatedAt });
       maybeLoadRawContent(rawKey);
       return;
     }
@@ -861,6 +871,7 @@ export default function MosaicEditor({
     pendingLocalChangeRef.current = false;
     hasLocalEditsThisSessionRef.current = false;
     lastRawKeyRef.current = null;
+    rawLoadRequestIdRef.current += 1;
     rawLoadDoneRef.current = false;
     docUnavailableRef.current = false;
     setDocUnavailable(false);

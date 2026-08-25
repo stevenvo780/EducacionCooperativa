@@ -30,7 +30,8 @@ const MUTATION_ACTIONS = new Set([
   'create_folder',
   'restore_document',
   'create_snippet',
-  'delete_snippet'
+  'delete_snippet',
+  'write_worker_file'
 ]);
 
 const DOCUMENT_REFRESH_ACTIONS = new Set([
