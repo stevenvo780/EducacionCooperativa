@@ -201,6 +201,33 @@ describe('agora ai workspace ui events', () => {
     expect(effects.shouldRefreshDocuments).toBe(true);
   });
 
+  it('trata write_worker_file como mutación y solicita refresh del workspace', () => {
+    const effects = collectAgentWorkspaceEffects({
+      mode: 'agent',
+      provider: 'openai',
+      iterations: 1,
+      finalReply: 'Archivo actualizado',
+      rollback: [],
+      steps: [{
+        id: 'worker-write-result',
+        type: 'tool_result',
+        title: 'Archivo escrito',
+        startedAt: Date.now(),
+        result: {
+          ok: true,
+          name: 'write_worker_file',
+          callId: 'call-worker-write',
+          summary: 'Escribí 12 bytes',
+          data: { path: 'notas/resumen.md', bytesWritten: 12 }
+        }
+      }]
+    }, 'workspace-1');
+
+    expect(effects.mutatedEvent?.mutations).toHaveLength(1);
+    expect(effects.mutatedEvent?.mutations[0]?.action).toBe('write_worker_file');
+    expect(effects.shouldRefreshDocuments).toBe(true);
+  });
+
   it('no intenta abrir carpetas, pero sí enfoca la ruta creada', () => {
     const effects = collectAgentWorkspaceEffects({
       mode: 'agent',
