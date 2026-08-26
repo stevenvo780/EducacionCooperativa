@@ -1,6 +1,6 @@
 import { authFetch, parseApiResponse } from '@/services/apiClient';
 
-export const AGENT_KEY_PROVIDERS = ['openai', 'deepseek', 'anthropic', 'google', 'gemini', 'agora-gateway', 'custom'] as const;
+export const AGENT_KEY_PROVIDERS = ['openai', 'deepseek', 'anthropic', 'google', 'gemini', 'minimax', 'agora-gateway', 'custom'] as const;
 export type AgentKeyProvider = typeof AGENT_KEY_PROVIDERS[number];
 
 export interface RemoteAgentSecret {

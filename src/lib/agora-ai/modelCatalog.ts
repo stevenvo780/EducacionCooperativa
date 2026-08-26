@@ -1,6 +1,6 @@
 import { apiUrl } from '@/services/apiClient';
 
-export type ModelFamily = 'deepseek' | 'anthropic' | 'openai' | 'google' | 'xai' | 'ollama';
+export type ModelFamily = 'deepseek' | 'anthropic' | 'openai' | 'google' | 'minimax' | 'xai' | 'ollama';
 export type ModelVerified = 'official' | 'community' | 'unverified';
 
 export interface CatalogModel {
@@ -30,7 +30,8 @@ const FALLBACK_CATALOG: ModelCatalog = {
     { id: 'gpt-4o', family: 'openai', label: 'GPT-4o', contextWindow: 128_000, maxOutputTokens: 16_384, verified: 'official' },
     { id: 'gpt-4.1', family: 'openai', label: 'GPT-4.1', contextWindow: 1_047_576, maxOutputTokens: 32_768, verified: 'official' },
     { id: 'gemini-2.5-pro', family: 'google', label: 'Gemini 2.5 Pro', contextWindow: 1_048_576, maxOutputTokens: 65_535, verified: 'official' },
-    { id: 'gemini-2.5-flash', family: 'google', label: 'Gemini 2.5 Flash', contextWindow: 1_048_576, maxOutputTokens: 65_535, verified: 'official' }
+    { id: 'gemini-2.5-flash', family: 'google', label: 'Gemini 2.5 Flash', contextWindow: 1_048_576, maxOutputTokens: 65_535, verified: 'official' },
+    { id: 'MiniMax-M3', family: 'minimax', label: 'MiniMax M3', contextWindow: 1_000_000, maxOutputTokens: 128_000, verified: 'official' }
   ]
 };
 
@@ -41,6 +42,7 @@ const PROVIDER_TO_FAMILY: Record<string, ModelFamily> = {
   anthropic: 'anthropic',
   deepseek: 'deepseek',
   gemini: 'google',
+  minimax: 'minimax',
   ollama: 'ollama'
 };
 
@@ -145,6 +147,29 @@ export function modelsForProvider(catalog: ModelCatalog, provider: string): Cata
   return catalog.models.filter((m) => m.family === family);
 }
 
+const FAST_MODEL_PATTERN = /flash|mini|haiku|lite|small|nano|8b|7b|3b|1\.5b|deepseek-chat/;
+
+/**
+ * El modelo de continuidad usa la misma API key y el mismo adapter que el
+ * modelo principal. Por eso sólo ofrecemos modelos del provider activo; mezclar
+ * familias produciría una llamada firmada con la key/endpoint equivocados.
+ * Los modelos rápidos aparecen primero, pero no ocultamos los demás (MiniMax
+ * hoy sólo publica M3 en el catálogo).
+ */
+export function continuityModelsForProvider(catalog: ModelCatalog, provider: string): CatalogModel[] {
+  return [...modelsForProvider(catalog, provider)].sort((a, b) => {
+    const aFast = FAST_MODEL_PATTERN.test(a.id.toLowerCase());
+    const bFast = FAST_MODEL_PATTERN.test(b.id.toLowerCase());
+    if (aFast !== bFast) return aFast ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+export function isKnownModelForProvider(catalog: ModelCatalog, provider: string, modelId: string): boolean {
+  if (!modelId) return false;
+  return modelsForProvider(catalog, provider).some((model) => model.id === modelId);
+}
+
 export function contextWindowForModel(provider: string, model: string, catalog?: ModelCatalog): number {
   const cat = catalog ?? getModelCatalogSync();
   const found = findCatalogModel(cat, model);
@@ -154,6 +179,7 @@ export function contextWindowForModel(provider: string, model: string, catalog?:
     case 'openai': return 128_000;
     case 'deepseek': return 128_000;
     case 'gemini': return 1_048_576;
+    case 'minimax': return 1_000_000;
     case 'ollama': return 32_768;
     default: return 32_768;
   }

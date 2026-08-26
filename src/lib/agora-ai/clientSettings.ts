@@ -53,6 +53,13 @@ export const PROVIDER_META: Record<AIProvider, {
     defaultModel: 'deepseek-v4-flash',
     needsKey: true,
     modelPlaceholder: 'deepseek-v4-flash, deepseek-v4-pro, deepseek-chat…'
+  },
+  minimax: {
+    label: 'MiniMax',
+    color: 'text-rose-400',
+    defaultModel: 'MiniMax-M3',
+    needsKey: true,
+    modelPlaceholder: 'MiniMax-M3, MiniMax-M2.7, MiniMax-M2.7-highspeed…'
   }
 };
 
