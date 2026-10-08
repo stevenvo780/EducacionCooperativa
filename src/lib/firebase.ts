@@ -1,6 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth, signInWithCustomToken, setPersistence, browserLocalPersistence, indexedDBLocalPersistence, connectAuthEmulator } from 'firebase/auth';
-import { initializeFirestore, getFirestore, Firestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from 'firebase/firestore';
 import { getDatabase, Database, connectDatabaseEmulator } from 'firebase/database';
 
 // Lectura literal: Next sólo inlinea process.env.NEXT_PUBLIC_* si el acceso
@@ -13,10 +12,10 @@ const cleanEnv = (raw: string | undefined): string => (raw ?? '').replace(/\\n/g
 // (Next la inlinea en build). El host por defecto es localhost.
 const useEmulators = cleanEnv(process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS) === 'true';
 const emulatorHost = cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_HOST) || 'localhost';
-const emuConnected = { auth: false, db: false, rtdb: false };
+const emuConnected = { auth: false, rtdb: false };
 
 // Firebase Storage NO se usa en Agora — los blobs viven en MinIO (NAS).
-// Mantenemos sólo Auth + Firestore + RTDB de Firebase.
+// Firebase aporta Auth + RTDB; todos los datos persistentes viven en PostgreSQL en la VPS.
 const projectId = cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 const firebaseConfig = {
   apiKey: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
@@ -33,7 +32,6 @@ const firebaseConfig = {
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
-let db: Firestore | null = null;
 let rtdb: Database | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
@@ -63,26 +61,6 @@ function getFirebaseAuth(): Auth {
     });
   }
   return auth;
-}
-
-function getFirebaseDb(): Firestore {
-  if (typeof window === 'undefined') {
-    return {} as Firestore;
-  }
-  if (!db) {
-    try {
-      db = initializeFirestore(getFirebaseApp(), {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-      });
-    } catch {
-      db = getFirestore(getFirebaseApp());
-    }
-    if (useEmulators && !emuConnected.db) {
-      emuConnected.db = true;
-      connectFirestoreEmulator(db, emulatorHost, 8080);
-    }
-  }
-  return db;
 }
 
 function getFirebaseRTDB(): Database {
@@ -116,7 +94,6 @@ async function signInWithCustomTokenWrapper(customToken: string) {
 
 export {
   getFirebaseAuth as auth,
-  getFirebaseDb as db,
   getFirebaseRTDB as rtdb,
   getGoogleProvider as googleProvider,
   signInWithCustomTokenWrapper as signInWithCustomToken

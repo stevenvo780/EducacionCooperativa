@@ -1,5 +1,5 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+import { authFetch } from '@/services/apiClient';
 
 /**
  * Configuración del agente que el backend lee desde `users/{uid}` en el campo
@@ -36,10 +36,11 @@ function normalizeAgentSettings(raw: unknown): AgentSettings {
 }
 
 export async function loadAgentSettings(uid: string): Promise<AgentSettings> {
-  const ref = doc(db(), 'users', uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return { ...DEFAULT_AGENT_SETTINGS };
-  return normalizeAgentSettings(snap.data()?.[AGENT_SETTINGS_FIELD]);
+  if (auth().currentUser?.uid !== uid) throw new Error('User not authenticated');
+  const response = await authFetch('/api/agora-ai/settings', { cache: 'no-store' });
+  if (!response.ok) throw new Error('Cannot load agent settings');
+  const payload = await response.json();
+  return normalizeAgentSettings(payload.settings);
 }
 
 /**
@@ -48,6 +49,8 @@ export async function loadAgentSettings(uid: string): Promise<AgentSettings> {
  * campo `agentSettings` como objeto completo evita borrar campos hermanos.
  */
 export async function saveAgentSettings(uid: string, settings: AgentSettings): Promise<void> {
-  const ref = doc(db(), 'users', uid);
-  await setDoc(ref, { [AGENT_SETTINGS_FIELD]: normalizeAgentSettings(settings) }, { merge: true });
+  if (auth().currentUser?.uid !== uid) throw new Error('User not authenticated');
+  const response = await authFetch('/api/agora-ai/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(normalizeAgentSettings(settings)) });
+  if (!response.ok) throw new Error('Cannot save agent settings');
 }

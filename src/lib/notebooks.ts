@@ -1,17 +1,6 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  deleteDoc,
-  addDoc,
-  serverTimestamp,
-  orderBy,
-  query
-} from 'firebase/firestore';
 import { parseNotebook } from '@stevenvo780/st-lang/format/stnb';
-import { db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+import { authFetch } from '@/services/apiClient';
 import type { Notebook } from '@/types/stnb';
 
 export interface NotebookListItem {
@@ -22,8 +11,8 @@ export interface NotebookListItem {
   updatedAt: number;
 }
 
-const notebooksCol = (uid: string) =>
-  collection(doc(collection(db(), 'users'), uid), 'notebooks');
+const assertUser = (uid: string) => { if (auth().currentUser?.uid !== uid) throw new Error('User not authenticated'); };
+const check = async (response: Response) => { if (!response.ok) throw new Error('Notebook request failed'); return response.json(); };
 
 export function stripUndefinedDeep<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -41,59 +30,35 @@ export function stripUndefinedDeep<T>(value: T): T {
 }
 
 export async function listNotebooks(uid: string): Promise<NotebookListItem[]> {
-  const q = query(notebooksCol(uid), orderBy('updatedAt', 'desc'));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => {
-    const data = d.data();
-    return {
-      id: d.id,
-      title: typeof data['title'] === 'string' ? data['title'] : 'Sin título',
-      profile: typeof data['profile'] === 'string' ? data['profile'] : 'classical',
-      createdAt: typeof data['createdAt'] === 'number' ? data['createdAt'] : 0,
-      updatedAt: typeof data['updatedAt'] === 'number' ? data['updatedAt'] : 0
-    };
-  });
+  assertUser(uid);
+  const payload = await check(await authFetch('/api/notebooks', { cache: 'no-store' }));
+  return payload.notebooks as NotebookListItem[];
 }
 
 export async function loadNotebook(uid: string, id: string): Promise<Notebook> {
-  const ref = doc(notebooksCol(uid), id);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error(`Notebook ${id} no encontrado`);
-  const data = snap.data();
-  const raw = data['notebook'];
+  assertUser(uid);
+  const payload = await check(await authFetch(`/api/notebooks?id=${encodeURIComponent(id)}`, { cache: 'no-store' }));
+  const raw = payload.notebook;
   if (!raw || typeof raw !== 'object') {
-    throw new Error(`Notebook ${id}: documento Firestore mal formado (campo 'notebook' ausente o inválido)`);
+    throw new Error(`Notebook ${id}: campo notebook ausente o inválido`);
   }
   return parseNotebook(JSON.stringify(raw));
 }
 
 export async function saveNotebook(uid: string, id: string, nb: Notebook): Promise<void> {
-  const ref = doc(notebooksCol(uid), id);
-  const now = Date.now();
-  await setDoc(ref, stripUndefinedDeep({
-    notebook: nb,
-    title: nb.metadata.title,
-    profile: nb.metadata.profile,
-    updatedAt: now
-  }), { merge: true });
+  assertUser(uid);
+  await check(await authFetch('/api/notebooks', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(stripUndefinedDeep({ id, notebook: nb })) }));
 }
 
 export async function createNotebook(uid: string, nb: Notebook): Promise<string> {
-  const now = Date.now();
-  const ref = await addDoc(notebooksCol(uid), {
-    ...stripUndefinedDeep({
-      notebook: nb,
-      title: nb.metadata.title,
-      profile: nb.metadata.profile,
-      createdAt: now,
-      updatedAt: now
-    }),
-    _serverTs: serverTimestamp()
-  });
-  return ref.id;
+  assertUser(uid);
+  const payload = await check(await authFetch('/api/notebooks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(stripUndefinedDeep({ notebook: nb })) }));
+  return String(payload.id);
 }
 
 export async function deleteNotebook(uid: string, id: string): Promise<void> {
-  const ref = doc(notebooksCol(uid), id);
-  await deleteDoc(ref);
+  assertUser(uid);
+  await check(await authFetch(`/api/notebooks?id=${encodeURIComponent(id)}`, { method: 'DELETE' }));
 }
